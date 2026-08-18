@@ -1,0 +1,13 @@
+{
+  "foundation": {
+    "description": "响应式 Web、Worker 与共享包已进入统一工程基线。业务能力将在后续阶段按需求门槛逐步实现。",
+    "eyebrow": "阶段 0",
+    "status": "当前仅提供工程与质量基础设施，不执行图片任务或积分操作。",
+    "title": "Zima 工程基线"
+  },
+  "metadata": {
+    "description": "Zima Phase 1 工程基线",
+    "title": "Zima"
+  }
+}
+

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./apps/web" },
+    { "path": "./apps/worker" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/config" },
+    { "path": "./packages/domain" },
+    { "path": "./packages/providers" },
+    { "path": "./packages/supabase" },
+    { "path": "./packages/ui" }
+  ]
+}
+

@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+minimumReleaseAgeExclude:
+  - icu-minify@4.13.7
+  - next-intl-swc-plugin-extractor@4.13.7
+  - next-intl@4.13.7
+  - use-intl@4.13.7

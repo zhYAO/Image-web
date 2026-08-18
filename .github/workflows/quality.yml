@@ -1,0 +1,110 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24.19.0
+  PNPM_VERSION: 11.22.0
+
+jobs:
+  quality:
+    name: lint-type-test-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          run_install: false
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scan for secrets
+        run: pnpm check:secrets
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: pnpm test:e2e
+
+  database:
+    name: migration-rls-types-mailpit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@7088e561eb65bb68695d245aa206f005ef30921d # v4.1.0
+        with:
+          run_install: false
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start Mailpit
+        run: docker compose -f compose.mailpit.yaml up -d --wait
+
+      - name: Verify Mailpit health
+        run: curl --fail --silent --show-error http://127.0.0.1:8025/readyz
+
+      - name: Start Supabase
+        run: pnpm db:start
+
+      - name: Replay migrations from an empty database
+        run: pnpm db:reset
+
+      - name: Run pgTAP
+        run: pnpm test:db
+
+      - name: Verify generated database types
+        run: |
+          pnpm db:types
+          git diff --exit-code -- packages/supabase/src/database.types.ts
+
+      - name: Stop local services
+        if: always()
+        run: |
+          pnpm db:stop || true
+          docker compose -f compose.mailpit.yaml down || true
+
