@@ -1,6 +1,6 @@
 begin;
 
-select plan(7);
+select plan(8);
 
 create table public.rls_owned_fixture (
   id uuid primary key,
@@ -50,6 +50,10 @@ select ok(
   not has_table_privilege('authenticated', 'public.rls_ungranted_fixture', 'select'),
   'RLS alone does not expose an ungranted table through the Data API role'
 );
+select ok(
+  not has_table_privilege('service_role', 'public.rls_ungranted_fixture', 'select'),
+  'service_role receives no implicit table grant'
+);
 
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', true);
 set local role authenticated;
@@ -84,4 +88,3 @@ reset role;
 
 select * from finish();
 rollback;
-

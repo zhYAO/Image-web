@@ -26,7 +26,7 @@ pnpm check:secrets
 
 ## Supabase 与数据库测试
 
-本地 Supabase 需要 Docker。迁移必须使用项目内 CLI 创建：
+本地 Supabase 需要 Docker 兼容容器运行时，不要求必须使用 Docker Desktop。迁移必须使用项目内 CLI 创建：
 
 ```bash
 pnpm exec supabase migration new <descriptive_name>
@@ -47,6 +47,18 @@ pnpm db:stop
 
 阶段 0 的 pgTAP 只在回滚事务内创建测试夹具，不留下业务表。Docker 不可用时，不得把数据库迁移、pgTAP 或类型生成标记为已验证。
 
+### 无本地容器时的远程验收
+
+本机没有 Docker 兼容运行时时，使用 GitHub Actions 的 `database` job 作为阶段 0 数据库运行证据。该 job 启动临时 Supabase 与 Mailpit，依次执行空库重放、pgTAP、数据库类型再生成和漂移检查。
+
+```bash
+gh run list --workflow quality.yml --branch <branch>
+gh run watch <run-id> --exit-status
+gh run view <run-id> --log-failed
+```
+
+如果类型漂移，失败的 run 会提供 `generated-database-types` artifact；下载并审阅后提交实际生成类型，再重新运行完整 job。远程 CI 通过只证明仓库 migration 和测试可重复执行，不代表 Supabase Cloud、生产 SMTP 或其他外部依赖已就绪。
+
 ## Mailpit
 
 ```bash
@@ -59,4 +71,3 @@ SMTP 监听 `127.0.0.1:1025`，Web UI 与健康检查位于 `http://127.0.0.1:80
 ## 外部门槛
 
 EXT-001～005 仍为 `external-gated`。本地配置和 Mock 不代表 SMTP、Supabase Cloud、阿里云图片能力、合规审批或生产价表已经可用。
-

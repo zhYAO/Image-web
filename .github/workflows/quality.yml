@@ -102,9 +102,16 @@ jobs:
           pnpm db:types
           git diff --exit-code -- packages/supabase/src/database.types.ts
 
+      - name: Upload generated database types on drift
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated-database-types
+          path: packages/supabase/src/database.types.ts
+          if-no-files-found: error
+
       - name: Stop local services
         if: always()
         run: |
           pnpm db:stop || true
           docker compose -f compose.mailpit.yaml down || true
-
