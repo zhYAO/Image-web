@@ -1,5 +1,13 @@
 import { getTranslations } from 'next-intl/server';
 
+export async function generateMetadata() {
+  const t = await getTranslations('foundation');
+  return {
+    title: t('title'),
+    description: t('description'),
+  };
+}
+
 const FoundationPage = async () => {
   const t = await getTranslations('foundation');
 

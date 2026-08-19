@@ -6,8 +6,16 @@
     "title": "Zima 工程基线"
   },
   "metadata": {
-    "description": "Zima Phase 1 工程基线",
-    "title": "Zima"
+    "description": "Zima 把受控的视觉 Agent、可继续加工的商品图与积分账本放在一起。",
+    "title": "Zima",
+    "auth": {
+      "title": "登录",
+      "description": "使用一次性邀请码与邮箱验证码完成 Zima 登录。"
+    },
+    "authCallback": {
+      "title": "校验邮箱验证码",
+      "description": "正在为你完成邮箱验证码校验与邀请码核销。"
+    }
   },
   "navigation": {
     "home": "首页",
@@ -83,6 +91,7 @@
       "session_unverified": "请先完成邮箱验证码校验。",
       "profile_already_exists": "你已拥有 Zima 账户，请直接登录。",
       "insufficient_credits": "积分不足，请稍后再试。",
+      "unmapped_error_code": "登录流程遇到了问题，请重新发起邀请码。",
       "internal_error": "服务暂时不可用，请稍后重试。"
     }
   },

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
@@ -12,6 +13,11 @@ import { createLogger } from '@zima/config';
 import { loadServerEnv } from '../../../server/env.js';
 
 export const runtime = 'nodejs';
+
+export const generateMetadata = async (): Promise<Metadata> => {
+  const t = await getTranslations('metadata.authCallback');
+  return { description: t('description'), title: t('title') };
+};
 
 const logger = createLogger({
   level: (process.env.LOG_LEVEL as 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace') ?? 'info',
