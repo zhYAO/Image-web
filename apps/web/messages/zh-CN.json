@@ -96,6 +96,22 @@
       "internal_error": "服务暂时不可用，请稍后重试。"
     }
   },
+  "skills": {
+    "title": "官方技能",
+    "subtitle": "声明式工作流，受 3 步 / 8 输出硬上限约束。",
+    "categoryAll": "全部",
+    "empty": "暂无已发布技能",
+    "useSkill": "使用此技能",
+    "steps": "步骤",
+    "outputs": "输出",
+    "capabilities": "能力",
+    "notFound": "未找到该技能，可能已下线。"
+  },
+  "community": {
+    "title": "精选案例",
+    "subtitle": "管理员策展的只读案例，不接受用户投稿。",
+    "empty": "策展中，敬请期待"
+  },
   "errors": {
     "title": "出现了一些问题",
     "retry": "重试"

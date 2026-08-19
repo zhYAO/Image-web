@@ -1,0 +1,68 @@
+[
+  {
+    "slug": "white-background-product",
+    "title": "白底商品图",
+    "summary": "把商品放进纯白底商品图，适合电商主图与列表页。",
+    "category": "商品主图",
+    "latestVersion": {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "skillId": "22222222-2222-4222-8222-222222222222",
+      "version": 1,
+      "status": "published",
+      "allowedCapabilities": ["remove_background", "generate"],
+      "requiredCapabilities": ["remove_background"],
+      "steps": [
+        {
+          "capability": "remove_background",
+          "inputBindings": ["primaryAsset"],
+          "parameters": { "mode": "auto" },
+          "outputCount": 1
+        },
+        {
+          "capability": "generate",
+          "inputBindings": ["step:0.output:0"],
+          "parameters": { "background": "white", "format": "jpeg" },
+          "outputCount": 4
+        }
+      ],
+      "outputContract": {
+        "minOutputs": 4,
+        "maxOutputs": 4,
+        "allowedFormats": ["jpeg", "png"]
+      }
+    }
+  },
+  {
+    "slug": "studio-scene-main-image",
+    "title": "影棚场景主图",
+    "summary": "把商品放进柔光影棚场景，输出可继续加工的主图。",
+    "category": "场景主图",
+    "latestVersion": {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "skillId": "44444444-4444-4444-8444-444444444444",
+      "version": 1,
+      "status": "published",
+      "allowedCapabilities": ["remove_background", "replace_background"],
+      "requiredCapabilities": ["replace_background"],
+      "steps": [
+        {
+          "capability": "remove_background",
+          "inputBindings": ["primaryAsset"],
+          "parameters": { "mode": "auto" },
+          "outputCount": 1
+        },
+        {
+          "capability": "replace_background",
+          "inputBindings": ["step:0.output:0"],
+          "parameters": { "scenePrompt": "柔光影棚，浅灰渐变背景，柔和反射" },
+          "outputCount": 4
+        }
+      ],
+      "outputContract": {
+        "minOutputs": 4,
+        "maxOutputs": 4,
+        "allowedFormats": ["jpeg", "webp"]
+      }
+    }
+  }
+]
