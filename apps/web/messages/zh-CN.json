@@ -36,6 +36,7 @@
       "submitAnonymous": "登录后继续",
       "tools": {
         "title": "快捷工具",
+        "generate": "生成",
         "remove_background": "智能抠图",
         "replace_background": "换背景",
         "outpaint_resize": "扩图 / 改尺寸",
