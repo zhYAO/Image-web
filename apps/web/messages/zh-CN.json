@@ -8,6 +8,86 @@
   "metadata": {
     "description": "Zima Phase 1 工程基线",
     "title": "Zima"
+  },
+  "navigation": {
+    "home": "首页",
+    "skills": "技能",
+    "community": "案例",
+    "auth": "登录",
+    "skipToContent": "跳到主要内容"
+  },
+  "home": {
+    "eyebrow": "Phase 1 公共首页",
+    "title": "用受控的视觉能力，生产可继续加工的商品图。",
+    "subtitle": "Zima 把电商视觉 Agent、图片工作流与积分账本放在一起，先把首页与认证打通。",
+    "composer": {
+      "title": "从这里开始",
+      "prompt": "你想做什么？例如：把这双鞋放进浅灰影棚背景",
+      "placeholder": "输入提示词，或选择下方快捷工具 / 技能",
+      "submit": "执行",
+      "submitAnonymous": "登录后继续",
+      "tools": {
+        "title": "快捷工具",
+        "remove_background": "智能抠图",
+        "replace_background": "换背景",
+        "outpaint_resize": "扩图 / 改尺寸",
+        "upscale": "高清放大"
+      },
+      "skills": {
+        "title": "官方技能",
+        "empty": "暂无已发布技能"
+      }
+    },
+    "recentProjects": {
+      "title": "最近项目",
+      "empty": "还没有项目，创建第一个任务即可自动建立",
+      "viewAll": "查看全部"
+    },
+    "featuredCases": {
+      "title": "精选案例",
+      "empty": "策展中，敬请期待",
+      "viewAll": "查看全部"
+    },
+    "anonymousHint": "未登录用户可以浏览与编辑提示词；执行会先进入登录流程。"
+  },
+  "auth": {
+    "title": "登录 Zima",
+    "subtitle": "使用一次性邀请码与邮箱验证码完成认证。",
+    "invitation": {
+      "label": "邀请码",
+      "placeholder": "Zima-Invite_2026A",
+      "submit": "发送验证码",
+      "submitting": "发送中..."
+    },
+    "email": {
+      "label": "邮箱",
+      "placeholder": "you@example.com"
+    },
+    "otp": {
+      "label": "邮箱验证码",
+      "placeholder": "6 位数字",
+      "submit": "验证并登录",
+      "submitting": "校验中..."
+    },
+    "errors": {
+      "invalid_input": "输入有误，请检查后重试。",
+      "rate_limited": "请求过于频繁，请稍后再试。",
+      "invitation_not_found": "邀请码不存在或已失效。",
+      "invitation_disabled": "邀请码已被停用。",
+      "invitation_expired": "邀请码已过期。",
+      "invitation_not_approved": "邀请码尚未批准，请联系管理员。",
+      "invitation_already_redeemed": "邀请码已被使用。",
+      "reservation_active_for_other_email": "当前邀请码已与另一邮箱绑定。",
+      "reservation_expired": "预约已过期，请重新申请。",
+      "reservation_already_consumed": "预约已被消费。",
+      "session_unverified": "请先完成邮箱验证码校验。",
+      "profile_already_exists": "你已拥有 Zima 账户，请直接登录。",
+      "insufficient_credits": "积分不足，请稍后再试。",
+      "internal_error": "服务暂时不可用，请稍后重试。"
+    }
+  },
+  "errors": {
+    "title": "出现了一些问题",
+    "retry": "重试"
   }
 }
-

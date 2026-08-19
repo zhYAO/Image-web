@@ -10,10 +10,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/ssr": "0.7.0",
+    "@supabase/supabase-js": "2.58.0",
+    "@zima/config": "workspace:*",
+    "@zima/domain": "workspace:*",
+    "@zima/supabase": "workspace:*",
     "next": "16.2.12",
     "next-intl": "4.13.7",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
