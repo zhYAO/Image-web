@@ -13,6 +13,8 @@ import {
 
 import { loadServerEnv } from '../server/env';
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('home');
   return { description: t('subtitle'), title: t('eyebrow') };

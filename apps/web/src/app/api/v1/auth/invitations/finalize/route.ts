@@ -15,8 +15,8 @@ import {
 } from '@zima/domain';
 import { createLogger } from '@zima/config';
 
-import { loadServerEnv } from '../../../../../../server/env.js';
-import { encodeDraft, readDraftFromCookieStore, type HomeComposerDraft } from '../../../../../../server/draft-restore.js';
+import { loadServerEnv } from '../../../../../../server/env';
+import { encodeDraft, readDraftFromCookieStore, type HomeComposerDraft } from '../../../../../../server/draft-restore';
 
 export const runtime = 'nodejs';
 

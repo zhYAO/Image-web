@@ -11,7 +11,7 @@ import {
 } from '@zima/domain';
 import { createLogger } from '@zima/config';
 
-import { loadServerEnv } from '../../../../../../server/env.js';
+import { loadServerEnv } from '../../../../../../server/env';
 
 export const runtime = 'nodejs';
 
