@@ -1,6 +1,8 @@
 # zimage 需求文档（PRD）
 
 > ZImage — 面向设计师的电商图片处理工作台。本文档遵循 PRD Strict Schema（Executive Summary / UX & Functionality / AI System Requirements / Technical Specifications / Risks & Roadmap），并新增"决策记录""非功能与运维""Traceability 矩阵"三个补充章节，作为产品与工程的"双方约定单一来源"。所有未在此处列出的功能视为未规划。
+>
+> **文档版本**：v1.2（v1.1 + ADR-001 内容安全策略调整）｜**变更摘要**：Q11 由"Phase1 国内合规必接独立第三方（数美 / 火山 / 阿里云绿网）"改为"委托 provider 自身内容安全网关 + 错误码模式映射"（lobehub 风格）；`image_safety_audits` 表 repurposed 记录 provider 网关拦截证据；`/api/image/safety-check` 端点删除。详见 §6.1 ADR-001。
 
 ---
 
@@ -51,7 +53,7 @@
 8. 4K 挪 Phase2，Phase1 默认 2K
 9. 监控/备份纳入 MVP 验收
 10. workflow/checkpointer 每请求 compile
-11. 内容安全 Phase1 国内合规必接
+11. 内容安全 Phase1 委托 provider 自身内容安全网关（lobehub 风格）+ 错误码模式映射
 12. **聊天 LLM provider = Doubao（字节火山）+ MiniMax 双 provider**（review-report C1 确认；tech-selection §3.9 落地）
 
 **代决策（13 项）**：
@@ -297,16 +299,16 @@ interface ImageProvider {
                 │  └──────┬───────┘  └────────┬───────┘  └───────────────┘ │
                 │  ┌──────▼────────────────────────────────────────────┐  │
                 │  │ agent/ (LangGraph) — 每请求 compile              │  │
-                │  │ providers/ (ImageProvider) + parametersSchema    │  │
-                │  │ middleware/content-safety (国内违禁检测)        │  │
+                │  │ providers/ (ImageProvider + ChatProvider)         │  │
+                │  │ adapters 入口 isProviderModeration 拦截 (ADR-001) │  │
                 │  └──────┬────────────────────────────────────────────┘  │
                 └──────────┼───────────────────────────────────────────────┘
                            │  RLS(uid) · Storage (signed URL or public)
                 ┌──────────▼───────────────────────────────────────────────┐
-                │  Supabase Cloud + 内容安全供应商                          │
+                │  Supabase Cloud                                            │
                 │  Postgres · Storage (generated-images / uploads) · Auth  │
                 │  anonymous sign-in (Phase1) → OAuth PKCE (Phase2)        │
-                │  内容安全 (数美/火山/阿里云绿网 任选其一)               │
+                │  content safety: provider 网关拦截 + audit 表 (ADR-001)  │
                 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -323,15 +325,16 @@ ChatInput → useSendMessage → POST /api/chat (withAuth)
   → 前端手写 parseSseEvents → 增量渲染 + UI 错误码 → 错误卡片
 ```
 
-**工作台链路**：
+**工作台链路**（ADR-001：内容安全由 provider 网关自助拦截，无前置 preCheck）：
 
 ```
 /image 页面 → POST /api/image {prompt, params, topicId?, skillId?}
   → withAuth → SigninAnonymously → 配额校验 → 同步建 topic/batch/generations(pending)
-  → content-safety.preCheck(prompt, imageUrls)
-  → ImageProvider.generate() → content-safety.postCheck(imageBuffer)
-  → Storage 上传 → 更新 generations(succeeded | failed, error_code)
-  → 任务整体返回 {taskId: batchId, batchId, generations}
+  → 立即返回 {taskId: batchId, batchId, generations}
+  → （async fire-and-forget）ImageProvider.generate()
+       └─ adapter catch 块：isProviderModeration(err) 命中 → throw ContentModerationError
+              └─ 写 image_safety_audits + generations.status='failed', error_code='moderation'
+  → （async fire-and-forget）Storage 上传 → generations.status='succeeded'
 前端用 SWR 轮询 GET /api/image/[taskId] 获取最新状态（v1.2 改为异步队列时仍兼容同一接口）。
 ```
 
@@ -351,7 +354,7 @@ zimage/
 │       │   │   ├── image/route.ts
 │       │   │   ├── image/[taskId]/route.ts
 │       │   │   ├── image/recreate/route.ts       # recreate single/failed/all 三模式
-│       │   │   ├── image/safety-check/route.ts  # 内容安全实时预览
+│       │   │   ├── ~~image/safety-check/route.ts~~  # ADR-001 删除（不再需要内容安全实时预览）
 │       │   │   ├── topics/route.ts
 │       │   │   ├── topics/[id]/batches/route.ts
 │       │   │   └── skills/route.ts
@@ -360,17 +363,23 @@ zimage/
 │       ├── features/                        # chat / image / skills / home / layout
 │       ├── hooks/                           # useChatMessages / useSendMessage / useImageWorkspace
 │       ├── store/                           # zustand（image / chat / skill slices）
-│       ├── services/                        # SSE / fetch / trpc-like
-│       ├── libs/                            # supabase client（browser+server）、sse parser
+│       ├── services/                        # storage / async-image 等服务层封装
+│       ├── libs/                            # supabase client（browser+server）、openapi 客户端、logger
 │       ├── agent/                           # LangGraph chatbot.ts + 工具 + 模型初始化
 │       ├── middleware/                      # withAuth + content-safety
 │       ├── monitoring/                      # 告警 SDK 封装、provider 健康检查 worker
+│       ├── sentry.{client,server,edge}.config.ts  # Sentry ErrorBoundary 与 traces
 │       └── ...
 ├── packages/
 │   ├── image-providers/                     # ImageProvider 抽象 + seedream/gemini adapters
-│   ├── skills/                              # 内置 SKILL.md + loader
-│   ├── shared/                              # types / zod schemas / i18n keys / constants
-│   │   └── parameters/                      # parametersSchema:
+│   ├── chat-providers/                      # ChatProvider 抽象 + doubao/minimax adapters（双 LLM）
+│   ├── fetch-sse/                           # SSE 客户端：行截断 + 多事件 + 心跳容错 + SSE_EVENT 常量
+│   ├── skills/                              # 内置 SKILL.md + loader + render
+│   ├── shared/                              # types / zod schemas / i18n keys / errors / constants
+│   │   ├── errors.ts                        # ERROR_CODES + ERROR_STATUS + errorResponse（review-report GAP-13）
+│   │   ├── i18n/zh-CN.ts                    # i18n key 单一权威（review-report C-AR-2）
+│   │   ├── schemas/                         # 前后端共享 zod schemas（ImageGenerationParams 等）
+│   │   └── parameters/                      # per-model parametersSchema（JSON Schema；review-report C2）：
 │   │       ├── seedream/3.0.schema.json
 │   │       └── gemini/pro-preview.schema.json
 │   └── observability/                       # 监控 SDK 封装（告警/埋点）
@@ -443,13 +452,14 @@ CREATE TABLE sessions (
 );
 CREATE INDEX sessions_user_updated_idx ON sessions (user_id, updated_at DESC);
 
--- 内容安全审计（每条 generation 调用前后都记录）
+-- 内容安全审计：provider 自身网关过滤的拦截记录（ADR-001）
+-- 每条 generation 若被 provider 的内容安全网关拦截，保留证据供复盘
 CREATE TABLE image_safety_audits (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   generation_id uuid NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
   provider      text NOT NULL,
   verdict       text NOT NULL CHECK (verdict IN ('pass','block','review')),
-  reasons       jsonb NOT NULL,                  -- 内容安全供应商返回的原因列表
+  reasons       jsonb NOT NULL,                  -- provider 网关返回的错误码 / 拒因关键词
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 
@@ -548,7 +558,7 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 - `POST /api/topics` `{ kind, title }` → `Topic`
 - `GET /api/topics/[id]/batches` → `GenerationBatch[]`
 - `GET /api/skills` → `Skill[]`（meta + SKILL.md 正文已解析）
-- `POST /api/image/safety-check` `{ prompt, imageUrls? }` → `{ verdict: 'pass' | 'block' | 'review', reasons: string[] }`（前端实时预览）
+- ~~`POST /api/image/safety-check`~~ **（ADR-001 已删除）**：原计划「内容安全实时预览」端点不再需要—— provider 网关拦截信号异步返回，用户在前端看到 `<ErrorCard code='moderation'>` 即可
 
 ### 4.5 Integration Points
 
@@ -559,7 +569,6 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 | `@skroyc/langgraph-supabase-checkpointer` | LangGraph 历史持久化 | **每请求新建** `new SupabaseSaver(client, undefined, userId)`；表名按库默认，迁移 SQL 入库 |
 | `@google/genai` + Gemini API | Gemini 图片生成 | `GOOGLE_API_KEY` |
 | 火山方舟 Ark API | Seedream 图片生成 | `ARK_API_KEY` + endpoint |
-| 内容安全供应商 | 违禁检测（数美/火山/阿里云绿网 任选其一） | `CONTENT_SAFETY_API_KEY` + `CONTENT_SAFETY_ENDPOINT` |
 | 监控告警 | provider 健康检查 + 配额告警 | `MONITORING_WEBHOOK_URL` |
 | `@langchain/*` | LangGraph / 模型适配 | — |
 
@@ -576,7 +585,7 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 - **OAuth PKCE**：Phase2 引入真实登录时采用 OAuth PKCE（不沿用 LangGraphPj implicit flow）。
 - **迁移文件**：所有表结构变更以 `supabase/migrations/*.sql` 入库，CI 校验 `supabase db diff` 与迁移一致。
 - **配额**：服务端按 `user_id` + UTC 日计算使用量，DB 计数器；越界返回 `quota_exceeded` HTTP 429。
-- **内容安全**：所有生图调用前后过国内内容安全供应商；`moderation` 错误码独立于其他错误码；审计落 `image_safety_audits`。
+- **内容安全（ADR-001）**：依赖 provider 自带的内容安全网关（Seedream / Gemini / Doubao / MiniMax 各自的过滤）；intercept 模式映射为统一 `moderation` 错误码（HTTP 403），不引入独立第三方；provider 网关拦截的 generations 写 `image_safety_audits` 表供复盘。详细映射参见 tech-selection §3.12。
 - **日志**：不打印原始提示词与全量 base64；错误日志脱敏（仅保留错误码与首 80 字符）。
 
 ### 4.7 i18n
@@ -641,7 +650,7 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 | Gemini 国内访问受限 | 高 | 中 | 5 分钟错误率 > 30% | 调度降级到 Seedream；UI 提示限上不可用 | 工程 |
 | Seedream 服饰效果未达可用率 80% | 中 | 高 | 周盲评 < 80% | 模板调优回归；临时降级空白模板 | 设计 |
 | 无登录被薅羊毛 | 中 | 中 | 同一 UID 24h 出图 > 30 | 每日配额 + 并发限制 + UA/IP 软限速 | 工程 |
-| 内容合规（国内上线） | 高 | 高 | 违规样本拦截率 < 99% | Phase1 必接供应商；违规告警 P0 | 运维 |
+| 内容合规（ADR-001：依赖 provider 网关） | 中 | 中 | provider 网关拦截率 < 95% | 拦截的 generations 落 `image_safety_audits` 供运营复盘；Phase2 评估是否补独立第三方兜底 | 运维 |
 | serverless 长任务超时 | 低 | 中 | Vercel 10s/60s 超时 | 每请求 compile + 同步生成 ≤ 60s；超长任务降级 Next 配置 | 工程 |
 | checkpointer 删 thread 失败 | 低 | 低 | 每次删除告警 | 主流程 warn 仅；定期 job 清理孤儿 | 工程 |
 | parametersSchema 与 provider 版本漂漂 | 中 | 中 | provider SDK 升级 | schema 入仓，CI 校验 schema 与 adapter 字段一致 | 工程 |
@@ -656,7 +665,7 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 | --- | --- | --- | --- |
 | Seedream 4K 实际生成时长（v1.1 前实测） | Phase1 末 | 工程 | 待确认 |
 | 国内访问 Gemini 的代理方案（v1.1 前） | Phase1 末 | 工程 | 待确认 |
-| 内容安全供应商选型（数美 / 火山 / 阿里云绿网） | Phase1 第三周 | 运维 | 待确认 |
+| **内容安全策略**（见 ADR-001）| 已拍板 | 运维 | **Phase1 委托 provider 网关**（详见 §6.1 ADR-001 / tech §3.12 改写） |
 | 与公司既有"服饰出图方法论"SKILL.md 模板对接 | Phase1 第二周 | 设计 | 待确认 |
 | **parametersSchema 数据格式（JSON Schema vs Zod）** | Phase1 第一周 | 工程 | **已确认：JSON Schema**（review-report C2 确认；tech-selection §3.8 落地） |
 | provider 健康检查告警渠道（PagerDuty / 钉钉 / Lark） | Phase1 第一周 | 运维 | 待确认（告警渠道 Phase2 推迟，机制见 tech-selection §3.13a） |
@@ -695,6 +704,7 @@ CREATE POLICY audits_via_generation ON image_safety_audits
 | D11 | i18n Phase1 | — | 仅 zh-CN | 范围控制 |
 | D12 | OAuth | — | Phase2 PKCE | 不沿用 LangGraphPj implicit flow |
 | D13 | 禁 any | — | strict + ESLint | 修复 LangGraphPj 类型安全弱点 |
+| **ADR-001** | **内容安全策略（拍板）** | **Phase1 国内必接独立第三方（数美/火山/绿网）** / **依赖 provider 网关 + 错误模式映射（lobehub 风格）** | **依赖 provider 网关** | 参考 lobehub-canary `apps/server/src/routers/async/contentPolicyError.ts`：依赖 provider 自身内容安全网关 + 错误码模式映射，**不引入独立第三方内容安全供应商**；`moderation` 错误码保留；`image_safety_audits` 表 repurposed 记录 provider 拦截证据 |
 
 ### 6.2 Traceability Matrix（US ↔ Success Criteria ↔ Risk ↔ Tech）
 

@@ -5,6 +5,8 @@
 > 本文按"页面功能需求"组织结构，每项选型包含：① 需求来源（`requirements.md` 条号 + 摘要）② 技术实现方案（伪代码 + 参考实现路径）③ 选型依据（含备选对比）④ 实施步骤。
 >
 > 实施原则：**先前端后后端、仅 web 端**。本文 §1-§2 是前端/工程基础，§3 是后端，§4 按页面串起来，§5 给出阶段化实施路径。
+>
+> **文档版本**：v1.2（v1.1 + ADR-001 内容安全策略调整）。本版本主要变更：§3.12 全文重写（委托 provider 网关 + `isProviderModeration` 模式 append-only）；`CONTENT_SAFETY_*` env 移除。详见 `review-report-requirements-vs-tech.md §5`。
 
 ---
 
@@ -318,9 +320,6 @@ GOOGLE_API_KEY=xxx
 ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
 ANTHROPIC_API_KEY=xxx
 MINIMAX_MODEL=minimax-...   # 接入时确认
-# Content safety
-CONTENT_SAFETY_API_KEY=xxx
-CONTENT_SAFETY_ENDPOINT=https://api.example.com/v1/check
 # Monitoring
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=xxx
@@ -1382,9 +1381,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
 
-  // 1. 配额 + 内容安全前置
+  // 1. 配额前置（ADR-001：内容安全前置 preCheck 已移除）
   await checkQuota(supabase, user.id);
-  await contentSafety.preCheck(body.prompt, body.params.imageUrls);
+  // 内容安全由 provider 网关拦截，adapter 入口 isProviderModeration() 归一到 moderation 错误码
 
   // 2. 同步事务建 batch + generations
   const { batch, generations } = await supabase.rpc('create_generation_batch', {
@@ -1413,8 +1412,8 @@ async function generateImages(supabase, batch, generations, body) {
   for (const gen of generations) {
     try {
       const buffer = await imageProvider.generate({ ...body.params, prompt: body.prompt });
-      const contentSafe = await contentSafety.postCheck(buffer);
-      if (!contentSafe) throw new Error('moderation');
+      // ADR-001：移除 contentSafety.postCheck(buffer)
+      // 内容安全由 imageProvider.generate() 内部 catch 块命中 isProviderModeration() 抛出 ContentModerationError
       const { url, storage_path } = await storage.uploadImage(buffer, ..., mimeType);
       await supabase.from('generations').update({
         status: 'succeeded', image_url: url, storage_path,
@@ -1533,8 +1532,7 @@ async function regenerateOne(supabase, batch, gen, userId) {
     const config = batch.config;  // 复用原 config jsonb
     const params = { ...config, prompt: config.prompt };
     const buffer = await imageProvider.generate(params);
-    const contentSafe = await contentSafety.postCheck(buffer);
-    if (!contentSafe) throw new Error('moderation');
+    // ADR-001：移除 contentSafety.postCheck(buffer)（同 generateImages）
     const { url, storage_path } = await storage.uploadImage(buffer, userId, batch.id, gen.id, 'image/png');
     await supabase.from('generations').update({
       status: 'succeeded', image_url: url, storage_path,
@@ -2352,45 +2350,149 @@ $$);
 
 ---
 
-### 3.12 内容安全：Phase1 国内合规必接
+### 3.12 内容安全：委托 provider 网关 + 错误码模式映射（ADR-001）
 
-**需求来源**：`requirements.md` §4.6 + Q11 决策
+**需求来源**：`requirements.md §4.6 + Q11`（已重拍 → ADR-001）
+
+> Q11 由「Phase1 国内合规必接独立第三方（数美/火山/绿网）」改为「委托 provider 自身内容安全网关 + 错误码模式映射」。本节给出新的实现路径。
+>
+> 依据：参考 lobehub-canary `apps/server/src/routers/async/contentPolicyError.ts`（21 行代码）—— 依赖 provider 自身 safety filter + 错误码模式归类，不引入独立中间件。lobehub 用户面向文案 `errorContentModeration` 见 `apps/server/src/services/bot/replyTemplate.ts:318`。
 
 **技术实现**：
 
-`apps/web/middleware/content-safety.ts`：
+**`packages/shared/safety.ts`**：provider moderation 信号归一（模式匹配器）
+
 ```ts
-export class ContentSafety {
-  async preCheck(prompt: string, imageUrls?: string[]): Promise<{ verdict: 'pass' | 'block' | 'review'; reasons: string[] }> {
-    const res = await fetch(process.env.CONTENT_SAFETY_ENDPOINT + '/text-check', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.CONTENT_SAFETY_API_KEY}` },
-      body: JSON.stringify({ text: prompt }),
-    });
-    return (await res.json()).verdict ?? 'review';
-  }
-  async postCheck(imageBuffer: ArrayBuffer): Promise<boolean> {
-    const res = await fetch(process.env.CONTENT_SAFETY_ENDPOINT + '/image-check', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.CONTENT_SAFETY_API_KEY}` },
-      body: imageBuffer,
-    });
-    const { verdict } = await res.json();
-    return verdict === 'pass';
+import { ErrorCode } from './errors';
+
+/**
+ * 各 provider 内容安全网关返回的「拦截信号」中英文模式集合。
+ * 当用户面向提示触发这些之一时，归一到 zimage 统一的 `moderation` 错误码。
+ *
+ * 模式集合的设计原则：
+ *  - 列举当下观察到的 provider 拦截文案/错误码
+ *  - 新增 provider 时 append-only，不删旧模式
+ *  - 大小写不敏感；中英文均覆盖
+ */
+export const PROVIDER_MODERATION_PATTERNS: Array<{
+  errorCodes: string[];
+  messageIncludes: string[];
+}> = [
+  {
+    // Google Gemini / 火山方舟 Ark
+    errorCodes: ['InputTextSensitiveContentDetected', 'content_policy_violation'],
+    messageIncludes: [],
+  },
+  {
+    // Doubao / 通用
+    errorCodes: ['moderation_blocked', 'sensitive_information_detected'],
+    messageIncludes: [],
+  },
+  {
+    // 兜底关键词（中英文）
+    errorCodes: [],
+    messageIncludes: [
+      'content policy',
+      'safety system',
+      'sensitive information',
+      'content moderation',
+      '内容违规',
+      '敏感信息',
+    ],
+  },
+];
+
+export interface ProviderError {
+  code?: string;
+  message?: string;
+}
+
+export function isProviderModeration(err: ProviderError): boolean {
+  const code = (err.code || '').toLowerCase();
+  const msg = (err.message || '').toLowerCase();
+  return PROVIDER_MODERATION_PATTERNS.some((p) => {
+    if (p.errorCodes.some((c) => code === c.toLowerCase())) return true;
+    if (p.messageIncludes.some((m) => msg.includes(m.toLowerCase()))) return true;
+    return false;
+  });
+}
+
+/**
+ * 单元测试覆盖（fixtures）：
+ *  - Gemini `InputTextSensitiveContentDetected` → true
+ *  - Doubao `moderation_blocked` → true
+ *  - Seedream 5xx → false（属 provider_error）
+ *  - 网络中断 → false（属 network）
+ *  - 中文「内容违规」消息 → true
+ */
+```
+
+**`packages/image-providers/src/{seedream,gemini}.ts`**：adapter `generate()` 入口把 provider 错误归一到 6 个 zimage 错误码之一
+
+```ts
+import { isProviderModeration } from '@zimage/shared/safety';
+import { classifyError } from '@zimage/shared/errors';
+
+// 伪代码（每个 adapter 同样写法）
+async generate(params: ImageGenerationParams): Promise<ImageResult[]> {
+  try {
+    const res = await providerSdk.generate(...);
+    return mapToImageResult(res);
+  } catch (err) {
+    if (isProviderModeration(err)) {
+      throw new ContentModerationError(err.message ?? 'Provider content safety filter');
+    }
+    throw classifyError(err);  // 归一为 provider_error / network / bad_request 等
   }
 }
 ```
 
-**参考代码**：无参考项目；自实现。
+**`packages/chat-providers/src/{doubao,minimax}.ts`**：model.invoke 流也接入同样的 moderation 检测；调 `model.invoke()` 后若 SSE 流中含 `finish_reason='content_filter'` 或 chunk 含敏感词模式，归一到 `moderation`。
 
-**选型依据**：
-- 用户 Q11 选"Phase1 国内合规必接"。
-- 数美 / 火山 / 阿里云绿网 任选其一（接入时确认）。
+**`apps/web/middleware/error-handler.ts`**：新增 `ContentModerationError` → HTTP 403
+
+```ts
+export class ContentModerationError extends Error {
+  constructor(public reason: string) {
+    super(`moderation: ${reason}`);
+  }
+}
+
+// 在 error-handler.ts 的 catch 路由里：
+// if (err instanceof ContentModerationError) return errorResponse(ERROR_CODES.MODERATION);
+```
+
+**审计落库**：`apps/web/services/async-image.ts` 与 `recreate 路径`统一捕获 `ContentModerationError`；判定 `moderation` 的 generations 写 `image_safety_audits`（reason = provider code / message）。
+
+**用户面向文案**（沿用 lobehub 风格）：
+
+```
+中文：「**内容违规** Provider 内容安全网关拒收了请求或结果，请修改提示词后重试。」
+英文（Phase2 切换）：「**Blocked by the content-safety filter.** The model provider's safety filter rejected the request or response. Please rephrase and try again.」
+```
+
+错误码枚举、HTTP 状态映射已在 `packages/shared/errors.ts` 完成（review-report GAP-13），不需要改动。
+
+**参考代码**：
+- lobehub-canary `apps/server/src/routers/async/contentPolicyError.ts`（21 行错误码/消息模式归类）
+- lobehub-canary `apps/server/src/services/bot/replyTemplate.ts:318` 用户面向文案
+- lobehub-canary `packages/model-runtime/src/errors/taxonomy.ts:24`：`'safety' // content moderation`
+
+**Phase1 验收口径**：
+- 不再需要 `CONTENT_SAFETY_*` 环境变量（不影响 `.env.example` 与部署）
+- `image_safety_audits` 表 repurposed 记录 provider 网关拦截证据（每次拦截写一条）
+- `moderation` 错误码语义不变（HTTP 403，ERROR_STATUS 映射已在 §3.16）
+- Seedream / Gemini / Doubao / MiniMax 各自的拦截信号均被覆盖（patterns 列表 append-only）
+
+**Phase2 跟进**：若运营复盘发现 provider 网关拦截率 < 95%，评估补接独立第三方供应商（数美 / 火山 / 阿里云绿网）；本次不预设接口。
 
 **实施步骤**：
-1. 写 `middleware/content-safety.ts`。
-2. 在 `services/async-image.ts` 与 `api/chat/route.ts` 调用。
-3. 失败返回 `moderate_rejected` 错误码。
+1. 写 `packages/shared/safety.ts` + `isProviderModeration` 单测（覆盖 6 模式 × 2 case）。
+2. 在 `packages/image-providers/src/{seedream,gemini}.ts` adapter 接入 `isProviderModeration`。
+3. 在 `packages/chat-providers/src/{doubao,minimax}.ts` 的 model.invoke 路径接入。
+4. 在 `apps/web/middleware/error-handler.ts` 新增 `ContentModerationError`。
+5. `apps/web/services/async-image.ts` 写 `image_safety_audits`。
+6. e2e：用 seedream 网关拦截的 prompt 跑通，验证 `moderation` 错误码 + audit 表写入。
 
 ---
 
@@ -2820,7 +2922,7 @@ ON CONFLICT DO NOTHING;
 
 **后端**：
 - 配额：每 UID + UTC 日计数器（Supabase 表，详见 §3.7b）
-- 内容安全：preCheck + postCheck（详见 §3.12）
+- 内容安全：provider 网关拦截 + adapter isProviderModeration 归一（详见 §3.12，ADR-001）
 - 错误码：统一 6 枚举 + HTTP 状态映射（详见 §3.16）
 - 监控：Sentry server-side + LangSmith tracing + Provider 健康检查（详见 §3.13a）
 
@@ -3058,7 +3160,7 @@ export function useAutoDegrade(currentProvider: string, onSwitch: (newProvider: 
 - Phase1 单租户，无 workspace / 团队 / 多租户概念。
 - 公开 Supabase Cloud + Supabase Storage + Auth 匿名登录，不引 WAF / Flow Control。
 - 模型接入以官方 SDK 优先（豆包 OpenAI 兼容 / MiniMax Anthropic 兼容）。
-- Content safety 供应商选型（数美 / 火山 / 阿里云绿网）于接入时确认。
+- Content safety 策略：ADR-001 落地为**委托 provider 网关** + 错误码模式映射（tech §3.12 已重写）；不再选独立第三方供应商。Phase2 视运营复盘结果决定是否补回独立第三方兜底。
 - 后端生图执行走 Next.js Route Handler（Node runtime），不引 Supabase Edge Function（Phase1 同步即可）。
 - 监控告警渠道（lark / 钉钉 / PagerDuty）推迟到 Phase2。
 - 单租户 + 匿名登录意味着每浏览器实例一个 anon uid，跨设备不同。
@@ -3080,6 +3182,6 @@ export function useAutoDegrade(currentProvider: string, onSwitch: (newProvider: 
 | `apps/web/src/features/Chat/` | LangGraphPj `app/hooks/useSendMessage.ts` + lobehub `src/features/Conversation/` | 合并最佳实践 |
 | `packages/shared/i18n/zh-CN.ts` | lobehub-canary `packages/locales/src/default/` | i18n key 结构 |
 | `packages/shared/parameters/*.schema.json` | lobehub-canary `model-bank/imageParameters` | per-model 参数 |
-| `apps/web/middleware/content-safety.ts` | （无参考） | 自实现 |
+| `packages/shared/safety.ts` + 各 provider adapter 入口 `isProviderModeration` | lobehub-canary `apps/server/src/routers/async/contentPolicyError.ts` | ADR-001 委托 provider 网关 + 错误模式归类 |
 | `turbo.json` | （无参考） | 自定义 |
 | `langgraph.json` | LangGraph Studio 官方 | 标准模板 |

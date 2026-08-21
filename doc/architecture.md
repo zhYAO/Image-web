@@ -2,7 +2,9 @@
 
 > ZImage — 面向设计师的电商图片处理工作台的运行时架构与故障应对手册。
 >
-> 本文档定位为**架构全景 + 故障应对手册**，面向三类读者：① 系统架构师（评审整体设计）② 新入职工程师（30 分钟内建立心智模型）③ Code Reviewer（评估 PR 是否破坏既有边界）。所有架构决策的来源已在 `requirements.md §1.4` 决策记录、`tech-selection.md §3.x` 技术选型、`doc/review-report-requirements-vs-tech.md` 审查报告中锁定，本文不复述决策理由。
+> 本文档定位为**架构全景 + 故障应对手册**，面向三类读者：① 系统架构师（评审整体设计）② 新入职工程师（30 分钟内建立心智模型）③ Code Reviewer（评估 PR 是否破坏既有边界）。所有架构决策的来源已在 `requirements.md §1.4` 决策记录、`tech-selection.md §3.x` 技术选型、`doc/review-report-requirements-vs-tech.md`（req ↔ tech 审查）、`doc/review-report-requirements-vs-architecture.md`（req ↔ arch 审查）中锁定，本文不复述决策理由。
+>
+> **本版本（v1.1）基于 review-report-requirements-vs-architecture.md 修订**：落实 3 项决策澄清（C-AR-1 Storage 访问模式 / C-AR-2 i18n / C-AR-3 工具触发路径图）+ 6 项 MEDIUM GAP + 1 项 Phase2 跟进。详细变更见 §10.1。
 
 ---
 
@@ -11,17 +13,22 @@
 | 主题 | requirements.md §4.1 | tech-selection.md §3.x | **本 architecture.md** |
 |---|---|---|---|
 | 高层架构图 | ✅ 粗粒度 3 层 | — | ✅ 细粒度 5 层 × 23 模块 |
-| 模块职责边界 | — | — | ✅ **核心新增** |
-| 数据流时序图 | 粗流程（聊天 + 工作台两条） | — | ✅ **7 个场景详细时序** |
-| 通信方式 | — | 分散 | ✅ **统一通信矩阵** |
-| 降级策略 | 风险表 §5.2 列出 | §3.13a 部分 | ✅ **8 场景应对路径** |
+| 模块职责边界 | — | — | ✅ **核心新增**（§2） |
+| 数据流时序图 | 粗流程（聊天 + 工作台两条） | — | ✅ **8 个场景详细时序**（§3.1-§3.8，含 review-report C-AR-3 新增的 §3.8 工具触发路径图） |
+| 通信方式 | — | 分散 | ✅ **统一通信矩阵 + 9 端点全景**（§4） |
+| 降级策略 | 风险表 §5.2 列出 | §3.13a 部分 | ✅ **8 场景应对路径**（§5） |
+| 安全约束 | §4.6 11 条分散 | — | ✅ **§9 安全边界集中视图**（review-report GAP-C2） |
+| SLO / 性能 | 1 指标 | — | ✅ **§6 14 项 SLO 指标**（含 review-report GAP-B1 / GAP-L1 新增 2 行） |
 | 库 / 版本选型 | — | ✅ | — |
 | 数据模型 / SQL | §4.3 | — | —（仅在 §2 L6 Persistence 层 M21-M23 简述） |
+| i18n | §4.7 zh-CN 优先 | §2.10 react-i18next | ✅ **M01/M06 各一行**（review-report C-AR-2） |
+| Storage 访问模式 | §4.3.2 双 bucket | §3.5 上传客户端 | ✅ **M22 区分 publicUrl / signedUrl**（review-report C-AR-1） |
 
 **阅读建议**：
 - 想了解「系统在做什么」→ 先读 §1 模块总览 + §3 核心数据流
 - 想了解「某模块如何工作」→ 直接跳到 §2 对应小节
 - 想了解「上游出错会怎样」→ §5 降级策略
+- 想了解「安全边界」→ §9 安全约束矩阵 + 信任边界
 - 想了解「为什么要这样做」→ 回查 requirements.md / tech-selection.md / review-report
 
 ---
@@ -50,12 +57,12 @@ zimage 系统划分为 **5 层 × 23 模块**。每个模块有明确的「职�
 | | M14 | Chat Adapter: Doubao | 字节火山聊天模型（OpenAI 兼容） | `@langchain/openai` |
 | | M15 | Chat Adapter: MiniMax | MiniMax 聊天模型（Anthropic 兼容） | `@langchain/anthropic` |
 | **L5 Middleware** | M16 | Quota Middleware | 配额扣减（30 张/日 UTC）+ 原子事务 | `apps/web/middleware/quota.ts` |
-| | M17 | Content Safety Middleware | preCheck + postCheck 双层校验 | `apps/web/middleware/content-safety.ts` |
+| | M17 | Content Safety Adapter | 委托 provider 网关 + 错误码模式映射（ADR-001） | `packages/shared/safety.ts` + 各 provider adapter 入口 |
 | | M18 | Provider Health Monitor | 5 分钟滚动窗口错误率监控 | `apps/web/monitoring/provider-health.ts` |
 | | M19 | Reference Image Validator | 上传图片 MIME + 大小（10MB）校验 | `packages/image-providers/src/validate.ts` |
 | | M20 | Logger + Sentry | 结构化日志 + 错误埋点 | `pino` + `@sentry/nextjs` |
 | **L6 Persistence** | M21 | Supabase Postgres | 5 张业务表 + 2 个 cron job + RLS | Supabase Cloud |
-| | M22 | Supabase Storage | generated-images 90 天 / uploads 30 天 | Supabase Cloud |
+| | M22 | Supabase Storage | generated-images 90 天（publicUrl）/ uploads 30 天（signedUrl） | Supabase Cloud |
 | | M23 | Supabase Auth | 匿名登录 + Phase2 OAuth PKCE | `@supabase/ssr` |
 
 > **注**：L5 Middleware 与 L2 API Gateway 在物理位置上都位于 Next.js Route Handler 内，但逻辑上 Middleware 是**横向可复用的处理环节**（Quota 可被 `/api/image` 与 `/api/chat` 共用），而 API Gateway 是**纵向入口层**。本文按"功能模块"而非"代码物理位置"分层。
@@ -156,7 +163,8 @@ zimage 系统划分为 **5 层 × 23 模块**。每个模块有明确的「职�
 - **输入**：用户点击 / 输入 / 拖拽上传；来自 M02 Store 的 state
 - **输出**：调用 M02 的 action；触发 fetch/SSE 调 M04
 - **失败模式**：组件崩溃由 Sentry `ErrorBoundary` 捕获；UI 降级为骨架屏
-- **关键代码**：`apps/web/app/{page.tsx, image/page.tsx}` + `src/features/{Home,ImageWorkspace,Chat}/*`
+- **i18n**（review-report C-AR-2）：所有 UI 文案走 react-i18next，资源包位于 `packages/shared/i18n/zh-CN.ts`；新增文案必须先有 zh-CN key（`packages/shared/i18n/zh-CN.ts` 结构化 key，参考 lobehub-canary `packages/locales/src/default/agent.ts`）
+- **关键代码**：`apps/web/app/{page.tsx, image/page.tsx}` + `src/features/{Home,ImageWorkspace,Chat}/*` + `apps/web/src/i18n.ts`
 
 #### M02 Client Store
 
@@ -207,6 +215,7 @@ zimage 系统划分为 **5 层 × 23 模块**。每个模块有明确的「职�
 - **输入**：业务代码抛出的 Error 或显式 code
 - **输出**：`Response.json({ error: { code, message } }, { status: ERROR_STATUS[code] })`
 - **失败模式**：未捕获异常 → fallback `provider_error` 502 + Sentry 上报
+- **i18n**（review-report C-AR-2）：错误消息国际化由 `ERROR_MESSAGES` 中文常量提供（`packages/shared/errors.ts`），UI 端 L1 M01 通过 react-i18next 引用；新增错误码时同步添加中文文案
 - **关键代码**：`packages/shared/errors.ts`
 
 ---
@@ -313,15 +322,17 @@ zimage 系统划分为 **5 层 × 23 模块**。每个模块有明确的「职�
   - 越界 → `QuotaExceededError` → `errorResponse(QUOTA_EXCEEDED)` 含 `Retry-After: 86400`
 - **关键代码**：`apps/web/middleware/quota.ts` + `supabase/migrations/0006_quotas.sql` + `0007_increment_quota_rpc.sql`
 
-#### M17 Content Safety Middleware
+#### M17 Content Safety Adapter（ADR-001）
 
-- **职责**：调用国内内容安全供应商（数美 / 火山 / 阿里云绿网 任选其一）；preCheck 文本 + postCheck 图像
-- **输入**：`prompt: string` + `imageUrls?: string[]`（preCheck）/ `imageBuffer: ArrayBuffer`（postCheck）
-- **输出**：`{ verdict: 'pass' | 'block' | 'review', reasons: string[] }`（preCheck）/ `boolean`（postCheck）
+- **职责**：归一各个 provider 内容安全网关的拦截信号到 zimage 统一的 `moderation` 错误码（HTTP 403）；**不引入独立第三方**内容安全供应商。
+- **输入**：`ProviderError { code?: string, message?: string }`，由 M11 / M12 / M14 / M15 在调用 provider 抛出错误时传入
+- **输出**：命中拦截模式 → 抛 `ContentModerationError`（由 M06 Error Handler 映射为 `moderation` 403）；未命中 → 交由 `classifyError()` 归一到 `provider_error` / `network` 等
 - **失败模式**：
-  - 供应商不可用 → 主流程 warn + Sentry；fallback 默认 `review`（保守拒绝）
-  - verdict='block' → 立即抛 `moderation` 403
-- **关键代码**：`apps/web/middleware/content-safety.ts`（tech-selection §3.12）
+  - Provider 拦截信号漏识别 → Sentry metric `safety.detection.miss`（运营监控复盘）
+  - 拦截模式新增 → append-only，避免历史 generation 被误判 `provider_error`
+- **审计落库**：被判定 `moderation` 的 generations 写 `image_safety_audits` 表（reason = provider code + message）
+- **i18n**：用户面向文案走 `ERROR_MESSAGES.moderation`，Phase2 切换英文沿用 lobehub 风格 `errorContentModeration`
+- **关键代码**：`packages/shared/safety.ts` `isProviderModeration()` + 各 `packages/{image-providers,chat-providers}/src/*` adapter 入口 + `apps/web/middleware/error-handler.ts`（tech-selection §3.12）
 
 #### M18 Provider Health Monitor
 
@@ -365,13 +376,18 @@ zimage 系统划分为 **5 层 × 23 模块**。每个模块有明确的「职�
 
 #### M22 Supabase Storage
 
-- **职责**：两个 bucket（`generated-images` public 90 天 / `uploads` private 30 天）
+- **职责**：两个 bucket，**访问模式不同**（review-report C-AR-1）：
+  - `generated-images`：**public 读**，90 天生命周期，路径 `generated/{user_id}/{batch_id}/{generation_id}.{ext}`
+  - `uploads`：**private**，30 天生命周期，路径 `uploads/{user_id}/{uuid}.{ext}`（参考图）
 - **输入**：上传 buffer / 删除 path 列表
-- **输出**：public URL / signed URL
+- **输出**：**按 bucket 属性选择**：
+  - `generated-images` → `publicUrl`（直接 `getPublicUrl()`，与 LangGraphPj 一致）
+  - `uploads` → `signedUrl`（1h 过期签名 `createSignedUrl()`，zimage 独有）
 - **失败模式**：
   - 上传失败 → generation.status='failed' + `provider_error`
   - 删除失败 → §5.4 / tech-selection §3.5a cron 兜底
-- **关键代码**：`apps/web/services/storage.service.ts` + `supabase/migrations/0009_storage_lifecycle.sql`
+  - signed URL 过期 → L1 M01 自动重新获取（不影响用户）
+- **关键代码**：`apps/web/services/storage.service.ts`（两个 bucket 用同一服务但走不同 API：`storage.from('generated-images').getPublicUrl()` vs `storage.from('uploads').createSignedUrl(path, 3600)`）+ `supabase/migrations/0009_storage_lifecycle.sql`
 
 #### M23 Supabase Auth
 
@@ -403,7 +419,6 @@ sequenceDiagram
     participant M07 as M07 LangGraph Agent
     participant M08 as M08 Checkpointer
     participant M14 as M14 Chat Adapter<br/>(Doubao / MiniMax)
-    participant M17 as M17 Content Safety
     participant M18 as M18 Provider Health
     participant M21 as M21 Postgres
 
@@ -431,15 +446,14 @@ sequenceDiagram
 
     opt 模型决定调用 image_generation
         M07->>M04: emit SSE 'tool_calls' { toolId, args }
-        M07->>M17: preCheck(prompt, imageUrls)
-        M17-->>M07: verdict
-        alt verdict='block'
+        M07->>M11: ImageProvider.generate()
+        M11->>M11: isProviderModeration(err) 检查 catch 块
+        alt provider 网关拦截（ADR-001）
+            M11-->>M07: throw ContentModerationError
             M07->>M04: emit SSE 'tool_error' { code: 'moderation' }
             M04->>M01: ErrorCard
-        else verdict='pass'
-            M07->>M11: ImageProvider.generate()
-            M11->>M17: postCheck(buffer)
-            M17-->>M11: pass/block
+            M11->>M21: 写 image_safety_audits 拦截证据
+        else 正常
             M11->>M22: upload to Storage
             M22-->>M11: publicUrl
             M11-->>M07: ImageResult[]
@@ -456,19 +470,36 @@ sequenceDiagram
 **关键节点注解**：
 - 节点 8（Provider Health）：每次请求前查询，不健康时自动切换到另一 provider（见 §5.1）
 - 节点 14（系统消息拼装）：base + skill.triggers.providerHints 触发的 skill prompt + toolIds 触发的 tool usage prompt
-- 节点 17（preCheck）：仅文本校验；postCheck 在 M11 内调用
+- 节点 17（**ADR-001 内容安全拦截点**）：M11 adapter `generate()` 内 `catch` 块，命中 `isProviderModeration(err)` → 抛 `ContentModerationError`，无中间件 preCheck/postCheck 同步调用
 - 节点 21（save）：checkpointer 写入失败仅 warn，不阻塞 SSE 'end' 发送
 
 **失败分支**：
 - 模型调用失败 → 自动重试 1 次（同 provider）→ 失败 `provider_error` 502 + `<ErrorCard>`
-- preCheck 'block' → 立即中断模型流 → SSE 'tool_error' → 前端 ErrorCard
-- postCheck 'block' → generation.status='failed' + error_code='moderation'
+- provider 网关拦截（ADR-001） → M11 throw `ContentModerationError` → SSE `tool_error` → 前端 ErrorCard → M21 `image_safety_audits` 写入拦截证据
 
 ---
 
 ### 3.2 工作台批量生图（核心场景）
 
 **触发条件**：用户在 `/image` 工作台提交 prompt + 配置（provider/model/aspect/resolution/num 1-4）。
+
+**前置：参考图上传与自动尺寸推断**（review-report GAP-A2）：
+
+```
+[L1 M01] 用户拖拽首张参考图到 <UploadDropzone>
+  ↓
+[L1 M02] dispatch(addReferenceImage({ file, previewUrl, mimeType, sizeBytes }))
+  ↓
+[L1 M01] onReferenceImageAdded:
+  ├─ 客户端校验: MIME ∈ {png, jpeg, webp} & sizeBytes ≤ 10MB（M19 RefImage Validator 同步规则）
+  ├─ 上传到 M22 storage.from('uploads') 拿 signedUrl（zimage 独有 private bucket 模式）
+  ├─ 推断 aspectRatio = readImageDimensions(file) → '1:1' / '3:4' / ...
+  └─ 预填表单字段: aspectRatio 默认值（如未手动设置）
+  ↓
+[L1 M01] 用户可手动覆盖 aspectRatio（显式选择）
+```
+
+**主链路**：
 
 ```mermaid
 sequenceDiagram
@@ -478,14 +509,13 @@ sequenceDiagram
     participant M04 as M04 Route Handler<br/>(/api/image POST)
     participant M05 as M05 Auth
     participant M16 as M16 Quota
-    participant M17 as M17 Content Safety
     participant M21 as M21 Postgres<br/>(create_generation_batch RPC)
     participant M19 as M19 RefImage Validator
     participant M11 as M11 Image Adapter
     participant M22 as M22 Storage
     participant M01b as M01 UI<br/>(SWR 轮询)
 
-    U->>M01: 提交表单
+    U->>M01: 提交表单（已含参考图与自动设尺寸）
     M01->>M04: POST /api/image {prompt, params, topicId?, skillId?}
     M04->>M05: getUser()
     M04->>M16: checkAndIncrementQuota(user.id, num)
@@ -495,31 +525,24 @@ sequenceDiagram
         M01->>U: 显示「今日配额已用完」
     else quota ok
         M16-->>M04: { used, limit, remaining }
-        M04->>M17: preCheck(prompt, imageUrls)
-        alt preCheck 'block'
-            M17-->>M04: verdict=block
-            M04-->>M01: 403 moderation
-        else preCheck 'pass'
-            M17-->>M04: pass
-            M04->>M21: rpc('create_generation_batch', {num})
-            M21-->>M04: { batch, generations[pending] }
-            M04-->>M01: 200 { taskId=batchId, batchId, generations }
-            M01->>M01b: 立即渲染 pending 卡片
-            M01b->>M04: GET /api/image/[taskId] (SWR 2s 轮询)
-        end
+        M04->>M21: rpc('create_generation_batch', {num})
+        M21-->>M04: { batch, generations[pending] }
+        M04-->>M01: 200 { taskId=batchId, batchId, generations }
+        M01->>M01b: 立即渲染 pending 卡片
+        M01b->>M04: GET /api/image/[taskId] (SWR 2s 轮询)
 
-        par 异步生成（fire-and-forget）
-            M04->>M19: validateReferenceImages()
+        par 异步生成（fire-and-forget, ADR-001 无前置 preCheck）
+            M04->>M19: validateReferenceImages() — 服务端二次校验
             M19-->>M04: ok
             M04->>M11: ImageProvider.generate() × N
             loop 每张图
-                M11->>M17: postCheck(buffer)
-                alt postCheck 'block'
-                    M17-->>M11: block
+                M11->>M11: try { generate() } catch (err)
+                alt provider 网关拦截（ADR-001，isProviderModeration 命中）
+                    M11-->>M11: throw ContentModerationError
+                    M11->>M21: 写 image_safety_audits（verdict='block', reasons=provider code/message）
                     M11->>M21: update generation.status='failed', error_code='moderation'
-                else postCheck 'pass'
-                    M17-->>M11: pass
-                    M11->>M22: upload(buffer)
+                else 正常
+                    M11->>M22: upload(buffer) → publicUrl（generated-images public bucket）
                     M22-->>M11: { url, storage_path }
                     M11->>M21: update generation.status='succeeded'
                 end
@@ -533,15 +556,18 @@ sequenceDiagram
 ```
 
 **关键节点注解**：
+- **节点 0（前置：参考图上传与自动尺寸推断，review-report GAP-A2）**：客户端首图上传后立即读 `Image.naturalWidth/naturalHeight` 推断比例（5 种 enum 之一），预填表单的 `aspectRatio`；用户可手动覆盖
 - 节点 5（Quota）：用 RPC 原子事务（`increment_quota`）保证并发越界保护
 - 节点 11（pending generations）：同步建 batch + N 条 generations（status='pending'）后立即返回；前端 SWR 轮询
 - 节点 16（async fire-and-forget）：`process.nextTick` 派发；不阻塞 200 响应
 - 节点 18-22（per-generation loop）：每张图独立状态，失败不影响其他
+- **节点 22（M22 Storage 上传 review-report C-AR-1）**：generated-images 是 public bucket，返回 `publicUrl` 直传前端展示；uploads 是 private bucket（仅前端参考图上传路径），返回 `signedUrl`（1h 过期）
+- **ADR-001 拦截点**：M11 adapter `generate()` 内 `catch` 块，命中 `isProviderModeration(err)` → throw `ContentModerationError`，无前置 preCheck / postCheck 同步调用
 
 **失败分支**：
+- 参考图 MIME/大小不通过：客户端 toast 立即拒绝（不等服务端）；服务端 M19 二次校验失败 → 400 `bad_request`
 - Quota 越界：429 → 前端禁用重试按钮
-- preCheck block：403 → 前端显示违规提示
-- postCheck block：单张 generation.status='failed'，其他张继续
+- provider 网关拦截（ADR-001）：单张 generation.status='failed'，其他张继续；同步写 `image_safety_audits` 留证
 - Provider 5xx：generation.status='failed', error_code='provider_error'
 
 ---
@@ -556,10 +582,10 @@ sequenceDiagram
   ├─ emit SSE 'tool_calls' 事件
   ├─ 调 image_generation handler:
   │    ├─ L19 校验 imageUrls (10MB/MIME)
-  │    ├─ L11 Seedream/Gemini.generate()
-  │    ├─ L17 postCheck(buffer)
+  │    ├─ L11 Seedream/Gemini.generate() — ADR-001 catch 块命中 isProviderModeration → 抛 ContentModerationError
   │    ├─ L22 Storage.upload()
   │    ├─ 写 generations 表 (status='succeeded', image_url, storage_path)
+  │    │   或 status='failed' / error_code='moderation'（命中拦截时，同步写 image_safety_audits）
   │    └─ 返回 ImageCard 数据 (URL + 元信息)
   ├─ emit SSE 'tool_result' { toolId, result: ImageCard }
   └─ 继续模型生成（拼 ImageCard 到回复上下文）
@@ -581,9 +607,15 @@ sequenceDiagram
   ↓
 [L2 M04] GET /api/skills → 返回 Skill[] (meta + promptTemplate)
   ↓
-[L1 M01] <SkillRequiredFields> 显示 params: ['imageUrls']
+[L1 M01] <SkillRequiredFields> 显示 params: ['imageUrls']（review-report GAP-A1）
   ↓
-[L1 M01] 用户填必填字段 → 表单校验通过
+[L1 M01] useSkillPrompt hook: renderSkillPrompt(skill, { prompt: '', imageUrls: [] })
+  ↓
+[L1 M01] 预览区显示：替换占位符后的完整系统提示词（review-report GAP-A1）
+  ↓
+[L1 M01] 用户填必填字段（imageUrls 上传）
+  ├─ 字段缺失 → useSkillPrompt.getMissingFields() 返回缺失列表 → 字段标红
+  └─ 字段填全 → 预览实时更新 + 提交按钮可点击
   ↓
 [L3 M07] chatbotNode:
   1. loadSkill('white-bg') - 读 packages/skills/skills/white-bg/SKILL.md
@@ -597,7 +629,11 @@ sequenceDiagram
 **关键设计**：
 - 技能切换是**纯前端 + LangGraph 系统消息层**的事情，**不经 M04 后端 API**
 - SKILL.md 在 Phase1 是文件加载（`packages/skills/skills/`），Phase2 才考虑 DB 化
-- 必填字段缺失由 L1 表单标红（`getMissingFields()`），不阻塞发送但在 L3 内做兜底校验
+- **必填字段缺失**（review-report GAP-A1）：
+  - L1 表单层由 `useSkillPrompt.getMissingFields()` 标红（用户感知）
+  - L3 chatbotNode 内做兜底校验（服务端不能信任前端）
+  - 缺失项**不阻塞**发送，但服务端 reject + 提示错误
+- **工作台预览**（review-report GAP-A1）：`<GenerationForm>` 内集成 `useSkillPrompt` hook，预览区直接显示 SKILL.md 模板填充结果（可二次编辑）
 
 ---
 
@@ -666,40 +702,139 @@ COMMIT;
 
 ---
 
-### 3.7 内容安全（preCheck + postCheck 双层）
+### 3.7 内容安全（ADR-001：provider 网关拦截 + adapter 归一）
 
 ```
-[L4 M11/M12 Image Adapter] generate(prompt, imageUrls)
+[L4 M11 Seedream Adapter | M12 Gemini Adapter] generate(prompt, imageUrls)
   ↓
-[L5 M17 Content Safety.preCheck(prompt, imageUrls)]
-  ├─ 调供应商 POST /text-check
-  │    └─ 入参: { text: prompt, image_urls: [...] }
-  ├─ 返回 verdict ∈ { 'pass', 'block', 'review' }
-  └─ block → 抛 moderation (立即拒绝，不调模型)
+[L4 adapter 内部] catch (providerErr):
+  ├─ isProviderModeration(providerErr) === true
+  │    ├─ 命中拦截模式 → throw ContentModerationError(reason)
+  │    └─ 未命中 → classifyError(providerErr) → provider_error / network / bad_request
+  ├─ 写 image_safety_audits 表（仅命中 moderation 时）
+  └─ 上抛至 M06 Error Handler → HTTP 403 moderation
 
-[pass] ↓
-[L4 M11/M12] ImageProvider.generate()
-  ↓ 返回 buffer
-[L5 M17 Content Safety.postCheck(imageBuffer)]
-  ├─ 调供应商 POST /image-check
-  │    └─ 入参: imageBuffer (multipart/form-data)
-  ├─ 返回 verdict ∈ { 'pass', 'block' }
-  └─ block → generation.status='failed', error_code='moderation'
-
-[pass] ↓
+[未拦截 ↓]
 [L6 M22 Storage] upload(buffer)
   ↓ 落 generations.status='succeeded'
 ```
 
-**供应商选型**：数美 / 火山 / 阿里云绿网 任选其一（Phase1 第三周确认，详见 §7）。
+**拦截模式来源**：`packages/shared/safety.ts` `isProviderModeration()`，模式集合 append-only。
+**模式覆盖**：
+- Google Gemini：`InputTextSensitiveContentDetected` / `content_policy_violation`
+- 火山方舟 Ark：`sensitive_information_detected`
+- Doubao / MiniMax：`moderation_blocked` 等错误码
+- 中英文消息兜底关键词：`content policy` / `safety system` / `sensitive information` / `content moderation` / `内容违规` / `敏感信息`
 
-**降级行为**：供应商不可用 → 主流程 warn + Sentry + 默认 verdict='review'（保守拒绝，避免漏过违规内容）。
+**为什么不独立中间件**：
+- ❌ 旧方案需在生图前同步 HTTP 调用第三方，预 check 抢 ~500ms~2s
+- ❌ 旧方案需对图像 buffer 二次调用第三方，post check 又加 ~500ms~2s
+- ✅ provider 网关自带内容安全（Google 安全过滤 / OpenAI content policy / 火山 sensitive_word 等）
+- ✅ adapter 一次性拦截，零额外延迟（参考 lobehub-canary 21 行 `contentPolicyError.ts`）
+
+**审计回流**：每次拦截写一条 `image_safety_audits` 记录（reason = provider code / message），可由运营复盘模式覆盖率。
+
+**降级行为**：provider 网关不可用 → 与一般 `provider_error` 同样处理（M11/M12 抛 `provider_error` 5xx），不区分「网关挂了」vs「网关拦截」。
+
+---
+
+### 3.8 工具触发路径（三种触发方式）
+
+> requirements §3.3 明确规定图片工具有 3 种触发路径（review-report C-AR-3）。本节为每条路径给出独立时序图，覆盖 requirements §3.3 的全部触发入口。
+>
+> 共同前置：图片工具默认关闭，三种打开路径独立生效。
+
+#### 3.8.1 路径 A：手动勾选（ToolSelector）
+
+**触发条件**：用户在聊天输入框旁 `<ToolSelector>` 显式勾选「图片工具」。
+
+```
+[L1 M01] ToolSelector UI: 用户勾选 image_generation
+  ↓
+[L1 M02] dispatch(setEnabledTools(['image_generation']))
+  ↓
+[L2 M04] POST /api/chat { message, thread_id?, tools: ['image_generation'], ... }
+  ↓
+[L3 M07] chatbotNode:
+  ├─ 按 toolIds 选择性 bindTools: [image_generation]
+  ├─ model.invoke(messages) — 模型根据工具描述判断是否调用
+  └─ 显式提示词如「生成」「画一张」触发工具调用
+  ↓ (后续走 §3.1 聊天链路，进入 image_generation tool 执行)
+```
+
+**关键设计**：
+- `toolIds` 是会话级开关（zustand 持久化在 M02 Store），刷新页面后保持
+- 模型根据工具描述（"用于生成图片；当用户明确要求出图且提示词含人物 / 场景 / 商品 / 服饰等关键信息时调用"）判断是否真调
+- 未勾选时 `toolIds=[]` → `bindTools([])` → 模型看不到工具描述 → 不会调用
+
+#### 3.8.2 路径 B：技能自动启用（triggers.tools）
+
+**触发条件**：用户选中任一服饰技能（`white-bg` / `model-image` / `scene`），从 `skill.triggers.tools` 读取并自动启用。
+
+```
+[L1 M01] <SkillSelector>: 用户选中 'white-bg'
+  ↓
+[L1 M02] dispatch(setActiveSkill('white-bg'))
+  ↓
+[L1 M01] useEffect 监听 skillId 变化 → dispatch(setEnabledTools(skill.triggers.tools))
+  └─ skill.triggers.tools = ['image_generation']（从 SKILL.md frontmatter 读取）
+  ↓
+[L2 M04] POST /api/chat { skillId: 'white-bg', tools: ['image_generation'], ... }
+  ↓
+[L3 M07] chatbotNode:
+  ├─ loadSkill('white-bg') → parseSkill → renderSkillPrompt
+  ├─ 系统消息: [base] + [rendered skill prompt] + [tool usage prompt（triggers.tools 启用时）]
+  ├─ effectiveProvider = skill.triggers.providerHints[0] ?? 'seedream'
+  └─ bindTools(skill.triggers.tools) — 即使前端未传 toolIds，技能也可自动启用
+  ↓ (后续走 §3.1 聊天链路)
+```
+
+**关键设计**：
+- 技能切换是**纯前端 + LangGraph 系统消息层**的事，**不经 L2 M04 后端 API**
+- `skill.triggers.tools` 在 SKILL.md frontmatter 中声明（例：`tools: [image_generation]`）
+- Phase2 v1.1 扩展（卖点图/A+/尺码图）时，新技能可能启用多个工具
+
+#### 3.8.3 路径 C：意图识别（模型判断）
+
+**触发条件**：未勾选工具也未选技能，但用户消息含显式出图意图（"生成"、"画一张"、"做白底图"等）。
+
+```
+[L1 M01] 用户输入: "帮我生成一张白底图"（toolIds=[]，未选技能）
+  ↓
+[L2 M04] POST /api/chat { message: '帮我生成一张白底图', tools: [], ... }
+  ↓
+[L3 M07] chatbotNode:
+  ├─ toolIds=[] → bindTools([])
+  ├─ 模型看不到工具描述 → 不会调用 image_generation tool
+  └─ **本路径不生效**（模型无法在 toolIds=[] 时调用工具）
+  ↓
+[L1 M01] 模型回复: "请先在工具栏勾选'图片工具'或选择一个服饰技能"
+```
+
+**关键设计**：
+- 路径 C 的"意图识别"**依赖路径 A 或 B 的前置启用**：模型判断调用需基于工具描述可见
+- 严格说，路径 C 是路径 A/B 的**激活后行为**，不是独立路径
+- requirements §3.3 描述为三条独立路径是**用户体验上的区分**（手动 vs 技能 vs "我直接说要生成"），但**架构上是 A 或 B 触发 → C 行为**
+
+#### 3.8.4 路径对比表
+
+| 维度 | 路径 A 手动勾选 | 路径 B 技能自动 | 路径 C 意图识别 |
+|---|---|---|---|
+| 用户操作 | ToolSelector 勾选 | SkillSelector 选中 | 直接说"生成..." |
+| 工具启用时机 | UI 操作时立即 | UI 操作时立即 | 不需要（依赖 A/B） |
+| 工具描述对模型可见 | ✅ | ✅ | 需 A 或 B 先启用 |
+| `bindTools` 入参 | `toolIds` | `skill.triggers.tools` | 需 A 或 B |
+| 系统消息 | base | base + skill prompt + tool usage prompt | base（无 skill） |
+| effectiveProvider | UI 选择 | `skill.triggers.providerHints[0]` | UI 选择 |
+| 工作台适用？ | ❌ | ❌（走工具栏） | ❌（走工具栏） |
+
+> **/image 工作台不参与触发路径**：工作台直接 POST `/api/image`，不经 LangGraph agent，工具触发机制与工作台链路无关（详见 §3.2 数据流）。
 
 ---
 
 ## 4. 模块间通信矩阵
 
-> 列出 23 个模块之间的主通信路径。共约 25 条路径，覆盖所有用户场景。
+> 本节列出 23 个模块之间的主通信路径（共约 25 条）+ 9 个 API 端点全景。
 
 ### 4.1 通信方式分类
 
@@ -711,7 +846,7 @@ COMMIT;
 | **DB RPC** | PostgreSQL `FUNCTION` + transaction | 同步（事务保证） | 配额原子扣减、batch 事务创建 |
 | **LangChain Tool** | `model.bindTools()` + `ToolNode` | 异步（agent 调度） | LangGraph 工具调用 |
 | **Memory** | 进程内 Map | 同步（进程局部） | Provider Health 桶、in-memory cache |
-| **3rd-party API** | fetch + 各 provider SDK | 同步（请求-响应） | 火山方舟 / Gemini / Doubao / MiniMax / 内容安全 |
+| **3rd-party API** | fetch + 各 provider SDK | 同步（请求-响应） | 火山方舟 / Gemini / Doubao / MiniMax / 内容安全已并入 provider 网关（ADR-001） |
 | **Storage** | `@supabase/supabase-js` upload | 异步（流式上传） | 图片 buffer 落 Storage |
 | **Sentry** | `@sentry/nextjs` SDK | 异步（非阻塞） | 错误埋点、性能监控 |
 
@@ -726,7 +861,7 @@ COMMIT;
 | 5 | M01 UI | M04 Route Handler | HTTP | `GET /api/skills` | 同步 | — |
 | 6 | M01 UI | M04 Route Handler | HTTP | `GET /api/health/providers` | 同步（轮询 60s） | Provider 状态轮询 |
 | 7 | M01 UI | M04 Route Handler | HTTP | `GET /api/quotas` | 同步（轮询 30s） | 配额卡片实时显示 |
-| 8 | M01 UI | M04 Route Handler | HTTP | `POST /api/image/safety-check` | 同步 | 实时预览违规检测 |
+| 8 | ~~M01 UI ↔ /api/image/safety-check~~ | **ADR-001 已删除该端点**（provider 网关拦截信号已异步返回，前端展示 `<ErrorCard>`） | — | — | — |
 | 9 | M01 UI | M04 Route Handler | HTTP | `DELETE /api/chat/sessions/[id]` | 同步 | 同步清 checkpointer + storage |
 | 10 | M01 UI | M04 Route Handler | HTTP | `POST /api/image/recreate` | 同步（≤500ms） | 三模式重生成 |
 | 11 | M03 SSE Parser | M02 Store | In-process | `onMessage` callback | 同步（解析后） | 行截断 + 心跳容错 |
@@ -734,27 +869,52 @@ COMMIT;
 | 13 | M04 Route Handler | M07 LangGraph | In-process | `buildChatGraph().invoke()` | 异步（SSE） | 每请求 compile |
 | 14 | M04 Route Handler | M11/M12 Image Adapter | In-process | `imageProvider.generate()` | 同步（最长 60s） | maxDuration=60 |
 | 15 | M04 Route Handler | M16 Quota | DB RPC | `increment_quota(...)` | 同步（事务） | FOR UPDATE 行锁 |
-| 16 | M04 Route Handler | M17 Content Safety | 3rd-party HTTP | `POST /text-check` | 同步（≤1s） | 供应商 API |
+| 16 | M04 Route Handler | M19 RefImage Validator | 3rd-party HTTP | `fetch(url, { method: 'HEAD' })` | 同步 | MIME + size 校验（不再含 Content Safety 第三方调用） |
 | 17 | M04 Route Handler | M21 Postgres | DB | `INSERT/UPDATE/SELECT` | 同步（≤500ms） | RLS 自动按 uid |
 | 18 | M04 Route Handler | M22 Storage | DB | `storage.upload()` | 异步（流式） | 失败回滚 generation |
 | 19 | M04 Route Handler | M20 Logger | In-process | `logger.info/warn/error` | 异步（非阻塞） | 脱敏 prompt/apiKey |
 | 20 | M07 LangGraph | M08 Checkpointer | DB | `SupabaseSaver` 自动 | 异步（状态保存） | 失败仅 warn |
 | 21 | M07 LangGraph | M09 Tool Registry | In-process | `createLangChainTools(toolIds)` | 同步（按需加载） | — |
-| 22 | M07 LangGraph | M11/M12 Image Adapter | LangChain Tool | `model.invoke(tool_call)` | 异步 | 含 preCheck + postCheck |
+| 22 | M07 LangGraph | M11/M12 Image Adapter | LangChain Tool | `model.invoke(tool_call)` | 异步 | ADR-001：拦截在 adapter 入口 `isProviderModeration` |
 | 23 | M07 LangGraph | M14/M15 Chat Adapter | LangChain | `model.invoke(messages)` | 异步（SSE chunk） | 增量 tokens |
 | 24 | M11/M12 Image Adapter | M22 Storage | DB | `storage.upload(buffer)` | 异步 | 失败 → generation='failed' |
 | 25 | M11/M12 Image Adapter | M18 Provider Health | In-process | `recordProviderCall()` | 同步（内存写入） | 5 分钟桶 |
 | 26 | M11/M12 Image Adapter | 火山方舟 / @google/genai | 3rd-party HTTP | `POST /images/generations` | 同步（≤60s） | maxDuration=60 |
 | 27 | M14/M15 Chat Adapter | Doubao / MiniMax | 3rd-party HTTP | OpenAI / Anthropic 兼容 | 异步（SSE） | — |
-| 28 | M17 Content Safety | 内容安全供应商 | 3rd-party HTTP | 数美 / 火山 / 阿里云绿网 | 同步（≤2s） | 失败默认 review |
+| 28 | M11/M12/M14/M15 Provider Adapter | M17 Content Safety Adapter | In-process | `isProviderModeration(err)` 模式匹配 | 同步（一次性） | provider 网关拦截归一 |
 | 29 | M19 RefImage Validator | Storage 对象 | HTTP HEAD | `fetch(url, { method: 'HEAD' })` | 同步 | MIME + size 校验 |
 | 30 | M20 Logger + Sentry | pino / Sentry Cloud | In-process + 3rd-party | — | 异步（非阻塞） | — |
 
 ### 4.3 通信模式总结
 
-- **同步链路**：UI 表单提交、配额扣减、内容安全校验、provider 健康检查 → 都是**请求-响应模式**，超时需明确上限
+- **同步链路**：UI 表单提交、配额扣减、provider 健康检查 → 都是**请求-响应模式**，超时需明确上限（内容安全由 provider 网关拦截，零额外同步调用，ADR-001）
 - **异步链路**：聊天 SSE 流、生图 async fire-and-forget、checkpointer 状态保存 → 都是**单向推送 / 后台处理**
 - **关键异步边界**：M04 `/api/image` POST 在 N+1 张图场景下，**只同步建 batch + generations 记录，立即返回 200**，实际生成在 `process.nextTick` 后台跑；前端通过 SWR 轮询感知进度。这一边界是 Phase1 区分「同步 API」与「异步队列」的过渡设计（v1.2 改为 Supabase Edge Function 队列后接口不变）。
+
+---
+
+### 4.4 API 端点全景
+
+> review-report GAP-C1：requirements §4.4.1–§4.4.3 共定义 9 个 API 端点，本节集中列出。本节为**接口契约**，实现细节见 tech-selection §3.x。
+
+| # | 方法 + 路径 | 功能 | 关键模块 | 同步性 | 备注 |
+|---|---|---|---|---|---|
+| 1 | `POST /api/chat` | 聊天 SSE 流 | M04 + M07 + M03 | 异步推送 | 首事件 `session`，末事件 `end`，中间 4 类工具事件 |
+| 2 | `GET /api/chat/sessions` | 聊天会话列表 | M04 + M21 | 同步 | — |
+| 3 | `POST /api/chat/sessions` | 创建新会话 | M04 + M21 | 同步 | — |
+| 4 | `PATCH /api/chat/sessions` | 更新会话（重命名） | M04 + M21 | 同步 | — |
+| 5 | `DELETE /api/chat/sessions/[id]` | 删会话 + 同步清 checkpointer + Storage | M04 + M21 + M08 + M22 | 同步 | §5.4 4 阶段清理 |
+| 6 | `GET /api/image/[taskId]` | 单 batch 状态轮询 | M04 + M21 | 同步 | SWR 2s 间隔 |
+| 7 | `POST /api/image` | 创建生成任务 | M04 + M16 + M21 | 同步（≤500ms，lambda 部分） | async fire-and-forget 后续生成（ADR-001 移除 M17 preCheck 同步调用） |
+| 8 | `POST /api/image/recreate` | 重生成三模式 | M04 + M16 + M21 | 同步 | `single` / `failed` / `all` |
+| 9 | `POST /api/image/safety-check` | ~~内容安全实时预览~~（ADR-001 删除该端点） | — | — | Phase1 由前端展示 provider 网关拦截错误即可 |
+
+> **超出 9 端点的扩展端点**（不在 requirements §4.4 强制范围，属架构建议）：
+> - `GET /api/skills` — 技能列表
+> - `GET /api/topics` / `POST /api/topics` / `GET /api/topics/[id]/batches` — 话题 CRUD
+> - `GET /api/health/providers` — Provider 健康状态（review-report §3.13a）
+> - `GET /api/quotas` — 配额查询（review-report §3.7b）
+> - `GET /api/openapi.json` — OpenAPI 文档（tech-selection §2.8 / §3.15）
 
 ---
 
@@ -800,21 +960,28 @@ COMMIT;
 
 ---
 
-### 5.3 内容安全拦截
+### 5.3 内容安全拦截（ADR-001）
 
-**触发**：M17 Content Safety.preCheck 或 postCheck 返回 `verdict='block'`
+**触发**：provider 网关（Seedream / Gemini / Doubao / MiniMax）拦截信号命中 `isProviderModeration()` 模式
 
 **用户感知**：
-- preCheck block：聊天流立即中断 → `<ErrorCard code='moderation'>` 显示「内容违规：[reasons[0]]」
-- postCheck block：工作台单张图卡片显示「内容违规」徽章 + `<ErrorCard>`（其他张继续）
+- 聊天流：模型生成中途被网关拦截 → SSE `tool_error` 事件 → `<ErrorCard code='moderation'>` 显示「Provider 内容安全网关拒收了请求或结果，请修改提示词后重试。」
+- 工作台：单张图卡片显示「内容违规」徽章 + `<ErrorCard>`（其他张继续）
 
 **系统行为**：
-1. preCheck block：M07 → SSE `tool_error` 事件 → 立即结束本次流
-2. postCheck block：M11 → 写 `generations.status='failed', error_code='moderation'`
-3. M20 logger + Sentry 上报（**不打印原始 prompt，仅记错误码 + 首 80 字符**）
-4. M21 `image_safety_audits` 写入审计（verdict + reasons）
+1. Provider 调用抛错 → M11/M12/M14/M15 在 adapter 入口调 `isProviderModeration(err)` → 命中 → throw `ContentModerationError`
+2. M06 Error Handler 捕获 → `errorResponse(MODERATION)`（HTTP 403）
+3. 工作台路径：M11 → 写 `generations.status='failed', error_code='moderation'` + 同步 `image_safety_audits`（verdict='block'，reasons = provider code/message）
+4. 聊天路径：M07 → SSE `tool_error` 事件 → 立即结束本次流
+5. M20 logger + Sentry 上报（**不打印原始 prompt，仅记错误码与 provider code/message**）
 
-**降级等级**：**软阻断**（仅当次拒绝，可改写 prompt 再试）
+**降级等级**：**软阻断**（仅当次拒绝，用户可改写 prompt 再试）
+
+**与旧方案的差异**（ADR-001）：
+- ❌ 不再有 preCheck 在图像生成前的「同步 HTTP 调用」
+- ❌ 不再有 postCheck 在图像生成后的「同步 HTTP 调用」
+- ✅ 拦截信号完全由 provider 网关异步返回，无独立中间件
+- ✅ `image_safety_audits` 表 repurposed：记录 provider 网关拦截证据，而非第三方供应商审计
 
 ---
 
@@ -920,7 +1087,7 @@ COMMIT;
 |---|---|---|---|---|---|
 | Provider 不健康 | M18 | 5min 错误率 > 50% | UI 禁用 + 自动切 | 自动切到健康 provider | 自动无缝 |
 | 配额耗尽 | M16 | used + n > 30 | 429 + 禁用重试 | 等 UTC 日切 reset | 硬阻断 |
-| 内容违规 | M17 | verdict='block' | 错误卡片 + 可改写 | 写 moderation 错误码 | 软阻断 |
+| 内容违规 | M17 + provider 网关 | provider 拦截信号命中 `isProviderModeration()` | 错误卡片 + 可改写 | adapter 入口归一 → 写 moderation 错误码 + image_safety_audits | 软阻断 |
 | Checkpointer 删除失败 | M08 | DB 操作失败 | warn toast | 主流程成功 + cron 兜底 | 主流程优先 |
 | Provider 5xx / 网络 | M11/M12 | HTTP 5xx / timeout | 错误卡片 + 重试 | 写 provider_error | 手动重试 |
 | 鉴权失败 | M05 | JWT 过期 | 自动 anon 重登 | 静默恢复 | 自动恢复 |
@@ -937,11 +1104,13 @@ COMMIT;
 | 聊天流首 token 时间（TTFT） | ≤ 2 s | 从 `POST /api/chat` 到首个 SSE 'chunk' 事件 | M04 + M07 + M14/M15 |
 | `/api/image` POST 返回延迟 | ≤ 500 ms | 从请求到 `taskId` 返回（lambda 同步部分） | M04 + M16 + M21 |
 | `/api/image/[taskId]` GET 轮询响应 | ≤ 200 ms | DB 单条 batch + N 条 generations 查询 | M04 + M21 |
+| 聊天侧栏渲染耗时（review-report GAP-B1） | ≤ 200 ms | 浏览器 Performance API 测量侧栏列表首次渲染耗时；测试环境 Chrome/Safari 最新版 + 千兆网络 | M01 + M02 |
+| 刷新/重开浏览器历史恢复率（review-report GAP-L1） | 100% | Playwright e2e：创建会话 → 刷新 → 验证 sessions + generations 完整 | M08 + M21 + M02 |
 | Provider 健康检查 API 响应 | ≤ 100 ms | 内存桶读取 | M04 + M18 |
 | 配额越界响应 | ≤ 100 ms | RPC 返回 | M04 + M16 |
 | 配额扣减 RPC 原子性 | FOR UPDATE 行锁 | 并发测试：同一 uid 50 并发扣减仅越界一次 | M16 + M21 |
 | Provider 健康检查窗口 | 5 分钟 | `Math.floor(now / 5min) * 5min` 对齐 | M18 |
-| 内容安全拦截率 | ≥ 99% | 1000 条已知违规样本日回归 | M17 |
+| 内容安全拦截率（ADR-001）| ≥ 95%（provider 网关拦截） | 1000 条已知违规样本日回归（CI 验证 provider 网关行为） | M17 `isProviderModeration` 模式覆盖率 |
 | Provider 健康检查告警准确率 | 误报 < 5% / 漏报 < 1% | 人工验证 + 边界值测试 | M18 |
 | 备份 RPO / RTO | RPO ≤ 1h / RTO ≤ 4h | Supabase 自动备份 + 季度恢复演练 | M21 |
 | LangGraph 每请求 compile 开销 | ≤ 50ms | benchmark 测试 | M07 |
@@ -949,7 +1118,7 @@ COMMIT;
 
 **性能基准（目标）**：
 - 简单聊天（无工具调用）：p95 ≤ 3s 完成
-- 单张生图（无参考图）：p95 ≤ 60s（含 provider 调用 + postCheck + upload）
+- 单张生图（无参考图）：p95 ≤ 60s（含 provider 调用 + 内容安全由 provider 网关异步拦截，无 postCheck 同步开销 + upload）
 - 4 张批量生图：p95 ≤ 90s（provider 并行可优化，Phase1 串行）
 - 配额扣减 RPC：p95 ≤ 100ms（含行锁等待）
 
@@ -967,8 +1136,11 @@ COMMIT;
 | 每浏览器实例一个 anon uid | 同一用户多设备视为不同用户 | Phase2 引入 OAuth 后合并 |
 | Phase1 仅 web 端 | 响应式 Web 即可，不做移动 / 桌面 | Phase2+ 评估 |
 | LangGraph 每请求 compile 性能可接受 | 约 +50ms/请求；多次并发实例安全 | Phase2 评估是否引入 Map 缓存 |
-| 内容安全供应商（数美 / 火山 / 阿里云绿网）任选其一 | 选型未最终确认 | Phase1 第三周锁定 |
+| 内容安全（ADR-001）采用 provider 网关 + 错误码模式映射（lobehub 风格） | 不引入独立第三方供应商 | Phase2 视运营复盘拦截率决定是否补回独立第三方兜底 |
 | 单一 Next.js 全栈部署（Vercel / 自托管 PM2） | 不分离前后端 | 自托管兜底 |
+| **工程实践（review-report GAP-C3）**：PR 模板 + CodeQL + secret scanning 已配置 | 安全门禁到位 | tech-selection §1.5 husky + §1.6 GitHub Actions + §4.9.4 评审清单；`pull_request_template.md` 含「变更类型 / 关联 US / 验收标准 / 影响范围 / 回滚方案」五段 |
+| 错误码统一在 `packages/shared/errors.ts` | 全栈一致 | tech-selection §3.16 ERROR_CODES + ERROR_STATUS |
+| provider 健康检查告警渠道 Phase2 推迟 | Phase1 仅本地日志 + Sentry | tech-selection §3.13；§5.1 降级策略仅依赖健康检查本身 |
 
 ### 7.2 已知架构风险
 
@@ -978,7 +1150,7 @@ COMMIT;
 | Gemini 国内访问受限 | 高 | 中 | M18 健康检查 + 自动降级 |
 | Seedream 服饰效果未达可用率 80% | 中 | 高 | SKILL.md 模板调优回归 |
 | 无登录被薅羊毛 | 中 | 中 | 30 张配额 + UA/IP 软限速 |
-| 内容合规（国内上线） | 高 | 高 | Phase1 必接供应商；违规告警 P0 |
+| 内容合规（ADR-001） | 中 | 中 | provider 网关拦截率 ≥ 95% 即满足 Phase1；定期人工 audit `image_safety_audits` 表复盘命中模式；Phase2 视拦截率决定是否补接独立第三方 |
 | serverless 长任务超时 | 低 | 中 | maxDuration=60 + 同步生成 |
 | checkpointer 删 thread 失败 | 低 | 低 | 主流程 warn + cron 兜底 |
 | parametersSchema 与 provider 版本漂移 | 中 | 中 | schema 入仓 + CI 校验 |
@@ -1018,7 +1190,7 @@ COMMIT;
 | Q8 | 4K 挪 Phase2 | M11/M12 supportedResolutions=['1K','2K'] |
 | Q9 | 监控/备份纳入 MVP | M18 + M20 + §7.2 RPO/RTO |
 | Q10 | workflow 每请求 compile | M07 LangGraph Agent |
-| Q11 | 内容安全 Phase1 必接 | M17 Content Safety Middleware |
+| Q11 | 内容安全 Phase1 委托 provider 网关 + 错误码模式映射（ADR-001） | M17 Content Safety Adapter + 各 provider adapter 入口 |
 | Q12 | 聊天 LLM = Doubao + MiniMax | M14 + M15 Chat Adapter |
 | D1 | 借鉴范围（@lobehub/ui + 自建） | L1 Browser UI |
 | D2 | 工具注册表四类 | M09 Tool Registry |
@@ -1055,13 +1227,135 @@ COMMIT;
 
 ---
 
-## 9. 文档元信息
+## 9. 安全边界（review-report GAP-C2 集中视图）
+
+> requirements §4.6 共 11 条安全约束，本节集中说明每条约束在 architecture 中由谁实现。**架构层 vs 实施层分工**：
+> - 架构层（本节）：定义边界、责任模块、违反后果
+> - 实施层（tech-selection §1.3 / §1.4 / §4.6）：具体代码、配置、CI 校验
+>
+> 详细实施细节见 tech-selection §4.6 与 §1.3，本节不重复。
+
+### 9.1 安全约束矩阵
+
+| # | 约束 | 责任模块 | 违反后果 | 实施层（tech-selection） |
+|---|---|---|---|---|
+| 1 | **密钥走 env，不入代码库** | M20 Logger + 平台原生 secrets | 密钥泄漏 → Sentry alert + 立即轮转 | §1.7 Secrets 管理（review-report C-1 统一 ARK_*） |
+| 2 | **RLS 完整且匿名用户有效** | M21 Supabase Postgres + M05 Auth | 数据越权 → RLS 自动拦截 | §4.3.3 完整 SQL 5 张表策略 |
+| 3 | **构建类型检查（禁 `any`）** | M07 LangGraph Agent + 编译期 | 类型漏洞绕过 → 运行时崩溃 | §1.3 strict TS + §1.4 ESLint `@typescript-eslint/no-explicit-any: error` |
+| 4 | **SSE 解析容错** | M03 Client SSE Parser + M04 Route Handler | 连接中断 → 用户感知重连按钮 | §2.9 行截断 / 多事件 / 心跳容错 |
+| 5 | **禁 `eval` / `Function`** | 全模块（code review） | 代码执行逃逸 → XSS / RCE | Code Review 规则 + 预提交钩子 |
+| 6 | **每请求 compile** | M07 LangGraph Agent | serverless 多实例串数据 | §3.10 buildChatGraph 每请求调用 |
+| 7 | **OAuth PKCE（Phase2）** | M23 Supabase Auth | implicit flow 漏洞 | Phase2 引入 PKCE |
+| 8 | **迁移文件入仓 + CI 校验** | M21 Postgres + CI | 表结构漂移 → 生产事故 | tech-selection §4.9.3 + `supabase db diff` |
+| 9 | **配额按 UTC 日原子扣减** | M16 Quota Middleware + M21 Postgres RPC | 配额绕过 / 并发越界 | §3.5 `increment_quota` RPC FOR UPDATE 行锁 |
+| 10 | **内容安全（ADR-001：provider 网关 + 错误模式映射）** | M11/M12/M14/M15 各 provider adapter + M17 模式匹配器 + M21 `image_safety_audits` 表 | 拦截模式漏识别 → 合规风险 | tech-selection §3.12 `isProviderModeration` + 模式 append-only；audit 表记录每次拦截证据 |
+| 11 | **日志脱敏** | M20 Logger + Sentry | prompt / apiKey 泄漏 → 隐私事故 | pino redact 配置 + Sentry beforeSend |
+
+### 9.2 信任边界
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ 信任边界 1：浏览器 ↔ API Gateway                               │
+│   ├─ 入口：Cookie JWT（HttpOnly + Secure + SameSite=Lax）     │
+│   ├─ 上行：所有请求必须经 M05 Auth Middleware（RLS 上下文注入）│
+│   └─ 下行：响应不得包含 service_role key、原始 prompt 等敏感数据 │
+└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ 信任边界 2：API Gateway ↔ Supabase                              │
+│   ├─ 入口：anon key + user JWT（anon sign-in）                  │
+│   ├─ 关键：禁用 service_role 走前端（防 RLS 旁路）              │
+│   └─ 所有 DB 操作走 M21 RLS 隔离                              │
+└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ 信任边界 3：Provider Layer ↔ 3rd-party API                     │
+│   ├─ 入口：ARK_API_KEY / GOOGLE_API_KEY（env 注入）            │
+│   ├─ 上行：参考图 MIME/大小校验（M19）                          │
+│   │   备注：内容安全由 provider 网关自助拦截                    │
+│   │         （ADR-001，详见 M17 / tech §3.12）                  │
+│   └─ 下行：3rd-party 返回 buffer 不再过 postCheck                 │
+│            provider 网关拦截信号由 adapter 入口归一到           │
+│            moderation 错误码并审计落 image_safety_audits         │
+└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│ 信任边界 4：客户端 UI ↔ 用户（LLM 生成内容）                   │
+│   ├─ 入口：所有 LLM 输出经 MarkdownRenderer（防 XSS）          │
+│   ├─ 关键：禁 eval/Function 执行 AI 生成代码（修复 LangGraphPj │
+│   │        CodePreviewPanel 风险）                             │
+│   └─ SSE 解析容错防心跳解析崩溃                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 9.3 数据敏感性分级
+
+| 数据类型 | 敏感性 | 存储位置 | 访问控制 |
+|---|---|---|---|
+| API 密钥（ARK / GOOGLE / ANTHROPIC / DOUBAO_MODEL / MINIMAX） | 🔴 高 | env（不入仓） | 仅服务端访问 |
+| anon user JWT | 🟡 中 | Cookie（HttpOnly + Secure + SameSite=Lax） | 仅服务端验证 |
+| 用户提示词 prompt | 🟡 中 | DB generations.prompt + LangGraph checkpointer | RLS + 日志脱敏 |
+| 生成图片 URL（generated-images public bucket） | 🟢 低 | Storage public | 无需签名 |
+| 参考图 URL（uploads private bucket） | 🟡 中 | Storage private | signedUrl 1h 过期（review-report C-AR-1） |
+| 配额计数 | 🟢 低 | DB quotas | RLS |
+| Provider 内容安全拦截证据（verdict + provider code + reasons） | 🟡 中 | DB image_safety_audits（ADR-001 repurposed） | RLS + 90 天保留 |
+
+### 9.4 已知安全风险与缓解
+
+| 风险 | 概率 | 影响 | 缓解措施（架构层） | 实施层 |
+|---|---|---|---|---|
+| 无登录被薅羊毛 | 中 | 中 | anon uid + 30 张/日 UTC 配额 | tech-selection §3.7b + M16 配额 |
+| Gemini 国内访问受限 | 高 | 中 | Provider 健康检查自动降级 | tech-selection §3.13a + §5.1 |
+| 内容合规风险（ADR-001） | 中 | 中 | provider 网关拦截 + audit 表留证；Phase2 视拦截率决定是否补独立第三方 | tech-selection §3.12 + M17 `isProviderModeration` |
+| checkpointer 删 thread 失败 | 低 | 低 | 主流程 warn + cron 兜底 | tech-selection §3.11a + §5.4 |
+| 密钥泄漏 | 低 | 高 | 预提交钩子 + secret scanning | tech-selection §1.7 |
+| 每请求 compile 50ms 开销 | 中 | 低 | 已确认可接受；Phase2 评估缓存 | §7.2 已知风险 |
+
+---
+
+## 10. 文档元信息
 
 | 字段 | 值 |
 |---|---|
-| 文档版本 | 1.0 |
+| 文档版本 | 1.2（v1.1 + ADR-001 内容安全策略调整） |
 | 生成日期 | 本会话 |
-| 关联文档 | `requirements.md`（PRD） / `tech-selection.md`（技术选型） / `review-report-requirements-vs-tech.md`（审查报告） |
+| 关联文档 | `requirements.md`（PRD） / `tech-selection.md`（技术选型） / `review-report-requirements-vs-tech.md`（req ↔ tech 审查） / `review-report-requirements-vs-architecture.md`（req ↔ arch 审查） |
 | 模块粒度 | 细粒度（5 层 × 23 模块） |
 | 受众 | 架构师 / 新入职工程师 / Code Reviewer |
+| 本版本变更 | 见 §10.1（v1.1）/ §10.2（v1.2 ADR-001）|
 | 下次更新触发 | Phase1 编码进入稳定期后（约第 4 周），补充实际部署拓扑与监控 dashboard 配置 |
+
+### 10.1 本版本变更（review-report-requirements-vs-architecture 落地）
+
+| # | 来源 | 章节 | 修改 |
+|---|---|---|---|
+| 1 | C-AR-1 | §1.1 M22、§2 M22 | 区分 `publicUrl` / `signedUrl` 双输出 |
+| 2 | C-AR-2 | §2 M01、M06 | 各补一行 i18n |
+| 3 | C-AR-3 | 新增 §3.8 | 工具触发路径图（3 种触发方式） |
+| 4 | GAP-B1 | §6 SLO | 新增"聊天侧栏渲染 ≤ 200 ms" |
+| 5 | GAP-L1 | §6 SLO | 新增"恢复率 100%（e2e 自动化）" |
+| 6 | GAP-A2 | §3.2 | 新增"参考图上传与自动尺寸推断"前置步骤 |
+| 7 | GAP-A1 | §3.4 | 新增"必填字段标红 + 预览"步骤 |
+| 8 | GAP-C1 | §4.4 | 新增"API 端点全景"列表 |
+| 9 | GAP-C2 | §9 | 新增"安全边界"专章（11 条约束矩阵 + 4 信任边界 + 数据敏感性分级） |
+| 10 | GAP-C3 | §7.1 | 假设表新增 PR 模板 / CodeQL / secret scanning 行 |
+
+### 10.2 本版本变更（v1.2 ADR-001 落地）
+
+| # | 来源 | 章节 | 修改 |
+|---|---|---|---|
+| 1 | ADR-001 | §1.1 M17 | M17 改名为 Content Safety Adapter（委托 provider 网关） |
+| 2 | ADR-001 | §2 M17 | 职责 / 输入 / 输出 / 失败模式 全文重写 |
+| 3 | ADR-001 | §3.1 sequenceDiagram | 移除 M17 participant；改"工具调用 image_generation"分支写 audit 表 |
+| 4 | ADR-001 | §3.2 sequenceDiagram | 移除 M17 participant；前/后置 preCheck/postCheck 同步调用全删 |
+| 5 | ADR-001 | §3.7 | 内容安全段全文重写（provider 网关拦截 + adapter 归一 + 拦截模式覆盖） |
+| 6 | ADR-001 | §4.2 通信矩阵 | #16 / #28 重写；#8、#9 端点删除标记 |
+| 7 | ADR-001 | §4.3 同步链路 | 移除"内容安全校验"项 |
+| 8 | ADR-001 | §4.4 端点 #9 | 标记 /api/image/safety-check 删除 |
+| 9 | ADR-001 | §5.3 降级策略 | 内容安全拦截段全文重写 |
+| 10 | ADR-001 | §5.9 总览表 内容违规行 | 更新触发条件 + 用户感知 + 系统行为 |
+| 11 | ADR-001 | §6 SLO | 内容安全拦截率目标 99% → 95% provider 网关 |
+| 12 | ADR-001 | §7.1 假设 内容安全行 | 删除"Phase1 第三周锁定" |
+| 13 | ADR-001 | §7.2 风险 内容合规行 | 概率/影响 高→中；Phase1 必接供应商 替换为 网关 ≥ 95% |
+| 14 | ADR-001 | §8.1 决策索引 Q11 | 改写 |
+| 15 | ADR-001 | §9.1 安全约束 #10 | 改写 |
+| 16 | ADR-001 | §9.2 信任边界 3 | 内容安全行改写 |
+| 17 | ADR-001 | §9.3 数据敏感性 image_safety_audits | 改写（repurposed 为 provider 网关拦截证据） |
+| 18 | ADR-001 | §9.4 风险 内容合规行 | 改写 |
