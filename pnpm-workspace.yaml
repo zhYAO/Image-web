@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+confirmModulesPurge: false
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

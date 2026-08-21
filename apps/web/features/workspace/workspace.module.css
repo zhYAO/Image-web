@@ -1,0 +1,728 @@
+.workspace {
+  display: grid;
+  grid-template-columns: 264px minmax(420px, 1fr) 360px;
+  width: 100vw;
+  height: 100dvh;
+  background:
+    radial-gradient(circle at 52% 0%, rgba(79, 70, 229, 0.08), transparent 32%),
+    var(--z-bg);
+}
+
+.sidebar,
+.configPanel {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  border-color: var(--z-border);
+  background: var(--z-panel);
+  backdrop-filter: blur(18px);
+}
+
+.sidebar {
+  border-right: 1px solid var(--z-border);
+}
+
+.configPanel {
+  border-left: 1px solid var(--z-border);
+}
+
+.panelInner {
+  overflow: auto;
+  height: 100%;
+  padding: 20px 16px;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  padding: 0 4px;
+}
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--z-primary), #7c3aed);
+  color: white;
+  font-weight: 800;
+  box-shadow: 0 8px 22px rgba(79, 70, 229, 0.28);
+}
+
+.brandName {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.brandMeta,
+.muted {
+  color: var(--z-muted);
+  font-size: 12px;
+}
+
+.newButton {
+  width: 100%;
+  height: 42px;
+  margin-bottom: 18px;
+  border-color: var(--z-primary) !important;
+  background: var(--z-primary) !important;
+}
+
+.sectionLabel {
+  margin: 18px 4px 8px;
+  color: var(--z-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sessionList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sessionItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 8px 9px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--z-text);
+  text-align: left;
+}
+
+.sessionItem:hover,
+.sessionActive {
+  background: var(--z-primary-soft);
+}
+
+.sessionTitle {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionActions {
+  display: flex;
+  opacity: 0;
+}
+
+.sessionItem:hover .sessionActions,
+.sessionActive .sessionActions {
+  opacity: 1;
+}
+
+.main {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex: 0 0 64px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  border-bottom: 1px solid rgba(229, 231, 239, 0.8);
+  background: rgba(245, 246, 250, 0.75);
+  backdrop-filter: blur(16px);
+}
+
+.headerTitle {
+  overflow: hidden;
+  max-width: 52vw;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobileControl {
+  display: none;
+}
+
+.timelineScroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: min(100%, 960px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 34px 38px 150px;
+}
+
+.empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 820px);
+  margin: auto;
+  padding: 44px 26px 170px;
+  text-align: center;
+}
+
+.heroMark {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  margin-bottom: 22px;
+  border: 1px solid rgba(79, 70, 229, 0.15);
+  border-radius: 24px;
+  background: linear-gradient(145deg, white, #eef2ff);
+  color: var(--z-primary);
+  font-size: 27px;
+  font-weight: 850;
+  box-shadow: var(--z-shadow);
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(28px, 3.4vw, 44px);
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+}
+
+.heroSubtitle {
+  max-width: 560px;
+  margin: 14px 0 30px;
+  color: var(--z-muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.skillGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.skillCard {
+  cursor: pointer;
+  padding: 18px;
+  border: 1px solid var(--z-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--z-text);
+  text-align: left;
+  transition: 160ms ease;
+}
+
+.skillCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(79, 70, 229, 0.35);
+  box-shadow: 0 12px 28px rgba(48, 46, 94, 0.08);
+}
+
+.skillIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+}
+
+.skillName {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 700;
+}
+
+.composerDock {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 16px 34px 22px;
+  background: linear-gradient(transparent, var(--z-bg) 24%);
+}
+
+.composer {
+  width: min(100%, 900px);
+  margin: auto;
+  padding: 10px;
+  border: 1px solid rgba(213, 216, 229, 0.95);
+  border-radius: 22px;
+  background: white;
+  box-shadow: 0 18px 55px rgba(38, 39, 70, 0.13);
+}
+
+.modeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 11px;
+  background: #f2f3f7;
+}
+
+.modeButton {
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--z-muted);
+  font-size: 13px;
+}
+
+.modeActive {
+  background: white;
+  color: var(--z-primary);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(30, 33, 60, 0.08);
+}
+
+.composerBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inlineReferences {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  padding: 6px 4px;
+}
+
+.inlineReferences > * {
+  transition: margin-inline-start 180ms ease;
+}
+
+.inlineReferences > * + * {
+  margin-inline-start: -52px;
+}
+
+.inlineReferences:hover > * + *,
+.inlineReferences:focus-within > * + * {
+  margin-inline-start: 4px;
+}
+
+.referenceCard,
+.referenceAddCard {
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--z-border);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 4px 14px rgba(38, 39, 70, 0.1);
+}
+
+.referenceCard {
+  padding: 2px;
+}
+
+.referencePreview {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  background: #f3f4f8;
+  color: var(--z-muted);
+}
+
+.referenceRemove {
+  cursor: pointer;
+  position: absolute;
+  z-index: 2;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--z-border);
+  border-radius: 50%;
+  opacity: 0;
+  background: white;
+  color: var(--z-muted);
+  box-shadow: 0 3px 10px rgba(38, 39, 70, 0.16);
+  transition: opacity 160ms ease, color 160ms ease;
+}
+
+.referenceCard:hover,
+.referenceCard:focus-within {
+  z-index: 20 !important;
+}
+
+.referenceCard:hover .referenceRemove,
+.referenceCard:focus-within .referenceRemove,
+.referenceRemove:focus-visible {
+  opacity: 1;
+}
+
+.referenceRemove:hover {
+  color: #d4380d;
+}
+
+.referenceAddCard {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  background: #f8f8fc;
+  color: var(--z-muted);
+  font-size: 10px;
+  transition: border-color 160ms ease, color 160ms ease, margin-inline-start 180ms ease;
+}
+
+.referenceAddCard:hover,
+.referenceAddCard:focus-within {
+  border-color: var(--z-primary);
+  color: var(--z-primary);
+}
+
+.composerInput {
+  min-width: 0;
+}
+
+.composerInput textarea {
+  padding: 8px 4px !important;
+  font-size: 15px;
+}
+
+.composerActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+}
+
+.actionGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.message {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.messageUser {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  display: grid;
+  flex: 0 0 32px;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.messageUser .avatar {
+  background: #fff0e6;
+  color: var(--z-accent);
+}
+
+.bubble {
+  max-width: min(78%, 720px);
+  padding: 12px 15px;
+  border: 1px solid var(--z-border);
+  border-radius: 6px 18px 18px;
+  background: white;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.messageUser .bubble {
+  border: 0;
+  border-radius: 18px 6px 18px 18px;
+  background: var(--z-primary);
+  color: white;
+}
+
+.generationCard {
+  overflow: hidden;
+  border: 1px solid var(--z-border);
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 8px 30px rgba(30, 33, 60, 0.05);
+}
+
+.generationHeader,
+.generationFooter {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.generationPrompt {
+  overflow: hidden;
+  max-width: 72%;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.asset {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f2f3f7, #e9ebf3);
+}
+
+.asset img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.assetState {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(247, 248, 252, 0.88);
+  color: var(--z-muted);
+  text-align: center;
+}
+
+.expired {
+  background: rgba(23, 23, 37, 0.68);
+  color: white;
+}
+
+.configTitle {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.field {
+  margin-top: 18px;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.ratioGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.ratioButton {
+  cursor: pointer;
+  padding: 9px 3px;
+  border: 1px solid var(--z-border);
+  border-radius: 10px;
+  background: white;
+  color: var(--z-muted);
+  font-size: 11px;
+}
+
+.ratioActive {
+  border-color: var(--z-primary);
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+  font-weight: 700;
+}
+
+.promptPreview {
+  padding: 12px;
+  border: 1px dashed #c9cce0;
+  border-radius: 12px;
+  background: #fafaff;
+  color: var(--z-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.quota {
+  margin-top: 24px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f8f8fc;
+}
+
+.recoveryAlert {
+  margin: 12px 18px 0;
+}
+
+.statusFeedback {
+  position: absolute;
+  z-index: 7;
+  top: 74px;
+  right: 20px;
+  max-width: 420px;
+}
+
+@media (max-width: 1199px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar,
+  .configPanel {
+    display: none;
+  }
+
+  .mobileControl {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .header {
+    flex-basis: 56px;
+    padding: 0 12px;
+  }
+
+  .timeline {
+    gap: 16px;
+    padding: 20px 14px 144px;
+  }
+
+  .empty {
+    justify-content: flex-start;
+    padding: 44px 16px 152px;
+  }
+
+  .heroMark {
+    width: 58px;
+    height: 58px;
+    border-radius: 19px;
+  }
+
+  .skillGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .skillCard {
+    padding: 14px 16px;
+  }
+
+  .skillIcon {
+    margin: 0 10px 0 0;
+  }
+
+  .skillName {
+    display: inline;
+  }
+
+  .skillCard .muted {
+    display: block;
+    margin: 6px 0 0 42px;
+  }
+
+  .composerDock {
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .composer {
+    border-radius: 18px;
+  }
+
+  .referenceCard,
+  .referenceAddCard {
+    flex-basis: 52px;
+    width: 52px;
+    height: 52px;
+  }
+
+  .inlineReferences > * + * {
+    margin-inline-start: -40px;
+  }
+
+  .inlineReferences:hover > * + *,
+  .inlineReferences:focus-within > * + * {
+    margin-inline-start: 3px;
+  }
+
+  .bubble {
+    max-width: 86%;
+  }
+
+  .assetGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolLabel {
+    display: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .inlineReferences {
+    overflow-x: auto;
+    max-width: 60%;
+  }
+
+  .inlineReferences > * + * {
+    margin-inline-start: 4px;
+  }
+
+  .referenceRemove {
+    opacity: 1;
+  }
+}

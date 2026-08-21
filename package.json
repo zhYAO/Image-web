@@ -1,0 +1,26 @@
+{
+  "name": "zimage",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.19.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @zimage/web dev",
+    "build": "pnpm --filter @zimage/web build",
+    "lint": "eslint apps/web packages/domain --max-warnings=0",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:run": "pnpm -r --if-present test:run",
+    "test:coverage": "pnpm -r --if-present test:coverage",
+    "e2e": "pnpm --filter @zimage/web e2e"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "3.2.6",
+    "eslint": "9.39.2",
+    "eslint-config-next": "16.3.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "vitest": "3.2.6"
+  }
+}
