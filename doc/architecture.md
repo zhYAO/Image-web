@@ -29,10 +29,10 @@ flowchart LR
 
 | 模块 ID | 模块 | 职责与边界 |
 | --- | --- | --- |
-| M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 布局、会话选择和匿名恢复提示；旧路径只做重定向。 |
+| M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 两栏布局、可折叠会话侧栏、会话选择和匿名恢复提示；旧路径只做重定向。 |
 | M02 | `Timeline` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态。 |
 | M03 | `UnifiedComposer` / `ToolSelector` | 显式聊天/生图模式、草稿、图片工具许可和提交；图片工具默认关闭，不直接调用 provider。 |
-| M04 | `GenerationConfigDrawer` | 技能必填字段、可编辑提示词预览、参考图、provider/model、动态参数和降级确认。 |
+| M04 | `ModelPopover` / `GenerationParameterPopover` / `SkillPopover` | 输入框上方互斥浮层：provider/model 与健康状态、能力驱动的比例/分辨率/数量、技能必填字段与实时提示词预览；窄屏保留兼容抽屉。参考图由输入框单点维护。 |
 | M05 | Chat Route + LangGraph | 认证、用户消息持久化、SSE、请求级 workflow/checkpointer、Doubao/MiniMax 与聊天 tool 编排。 |
 | M06 | Application API | 会话、生图、重生成、配额、技能、健康和资产 URL 的 Route Handlers。 |
 | M07 | Skill Registry | 三个内置技能、版本、指令和 provider/model capability。 |

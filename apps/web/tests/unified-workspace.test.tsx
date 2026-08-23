@@ -1,4 +1,4 @@
-import type { ChatRequest, ImageRequest } from '@zimage/domain';
+import type { ChatRequest, ImageRequest, ProviderCapability } from '@zimage/domain';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -31,6 +31,24 @@ class CapturingGateway extends MockWorkspaceGateway {
   }
 }
 
+class MultiModelGateway extends CapturingGateway {
+  override async getProviderCapabilities(): Promise<ProviderCapability[]> {
+    return [
+      {
+        models: [
+          { aspectRatios: ['1:1', '16:9'], id: 'wide', label: 'Wide', maxImages: 2, resolutions: ['1K'] },
+          { aspectRatios: ['3:4', '1:1'], id: 'portrait', label: 'Portrait', maxImages: 4, resolutions: ['1K', '2K'] },
+        ],
+        provider: 'Studio',
+      },
+    ];
+  }
+
+  override async getProviderHealth() {
+    return [{ checkedAt: '2026-08-23', provider: 'Studio', status: 'healthy' as const }];
+  }
+}
+
 const createObjectURL = vi.fn((file: File) => `blob:${file.name}`);
 const revokeObjectURL = vi.fn();
 
@@ -45,7 +63,7 @@ describe('UnifiedWorkspace', () => {
 
   it('keeps independent chat and image drafts while switching modes', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
 
     const input = screen.getByRole('textbox', { name: '创作输入' });
     fireEvent.change(input, { target: { value: '聊天草稿' } });
@@ -71,7 +89,7 @@ describe('UnifiedWorkspace', () => {
   it('derives a locked image-tool selection in image mode and restores the chat preference', async () => {
     const gateway = new CapturingGateway({ storage: new TestStorage() });
     render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
 
     const imageTool = screen.getByRole('switch', { name: '图片工具' });
     const chatMode = screen.getByRole('button', { name: '聊天模式' });
@@ -102,7 +120,7 @@ describe('UnifiedWorkspace', () => {
   it('preserves an explicitly enabled chat image tool across mode switches', async () => {
     const gateway = new CapturingGateway({ storage: new TestStorage() });
     render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
 
     const imageTool = screen.getByRole('switch', { name: '图片工具' });
     fireEvent.click(imageTool);
@@ -124,7 +142,7 @@ describe('UnifiedWorkspace', () => {
     const { unmount } = render(
       <UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />,
     );
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
 
     const reference = new File(['image'], 'ref.png', { type: 'image/png' });
@@ -142,7 +160,7 @@ describe('UnifiedWorkspace', () => {
 
   it('hides image references in chat mode without clearing them', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['image'], 'kept.webp', { type: 'image/webp' })] },
@@ -159,7 +177,7 @@ describe('UnifiedWorkspace', () => {
 
   it('rejects unsupported reference types and caps accepted references at four', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
 
     fireEvent.change(screen.getByLabelText('上传参考图'), {
@@ -180,7 +198,7 @@ describe('UnifiedWorkspace', () => {
 
   it('rejects reference images larger than 10 MB', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
 
     const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.jpg', {
@@ -195,7 +213,7 @@ describe('UnifiedWorkspace', () => {
   it('keeps local preview URLs out of the image gateway request', async () => {
     const gateway = new CapturingGateway({ storage: new TestStorage() });
     render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['image'], 'payload.png', { type: 'image/png' })] },
@@ -215,7 +233,7 @@ describe('UnifiedWorkspace', () => {
     const { unmount } = render(
       <UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />,
     );
-    await screen.findByText('让灵感，从一句话变成画面');
+    await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['image'], 'cleanup.png', { type: 'image/png' })] },
@@ -228,11 +246,56 @@ describe('UnifiedWorkspace', () => {
   it('validates required skill fields before submitting', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
     fireEvent.click(await screen.findByRole('button', { name: /模特图/ }));
+    fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '生成秋季外套展示图' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('请填写必填技能参数'));
+    expect(screen.getByRole('dialog', { name: '技能配置' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '模特风格' })).toHaveFocus();
+  });
+
+  it('uses the selected provider, model and generation parameters in the image request', async () => {
+    const gateway = new MultiModelGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 1K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Studio · Portrait' }));
+    expect(screen.getByRole('button', { name: '生成参数 3:4 1K 2张' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 3:4 1K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '分辨率 2K' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成数量 4' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '一张秋日产品海报' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
+    expect(gateway.lastImageRequest).toMatchObject({
+      aspectRatio: '3:4',
+      count: 4,
+      model: 'portrait',
+      provider: 'Studio',
+      resolution: '2K',
+    });
+  });
+
+  it('removes the fixed desktop config panel, collapses the sidebar and reports the asset-library placeholder', async () => {
+    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    await screen.findByText('你好，想创作什么？');
+
+    expect(screen.queryByRole('heading', { name: '生成配置' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '折叠会话侧栏' }));
+    expect(screen.getByRole('button', { name: '展开会话侧栏' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '资产库' }));
+    expect(await screen.findByText('资产库暂未开放')).toBeInTheDocument();
   });
 });

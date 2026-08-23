@@ -1,8 +1,11 @@
-import type { GenerationBatch, Skill, TimelineItem } from '@zimage/domain';
+import type { GenerationBatch, ProviderCapability, Skill, TimelineItem } from '@zimage/domain';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { GenerationConfig } from '@/features/workspace/GenerationConfig';
+import {
+  GenerationParameterPopover,
+  normalizeGenerationSelection,
+} from '@/features/workspace/GenerationConfig';
 import { SessionSidebar } from '@/features/workspace/SessionSidebar';
 import { WorkspaceTimeline } from '@/features/workspace/WorkspaceTimeline';
 import { useWorkspaceStore } from '@/store/workspace-store';
@@ -18,52 +21,70 @@ const skill: Skill = {
 };
 
 describe('workspace presentation components', () => {
-  it('wires generation controls, references and skill fields', () => {
+  it('keeps the parameter popover closed until clicked and closes it with outside click or Escape', () => {
     const onAspectRatioChange = vi.fn();
-    const onReferenceAdd = vi.fn();
-    const onReferenceRemove = vi.fn();
-    const onSkillValueChange = vi.fn();
-    const { container } = render(
-      <GenerationConfig
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <GenerationParameterPopover
         aspectRatio="1:1"
         count={2}
-        health={{ checkedAt: '2026-08-21', provider: 'Google', status: 'healthy' }}
-        mode="image"
+        model={{ aspectRatios: ['1:1', '16:9'], id: 'model', label: 'Image', maxImages: 2, resolutions: ['2K'] }}
         onAspectRatioChange={onAspectRatioChange}
         onCountChange={vi.fn()}
-        onReferenceAdd={onReferenceAdd}
-        onReferenceRemove={onReferenceRemove}
         onResolutionChange={vi.fn()}
-        onScenarioChange={vi.fn()}
-        onSkillValueChange={onSkillValueChange}
-        prompt="夹克"
-        providerCapabilities={[
-          {
-            models: [{ aspectRatios: ['1:1'], id: 'model', label: 'Image', maxImages: 4, resolutions: ['1K', '2K'] }],
-            provider: 'Google',
-          },
-        ]}
-        quota={{ limit: 100, resetsAt: '2026-09-01', used: 25 }}
-        references={[{ mimeType: 'image/png', name: 'ref.png', size: 100 }]}
-        resolution="1K"
-        scenario="happy"
-        selectedSkill={skill}
-        skillValues={{ product: '夹克' }}
+        onOpenChange={onOpenChange}
+        open={false}
+        resolution="2K"
       />,
     );
 
-    fireEvent.change(screen.getByRole('textbox', { name: '商品名称' }), { target: { value: '风衣' } });
-    expect(onSkillValueChange).toHaveBeenCalledWith('product', '风衣');
-    fireEvent.click(screen.getByRole('button', { name: '比例 3:4' }));
-    expect(onAspectRatioChange).toHaveBeenCalledWith('3:4');
-    fireEvent.click(screen.getByRole('button', { name: '移除 ref.png' }));
-    expect(onReferenceRemove).toHaveBeenCalledWith(0);
+    expect(screen.queryByRole('dialog', { name: '生成参数' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 2K 2张' }));
+    expect(onOpenChange).toHaveBeenCalledWith(true);
 
-    const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]');
-    const file = new File(['image'], 'new.png', { type: 'image/png' });
-    expect(fileInput).not.toBeNull();
-    if (fileInput) fireEvent.change(fileInput, { target: { files: [file] } });
-    expect(onReferenceAdd).toHaveBeenCalled();
+    rerender(
+      <GenerationParameterPopover
+        aspectRatio="1:1"
+        count={2}
+        model={{ aspectRatios: ['1:1', '16:9'], id: 'model', label: 'Image', maxImages: 2, resolutions: ['2K'] }}
+        onAspectRatioChange={onAspectRatioChange}
+        onCountChange={vi.fn()}
+        onResolutionChange={vi.fn()}
+        onOpenChange={onOpenChange}
+        open
+        resolution="2K"
+      />,
+    );
+    expect(screen.getByRole('dialog', { name: '生成参数' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '比例 16:9' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '比例 3:4' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成数量 2' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '生成数量 3' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
+    expect(onAspectRatioChange).toHaveBeenCalledWith('16:9');
+    fireEvent.mouseDown(document.body);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('normalizes generation values against the newly selected model capability', () => {
+    const capabilities: ProviderCapability[] = [
+      {
+        models: [
+          { aspectRatios: ['1:1', '16:9'], id: 'wide', label: 'Wide', maxImages: 2, resolutions: ['1K'] },
+          { aspectRatios: ['3:4', '1:1'], id: 'portrait', label: 'Portrait', maxImages: 4, resolutions: ['1K', '2K'] },
+        ],
+        provider: 'Studio',
+      },
+    ];
+
+    expect(normalizeGenerationSelection(capabilities, {
+      aspectRatio: '16:9', count: 4, model: 'wide', provider: 'Studio', resolution: '2K',
+    })).toEqual({ aspectRatio: '16:9', count: 2, model: 'wide', provider: 'Studio', resolution: '1K' });
+    expect(normalizeGenerationSelection(capabilities, {
+      aspectRatio: '16:9', count: 2, model: 'portrait', provider: 'Studio', resolution: '1K',
+    })).toEqual({ aspectRatio: '3:4', count: 2, model: 'portrait', provider: 'Studio', resolution: '1K' });
   });
 
   it('supports create, select, rename, cancel and delete session actions', () => {
@@ -82,7 +103,7 @@ describe('workspace presentation components', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '新建创作' }));
+    fireEvent.click(screen.getByRole('button', { name: '新对话' }));
     fireEvent.click(screen.getByRole('button', { name: '测试会话' }));
     fireEvent.click(screen.getByRole('button', { name: '重命名 测试会话' }));
     fireEvent.change(screen.getByRole('textbox', { name: '会话名称' }), { target: { value: '新名称' } });

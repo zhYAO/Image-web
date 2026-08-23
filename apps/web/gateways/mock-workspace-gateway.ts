@@ -462,6 +462,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
 const SKILLS: Skill[] = [
   {
+    coverImageUrl: '/skills/white-background.webp',
     description: '干净背景与清晰商品轮廓',
     fields: [{ key: 'product', label: '商品名称', required: true, placeholder: '例如：羊毛大衣' }],
     icon: '◇',
@@ -471,6 +472,7 @@ const SKILLS: Skill[] = [
     requiresImageTool: true,
   },
   {
+    coverImageUrl: '/skills/model.webp',
     description: '自然姿态与真实穿着效果',
     fields: [{ key: 'style', label: '模特风格', required: true, placeholder: '例如：都市简约' }],
     icon: '◉',
@@ -480,6 +482,7 @@ const SKILLS: Skill[] = [
     requiresImageTool: true,
   },
   {
+    coverImageUrl: '/skills/social.webp',
     description: '生活化构图与社媒氛围',
     fields: [{ key: 'scene', label: '使用场景', required: true, placeholder: '例如：周末咖啡馆' }],
     icon: '✦',

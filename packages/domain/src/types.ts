@@ -98,6 +98,7 @@ export interface SkillField {
 }
 
 export interface Skill {
+  coverImageUrl?: string;
   id: string;
   name: string;
   description: string;

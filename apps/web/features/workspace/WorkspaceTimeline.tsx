@@ -93,15 +93,21 @@ export function WorkspaceTimeline({
   if (items.length === 0 && !streamingText) {
     return (
       <div className={styles.empty}>
-        <div className={styles.heroMark}>Z</div>
-        <h1 className={styles.heroTitle}>让灵感，从一句话变成画面</h1>
-        <p className={styles.heroSubtitle}>在同一个时间线里和 AI 对话、完善想法并生成图片。选择一个快捷技能，或直接从下方输入框开始。</p>
+        <h1 className={styles.heroTitle}>你好，想创作什么？</h1>
         <div className={styles.skillGrid}>
           {skills.map((skill) => (
             <button aria-label={`${skill.name}：${skill.description}`} className={styles.skillCard} key={skill.id} onClick={() => onSelectSkill(skill.id)} type="button">
-              <span className={styles.skillIcon}>{skill.icon}</span>
-              <span className={styles.skillName}>{skill.name}</span>
-              <span className={styles.muted}>{skill.description}</span>
+              <span className={styles.skillCover}>
+                {skill.coverImageUrl ? (
+                  <Image alt="" fill sizes="(max-width: 900px) 100vw, 300px" src={skill.coverImageUrl} />
+                ) : (
+                  <span className={styles.skillIcon}>{skill.icon}</span>
+                )}
+                <span className={styles.skillCoverShade} />
+                <span className={styles.skillCoverTitle}>{skill.name}</span>
+                <span className={styles.tryButton}>试一试</span>
+              </span>
+              <span className={styles.skillDescription}>{skill.description}</span>
             </button>
           ))}
         </div>

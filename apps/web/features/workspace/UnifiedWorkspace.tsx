@@ -17,15 +17,15 @@ import {
   type UploadReference,
   type WorkspaceGateway,
 } from '@zimage/domain';
-import { Alert, Button, Drawer, Space } from 'antd';
-import { Menu, SlidersHorizontal } from 'lucide-react';
+import { Alert, Button, Drawer, Input, Select, Space } from 'antd';
+import { Archive, ChevronRight, Menu } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
-import { GenerationConfig } from './GenerationConfig';
+import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { UnifiedComposer } from './UnifiedComposer';
 import { WorkspaceTimeline } from './WorkspaceTimeline';
@@ -41,21 +41,25 @@ const ALLOWED_REFERENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'
 export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceProps) {
   const gateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
   const {
+    activePopover,
     configDrawerOpen,
     drafts,
     explicitImageToolEnabled,
     mode,
     scenario,
     selectedSkillId,
+    sidebarCollapsed,
     sessionDrawerOpen,
     skillValues,
     selectSkill,
+    setActivePopover,
     setConfigDrawerOpen,
     setDraft,
     setExplicitImageToolEnabled,
     setMode,
     setScenario,
     setSessionDrawerOpen,
+    setSidebarCollapsed,
     setSkillValue,
   } = useWorkspaceStore();
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -69,8 +73,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [streamingText, setStreamingText] = useState('');
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
-  const [resolution, setResolution] = useState<ImageResolution>('1K');
+  const [resolution, setResolution] = useState<ImageResolution>('2K');
   const [count, setCount] = useState(2);
+  const [selectedProvider, setSelectedProvider] = useState<string>();
+  const [selectedModelId, setSelectedModelId] = useState<string>();
+  const [focusSkillFieldKey, setFocusSkillFieldKey] = useState<string>();
   const [references, setReferences] = useState<UploadReference[]>([]);
   const localPreviewUrls = useRef(new Set<string>());
 
@@ -80,6 +87,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     skillRequiresImage: selectedSkill?.requiresImageTool ?? false,
   });
   const displayedImageToolEnabled = mode === 'image' || chatImageToolEnabled;
+  const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
 
   const changeScenario = (value: typeof scenario) => {
     setScenario(value);
@@ -124,6 +132,16 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       setQuota(nextQuota);
       setCapabilities(nextCapabilities);
       setHealth(nextHealth);
+      const initialSelection = normalizeGenerationSelection(nextCapabilities, {
+        aspectRatio: '1:1',
+        count: 2,
+        resolution: '2K',
+      });
+      setAspectRatio(initialSelection.aspectRatio);
+      setCount(initialSelection.count);
+      setResolution(initialSelection.resolution);
+      setSelectedProvider(initialSelection.provider);
+      setSelectedModelId(initialSelection.model);
       const initialId = nextSessions[0]?.id;
       setActiveSessionId(initialId);
       if (initialId) setTimeline(await gateway.getTimeline(initialId));
@@ -184,7 +202,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         error: { code: 'VALIDATION_PROMPT_REQUIRED', message: `请填写必填技能参数：${missingField.label}`, retryable: false },
         message: `请填写必填技能参数：${missingField.label}`,
       });
-      if (window.matchMedia('(max-width: 1199px)').matches) setConfigDrawerOpen(true);
+      setFocusSkillFieldKey(missingField.key);
+      setActivePopover('skill');
+      if (window.matchMedia('(max-width: 767px)').matches) setConfigDrawerOpen(true);
       return;
     }
 
@@ -196,9 +216,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         await gateway.submitImage({
           aspectRatio,
           count,
-          model: capabilities[0]?.models[0]?.id,
+          model: selectedModelId,
           prompt,
-          provider: capabilities[0]?.provider,
+          provider: selectedProvider,
           references: references.map((reference) => ({
             mimeType: reference.mimeType,
             name: reference.name,
@@ -363,29 +383,25 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     });
   };
 
-  const config = (
-    <GenerationConfig
-      aspectRatio={aspectRatio}
-      count={count}
-      health={health[0]}
-      mode={mode}
-      onAspectRatioChange={setAspectRatio}
-      onCountChange={setCount}
-      onReferenceAdd={addReferences}
-      onReferenceRemove={removeReference}
-      onResolutionChange={setResolution}
-      onScenarioChange={changeScenario}
-      onSkillValueChange={setSkillValue}
-      prompt={drafts[mode]}
-      providerCapabilities={capabilities}
-      quota={quota}
-      references={references}
-      resolution={resolution}
-      scenario={scenario}
-      selectedSkill={selectedSkill}
-      skillValues={skillValues}
-    />
-  );
+  const selectModel = (provider: string, model: string) => {
+    const normalized = normalizeGenerationSelection(capabilities, {
+      aspectRatio,
+      count,
+      model,
+      provider,
+      resolution,
+    });
+    setAspectRatio(normalized.aspectRatio);
+    setCount(normalized.count);
+    setResolution(normalized.resolution);
+    setSelectedProvider(normalized.provider);
+    setSelectedModelId(normalized.model);
+  };
+
+  const chooseSkill = (skillId: string) => {
+    setFocusSkillFieldKey(undefined);
+    selectSkill(skillId);
+  };
 
   const sidebar = (
     <SessionSidebar
@@ -394,23 +410,97 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       onDelete={(sessionId) => void deleteSession(sessionId)}
       onRename={(sessionId, title) => void renameSession(sessionId, title)}
       onSelect={selectSession}
+      onCollapse={() => setSidebarCollapsed(true)}
       sessions={sessions}
     />
   );
   const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const mobileConfig = (
+    <div className={styles.mobileConfig}>
+      <label>
+        <span className={styles.popoverLabel}>生成模型</span>
+        <Select
+          aria-label="移动端生成模型"
+          onChange={(value) => {
+            const [provider = '', model = ''] = value.split('::');
+            selectModel(provider, model);
+          }}
+          options={capabilities.flatMap((capability) => capability.models.map((model) => ({
+            label: `${capability.provider} · ${model.label}`,
+            value: `${capability.provider}::${model.id}`,
+          })))}
+          value={selectedProvider && selectedModelId ? `${selectedProvider}::${selectedModelId}` : undefined}
+        />
+      </label>
+      <div>
+        <span className={styles.popoverLabel}>比例</span>
+        <div className={styles.mobileOptionGrid}>
+          {selectedModel?.aspectRatios.map((ratio) => (
+            <Button key={ratio} onClick={() => setAspectRatio(ratio)} type={ratio === aspectRatio ? 'primary' : 'default'}>{ratio}</Button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className={styles.popoverLabel}>分辨率</span>
+        <div className={styles.mobileOptionGrid}>
+          {selectedModel?.resolutions.map((item) => (
+            <Button key={item} onClick={() => setResolution(item)} type={item === resolution ? 'primary' : 'default'}>{item}</Button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className={styles.popoverLabel}>数量</span>
+        <div className={styles.mobileOptionGrid}>
+          {Array.from({ length: Math.min(selectedModel?.maxImages ?? 1, 4) }, (_, index) => index + 1).map((item) => (
+            <Button key={item} onClick={() => setCount(item)} type={item === count ? 'primary' : 'default'}>{item}</Button>
+          ))}
+        </div>
+      </div>
+      {selectedSkill?.fields.map((field) => (
+        <label key={field.key}>
+          <span className={styles.popoverLabel}>{field.label}</span>
+          <Input aria-label={field.label} onChange={(event) => setSkillValue(field.key, event.target.value)} value={skillValues[field.key] ?? ''} />
+        </label>
+      ))}
+    </div>
+  );
 
   return (
-    <div className={styles.workspace}>
-      <aside className={styles.sidebar}>{sidebar}</aside>
+    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
+      <aside className={styles.sidebar}>
+        {sidebarCollapsed ? (
+          <Button aria-label="展开会话侧栏" className={styles.expandSidebar} icon={<ChevronRight size={18} />} onClick={() => setSidebarCollapsed(false)} type="text" />
+        ) : sidebar}
+      </aside>
       <main className={styles.main}>
         <header className={styles.header}>
           <Space>
             <Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" />
-            <span className={styles.headerTitle}>{activeSession?.title ?? '新的创作'}</span>
+            <span className={styles.headerTitle}>{activeSession?.title ?? '开启创作'}</span>
           </Space>
           <Space>
-            <span className={styles.muted}>Phase 1A · Mock</span>
-            <Button aria-label="打开生成配置" className={styles.mobileControl} icon={<SlidersHorizontal size={18} />} onClick={() => setConfigDrawerOpen(true)} type="text" />
+            <Select
+              aria-label="Mock 场景"
+              className={styles.devScenario}
+              onChange={changeScenario}
+              options={[
+                { label: 'Mock · 正常', value: 'happy' },
+                { label: 'Mock · 部分成功', value: 'partial' },
+                { label: 'Mock · 服务不可用', value: 'provider-unavailable' },
+                { label: 'Mock · 资源过期', value: 'expired' },
+                { label: 'Mock · 删除重试', value: 'delete-retry' },
+              ]}
+              size="small"
+              value={scenario}
+            />
+            <Button
+              aria-label="资产库"
+              className={styles.assetLibraryButton}
+              icon={<Archive size={16} />}
+              onClick={() => setFeedback({ message: '资产库暂未开放' })}
+            >
+              资产库
+            </Button>
           </Space>
         </header>
         {feedback && (
@@ -431,36 +521,58 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             items={timeline}
             onDownloadBatch={downloadBatch}
             onRecreate={(batch, scope) => void recreate(batch, scope)}
-            onSelectSkill={(skillId) => selectSkill(skillId)}
+            onSelectSkill={chooseSkill}
             skills={skills}
             streamingText={streamingText}
           />
         </div>
         <div className={styles.composerDock}>
           <UnifiedComposer
+            activePopover={activePopover}
+            aspectRatio={aspectRatio}
             busy={busy}
+            capabilities={capabilities}
+            count={count}
             draft={drafts[mode]}
+            focusSkillFieldKey={focusSkillFieldKey}
+            health={health}
             imageToolEnabled={displayedImageToolEnabled}
             mode={mode}
-            onClearSkill={() => selectSkill(undefined)}
+            onAspectRatioChange={setAspectRatio}
+            onClearSkill={() => {
+              setActivePopover(undefined);
+              selectSkill(undefined);
+            }}
+            onCountChange={setCount}
             onDraftChange={(value) => setDraft(mode, value)}
             onImageToolChange={setExplicitImageToolEnabled}
-            onModeChange={setMode}
+            onModeChange={(nextMode) => {
+              setActivePopover(undefined);
+              setMode(nextMode);
+            }}
+            onModelSelect={selectModel}
             onOpenConfig={() => setConfigDrawerOpen(true)}
+            onPopoverChange={setActivePopover}
             onReferenceAdd={addReferences}
             onReferenceRemove={removeReference}
+            onResolutionChange={setResolution}
+            onSkillValueChange={setSkillValue}
             onSubmit={() => void submit()}
+            quota={quota}
             references={references}
+            resolution={resolution}
+            selectedModel={selectedModel}
+            selectedProvider={selectedProvider}
             selectedSkill={selectedSkill}
+            skillValues={skillValues}
           />
         </div>
       </main>
-      <aside className={styles.configPanel}>{config}</aside>
       <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title="会话">
         {sidebar}
       </Drawer>
       <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title="生成配置">
-        {config}
+        {mobileConfig}
       </Drawer>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { Session } from '@zimage/domain';
 import { Button, Input, Tooltip } from 'antd';
-import { Check, MessageSquarePlus, Pencil, Trash2, X } from 'lucide-react';
+import { Check, ChevronsLeft, MessageSquarePlus, Pencil, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import styles from './workspace.module.css';
@@ -9,6 +9,7 @@ interface SessionSidebarProps {
   activeSessionId?: string;
   sessions: Session[];
   onCreate: () => void;
+  onCollapse?: () => void;
   onDelete: (sessionId: string) => void;
   onRename: (sessionId: string, title: string) => void;
   onSelect: (sessionId: string) => void;
@@ -18,6 +19,7 @@ export function SessionSidebar({
   activeSessionId,
   sessions,
   onCreate,
+  onCollapse,
   onDelete,
   onRename,
   onSelect,
@@ -38,19 +40,20 @@ export function SessionSidebar({
   return (
     <div className={styles.panelInner}>
       <div className={styles.brandRow}>
-        <div className={styles.brandMark}>Z</div>
-        <div>
-          <div className={styles.brandName}>ZImage</div>
-          <div className={styles.brandMeta}>AI 创作工作区</div>
-        </div>
+        <div className={styles.sidebarHeading}>开启创作</div>
+        {onCollapse && (
+          <Tooltip title="折叠侧栏">
+            <Button aria-label="折叠会话侧栏" icon={<ChevronsLeft size={17} />} onClick={onCollapse} type="text" />
+          </Tooltip>
+        )}
       </div>
       <Button
         className={styles.newButton}
         icon={<MessageSquarePlus size={16} />}
         onClick={onCreate}
-        type="primary"
+        type="default"
       >
-        新建创作
+        新对话
       </Button>
       <div className={styles.sectionLabel}>最近会话</div>
       <div className={styles.sessionList}>

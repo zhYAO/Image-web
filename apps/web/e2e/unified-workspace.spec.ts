@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 test('starts a streaming chat from the unified home', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: '让灵感，从一句话变成画面' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '你好，想创作什么？' })).toBeVisible();
   await page.getByRole('textbox', { name: '创作输入' }).fill('帮我完善一段商品图提示词');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByRole('article').filter({ hasText: '帮我完善一段商品图提示词' })).toBeVisible();
@@ -43,7 +43,7 @@ test('keeps the image composer usable on a mobile viewport', async ({ page }) =>
     mimeType: 'image/webp',
     name: 'mobile.webp',
   });
-  await expect(page.getByRole('button', { name: '移除参考图 mobile.webp' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '移除 mobile.webp' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '创作输入' })).toBeVisible();
   await expect(page.getByRole('button', { name: '发送创作请求' })).toBeVisible();
   await expect(page.getByRole('switch', { name: '图片工具' })).toBeChecked();
@@ -57,8 +57,27 @@ test('redirects legacy routes to the unified home', async ({ page }) => {
   await expect(page).toHaveURL('/');
 });
 
-test('matches the responsive empty workspace', async ({ page }) => {
+test('matches the desktop empty workspace', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop');
   await page.goto('/');
-  await expect(page.getByText('Phase 1A · Mock')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '你好，想创作什么？' })).toBeVisible();
+  await page.waitForFunction(() => Array.from(document.images).every((image) => image.complete));
   await expect(page).toHaveScreenshot('empty.png', { fullPage: true });
+});
+
+test('opens skill, model and parameter popovers on desktop', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop');
+  await page.goto('/');
+  await page.getByRole('button', { name: /白底图/ }).click();
+  await expect(page.getByRole('dialog', { name: '技能配置' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: /生成模型/ }).click();
+  await expect(page.getByRole('dialog', { name: '选择生成模型' })).toContainText('服务正常');
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: '生成参数 1:1 2K 2张' }).click();
+  await expect(page.getByRole('dialog', { name: '生成参数' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '比例 16:9' })).toBeVisible();
+  await expect(page).toHaveScreenshot('parameters-open.png', { fullPage: true });
 });

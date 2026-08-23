@@ -43,10 +43,10 @@ workers                  生成、删除、到期与备份任务
 
 | 决策 ID | 组件/选择 | 职责 |
 | --- | --- | --- |
-| TS-FE-01 | `UnifiedWorkspace` | `/` 唯一工作区；组合侧栏、时间线、输入框和配置抽屉。 |
+| TS-FE-01 | `UnifiedWorkspace` | `/` 唯一工作区；组合可折叠会话侧栏、主时间线、首页技能卡片、输入框和点击浮层。 |
 | TS-FE-02 | `UnifiedComposer` | 维护显式 `chat \| image` 模式，提交前完成模式对应的客户端校验。 |
 | TS-FE-03 | `Timeline` + `GenerationCard` | 文本、生成批次和错误使用同一排序；直接与工具生图复用同一卡片。 |
-| TS-FE-04 | `GenerationConfigDrawer` | 技能、参考图、provider/model 和高级参数；桌面侧栏、窄屏抽屉。 |
+| TS-FE-04 | `ModelPopover` + `GenerationParameterPopover` + `SkillPopover` | 桌面输入框上方的互斥点击浮层：模型与健康状态、能力驱动参数、技能字段与提示词预览；参考图只在输入框内维护，窄屏继续使用兼容抽屉。 |
 | TS-FE-05 | Next.js redirect | `/chat`、`/image` 只重定向到 `/`，不加载旧 store 或旧数据。 |
 | TS-FE-06 | `SessionSidebar` | 会话创建、选择、重命名、删除；匿名恢复边界提示。 |
 | TS-FE-07 | Zustand v5 | 仅保存 UI/请求瞬态；服务端会话和时间线始终以 API 返回为准。 |
@@ -59,10 +59,10 @@ workers                  生成、删除、到期与备份任务
 
 | Slice | 客户端状态 | 明确不负责 |
 | --- | --- | --- |
-| `workspaceSlice` | 当前 `sessionId`、侧栏/抽屉开合 | 会话持久化 |
+| `workspaceSlice` | 当前 `sessionId`、侧栏折叠、活动浮层和窄屏抽屉开合 | 会话持久化 |
 | `composerSlice` | 模式、草稿、参考图本地预览 | 服务端消息 |
 | `timelineSlice` | 当前页缓存、乐观 pending 卡片、SSE 增量缓冲 | 跨刷新事实源 |
-| `generationSlice` | 当前参数、批次轮询状态 | 任务执行与重试 |
+| `generationSlice` | 当前图片 provider/model、能力归一化后的比例/分辨率/数量、批次轮询状态 | 任务执行与重试 |
 | `capabilitySlice` | 技能、provider 健康与配额缓存 | provider 真实状态 |
 
 SSE 事件使用判别字段，例如 `session.created`、`message.delta`、`message.completed`、`tool.queued`、`stream.failed`。解析器收到 `unknown` 后先用 schema 验证；未知事件记录诊断并安全忽略。
