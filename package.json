@@ -13,7 +13,9 @@
     "test": "pnpm -r --if-present test",
     "test:run": "pnpm -r --if-present test:run",
     "test:coverage": "pnpm -r --if-present test:coverage",
-    "e2e": "pnpm --filter @zimage/web e2e"
+    "e2e": "pnpm --filter @zimage/web e2e",
+    "e2e:http": "pnpm --filter @zimage/web e2e:http",
+    "setup:langgraph": "pnpm --filter @zimage/web setup:langgraph"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "3.2.6",

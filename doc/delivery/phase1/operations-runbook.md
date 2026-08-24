@@ -11,11 +11,12 @@
 
 1. Apply every file in `supabase/migrations` in order through migration tooling, then run every pgTAP file in `supabase/tests/database`.
 2. Generate database TypeScript types from the migrated primary project and compare them with `apps/web/lib/supabase/database.generated.ts`; any drift blocks deployment.
-3. Enable anonymous Auth in the dashboard. Store `zimage_project_url`, `zimage_service_role_key` and `zimage_worker_cron_secret` in Vault, and configure the same worker secret plus optional Sentry DSN through Edge Function secrets.
-4. Run `PostgresSaver.setup()` once against `SUPABASE_DB_URL` with schema `langgraph`; application requests intentionally do not create checkpoint tables.
-5. Deploy `generation-worker` and `cleanup-worker`. Their public endpoints are protected by `ZIMAGE_WORKER_CRON_SECRET`; do not substitute an anon or publishable key.
-6. Call `schedule_cleanup_worker()` only after all three Vault values exist. It schedules cleanup every 15 minutes and reads secrets at execution time, so `cron.job` contains no secret value.
-7. Do not schedule generation while every provider is disabled. If a provider later passes the strict zero-cost gate, record its evidence and enable only that provider plus the generation flag.
+3. Enable anonymous Auth and Turnstile CAPTCHA together. Configure `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in the Preview before enforcing CAPTCHA; with this key set, browser challenge completion replaces the no-token server auto-bootstrap. For an isolated acceptance Preview, use [Cloudflare's documented always-pass Turnstile test site/secret pair](https://developers.cloudflare.com/turnstile/troubleshooting/testing/) in both the app and Supabase CAPTCHA settings; never use test keys in the production deployment.
+4. Store `zimage_project_url`, `zimage_service_role_key` and `zimage_worker_cron_secret` in Vault, and configure the same worker secret plus optional Sentry DSN through Edge Function secrets.
+5. Run `SUPABASE_DB_URL='postgresql://…' pnpm setup:langgraph` once with the private pooler URL. Application requests intentionally do not create checkpoint tables.
+6. Deploy `generation-worker` and `cleanup-worker` with their `deno.json` and `deno.lock`. Their public endpoints are protected by `ZIMAGE_WORKER_CRON_SECRET`; do not substitute an anon or publishable key.
+7. Call `select public.schedule_cleanup_worker();` only after all three Vault values exist. It schedules cleanup every 15 minutes and reads secrets at execution time, so `cron.job` contains no secret value.
+8. Do not schedule generation while every Provider is disabled. After the cost gate, enable only the approved image Provider plus `generation_enabled`, then call `select public.schedule_generation_worker();`. The RPC fails closed before creating a job if any prerequisite is missing.
 
 ## Vercel Preview
 
@@ -24,6 +25,7 @@
 3. Build with `pnpm install --frozen-lockfile` and `pnpm build`, then create a Preview deployment. Do not promote it to Production.
 4. Verify anonymous identity/Cookies, two-context RLS isolation, session CRUD, uploads/signed URLs/cleanup, every quota boundary, concurrent reservations and compensating release.
 5. Confirm chat and generation return unavailable and do not enqueue work while providers are disabled.
+6. Run `PHASE1B_HTTP_BASE_URL='https://preview.example' pnpm e2e:http` for identity/RLS. The suite waits up to 30 seconds for CAPTCHA-backed anonymous identity readiness. Add `PHASE1B_STORAGE_WRITE=true` only after cleanup scheduling is confirmed. Add `PHASE1B_CHAT_MODEL=doubao` or `minimax` only after the Provider cost gate is approved.
 
 ## Sentry validation
 

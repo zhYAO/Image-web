@@ -415,6 +415,7 @@ export type Database = {
         Returns: boolean
       }
       schedule_cleanup_worker: { Args: never; Returns: number }
+      schedule_generation_worker: { Args: never; Returns: number }
       set_provider_runtime_enabled: {
         Args: { p_enabled: boolean; p_evidence: string; p_provider: string }
         Returns: boolean
@@ -446,6 +447,7 @@ export type Database = {
         Returns: Json
       }
       unschedule_cleanup_worker: { Args: never; Returns: boolean }
+      unschedule_generation_worker: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

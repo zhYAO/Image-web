@@ -10,8 +10,12 @@ interface AnonymousBootstrapRequest {
   pathname: string;
 }
 
-export function shouldBootstrapAnonymousUser(request: AnonymousBootstrapRequest) {
-  return request.method === 'GET'
+export function shouldBootstrapAnonymousUser(
+  request: AnonymousBootstrapRequest,
+  options: { captchaRequired?: boolean } = {},
+) {
+  return options.captchaRequired !== true
+    && request.method === 'GET'
     && request.accept?.includes('text/html') === true
     && !request.pathname.startsWith('/api/');
 }
@@ -48,7 +52,8 @@ export async function updateSupabaseSession(request: NextRequest) {
     method: request.method,
     pathname: request.nextUrl.pathname,
   };
-  if (hasAuthCookie(request) || !shouldBootstrapAnonymousUser(bootstrapRequest)) {
+  const captchaRequired = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+  if (hasAuthCookie(request) || !shouldBootstrapAnonymousUser(bootstrapRequest, { captchaRequired })) {
     return response;
   }
 

@@ -318,6 +318,7 @@ export default {
         });
         return Response.json({ action: 'failed', code: 'provider_result_unknown' });
       }
+      if (claim.action !== 'process') throw new Error('invalid_queue_action');
 
       correlationId = claim.correlationId;
       generationId = claim.generationId;

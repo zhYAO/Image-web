@@ -35,6 +35,10 @@ describe('Supabase Web boundary', () => {
 
   it('creates anonymous identities only for first-party document navigations', () => {
     expect(shouldBootstrapAnonymousUser({ accept: 'text/html', method: 'GET', pathname: '/' })).toBe(true);
+    expect(shouldBootstrapAnonymousUser(
+      { accept: 'text/html', method: 'GET', pathname: '/' },
+      { captchaRequired: true },
+    )).toBe(false);
     expect(shouldBootstrapAnonymousUser({ accept: 'application/json', method: 'GET', pathname: '/api/sessions' })).toBe(false);
     expect(shouldBootstrapAnonymousUser({ accept: 'text/html', method: 'POST', pathname: '/' })).toBe(false);
     expect(shouldBootstrapAnonymousUser({ accept: 'text/html', method: 'GET', pathname: '/api/openapi.json' })).toBe(false);

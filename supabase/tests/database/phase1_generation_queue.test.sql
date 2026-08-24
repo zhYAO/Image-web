@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(12);
+select plan(14);
 
 select has_extension('pgmq', 'pgmq extension is installed');
 select ok(
@@ -59,6 +59,27 @@ select ok(
 select ok(
   has_function_privilege('service_role', 'public.claim_image_generation()', 'execute'),
   'service role can claim image work'
+);
+
+update private.runtime_flags set enabled = false where flag = 'generation_enabled';
+create temporary table phase1b_claim_probe as
+select pgmq.send(
+  'image_generation',
+  jsonb_build_object('generationId', gen_random_uuid(), 'correlationId', gen_random_uuid())
+)::bigint as message_id;
+select is(
+  private.claim_image_generation(),
+  null::jsonb,
+  'disabled generation returns no work even when a durable message is queued'
+);
+select is(
+  (
+    select queued.read_ct::bigint
+    from pgmq.q_image_generation queued
+    join phase1b_claim_probe probe on probe.message_id = queued.msg_id
+  ),
+  0::bigint,
+  'disabled generation does not claim or change the visibility of queued work'
 );
 
 select * from finish();

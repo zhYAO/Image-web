@@ -15,6 +15,8 @@ pnpm dev
 
 数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Sentry、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
 
+真实环境的显式入口为 `pnpm setup:langgraph` 与 `pnpm e2e:http`。后者必须提供 `PHASE1B_HTTP_BASE_URL`；Storage 写入和真实 Provider SSE 还需分别显式设置验收开关，避免本地回归误触云资源或费用。
+
 ## 质量门禁
 
 ```bash

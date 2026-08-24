@@ -10,7 +10,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:http": "playwright test --config=playwright.http.config.ts",
+    "setup:langgraph": "node scripts/setup-langgraph.mjs"
   },
   "dependencies": {
     "@langchain/core": "1.2.9",

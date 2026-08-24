@@ -13,7 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Sources of truth
 
 - `../../doc/requirements.md` is the only product-requirements source. `../../doc/tech-selection.md` records implementation decisions, and `../../doc/architecture.md` records runtime boundaries; neither may invent requirements.
-- The current delivery is the Phase 1A unified-home mock. Do not claim or assume that Supabase, real SSE, providers, queues, or private Storage are connected.
+- The workspace supports versioned mock and real HTTP modes behind the same gateway contract. Phase 1B integration code exists, but real Supabase, SSE, provider, queue, and private Storage readiness must only be claimed after the corresponding environment evidence is recorded.
 - Keep the generated Next.js rules block above intact. Before using a Next.js API, read the matching local guide under `node_modules/next/dist/docs/`.
 
 ## Workspace invariants
@@ -26,7 +26,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Reference-image ownership
 
 - The composer and generation config must share one `references` state owned by `UnifiedWorkspace`; never duplicate attachment state between components.
-- Accept at most four PNG, JPEG, or WebP files, each no larger than 10 MB. Phase 1A marks valid local selections as `ready` because there is no real upload service.
+- Accept at most four PNG, JPEG, or WebP files, each no larger than 10 MB. Mock mode marks valid local selections as `ready`; HTTP mode uploads them through the private Storage route before submission.
 - Object URLs are UI-only: create them for immediate previews, revoke them on removal and unmount, and exclude them from gateway payloads.
 - Keep chat mode free of direct-image attachments. Switching to chat hides image references without clearing them so returning to image mode restores the current configuration.
 

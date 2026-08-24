@@ -24,6 +24,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   retries: process.env.CI ? 2 : 0,
   testDir: './e2e',
+  testIgnore: 'http-phase1b.spec.ts',
   workers: 3,
   use: {
     baseURL: externalBaseUrl ?? 'http://127.0.0.1:3100',

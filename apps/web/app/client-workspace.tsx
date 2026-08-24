@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic';
 
+import { AnonymousAuthGate } from './anonymous-auth-gate';
+
 const WorkspaceApplication = dynamic(
   () => import('@/features/workspace/WorkspaceApplication').then((module) => module.WorkspaceApplication),
   {
@@ -18,5 +20,9 @@ const WorkspaceApplication = dynamic(
 );
 
 export function ClientWorkspace() {
-  return <WorkspaceApplication />;
+  return (
+    <AnonymousAuthGate>
+      <WorkspaceApplication />
+    </AnonymousAuthGate>
+  );
 }
