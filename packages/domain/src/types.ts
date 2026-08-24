@@ -28,6 +28,16 @@ export type ErrorCode =
   | 'BATCH_NOT_FOUND'
   | 'DELETE_RETRY_REQUIRED'
   | 'STORAGE_RECOVERED'
+  | 'BAD_REQUEST'
+  | 'UNAUTHORIZED'
+  | 'QUOTA_EXCEEDED'
+  | 'PROVIDER_ERROR'
+  | 'NETWORK'
+  | 'MODERATION'
+  | 'ASSET_EXPIRED'
+  | 'SESSION_DELETING'
+  | 'CONFLICT'
+  | 'NOT_FOUND'
   | 'UNKNOWN';
 
 export interface SafeError {
@@ -67,12 +77,21 @@ export interface GenerationAsset {
   expired?: boolean;
 }
 
+export interface GenerationConfigSnapshot {
+  aspectRatio: AspectRatio;
+  count: number;
+  resolution: ImageResolution;
+}
+
 export interface GenerationBatch {
   id: string;
   sessionId: string;
   source: GenerationSource;
   status: GenerationBatchStatus;
   prompt: string;
+  provider: string;
+  model: string;
+  config: GenerationConfigSnapshot;
   createdAt: string;
   assets: GenerationAsset[];
 }
@@ -105,6 +124,7 @@ export interface Skill {
   icon: string;
   promptTemplate: string;
   requiresImageTool: boolean;
+  version: string;
   fields: SkillField[];
 }
 
@@ -133,6 +153,8 @@ export interface ProviderHealth {
 }
 
 export interface UploadReference {
+  file?: File;
+  id?: string;
   name: string;
   size: number;
   mimeType: string;
@@ -141,6 +163,8 @@ export interface UploadReference {
 }
 
 export interface ChatRequest {
+  chatModel?: string;
+  imageProvider?: string;
   sessionId?: string;
   message: string;
   imageToolEnabled: boolean;
@@ -153,7 +177,7 @@ export type ChatEvent =
   | { type: 'session.created'; session: Session }
   | { type: 'message.delta'; messageId: string; delta: string }
   | { type: 'message.completed'; messageId: string; content: string }
-  | { type: 'tool.queued'; batch: GenerationBatch }
+  | { type: 'tool.queued'; batchId: string }
   | { type: 'stream.failed'; error: SafeError };
 
 export interface ImageRequest {

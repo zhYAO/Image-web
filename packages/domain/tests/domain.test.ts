@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_UPLOAD_BYTES,
   aggregateBatchStatus,
+  hasExplicitImageIntent,
   nextTimelineSequence,
   resolveImageToolEnabled,
   sanitizeError,
@@ -59,6 +60,17 @@ describe('skill/tool linkage', () => {
     expect(resolveImageToolEnabled({ explicitEnabled: false, skillRequiresImage: true })).toBe(true);
     expect(resolveImageToolEnabled({ explicitEnabled: false, skillRequiresImage: false })).toBe(false);
     expect(resolveImageToolEnabled({ explicitEnabled: true, skillRequiresImage: false })).toBe(true);
+  });
+
+  it.each([
+    ['请帮我生成一张羊毛大衣商品图', true],
+    ['生成一张秋日海报', true],
+    ['Please create a product image for this coat', true],
+    ['帮我分析这张商品图的构图', false],
+    ['如何生成更好的商品图？', false],
+    ['不要生成图片，只讨论提示词', false],
+  ])('classifies explicit image intent for %s', (message, expected) => {
+    expect(hasExplicitImageIntent(message)).toBe(expected);
   });
 });
 

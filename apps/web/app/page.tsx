@@ -1,5 +1,8 @@
+import { connection } from 'next/server';
+
 import { ClientWorkspace } from './client-workspace';
 
-export default function HomePage() {
+export default async function HomePage() {
+  await connection();
   return <ClientWorkspace />;
 }

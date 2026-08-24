@@ -105,6 +105,27 @@ describe('MockWorkspaceGateway', () => {
     expect(await gateway.listSessions()).toHaveLength(1);
   });
 
+  it('backs up the previous storage schema before loading batches with required metadata', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem('zimage:mock:v1', JSON.stringify({
+      state: {
+        batches: {},
+        deleteAttempts: {},
+        sessions: [],
+        timelines: {},
+      },
+      version: 1,
+    }));
+    const gateway = new MockWorkspaceGateway({
+      now: () => new Date('2026-08-21T00:00:00Z'),
+      storage,
+    });
+
+    expect(gateway.getRecoveryNotice()).toContain('已恢复初始数据');
+    expect([...storage.values.keys()]).toContain('zimage:mock:v1:backup:2026-08-21T00:00:00.000Z');
+    expect(await gateway.listSessions()).toHaveLength(1);
+  });
+
   it('keeps a deleting session hidden and allows a reliable retry', async () => {
     const gateway = new MockWorkspaceGateway({ storage: new MemoryStorage() });
     const session = await gateway.createSession('普通会话');
@@ -134,9 +155,20 @@ describe('MockWorkspaceGateway', () => {
     const toolPromise = collect(gateway.streamChat({ imageToolEnabled: true, message: '生成商品图' }));
     await vi.runAllTimersAsync();
     expect((await toolPromise).at(-1)).toMatchObject({
-      batch: { source: 'chat_tool' },
+      batchId: expect.any(String),
       type: 'tool.queued',
     });
+  });
+
+  it('does not queue an enabled image tool for ordinary image discussion', async () => {
+    const gateway = new MockWorkspaceGateway({ storage: new MemoryStorage() });
+    const eventsPromise = collect(
+      gateway.streamChat({ imageToolEnabled: true, message: '帮我分析这张商品图的构图' }),
+    );
+
+    await vi.runAllTimersAsync();
+
+    expect((await eventsPromise).map((event) => event.type)).not.toContain('tool.queued');
   });
 
   it('supports session rename, recreation and metadata reads', async () => {
@@ -144,17 +176,29 @@ describe('MockWorkspaceGateway', () => {
     const session = await gateway.createSession();
     expect(await gateway.renameSession(session.id, '新标题')).toMatchObject({ title: '新标题' });
     const batch = await gateway.submitImage({
-      aspectRatio: '1:1',
+      aspectRatio: '16:9',
       count: 1,
+      model: 'gemini-3-pro-image',
       prompt: '可重生成',
-      resolution: '1K',
+      provider: 'Google Gemini',
+      resolution: '2K',
       sessionId: session.id,
     });
+    expect(batch).toMatchObject({
+      config: { aspectRatio: '16:9', count: 1, resolution: '2K' },
+      model: 'gemini-3-pro-image',
+      provider: 'Google Gemini',
+    });
     await vi.runAllTimersAsync();
-    expect(await gateway.recreateGeneration({ batchId: batch.id, scope: 'all' })).toMatchObject({ status: 'pending' });
+    expect(await gateway.recreateGeneration({ batchId: batch.id, scope: 'all' })).toMatchObject({
+      config: { aspectRatio: '16:9', count: 1, resolution: '2K' },
+      model: 'gemini-3-pro-image',
+      provider: 'Google Gemini',
+      status: 'pending',
+    });
     expect(await gateway.getSkills()).toHaveLength(3);
-    expect(await gateway.getProviderCapabilities()).toHaveLength(1);
-    expect(await gateway.getProviderHealth()).toHaveLength(1);
-    expect(await gateway.getQuota()).toMatchObject({ limit: 100 });
+    expect(await gateway.getProviderCapabilities()).toHaveLength(2);
+    expect(await gateway.getProviderHealth()).toHaveLength(4);
+    expect(await gateway.getQuota()).toMatchObject({ limit: 30 });
   });
 });

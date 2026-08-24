@@ -10,6 +10,33 @@ globalThis.ResizeObserver = class {
   unobserve() {}
 } as unknown as typeof ResizeObserver;
 
+const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+const zeroLengthProperties = new Set([
+  'border-bottom-width',
+  'border-top-width',
+  'padding-bottom',
+  'padding-top',
+]);
+
+Object.defineProperty(window, 'getComputedStyle', {
+  value: (element: Element, pseudoElement?: string | null) => {
+    const declaration = nativeGetComputedStyle(element, pseudoElement);
+    const getPropertyValue = declaration.getPropertyValue.bind(declaration);
+    Object.defineProperty(declaration, 'getPropertyValue', {
+      configurable: true,
+      value: (property: string) => {
+        const value = getPropertyValue(property);
+        if (zeroLengthProperties.has(property) && !Number.isFinite(Number.parseFloat(value))) {
+          return '0px';
+        }
+        return value;
+      },
+    });
+    return declaration;
+  },
+  writable: true,
+});
+
 Object.defineProperty(window, 'matchMedia', {
   value: (query: string) => ({
     addEventListener: () => undefined,

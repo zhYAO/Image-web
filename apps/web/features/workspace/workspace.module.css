@@ -755,6 +755,12 @@
   white-space: nowrap;
 }
 
+.generationMeta {
+  padding: 0 16px 12px;
+  color: #858c96;
+  font-size: 12px;
+}
+
 .assetGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -785,6 +791,13 @@
   background: rgba(247, 248, 250, 0.9);
   color: #858c96;
   text-align: center;
+}
+
+.assetRecreate {
+  position: absolute !important;
+  z-index: 2;
+  right: 8px;
+  bottom: 8px;
 }
 
 .expired {

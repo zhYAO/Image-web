@@ -81,3 +81,17 @@ test('opens skill, model and parameter popovers on desktop', async ({ page }, te
   await expect(page.getByRole('button', { name: '比例 16:9' })).toBeVisible();
   await expect(page).toHaveScreenshot('parameters-open.png', { fullPage: true });
 });
+
+test('keeps chat and image provider selections independent on desktop', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium-desktop');
+  await page.goto('/');
+  await page.getByRole('button', { name: '聊天模型 豆包' }).click();
+  await expect(page.getByRole('dialog', { name: '聊天模型' })).toContainText('MiniMax');
+  await page.getByRole('button', { name: 'minimax · MiniMax' }).click();
+  await expect(page.getByRole('button', { name: '聊天模型 MiniMax' })).toBeVisible();
+
+  await page.getByRole('button', { name: '生图模式' }).click();
+  await expect(page.getByRole('button', { name: /生成模型 gemini Gemini 3 Pro Image/ })).toBeVisible();
+  await page.getByRole('button', { name: '聊天模式' }).click();
+  await expect(page.getByRole('button', { name: '聊天模型 MiniMax' })).toBeVisible();
+});

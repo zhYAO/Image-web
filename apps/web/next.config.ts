@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const dataMode = process.env.NEXT_PUBLIC_DATA_MODE ?? 'mock';
 const deploymentEnvironment = process.env.VERCEL_ENV ?? process.env.ZIMAGE_DEPLOYMENT_ENV;
@@ -13,4 +14,7 @@ const nextConfig: NextConfig = {
   transpilePackages: ['@zimage/domain'],
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  sourcemaps: { deleteSourcemapsAfterUpload: true },
+});

@@ -1,29 +1,38 @@
 import type { ComposerMode, MockScenario } from '@zimage/domain';
 import { create } from 'zustand';
 
-interface WorkspaceUiState {
+interface WorkspaceSlice {
   activePopover?: 'model' | 'parameters' | 'skill';
   sidebarCollapsed: boolean;
+  sessionDrawerOpen: boolean;
+  configDrawerOpen: boolean;
+  setActivePopover: (popover?: WorkspaceSlice['activePopover']) => void;
+  setConfigDrawerOpen: (open: boolean) => void;
+  setSessionDrawerOpen: (open: boolean) => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+}
+
+interface ComposerSlice {
   mode: ComposerMode;
   drafts: Record<ComposerMode, string>;
   explicitImageToolEnabled: boolean;
   selectedSkillId?: string;
   skillValues: Record<string, string>;
-  scenario: MockScenario;
-  sessionDrawerOpen: boolean;
-  configDrawerOpen: boolean;
   setMode: (mode: ComposerMode) => void;
-  setActivePopover: (popover?: WorkspaceUiState['activePopover']) => void;
   setDraft: (mode: ComposerMode, value: string) => void;
   setExplicitImageToolEnabled: (enabled: boolean) => void;
   selectSkill: (skillId?: string) => void;
   setSkillValue: (key: string, value: string) => void;
-  setScenario: (scenario: MockScenario) => void;
-  setSessionDrawerOpen: (open: boolean) => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  setConfigDrawerOpen: (open: boolean) => void;
-  reset: () => void;
 }
+
+interface CapabilitySlice {
+  scenario: MockScenario;
+  setScenario: (scenario: MockScenario) => void;
+}
+
+type WorkspaceUiState = WorkspaceSlice & ComposerSlice & CapabilitySlice & {
+  reset: () => void;
+};
 
 const initialState = {
   activePopover: undefined,

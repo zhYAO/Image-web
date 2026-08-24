@@ -13,7 +13,10 @@ import { ArrowUp, Image as ImageIcon, ImagePlus, MessageCircle, Settings2, X } f
 import Image from 'next/image';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 
+import { zhCN } from '@/i18n';
+
 import {
+  ChatModelPopover,
   GenerationParameterPopover,
   ModelPopover,
   SkillPopover,
@@ -36,8 +39,10 @@ interface UnifiedComposerProps {
   references: UploadReference[];
   resolution: ImageResolution;
   selectedModel?: ModelCapability;
+  selectedChatModel: string;
   selectedProvider?: string;
   selectedSkill?: Skill;
+  skillPrompt: string;
   skillValues: Record<string, string>;
   onAspectRatioChange: (ratio: AspectRatio) => void;
   onClearSkill: () => void;
@@ -46,8 +51,10 @@ interface UnifiedComposerProps {
   onImageToolChange: (enabled: boolean) => void;
   onModeChange: (mode: ComposerMode) => void;
   onModelSelect: (provider: string, model: string) => void;
+  onChatModelSelect: (model: string) => void;
   onOpenConfig: () => void;
   onPopoverChange: (popover?: UnifiedComposerProps['activePopover']) => void;
+  onSkillPromptChange: (value: string) => void;
   onReferenceAdd: (files: FileList) => void;
   onReferenceRemove: (index: number) => void;
   onResolutionChange: (resolution: ImageResolution) => void;
@@ -70,8 +77,10 @@ export function UnifiedComposer({
   references,
   resolution,
   selectedModel,
+  selectedChatModel,
   selectedProvider,
   selectedSkill,
+  skillPrompt,
   skillValues,
   onAspectRatioChange,
   onClearSkill,
@@ -80,8 +89,10 @@ export function UnifiedComposer({
   onImageToolChange,
   onModeChange,
   onModelSelect,
+  onChatModelSelect,
   onOpenConfig,
   onPopoverChange,
+  onSkillPromptChange,
   onReferenceAdd,
   onReferenceRemove,
   onResolutionChange,
@@ -104,7 +115,7 @@ export function UnifiedComposer({
     <div className={styles.composer}>
       <div className={styles.composerBody}>
         {mode === 'image' && (
-          <div aria-label="参考图" className={styles.inlineReferences}>
+          <div aria-label={zhCN.composer.reference} className={styles.inlineReferences}>
             {references.map((reference, index) => (
               <div className={styles.referenceCard} key={`${reference.name}-${index}`}>
                 <div className={styles.referencePreview}>
@@ -134,7 +145,7 @@ export function UnifiedComposer({
             ))}
             {references.length < 4 && (
               <label
-                aria-label="添加参考图"
+                aria-label={zhCN.composer.addReference}
                 className={styles.referenceAddCard}
                 role="button"
                 tabIndex={0}
@@ -153,7 +164,7 @@ export function UnifiedComposer({
                   type="file"
                 />
                 <ImagePlus aria-hidden size={21} />
-                <span>参考图</span>
+                <span>{zhCN.composer.reference}</span>
               </label>
             )}
           </div>
@@ -164,7 +175,7 @@ export function UnifiedComposer({
           className={styles.composerInput}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={mode === 'chat' ? '聊聊你的想法，或让 AI 帮你完善提示词…' : '上传参考图，输入文字描述你想生成的图片…'}
+          placeholder={mode === 'chat' ? zhCN.composer.chatPlaceholder : zhCN.composer.imagePlaceholder}
           value={draft}
           variant="borderless"
         />
@@ -173,7 +184,7 @@ export function UnifiedComposer({
         <div className={styles.composerTools}>
           <div className={styles.modeSwitch}>
             <button
-              aria-label="聊天模式"
+              aria-label={zhCN.composer.chatMode}
               aria-pressed={mode === 'chat'}
               className={`${styles.modeButton} ${mode === 'chat' ? styles.modeActive : ''}`}
               onClick={() => onModeChange('chat')}
@@ -182,7 +193,7 @@ export function UnifiedComposer({
               <MessageCircle size={14} />聊天
             </button>
             <button
-              aria-label="生图模式"
+              aria-label={zhCN.composer.imageMode}
               aria-pressed={mode === 'image'}
               className={`${styles.modeButton} ${mode === 'image' ? styles.modeActive : ''}`}
               onClick={() => onModeChange('image')}
@@ -215,30 +226,41 @@ export function UnifiedComposer({
               />
             </>
           )}
+          {mode === 'chat' && (
+            <ChatModelPopover
+              health={health}
+              onOpenChange={(open) => onPopoverChange(open ? 'model' : undefined)}
+              onSelect={onChatModelSelect}
+              open={activePopover === 'model'}
+              selectedModel={selectedChatModel}
+            />
+          )}
           <SkillPopover
+            editablePrompt={mode === 'image'}
             focusFieldKey={focusSkillFieldKey}
             onClear={onClearSkill}
             onOpenChange={(open) => onPopoverChange(open ? 'skill' : undefined)}
+            onPromptChange={onSkillPromptChange}
             onSkillValueChange={onSkillValueChange}
             open={activePopover === 'skill'}
-            prompt={draft}
+            prompt={skillPrompt}
             selectedSkill={selectedSkill}
             skillValues={skillValues}
           />
-          <Tooltip title="在对话中调用图片生成能力">
+          <Tooltip title={zhCN.composer.imageToolHint}>
             <span className={styles.imageToolToggle}>
               <Switch
-                aria-label="图片工具"
+                aria-label={zhCN.composer.imageTool}
                 checked={imageToolEnabled}
                 disabled={mode === 'image' || Boolean(selectedSkill?.requiresImageTool)}
                 onChange={onImageToolChange}
                 size="small"
               />
-              <span>图片工具</span>
+              <span>{zhCN.composer.imageTool}</span>
             </span>
           </Tooltip>
           <Button
-            aria-label="打开移动端生成配置"
+            aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}
             icon={<Settings2 size={15} />}
             onClick={onOpenConfig}
@@ -247,7 +269,7 @@ export function UnifiedComposer({
         <div className={styles.submitGroup}>
           {quota && <span className={styles.quotaText}>✦ {Math.max(0, quota.limit - quota.used)} 张</span>}
           <Button
-            aria-label="发送创作请求"
+            aria-label={zhCN.composer.submit}
             className={styles.submitButton}
             disabled={!draft.trim()}
             icon={<ArrowUp size={18} strokeWidth={2.5} />}

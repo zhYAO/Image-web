@@ -1,6 +1,6 @@
 import type { ChatRequest, ImageRequest, ProviderCapability } from '@zimage/domain';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { UnifiedWorkspace } from '@/features/workspace/UnifiedWorkspace';
 import { MockWorkspaceGateway, type StorageLike } from '@/gateways/mock-workspace-gateway';
@@ -53,6 +53,8 @@ const createObjectURL = vi.fn((file: File) => `blob:${file.name}`);
 const revokeObjectURL = vi.fn();
 
 describe('UnifiedWorkspace', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeEach(() => {
     useWorkspaceStore.getState().reset();
     createObjectURL.mockClear();
@@ -62,6 +64,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('keeps independent chat and image drafts while switching modes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -73,6 +76,7 @@ describe('UnifiedWorkspace', () => {
     expect(input).toHaveValue('聊天草稿');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
     expect(input).toHaveValue('生图草稿');
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('NaN');
   });
 
   it('auto-enables the image tool for a skill and restores the explicit choice when cleared', async () => {
@@ -215,18 +219,23 @@ describe('UnifiedWorkspace', () => {
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    fireEvent.change(screen.getByLabelText('上传参考图'), {
-      target: { files: [new File(['image'], 'payload.png', { type: 'image/png' })] },
-    });
+    const file = new File(['image'], 'payload.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('上传参考图'), { target: { files: [file] } });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '生成商品图' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
     await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
-    expect(gateway.lastImageRequest?.references).toEqual([
-      { mimeType: 'image/png', name: 'payload.png', size: 5, status: 'ready' },
-    ]);
+    expect(gateway.lastImageRequest?.references).toHaveLength(1);
+    expect(gateway.lastImageRequest?.references?.[0]).toMatchObject({
+      file,
+      mimeType: 'image/png',
+      name: 'payload.png',
+      size: 5,
+      status: 'ready',
+    });
+    expect(gateway.lastImageRequest?.references?.[0]).not.toHaveProperty('previewUrl');
   });
 
   it('releases remaining local preview URLs when the workspace unmounts', async () => {
@@ -255,6 +264,24 @@ describe('UnifiedWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('请填写必填技能参数'));
     expect(screen.getByRole('dialog', { name: '技能配置' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '模特风格' })).toHaveFocus();
+  });
+
+  it('submits the user-edited resolved skill prompt in image mode', async () => {
+    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
+    fireEvent.change(screen.getByRole('textbox', { name: '商品名称' }), { target: { value: '风衣' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '秋季新品' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '最终提示词' }), {
+      target: { value: '生成高级感秋季风衣白底图' },
+    });
+    expect(screen.getByRole('button', { name: '发送创作请求' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    await waitFor(() => expect(
+      gateway.lastImageRequest,
+      screen.queryByRole('alert')?.textContent ?? 'image request was not submitted',
+    ).toBeDefined());
+    expect(gateway.lastImageRequest?.prompt).toBe('生成高级感秋季风衣白底图');
   });
 
   it('uses the selected provider, model and generation parameters in the image request', async () => {

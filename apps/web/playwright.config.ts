@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
+
 export default defineConfig({
   expect: {
     toHaveScreenshot: { animations: 'disabled', maxDiffPixelRatio: 0.02 },
@@ -24,11 +26,11 @@ export default defineConfig({
   testDir: './e2e',
   workers: 3,
   use: {
-    baseURL: 'http://127.0.0.1:3100',
+    baseURL: externalBaseUrl ?? 'http://127.0.0.1:3100',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
-  webServer: {
+  webServer: externalBaseUrl ? undefined : {
     command: 'pnpm dev --hostname 127.0.0.1 --port 3100',
     env: { NEXT_PUBLIC_DATA_MODE: 'mock' },
     reuseExistingServer: !process.env.CI,

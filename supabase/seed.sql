@@ -1,0 +1,3 @@
+-- Phase 1 intentionally has no user-owned seed data. Anonymous identities and
+-- their sessions are created through the same authenticated runtime flow used
+-- by the Web application.

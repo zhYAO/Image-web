@@ -10,6 +10,7 @@ import {
   type ProviderCapability,
   type ProviderHealth,
   type Quota,
+  type RecreateScope,
   type SafeError,
   type Session,
   type Skill,
@@ -23,9 +24,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
+import { zhCN } from '@/i18n';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
-import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
+import { buildSkillPromptPreview, findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { UnifiedComposer } from './UnifiedComposer';
 import { WorkspaceTimeline } from './WorkspaceTimeline';
@@ -77,7 +79,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [count, setCount] = useState(2);
   const [selectedProvider, setSelectedProvider] = useState<string>();
   const [selectedModelId, setSelectedModelId] = useState<string>();
+  const [selectedChatModel, setSelectedChatModel] = useState('doubao');
   const [focusSkillFieldKey, setFocusSkillFieldKey] = useState<string>();
+  const [skillPromptOverride, setSkillPromptOverride] = useState<string>();
   const [references, setReferences] = useState<UploadReference[]>([]);
   const localPreviewUrls = useRef(new Set<string>());
 
@@ -88,6 +92,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   });
   const displayedImageToolEnabled = mode === 'image' || chatImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
+  const resolvedSkillPrompt = buildSkillPromptPreview(selectedSkill, skillValues, drafts.image);
+  const imageSubmissionPrompt = selectedSkill ? (skillPromptOverride ?? resolvedSkillPrompt) : drafts.image;
 
   const changeScenario = (value: typeof scenario) => {
     setScenario(value);
@@ -171,9 +177,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       (item) => item.type === 'generation' && ['pending', 'processing'].includes(item.batch.status),
     );
     if (!hasActiveBatch || !activeSessionId) return;
-    const timer = window.setInterval(() => void refreshTimeline(activeSessionId), 300);
+    const timer = window.setInterval(
+      () => void refreshTimeline(activeSessionId),
+      gateway instanceof MockWorkspaceGateway ? 300 : 1500,
+    );
     return () => window.clearInterval(timer);
-  }, [activeSessionId, refreshTimeline, timeline]);
+  }, [activeSessionId, gateway, refreshTimeline, timeline]);
 
   const createSession = async () => {
     const session = await gateway.createSession();
@@ -192,7 +201,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const submit = async () => {
-    const prompt = drafts[mode].trim();
+    const prompt = (mode === 'image' ? imageSubmissionPrompt : drafts.chat).trim();
     if (!prompt || busy) return;
     const missingField = selectedSkill?.fields.find(
       (field) => field.required && !skillValues[field.key]?.trim(),
@@ -211,6 +220,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setBusy(true);
     setFeedback(undefined);
     try {
+      const activeProvider = mode === 'image' ? selectedProvider : selectedChatModel;
+      if (health.find((item) => item.provider === activeProvider)?.status === 'unavailable') {
+        setFeedback({
+          error: { code: 'PROVIDER_UNAVAILABLE', message: '所选服务暂时不可用，请选择其他 provider。', retryable: true },
+          message: '所选服务暂时不可用，请选择其他 provider。',
+        });
+        return;
+      }
       if (mode === 'image') {
         const sessionId = await ensureSession();
         await gateway.submitImage({
@@ -220,6 +237,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
           prompt,
           provider: selectedProvider,
           references: references.map((reference) => ({
+            file: reference.file,
             mimeType: reference.mimeType,
             name: reference.name,
             size: reference.size,
@@ -232,7 +250,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
           skillValues,
         });
         setDraft('image', '');
-        await Promise.all([refreshTimeline(sessionId), refreshSessions()]);
+        setSkillPromptOverride(undefined);
+        const [, , nextQuota] = await Promise.all([
+          refreshTimeline(sessionId), refreshSessions(), gateway.getQuota(),
+        ]);
+        setQuota(nextQuota);
       } else {
         const existingSessionId = activeSessionId;
         const optimisticSessionId = existingSessionId ?? 'pending-session';
@@ -250,6 +272,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         ]);
         let resolvedSessionId = existingSessionId;
         for await (const event of gateway.streamChat({
+          chatModel: selectedChatModel,
+          imageProvider: selectedProvider,
           imageToolEnabled: chatImageToolEnabled,
           message: prompt,
           scenario,
@@ -268,7 +292,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         }
         setDraft('chat', '');
         setStreamingText('');
-        await Promise.all([refreshTimeline(resolvedSessionId), refreshSessions()]);
+        const [, , nextQuota] = await Promise.all([
+          refreshTimeline(resolvedSessionId), refreshSessions(), gateway.getQuota(),
+        ]);
+        setQuota(nextQuota);
       }
     } catch (error: unknown) {
       const safe = sanitizeError(error);
@@ -281,7 +308,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const deleteSession = async (sessionId: string) => {
     try {
       await gateway.deleteSession(sessionId);
-      setFeedback({ message: '会话已隐藏，后台清理已完成。' });
+      setFeedback({ message: zhCN.workspace.deleteCompleted });
     } catch (error: unknown) {
       const safe = sanitizeError(error);
       setFeedback({ error: safe, message: safe.message, retrySessionId: safe.retryable ? sessionId : undefined });
@@ -305,9 +332,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setSessionDrawerOpen(false);
   };
 
-  const recreate = async (batch: GenerationBatch, scope: 'failed' | 'all') => {
+  const recreate = async (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => {
     try {
-      await gateway.recreateGeneration({ batchId: batch.id, scope });
+      await gateway.recreateGeneration({ batchId: batch.id, generationId, scope });
       await refreshTimeline(batch.sessionId);
     } catch (error: unknown) {
       const safe = sanitizeError(error);
@@ -319,7 +346,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     batch.assets.forEach((asset, index) => {
       if (!asset.url || asset.expired || asset.status !== 'succeeded') return;
       const link = document.createElement('a');
-      link.download = `zimage-${batch.id}-${index + 1}.svg`;
+      const extension = (() => {
+        try {
+          return new URL(asset.url, window.location.href).pathname.match(/\.(png|jpe?g|webp)$/i)?.[1] ?? 'png';
+        } catch {
+          return 'png';
+        }
+      })();
+      link.download = `zimage-${batch.id}-${index + 1}.${extension}`;
       link.href = asset.url;
       link.click();
     });
@@ -361,6 +395,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       const previewUrl = URL.createObjectURL(file);
       localPreviewUrls.current.add(previewUrl);
       return {
+        file,
         mimeType: file.type,
         name: file.name,
         previewUrl,
@@ -400,6 +435,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
 
   const chooseSkill = (skillId: string) => {
     setFocusSkillFieldKey(undefined);
+    setSkillPromptOverride(undefined);
     selectSkill(skillId);
   };
 
@@ -476,11 +512,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         <header className={styles.header}>
           <Space>
             <Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" />
-            <span className={styles.headerTitle}>{activeSession?.title ?? '开启创作'}</span>
+            <span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span>
           </Space>
           <Space>
             <Select
-              aria-label="Mock 场景"
+              aria-label={zhCN.workspace.mockScenario}
               className={styles.devScenario}
               onChange={changeScenario}
               options={[
@@ -494,12 +530,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               value={scenario}
             />
             <Button
-              aria-label="资产库"
+              aria-label={zhCN.workspace.assetLibrary}
               className={styles.assetLibraryButton}
               icon={<Archive size={16} />}
-              onClick={() => setFeedback({ message: '资产库暂未开放' })}
+              onClick={() => setFeedback({ message: zhCN.workspace.assetLibraryUnavailable })}
             >
-              资产库
+              {zhCN.workspace.assetLibrary}
             </Button>
           </Space>
         </header>
@@ -541,11 +577,16 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             onAspectRatioChange={setAspectRatio}
             onClearSkill={() => {
               setActivePopover(undefined);
+              setSkillPromptOverride(undefined);
               selectSkill(undefined);
             }}
             onCountChange={setCount}
-            onDraftChange={(value) => setDraft(mode, value)}
+            onDraftChange={(value) => {
+              if (mode === 'image') setSkillPromptOverride(undefined);
+              setDraft(mode, value);
+            }}
             onImageToolChange={setExplicitImageToolEnabled}
+            onChatModelSelect={setSelectedChatModel}
             onModeChange={(nextMode) => {
               setActivePopover(undefined);
               setMode(nextMode);
@@ -556,22 +597,28 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             onReferenceAdd={addReferences}
             onReferenceRemove={removeReference}
             onResolutionChange={setResolution}
-            onSkillValueChange={setSkillValue}
+            onSkillPromptChange={setSkillPromptOverride}
+            onSkillValueChange={(key, value) => {
+              setSkillPromptOverride(undefined);
+              setSkillValue(key, value);
+            }}
             onSubmit={() => void submit()}
             quota={quota}
             references={references}
             resolution={resolution}
             selectedModel={selectedModel}
+            selectedChatModel={selectedChatModel}
             selectedProvider={selectedProvider}
             selectedSkill={selectedSkill}
+            skillPrompt={mode === 'image' ? imageSubmissionPrompt : drafts.chat}
             skillValues={skillValues}
           />
         </div>
       </main>
-      <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title="会话">
+      <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>
         {sidebar}
       </Drawer>
-      <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title="生成配置">
+      <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>
         {mobileConfig}
       </Drawer>
     </div>

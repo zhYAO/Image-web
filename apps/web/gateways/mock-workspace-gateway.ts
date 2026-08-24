@@ -1,6 +1,10 @@
 import {
+  CHAT_PROVIDER_MODELS,
+  IMAGE_PROVIDER_CAPABILITIES as CAPABILITIES,
+  PHASE1_SKILLS as SKILLS,
   WorkspaceError,
   aggregateBatchStatus,
+  hasExplicitImageIntent,
   nextTimelineSequence,
   sanitizeError,
   validateImageRequest,
@@ -21,20 +25,18 @@ import {
 } from '@zimage/domain';
 
 export const MOCK_STORAGE_KEY = 'zimage:mock:v1';
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
-
 interface MockState {
   sessions: Session[];
   timelines: Record<string, TimelineItem[]>;
   batches: Record<string, GenerationBatch>;
   deleteAttempts: Record<string, number>;
 }
-
 interface StorageEnvelope {
   version: number;
   state: MockState;
@@ -195,7 +197,9 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       return;
     }
 
-    const answer = request.imageToolEnabled
+    const shouldGenerateImage = request.imageToolEnabled &&
+      (Boolean(request.skillId) || hasExplicitImageIntent(request.message));
+    const answer = shouldGenerateImage
       ? '已理解你的创作目标，我先整理提示词，然后把生图任务加入队列。'
       : '可以。建议突出主体材质、光线、构图和使用场景，让画面目标更明确。';
     const deltas = this.splitIntoThree(answer);
@@ -223,7 +227,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     });
     yield { content: answer, messageId, type: 'message.completed' };
 
-    if (request.imageToolEnabled) {
+    if (shouldGenerateImage) {
       const batch = await this.submitImage({
         aspectRatio: '1:1',
         count: 2,
@@ -237,7 +241,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       const stored = this.state.batches[batch.id];
       if (stored) stored.source = 'chat_tool';
       this.persist();
-      yield { batch: clone(stored ?? batch), type: 'tool.queued' };
+      yield { batchId: (stored ?? batch).id, type: 'tool.queued' };
     }
   }
 
@@ -249,15 +253,25 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       : await this.createSession(this.titleFrom(request.prompt));
     const createdAt = this.timestamp();
     const batchId = this.id('batch');
+    const defaultCapability = CAPABILITIES[0];
+    const provider = request.provider ?? defaultCapability?.provider ?? 'unknown';
+    const model = request.model ?? defaultCapability?.models[0]?.id ?? 'unknown';
     const assets: GenerationAsset[] = Array.from({ length: request.count }, () => ({
       id: this.id('generation'),
       status: 'pending',
     }));
     const batch: GenerationBatch = {
       assets,
+      config: {
+        aspectRatio: request.aspectRatio,
+        count: request.count,
+        resolution: request.resolution,
+      },
       createdAt,
       id: batchId,
+      model,
       prompt: request.prompt.trim(),
+      provider,
       sessionId: session.id,
       source: 'direct',
       status: 'pending',
@@ -296,10 +310,12 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       throw new WorkspaceError({ code: 'BATCH_NOT_FOUND', message: '没有可重生成的图片。', retryable: false });
     }
     return this.submitImage({
-      aspectRatio: '1:1',
+      aspectRatio: original.config.aspectRatio,
       count: assets.length,
+      model: original.model,
       prompt: original.prompt,
-      resolution: '1K',
+      provider: original.provider,
+      resolution: original.config.resolution,
       sessionId: original.sessionId,
     });
   }
@@ -309,7 +325,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async getQuota(): Promise<Quota> {
-    return { limit: 100, resetsAt: '2026-09-01T00:00:00.000Z', used: 28 };
+    return { limit: 30, resetsAt: '2026-09-01T00:00:00.000Z', used: 28 };
   }
 
   async getProviderCapabilities(): Promise<ProviderCapability[]> {
@@ -317,7 +333,8 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async getProviderHealth(): Promise<ProviderHealth[]> {
-    return [{ checkedAt: this.timestamp(), provider: 'Google Gemini', status: 'healthy' }];
+    return [...CAPABILITIES.map((capability) => capability.provider), ...CHAT_PROVIDER_MODELS.map((model) => model.provider)]
+      .map((provider) => ({ checkedAt: this.timestamp(), provider, status: 'healthy' }));
   }
 
   private async transitionBatch(batchId: string, scenario: MockScenario) {
@@ -459,51 +476,3 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }
 }
-
-const SKILLS: Skill[] = [
-  {
-    coverImageUrl: '/skills/white-background.webp',
-    description: '干净背景与清晰商品轮廓',
-    fields: [{ key: 'product', label: '商品名称', required: true, placeholder: '例如：羊毛大衣' }],
-    icon: '◇',
-    id: 'white-background',
-    name: '白底图',
-    promptTemplate: '为 {product} 生成专业电商白底图',
-    requiresImageTool: true,
-  },
-  {
-    coverImageUrl: '/skills/model.webp',
-    description: '自然姿态与真实穿着效果',
-    fields: [{ key: 'style', label: '模特风格', required: true, placeholder: '例如：都市简约' }],
-    icon: '◉',
-    id: 'model',
-    name: '模特图',
-    promptTemplate: '生成 {style} 风格的模特展示图',
-    requiresImageTool: true,
-  },
-  {
-    coverImageUrl: '/skills/social.webp',
-    description: '生活化构图与社媒氛围',
-    fields: [{ key: 'scene', label: '使用场景', required: true, placeholder: '例如：周末咖啡馆' }],
-    icon: '✦',
-    id: 'social',
-    name: '种草图',
-    promptTemplate: '生成 {scene} 中的生活方式种草图',
-    requiresImageTool: true,
-  },
-];
-
-const CAPABILITIES: ProviderCapability[] = [
-  {
-    models: [
-      {
-        aspectRatios: ['1:1', '3:4', '4:3', '9:16', '16:9'],
-        id: 'gemini-3-pro-image',
-        label: 'Gemini 3 Pro Image',
-        maxImages: 4,
-        resolutions: ['1K', '2K'],
-      },
-    ],
-    provider: 'Google Gemini',
-  },
-];

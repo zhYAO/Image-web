@@ -57,6 +57,13 @@ export function resolveImageToolEnabled(input: {
   return input.skillRequiresImage || input.explicitEnabled;
 }
 
+export function hasExplicitImageIntent(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  const chineseCommand = /^(?:(?:请你?|帮我|给我|现在|直接|立刻|我要|我想要)\s*)*(?:生成|制作|创建|绘制|画|出图)/;
+  const englishCommand = /^(?:(?:please|could you|can you|i want(?: you)? to|i need(?: you)? to)\s+)*(?:generate|create|draw|make|produce)\b/;
+  return chineseCommand.test(normalized) || englishCommand.test(normalized);
+}
+
 export class WorkspaceError extends Error {
   readonly safe: SafeError;
 

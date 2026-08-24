@@ -3,8 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  ChatModelPopover,
   GenerationParameterPopover,
   normalizeGenerationSelection,
+  SkillPopover,
 } from '@/features/workspace/GenerationConfig';
 import { SessionSidebar } from '@/features/workspace/SessionSidebar';
 import { WorkspaceTimeline } from '@/features/workspace/WorkspaceTimeline';
@@ -18,9 +20,52 @@ const skill: Skill = {
   name: '白底图',
   promptTemplate: '生成 {product}',
   requiresImageTool: true,
+  version: '1.0.0',
 };
 
 describe('workspace presentation components', () => {
+  it('lets image-mode users edit the resolved skill prompt before submission', () => {
+    const onPromptChange = vi.fn();
+    render(
+      <SkillPopover
+        editablePrompt
+        onClear={vi.fn()}
+        onOpenChange={vi.fn()}
+        onPromptChange={onPromptChange}
+        onSkillValueChange={vi.fn()}
+        open
+        prompt="生成 风衣"
+        selectedSkill={skill}
+        skillValues={{ product: '风衣' }}
+      />,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: '最终提示词' }), {
+      target: { value: '生成高级感风衣白底图' },
+    });
+    expect(onPromptChange).toHaveBeenCalledWith('生成高级感风衣白底图');
+  });
+
+  it('selects chat providers independently and shows shared health', () => {
+    const onOpenChange = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <ChatModelPopover
+        health={[
+          { checkedAt: '2026-08-24T00:00:00.000Z', provider: 'doubao', status: 'healthy' },
+          { checkedAt: '2026-08-24T00:00:00.000Z', provider: 'minimax', status: 'degraded' },
+        ]}
+        onOpenChange={onOpenChange}
+        onSelect={onSelect}
+        open
+        selectedModel="doubao"
+      />,
+    );
+    expect(screen.getByRole('dialog', { name: '聊天模型' })).toHaveTextContent('服务正常');
+    fireEvent.click(screen.getByRole('button', { name: 'minimax · MiniMax' }));
+    expect(onSelect).toHaveBeenCalledWith('minimax');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('keeps the parameter popover closed until clicked and closes it with outside click or Escape', () => {
     const onAspectRatioChange = vi.fn();
     const onOpenChange = vi.fn();
@@ -122,9 +167,12 @@ describe('workspace presentation components', () => {
         { error: { code: 'UNKNOWN', message: '失败', retryable: true }, id: 'fail', status: 'failed' },
         { expired: true, id: 'expired', status: 'succeeded', url: 'data:image/svg+xml,expired' },
       ],
+      config: { aspectRatio: '3:4', count: 3, resolution: '2K' },
       createdAt: '2026',
       id: 'batch',
+      model: 'gemini-3-pro-image',
       prompt: '商品图',
+      provider: 'Google Gemini',
       sessionId: 's1',
       source: 'chat_tool',
       status: 'partial',
@@ -155,12 +203,15 @@ describe('workspace presentation components', () => {
       />,
     );
 
+    expect(screen.getByText('Google Gemini · gemini-3-pro-image · 3:4 · 2K')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重新生成第 1 张' }));
     fireEvent.click(screen.getByRole('button', { name: '批量下载' }));
     fireEvent.click(screen.getByRole('button', { name: '重试失败项' }));
     fireEvent.click(screen.getByRole('button', { name: '按原参数生成' }));
     expect(onDownloadBatch).toHaveBeenCalledWith(batch);
-    expect(onRecreate).toHaveBeenNthCalledWith(1, batch, 'failed');
-    expect(onRecreate).toHaveBeenNthCalledWith(2, batch, 'all');
+    expect(onRecreate).toHaveBeenNthCalledWith(1, batch, 'single', 'ok');
+    expect(onRecreate).toHaveBeenNthCalledWith(2, batch, 'failed');
+    expect(onRecreate).toHaveBeenNthCalledWith(3, batch, 'all');
   });
 
   it('forwards empty-state skill selection and exercises all store actions', () => {

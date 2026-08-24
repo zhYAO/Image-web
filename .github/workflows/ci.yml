@@ -1,0 +1,72 @@
+name: Phase 1 Web CI
+
+on:
+  pull_request:
+  push:
+    branches: [setup2, main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:coverage
+      - run: pnpm exec vitest run supabase/functions/generation-worker/image-providers.test.ts
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_DATA_MODE: mock
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec supabase start
+      - run: pnpm exec supabase test db supabase/tests/database
+      - run: pnpm exec supabase gen types typescript --local > database.generated.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: database-generated-types
+          path: database.generated.ts
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @zimage/web exec playwright install --with-deps chromium msedge
+      - run: pnpm e2e
+        env:
+          NEXT_PUBLIC_DATA_MODE: mock
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report

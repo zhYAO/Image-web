@@ -1,13 +1,16 @@
-import type {
-  AspectRatio,
-  ImageResolution,
-  ProviderCapability,
-  ProviderHealth,
-  Skill,
+import {
+  CHAT_PROVIDER_MODELS,
+  type AspectRatio,
+  type ImageResolution,
+  type ProviderCapability,
+  type ProviderHealth,
+  type Skill,
 } from '@zimage/domain';
 import { Button, Input, Tag, type InputRef } from 'antd';
 import { Box, Check, ChevronDown, SlidersHorizontal, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+
+import { zhCN } from '@/i18n';
 
 import styles from './workspace.module.css';
 
@@ -280,16 +283,80 @@ export function ModelPopover({
   );
 }
 
+interface ChatModelPopoverProps {
+  health: ProviderHealth[];
+  onOpenChange: (open: boolean) => void;
+  onSelect: (model: string) => void;
+  open: boolean;
+  selectedModel: string;
+}
+
+export function ChatModelPopover({
+  health, onOpenChange, onSelect, open, selectedModel,
+}: ChatModelPopoverProps) {
+  const selected = CHAT_PROVIDER_MODELS.find((model) => model.id === selectedModel)
+    ?? CHAT_PROVIDER_MODELS[0];
+  const selectedHealth = health.find((item) => item.provider === selected.provider);
+  return (
+    <PopoverShell
+      ariaLabel={zhCN.composer.chatModel}
+      className={styles.modelPopover}
+      onOpenChange={onOpenChange}
+      open={open}
+      trigger={(
+        <Button
+          aria-label={`${zhCN.composer.chatModel} ${selected.label}`}
+          className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
+          icon={<Box size={15} />}
+          onClick={() => onOpenChange(!open)}
+        >
+          {selected.label} <ChevronDown size={13} />
+        </Button>
+      )}
+    >
+      <div className={styles.popoverHeading}>
+        <div>
+          <div className={styles.popoverTitle}>{zhCN.composer.chatModel}</div>
+          <div className={styles.popoverHint}>{zhCN.composer.chatModelHint}</div>
+        </div>
+        <Tag color={selectedHealth?.status === 'healthy' ? 'green' : 'orange'}>
+          {selectedHealth?.status === 'healthy' ? zhCN.composer.serviceHealthy : zhCN.composer.serviceDegraded}
+        </Tag>
+      </div>
+      <div className={styles.modelList}>
+        {CHAT_PROVIDER_MODELS.map((model) => (
+          <button
+            aria-label={`${model.provider} · ${model.label}`}
+            className={`${styles.modelOption} ${model.id === selected.id ? styles.optionActive : ''}`}
+            key={model.id}
+            onClick={() => {
+              onSelect(model.id);
+              onOpenChange(false);
+            }}
+            type="button"
+          >
+            <span className={styles.modelIcon}><Sparkles size={16} /></span>
+            <span><strong>{model.label}</strong><small>{model.provider}</small></span>
+            {model.id === selected.id && <Check size={16} />}
+          </button>
+        ))}
+      </div>
+    </PopoverShell>
+  );
+}
+
 export function buildSkillPromptPreview(skill: Skill | undefined, values: Record<string, string>, prompt: string) {
   let preview = skill?.promptTemplate ?? (prompt || '输入内容后，这里会展示最终提示词。');
   for (const [key, value] of Object.entries(values)) preview = preview.replaceAll(`{${key}}`, value || `{${key}}`);
-  return preview;
+  return skill && prompt.trim() ? `${preview}\n\n用户补充：${prompt.trim()}` : preview;
 }
 
 interface SkillPopoverProps {
+  editablePrompt?: boolean;
   focusFieldKey?: string;
   onClear: () => void;
   onOpenChange: (open: boolean) => void;
+  onPromptChange?: (value: string) => void;
   onSkillValueChange: (key: string, value: string) => void;
   open: boolean;
   prompt: string;
@@ -298,9 +365,11 @@ interface SkillPopoverProps {
 }
 
 export function SkillPopover({
+  editablePrompt = false,
   focusFieldKey,
   onClear,
   onOpenChange,
+  onPromptChange,
   onSkillValueChange,
   open,
   prompt,
@@ -360,7 +429,14 @@ export function SkillPopover({
           </div>
           <div className={styles.promptPreviewBlock}>
             <span>实时提示词预览</span>
-            <p>{preview}</p>
+            {editablePrompt ? (
+              <Input.TextArea
+                aria-label="最终提示词"
+                autoSize={{ maxRows: 6, minRows: 3 }}
+                onChange={(event) => onPromptChange?.(event.target.value)}
+                value={prompt}
+              />
+            ) : <p>{preview}</p>}
           </div>
         </>
       ) : (
