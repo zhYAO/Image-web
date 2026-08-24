@@ -41,7 +41,7 @@ describe('image submission service', () => {
     const submit = vi.fn();
     const service = createImageService({ submit } as GenerationSubmissionStore);
 
-    await expect(service.submit(userId, {
+    await expect(service.prepare(userId, {
       model: 'seedream-4.5',
       params: { aspectRatio: '1:1', count: 1, resolution: '1K' },
       prompt: 'invalid pair',

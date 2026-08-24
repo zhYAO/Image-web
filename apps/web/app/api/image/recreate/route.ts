@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { hashCanonicalRequest } from '@/server/image/image-service';
 import { SupabaseGenerationStore } from '@/server/image/supabase-generation-store';
+import { createPreviewUsageGuard, withPreviewUsageReservation } from '@/server/preview/preview-usage-guard';
 import { assertTrustedOrigin, executeRoute, readJson, requireVerifiedUserId } from '@/server/route-context';
 
 export async function POST(request: Request) {
@@ -15,15 +16,24 @@ export async function POST(request: Request) {
     const userId = await requireVerifiedUserId(client);
     const input = recreateImageRequestSchema.parse(await readJson(request));
     const idempotencyKey = z.uuid().parse(request.headers.get('idempotency-key'));
-    const result = await new SupabaseGenerationStore(createSupabaseAdminClient()).recreate({
-      batchId: input.batchId,
+    const admin = createSupabaseAdminClient();
+    return withPreviewUsageReservation(createPreviewUsageGuard(admin), {
+      businessKey: `generation-recreate:${idempotencyKey}`,
       correlationId,
-      generationId: input.generationId,
-      idempotencyKey,
-      mode: input.mode,
-      requestHash: await hashCanonicalRequest({ input, userId }),
+      createsSession: false,
+      operation: 'generation_recreate',
       userId,
+    }, async () => {
+      const result = await new SupabaseGenerationStore(admin).recreate({
+        batchId: input.batchId,
+        correlationId,
+        generationId: input.generationId,
+        idempotencyKey,
+        mode: input.mode,
+        requestHash: await hashCanonicalRequest({ input, userId }),
+        userId,
+      });
+      return NextResponse.json(imageSubmissionResponseSchema.parse(result), { status: 202 });
     });
-    return NextResponse.json(imageSubmissionResponseSchema.parse(result), { status: 202 });
   });
 }

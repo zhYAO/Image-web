@@ -6,6 +6,11 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ApiRouteError } from '@/server/api-error';
 import { validateReferenceUpload } from '@/server/assets/reference-upload-service';
+import {
+  createPreviewUsageGuard,
+  PreviewUsageRetentionError,
+  withPreviewUsageReservation,
+} from '@/server/preview/preview-usage-guard';
 import { assertTrustedOrigin, executeRoute, requireVerifiedUserId } from '@/server/route-context';
 
 export const runtime = 'nodejs';
@@ -15,7 +20,7 @@ function temporaryFailure(message: string) {
 }
 
 export async function POST(request: Request) {
-  return executeRoute(async () => {
+  return executeRoute(async (correlationId) => {
     assertTrustedOrigin(request);
     const userClient = await createSupabaseServerClient();
     const userId = await requireVerifiedUserId(userClient);
@@ -76,41 +81,59 @@ export async function POST(request: Request) {
     const uploadId = crypto.randomUUID();
     const storagePath = `${userId}/${sessionId}/references/${uploadId}/reference.${metadata.extension}`;
     const admin = createSupabaseAdminClient();
-    const uploaded = await admin.storage.from('uploads').upload(storagePath, bytes, {
-      cacheControl: '3600',
-      contentType: file.type,
-      upsert: false,
+    return withPreviewUsageReservation(createPreviewUsageGuard(admin), {
+      bytes: file.size,
+      businessKey: `upload:${correlationId}`,
+      correlationId,
+      createsSession: false,
+      operation: 'upload',
+      userId,
+    }, async () => {
+      const persisted = await admin
+        .from('reference_uploads')
+        .insert({
+          height: metadata.height,
+          id: uploadId,
+          mime_type: file.type,
+          original_filename: file.name,
+          session_id: sessionId,
+          size_bytes: file.size,
+          storage_path: storagePath,
+          user_id: userId,
+          width: metadata.width,
+        })
+        .select('id,original_filename,mime_type,size_bytes,width,height,upload_expires_at')
+        .single();
+      if (persisted.error || !persisted.data) {
+        throw temporaryFailure('参考图元数据保存失败，请稍后重试。');
+      }
+
+      const uploaded = await admin.storage.from('uploads').upload(storagePath, bytes, {
+        cacheControl: '3600',
+        contentType: file.type,
+        upsert: false,
+      });
+      if (uploaded.error) {
+        const failure = temporaryFailure('参考图上传失败，请稍后重试。');
+        const removedObject = await admin.storage.from('uploads').remove([storagePath]);
+        const removedMetadata = await admin
+          .from('reference_uploads')
+          .delete()
+          .eq('id', uploadId)
+          .eq('user_id', userId);
+        if (removedObject.error || removedMetadata.error) throw new PreviewUsageRetentionError(failure);
+        throw failure;
+      }
+
+      return NextResponse.json(referenceUploadResponseSchema.parse({
+        expiresAt: persisted.data.upload_expires_at,
+        height: persisted.data.height,
+        id: persisted.data.id,
+        mimeType: persisted.data.mime_type,
+        name: persisted.data.original_filename,
+        size: persisted.data.size_bytes,
+        width: persisted.data.width,
+      }), { status: 201 });
     });
-    if (uploaded.error) throw temporaryFailure('参考图上传失败，请稍后重试。');
-
-    const persisted = await userClient
-      .from('reference_uploads')
-      .insert({
-        height: metadata.height,
-        id: uploadId,
-        mime_type: file.type,
-        original_filename: file.name,
-        session_id: sessionId,
-        size_bytes: file.size,
-        storage_path: storagePath,
-        user_id: userId,
-        width: metadata.width,
-      })
-      .select('id,original_filename,mime_type,size_bytes,width,height,upload_expires_at')
-      .single();
-    if (persisted.error || !persisted.data) {
-      await admin.storage.from('uploads').remove([storagePath]);
-      throw temporaryFailure('参考图元数据保存失败，请稍后重试。');
-    }
-
-    return NextResponse.json(referenceUploadResponseSchema.parse({
-      expiresAt: persisted.data.upload_expires_at,
-      height: persisted.data.height,
-      id: persisted.data.id,
-      mimeType: persisted.data.mime_type,
-      name: persisted.data.original_filename,
-      size: persisted.data.size_bytes,
-      width: persisted.data.width,
-    }), { status: 201 });
   });
 }

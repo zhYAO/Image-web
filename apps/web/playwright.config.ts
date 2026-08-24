@@ -17,8 +17,8 @@ export default defineConfig({
       use: { browserName: 'chromium', channel: 'msedge', viewport: { height: 768, width: 1024 } },
     },
     {
-      name: 'chromium-mobile',
-      use: { browserName: 'chromium', viewport: { height: 844, width: 390 } },
+      name: 'webkit-mobile',
+      use: { browserName: 'webkit', viewport: { height: 844, width: 390 } },
     },
   ],
   reporter: [['list'], ['html', { open: 'never' }]],

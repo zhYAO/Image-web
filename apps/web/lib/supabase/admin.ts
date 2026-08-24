@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
+import type { Database } from './database.generated';
 import { resolveSupabaseServiceEnv } from './service-env';
 
 export function createSupabaseAdminClient() {
@@ -8,7 +9,7 @@ export function createSupabaseAdminClient() {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   });
 
-  return createClient(environment.url, environment.serviceRoleKey, {
+  return createClient<Database>(environment.url, environment.serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       detectSessionInUrl: false,

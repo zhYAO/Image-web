@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+import type { Database } from './database.generated';
 import { readSupabasePublicEnv } from './env';
 
 export async function createSupabaseServerClient() {
@@ -8,7 +9,7 @@ export async function createSupabaseServerClient() {
   if (!environment) throw new Error('Supabase server configuration is unavailable.');
   const cookieStore = await cookies();
 
-  return createServerClient(environment.url, environment.publishableKey, {
+  return createServerClient<Database>(environment.url, environment.publishableKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

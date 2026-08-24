@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(45);
+select plan(44);
 
 select has_table('public', 'sessions', 'sessions exists');
 select has_table('public', 'timeline_items', 'timeline_items exists');
@@ -27,8 +27,8 @@ select ok(not has_table_privilege('anon', 'public.generations', 'select'), 'anon
 select ok(not has_table_privilege('anon', 'public.reference_uploads', 'select'), 'anon cannot select references');
 
 select ok(has_table_privilege('authenticated', 'public.sessions', 'select'), 'authenticated can select sessions');
-select ok(has_table_privilege('authenticated', 'public.sessions', 'insert'), 'authenticated can insert sessions');
-select ok(has_column_privilege('authenticated', 'public.sessions', 'title', 'update'), 'authenticated can rename sessions');
+select ok(not has_table_privilege('authenticated', 'public.sessions', 'insert'), 'authenticated cannot bypass session quotas');
+select ok(not has_column_privilege('authenticated', 'public.sessions', 'title', 'update'), 'authenticated cannot bypass write quotas');
 select ok(not has_table_privilege('authenticated', 'public.sessions', 'delete'), 'authenticated cannot directly delete sessions');
 select ok(has_table_privilege('authenticated', 'public.timeline_items', 'select'), 'authenticated can select timeline items');
 select ok(not has_table_privilege('authenticated', 'public.timeline_items', 'insert'), 'authenticated cannot bypass the chat service');
@@ -37,7 +37,7 @@ select ok(not has_table_privilege('authenticated', 'public.generation_batches', 
 select ok(has_table_privilege('authenticated', 'public.generations', 'select'), 'authenticated can select generations');
 select ok(not has_table_privilege('authenticated', 'public.generations', 'insert'), 'authenticated cannot bypass quota reservation');
 select ok(has_table_privilege('authenticated', 'public.reference_uploads', 'select'), 'authenticated can select references');
-select ok(has_table_privilege('authenticated', 'public.reference_uploads', 'insert'), 'authenticated can insert references');
+select ok(not has_table_privilege('authenticated', 'public.reference_uploads', 'insert'), 'authenticated cannot bypass upload validation');
 
 select ok(not has_table_privilege('authenticated', 'private.quota_ledger', 'select'), 'quota ledger is server-only');
 select ok(not has_table_privilege('authenticated', 'private.provider_health_windows', 'select'), 'health windows are server-only');
@@ -84,16 +84,18 @@ select results_eq(
   'RLS exposes only the current user sessions'
 );
 
-select lives_ok(
+select throws_ok(
   $$insert into public.sessions (id, user_id, title) values ('10000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a1', 'allowed')$$,
-  'the owner can create a session'
+  '42501',
+  'permission denied for table sessions',
+  'even the owner must create a session through the quota-guarded server route'
 );
 
 select throws_ok(
   $$insert into public.sessions (id, user_id, title) values ('10000000-0000-0000-0000-0000000000b3', '00000000-0000-0000-0000-0000000000b2', 'forbidden')$$,
   '42501',
-  'new row violates row-level security policy for table "sessions"',
-  'a user cannot create a session for another owner'
+  'permission denied for table sessions',
+  'direct cross-owner session creation is also denied before RLS'
 );
 
 reset role;

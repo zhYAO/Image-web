@@ -1,5 +1,7 @@
 import { withSupabase } from '@supabase/server';
 
+import { captureWorkerException } from '../_shared/sentry.ts';
+
 type AdminClient = {
   rpc(name: string, input?: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
   storage: { from(bucket: string): { remove(paths: string[]): Promise<{ error: unknown }> } };
@@ -63,6 +65,7 @@ export default {
       return Response.json({ error: 'unauthorized' }, { status: 401 });
     }
     const admin = context.supabaseAdmin as unknown as AdminClient;
+    await rpc<unknown>(admin, 'prune_preview_usage');
     const claim = parseClaim(await rpc<unknown>(admin, 'claim_cleanup_job'));
     if (!claim) return Response.json({ status: 'idle' });
     try {
@@ -72,6 +75,7 @@ export default {
       console.log(JSON.stringify({ action: 'completed', jobId: claim.jobId, jobType: claim.jobType }));
       return Response.json({ action: 'completed', jobType: claim.jobType });
     } catch (error: unknown) {
+      await captureWorkerException(error, { jobId: claim.jobId, operation: 'cleanup_worker' });
       const result = await rpc<{ attempts: number; dead: boolean }>(admin, 'fail_cleanup_job', {
         p_error_code: error instanceof Error ? error.message : 'cleanup_failed',
         p_job_id: claim.jobId,

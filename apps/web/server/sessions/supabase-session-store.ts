@@ -54,7 +54,8 @@ export class SupabaseSessionStore implements SessionStore {
   }
 
   async create(userId: string, title: string) {
-    const { data, error } = await this.userClient
+    if (!this.adminClient) throw databaseFailure('暂时无法创建会话，请稍后重试。');
+    const { data, error } = await this.adminClient
       .from('sessions')
       .insert({ title, user_id: userId })
       .select(sessionColumns)
@@ -64,7 +65,8 @@ export class SupabaseSessionStore implements SessionStore {
   }
 
   async rename(userId: string, sessionId: string, title: string) {
-    const { data, error } = await this.userClient
+    if (!this.adminClient) throw databaseFailure('暂时无法重命名会话，请稍后重试。');
+    const { data, error } = await this.adminClient
       .from('sessions')
       .update({ title })
       .eq('id', sessionId)

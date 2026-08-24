@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+import type { Database } from './database.generated';
 import { readSupabasePublicEnv, type DataMode } from './env';
 
 interface AnonymousBootstrapRequest {
@@ -25,7 +26,7 @@ export async function updateSupabaseSession(request: NextRequest) {
   if (!environment) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
-  const supabase = createServerClient(environment.url, environment.publishableKey, {
+  const supabase = createServerClient<Database>(environment.url, environment.publishableKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

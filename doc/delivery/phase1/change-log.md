@@ -2,27 +2,35 @@
 
 > Date: 2026-08-24
 > Branch: `setup2`
-> Scope: desktop Web implementation; narrow-screen regression only; no mobile-specific development
+> Scope: Web only; no mobile-specific development
+> Delivery label: Phase 1 Web free-environment candidate
 
-## Delivered locally
+## Delivered in the current working tree
 
-- Replaced the mock-only runtime boundary with a strict HTTP gateway, anonymous Supabase SSR identity, origin validation, shared Zod contracts, and an OpenAPI route.
-- Added sessions, timeline, reference uploads, direct image submission, recreation, signed assets, quotas, skills, provider health, chat SSE, and explicit image-tool routing.
-- Added versioned Doubao/MiniMax chat and Gemini/Seedream image adapters. Provider IDs remain deployment environment mappings; secrets never enter the repository.
-- Added durable PGMQ image work, idempotent quota reservation, unknown-provider-submission protection, partial batch aggregation, private Storage, bounded cleanup, stale cleanup lease recovery, and safety-audit metadata.
-- Added three versioned skills. Required fields block submission; the resolved image prompt is editable and the edited value is the submitted snapshot.
-- Added Sentry browser/server/edge wiring, structured correlation IDs, health windows, CI gates, operational runbook, and deterministic mock regression scenarios.
-- Tightened browser-role grants so authenticated users cannot bypass the service layer to insert timeline, batch, or generation records.
+- Added a private, fail-closed provider registry. Gemini, Seedream, Doubao and MiniMax are disabled by default; generation is disabled and uploads are enabled by default.
+- Added an atomic preview usage ledger with transaction advisory locks, UTC windows and compensating release:
+  - 10 sessions per anonymous user per day.
+  - 10 uploads and 50 MiB per anonymous user per day.
+  - 60 writes per anonymous user per hour.
+  - 200 uploads and 500 MiB globally per day.
+- Preserved the existing API success contracts. Limit rejections use `quota_exceeded` with HTTP 429 and the route correlation ID; disabled capabilities fail closed with the existing provider-unavailable semantics.
+- Added service-role-only runtime flag/provider RPCs, minimum grants, bounded ledger retention, composite quota indexes and explicit RLS policies on private runtime tables.
+- Wired the generated remote database type into browser, SSR, proxy and service-role Supabase clients.
+- Added pinned Sentry SDK support for both Supabase workers. Browser, Server and Edge events remove identity, request bodies, cookies, headers, query strings, breadcrumbs, extras and original exception messages.
+- Changed the third Playwright project from another Chromium profile to WebKit, while retaining Edge-channel regression.
 
-## Compatibility preserved
+## Delivered to Supabase Free
 
-- `/` remains the sole workspace; `/chat` and `/image` remain redirects.
-- Chat and image provider selections remain independent.
-- Existing narrow and 390px core flows remain regression targets; no native/mobile-specific feature was introduced.
-- Pre-existing untracked `diagram/` content was not modified.
+- Primary project `image-web` (`klmiycyesxnpinxpeqep`) received all nine Phase 1 migrations.
+- `generation-worker` and `cleanup-worker` are ACTIVE at version 3. Both use custom secret authentication and the pinned Sentry Deno SDK.
+- All eight pgTAP suites pass on the primary and restore-drill projects: 44 + 12 + 7 + 6 + 23 + 8 + 6 + 14 assertions.
+- The advisor-hardening migration added five missing foreign-key indexes and explicit private-table policies. The remaining primary security warnings are the pre-existing `vector in public` placement and disabled leaked-password protection; the restore project reports only the latter.
+- Created the zero-cost same-region project `image-web-restore-drill` (`kccgjkuzlmxlkefftxhu`), applied the same nine migrations, and restored a controlled session, timeline item, upload metadata row and queue message. Application inventory matches the primary: 12 tables, 62 non-extension functions and 11 policies.
 
-## Not claimed as delivered
+## Intentionally fail-closed or externally gated
 
-- No remote Supabase migration, Edge deployment, Vercel deployment, paid provider batch, Sentry alert replay, real Safari run, or backup/restore drill was performed.
-- No commit, pull request, merge, or branch change was made.
-
+- No provider probe or paid image call was made. All providers and generation scheduling remain disabled.
+- Cleanup Cron is not scheduled until the required URL, service-role key and worker secret exist in Vault; therefore no cron job ID is recorded yet.
+- Anonymous Auth, Vault/Edge secrets, LangGraph checkpointer setup, the Storage object portion of the restore drill, Sentry project/event replay and Vercel Preview require an authenticated dashboard session and remain incomplete.
+- No real Safari run, paid-provider 30-sample gate, automatic backup or PITR evidence exists. Playwright WebKit is regression evidence only.
+- No commit, push, pull request, merge, Production deployment or mobile change was made.

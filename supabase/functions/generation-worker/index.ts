@@ -1,5 +1,7 @@
 import { withSupabase } from '@supabase/server';
 
+import { captureWorkerException } from '../_shared/sentry.ts';
+
 import {
   generateGeminiImage,
   generateSeedreamImage,
@@ -216,13 +218,23 @@ async function failBeforeSubmission(admin: AdminClient, claim: ClaimedGeneration
 async function processClaim(admin: AdminClient, claim: ClaimedGeneration) {
   let references: ProviderReference[];
   try {
+    const providerAvailable = await rpc<boolean>(admin, 'assert_chat_provider_available', {
+      p_provider: claim.provider,
+    });
+    if (!providerAvailable) {
+      await failBeforeSubmission(admin, claim, 'provider_unavailable');
+      return { action: claim.readCount < 5 ? 'retry' : 'failed', code: 'provider_unavailable' };
+    }
     providerConfiguration(claim.provider);
     if ((claim.params.referenceIds?.length ?? 0) !== claim.references.length) {
       throw new Error('reference_count_mismatch');
     }
     references = await downloadReferences(admin, claim.references);
   } catch (error: unknown) {
-    const code = error instanceof Error && error.message.startsWith('missing_env:')
+    const code = error instanceof Error && (
+      error.message.startsWith('missing_env:')
+      || error.message === 'rpc_failed:assert_chat_provider_available'
+    )
       ? 'provider_unavailable'
       : 'reference_download_failed';
     await failBeforeSubmission(admin, claim, code);
@@ -284,34 +296,48 @@ export default {
     }
 
     const admin = context.supabaseAdmin as unknown as AdminClient;
-    const claim = parseClaim(await rpc<unknown>(admin, 'claim_image_generation'));
-    if (!claim) return Response.json({ status: 'idle' });
+    let correlationId: string | undefined;
+    let generationId: string | undefined;
+    try {
+      const claim = parseClaim(await rpc<unknown>(admin, 'claim_image_generation'));
+      if (!claim) return Response.json({ status: 'idle' });
 
-    if (claim.action === 'archive') {
-      await rpc(admin, 'archive_image_message', { p_message_id: claim.messageId });
-      return Response.json({ action: 'archived', reason: claim.reason });
-    }
-    if (claim.action === 'fail_unknown') {
-      if (!claim.generationId) throw new Error('invalid_unknown_generation');
-      await rpc(admin, 'fail_image_generation', {
-        p_error_code: 'provider_result_unknown',
-        p_generation_id: claim.generationId,
-        p_message_id: claim.messageId,
-        p_release_quota: false,
-        p_submission_state: 'unknown',
+      if (claim.action === 'archive') {
+        await rpc(admin, 'archive_image_message', { p_message_id: claim.messageId });
+        return Response.json({ action: 'archived', reason: claim.reason });
+      }
+      if (claim.action === 'fail_unknown') {
+        if (!claim.generationId) throw new Error('invalid_unknown_generation');
+        generationId = claim.generationId;
+        await rpc(admin, 'fail_image_generation', {
+          p_error_code: 'provider_result_unknown',
+          p_generation_id: claim.generationId,
+          p_message_id: claim.messageId,
+          p_release_quota: false,
+          p_submission_state: 'unknown',
+        });
+        return Response.json({ action: 'failed', code: 'provider_result_unknown' });
+      }
+
+      correlationId = claim.correlationId;
+      generationId = claim.generationId;
+      const result = await processClaim(admin, claim);
+      console.log(JSON.stringify({
+        action: result.action,
+        batchId: claim.batchId,
+        code: 'code' in result ? result.code : undefined,
+        correlationId,
+        generationId,
+        provider: claim.provider,
+      }));
+      return Response.json(result);
+    } catch (error: unknown) {
+      await captureWorkerException(error, {
+        correlationId,
+        jobId: generationId,
+        operation: 'generation_worker',
       });
-      return Response.json({ action: 'failed', code: 'provider_result_unknown' });
+      return Response.json({ error: 'generation_worker_failed' }, { status: 500 });
     }
-
-    const result = await processClaim(admin, claim);
-    console.log(JSON.stringify({
-      action: result.action,
-      batchId: claim.batchId,
-      code: 'code' in result ? result.code : undefined,
-      correlationId: claim.correlationId,
-      generationId: claim.generationId,
-      provider: claim.provider,
-    }));
-    return Response.json(result);
   }),
 };

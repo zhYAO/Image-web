@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import { ApiRouteError } from '@/server/api-error';
 
-interface GenerationSubmissionInput {
+export interface GenerationSubmissionInput {
   config: ImageApiRequest['params'] & { registryVersion: string };
   correlationId: string;
   idempotencyKey: string;
@@ -58,8 +58,77 @@ function invalidSelection(message: string) {
   });
 }
 
-export function createImageService(store: GenerationSubmissionStore) {
+export async function prepareImageSubmission(
+  userId: string,
+  input: ImageApiRequest,
+  idempotencyKey: string,
+  correlationId: string,
+  source: 'direct' | 'chat_tool' = 'direct',
+): Promise<GenerationSubmissionInput> {
+  const request = imageRequestSchema.parse(input);
+  const parsedUserId = z.uuid().parse(userId);
+  const parsedIdempotencyKey = z.uuid().parse(idempotencyKey);
+  const parsedCorrelationId = z.uuid().parse(correlationId);
+  let resolvedModel: ReturnType<typeof resolveImageModel>;
+  let skill: ReturnType<typeof resolveSkill>;
+  try {
+    resolvedModel = resolveImageModel({ model: request.model, provider: request.provider });
+    skill = resolveSkill(request.skillId);
+  } catch (error: unknown) {
+    throw invalidSelection(error instanceof Error ? error.message : '不支持的生成配置。');
+  }
+
+  const capability = resolvedModel.capability;
+  if (
+    request.params.count > capability.maxImages
+    || !capability.aspectRatios.includes(request.params.aspectRatio)
+    || !capability.resolutions.includes(request.params.resolution)
+  ) {
+    throw invalidSelection('所选模型不支持当前生成参数。');
+  }
+
+  const config = {
+    ...request.params,
+    registryVersion: MODEL_REGISTRY_VERSION,
+  };
   return {
+    config,
+    correlationId: parsedCorrelationId,
+    idempotencyKey: parsedIdempotencyKey,
+    model: resolvedModel.model,
+    prompt: request.prompt,
+    provider: resolvedModel.provider,
+    requestHash: await hashCanonicalRequest({
+      config,
+      model: resolvedModel.model,
+      prompt: request.prompt,
+      provider: resolvedModel.provider,
+      sessionId: request.sessionId,
+      skillId: skill?.id,
+      skillVersion: skill?.version,
+      source,
+      userId: parsedUserId,
+    }),
+    sessionId: request.sessionId,
+    skillId: skill?.id,
+    skillVersion: skill?.version,
+    source,
+    userId: parsedUserId,
+  };
+}
+
+export function createImageService(store: GenerationSubmissionStore) {
+  async function submitPrepared(prepared: GenerationSubmissionInput) {
+    const result = await store.submit(prepared);
+      return imageSubmissionResponseSchema.parse({
+        batchId: result.batchId,
+        sessionId: result.sessionId,
+        status: result.status,
+      });
+  }
+
+  return {
+    prepare: prepareImageSubmission,
     async submit(
       userId: string,
       input: ImageApiRequest,
@@ -67,62 +136,8 @@ export function createImageService(store: GenerationSubmissionStore) {
       correlationId: string,
       source: 'direct' | 'chat_tool' = 'direct',
     ) {
-      const request = imageRequestSchema.parse(input);
-      const parsedUserId = z.uuid().parse(userId);
-      const parsedIdempotencyKey = z.uuid().parse(idempotencyKey);
-      const parsedCorrelationId = z.uuid().parse(correlationId);
-      let resolvedModel: ReturnType<typeof resolveImageModel>;
-      let skill: ReturnType<typeof resolveSkill>;
-      try {
-        resolvedModel = resolveImageModel({ model: request.model, provider: request.provider });
-        skill = resolveSkill(request.skillId);
-      } catch (error: unknown) {
-        throw invalidSelection(error instanceof Error ? error.message : '不支持的生成配置。');
-      }
-
-      const capability = resolvedModel.capability;
-      if (
-        request.params.count > capability.maxImages
-        || !capability.aspectRatios.includes(request.params.aspectRatio)
-        || !capability.resolutions.includes(request.params.resolution)
-      ) {
-        throw invalidSelection('所选模型不支持当前生成参数。');
-      }
-
-      const config = {
-        ...request.params,
-        registryVersion: MODEL_REGISTRY_VERSION,
-      };
-      const hash = await hashCanonicalRequest({
-        config,
-        model: resolvedModel.model,
-        prompt: request.prompt,
-        provider: resolvedModel.provider,
-        sessionId: request.sessionId,
-        skillId: skill?.id,
-        skillVersion: skill?.version,
-        source,
-        userId: parsedUserId,
-      });
-      const result = await store.submit({
-        config,
-        correlationId: parsedCorrelationId,
-        idempotencyKey: parsedIdempotencyKey,
-        model: resolvedModel.model,
-        prompt: request.prompt,
-        provider: resolvedModel.provider,
-        requestHash: hash,
-        sessionId: request.sessionId,
-        skillId: skill?.id,
-        skillVersion: skill?.version,
-        source,
-        userId: parsedUserId,
-      });
-      return imageSubmissionResponseSchema.parse({
-        batchId: result.batchId,
-        sessionId: result.sessionId,
-        status: result.status,
-      });
+      return submitPrepared(await prepareImageSubmission(userId, input, idempotencyKey, correlationId, source));
     },
+    submitPrepared,
   };
 }

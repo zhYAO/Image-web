@@ -44,7 +44,9 @@ jobs:
       - run: pnpm exec supabase start
       - run: pnpm exec supabase test db supabase/tests/database
       - run: pnpm exec supabase gen types typescript --local > database.generated.ts
+      - run: diff --strip-trailing-cr --unified apps/web/lib/supabase/database.generated.ts database.generated.ts
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: database-generated-types
           path: database.generated.ts
@@ -61,7 +63,7 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @zimage/web exec playwright install --with-deps chromium msedge
+      - run: pnpm --filter @zimage/web exec playwright install --with-deps chromium msedge webkit
       - run: pnpm e2e
         env:
           NEXT_PUBLIC_DATA_MODE: mock
