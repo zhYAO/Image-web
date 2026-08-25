@@ -5,6 +5,7 @@ import Image from 'next/image';
 
 import { zhCN } from '@/i18n';
 
+import { AssistantMessageContent } from './AssistantMessageContent';
 import styles from './workspace.module.css';
 
 const statusLabels: Record<GenerationBatch['status'], string> = {
@@ -136,7 +137,9 @@ export function WorkspaceTimeline({
           return (
             <article className={`${styles.message} ${item.role === 'user' ? styles.messageUser : ''}`} key={item.id}>
               <div className={styles.avatar}>{item.role === 'user' ? <UserRound size={15} /> : <Bot size={16} />}</div>
-              <div className={styles.bubble}>{item.content}</div>
+              <div className={`${styles.bubble} ${item.role === 'assistant' ? styles.assistantBubble : ''}`}>
+                {item.role === 'assistant' ? <AssistantMessageContent content={item.content} /> : item.content}
+              </div>
             </article>
           );
         }
@@ -149,14 +152,8 @@ export function WorkspaceTimeline({
         <article className={styles.message}>
           <div className={styles.avatar}><Bot size={16} /></div>
           {streamingText ? (
-            <div className={styles.bubble}>
-              {streamingText}
-              {/* Trailing cursor only while the model is actively producing
-                  bytes. The instant the stream ends the cursor disappears so
-                  the bubble looks finalized rather than mid-typing. */}
-              {isChatStreaming && (
-                <span aria-label={zhCN.timeline.typing} data-testid="chat-stream-cursor"> ▍</span>
-              )}
+            <div className={`${styles.bubble} ${styles.assistantBubble}`}>
+              <AssistantMessageContent content={streamingText} streaming={isChatStreaming} />
             </div>
           ) : (
             <div className={`${styles.bubble} ${styles.bubbleLoading}`}>

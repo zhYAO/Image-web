@@ -8,6 +8,15 @@
 -- false (via private.set_provider_runtime_enabled) if a provider must be
 -- taken offline.
 
+-- Existing projects already ran phase1_preview_guards with MiniMax disabled.
+-- Backfill the runtime row here so upgrading projects receive the same
+-- enabled default as fresh databases, which now create that row as enabled.
+select private.set_provider_runtime_enabled(
+  'minimax',
+  true,
+  'minimax_m2_7_api_key_and_model_verified_20260825'
+);
+
 create or replace function public.assert_chat_provider_available(p_provider text)
 returns boolean
 language sql

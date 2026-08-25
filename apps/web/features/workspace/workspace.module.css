@@ -722,6 +722,63 @@
   white-space: pre-wrap;
 }
 
+.assistantBubble {
+  min-width: 0;
+  white-space: normal;
+}
+
+.markdown {
+  color: #30343a;
+  white-space: normal;
+}
+
+.markdown :global(h1:first-child),
+.markdown :global(h2:first-child),
+.markdown :global(h3:first-child),
+.markdown :global(p:first-child),
+.markdown :global(blockquote:first-child),
+.markdown :global(pre:first-child) {
+  margin-block-start: 0;
+}
+
+.markdown :global(h1:last-child),
+.markdown :global(h2:last-child),
+.markdown :global(h3:last-child),
+.markdown :global(p:last-child),
+.markdown :global(blockquote:last-child),
+.markdown :global(pre:last-child) {
+  margin-block-end: 0;
+}
+
+.markdown :global(blockquote) {
+  border-inline-start-color: #b8c0ca;
+}
+
+.markdown :global(table) {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdown :global(pre) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdownImage {
+  display: block;
+  overflow: hidden;
+  margin-block: 10px;
+  border-radius: 10px;
+}
+
+.streamCursor {
+  display: inline-block;
+  margin-inline-start: 3px;
+  color: #67717e;
+  vertical-align: baseline;
+}
+
 .bubbleLoading {
   display: inline-flex;
   align-items: center;

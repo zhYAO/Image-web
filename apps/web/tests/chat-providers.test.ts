@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatProviderFailure, streamOpenAiCompatibleChat } from '@/server/chat/chat-providers';
+import {
+  ChatProviderFailure,
+  resolveChatProvider,
+  streamOpenAiCompatibleChat,
+} from '@/server/chat/chat-providers';
 
 async function collect(stream: AsyncIterable<string>) {
   const values: string[] = [];
@@ -9,6 +13,29 @@ async function collect(stream: AsyncIterable<string>) {
 }
 
 describe('chat provider SSE adapter', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('resolves MiniMax with the configured model and official OpenAI-compatible endpoint', () => {
+    vi.stubEnv('MINIMAX_API_KEY', 'minimax-test-key');
+    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_MODEL', 'MiniMax-M2.7');
+    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_ENDPOINT', '');
+
+    expect(resolveChatProvider('minimax')).toEqual({
+      apiKey: 'minimax-test-key',
+      endpoint: 'https://api.minimaxi.com/v1/chat/completions',
+      model: 'MiniMax-M2.7',
+      provider: 'minimax',
+    });
+  });
+
+  it('fails closed when the MiniMax model mapping is still an example placeholder', () => {
+    vi.stubEnv('MINIMAX_API_KEY', 'minimax-test-key');
+    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_MODEL', 'replace_with_minimax_model_id');
+
+    expect(() => resolveChatProvider('minimax')).toThrow(ChatProviderFailure);
+    expect(() => resolveChatProvider('minimax')).toThrow('provider_unavailable');
+  });
+
   it('parses fragmented OpenAI-compatible SSE and ignores terminal usage chunks', async () => {
     const encoder = new TextEncoder();
     const body = new ReadableStream({

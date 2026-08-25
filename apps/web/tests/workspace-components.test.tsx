@@ -299,7 +299,9 @@ describe('workspace presentation components', () => {
       />,
     );
     expect(screen.queryByTestId('chat-typing-indicator')).not.toBeInTheDocument();
-    expect(screen.getByText('好的，先聊聊')).toBeInTheDocument();
+    expect(screen.getByText((_text, element) => (
+      element?.tagName === 'P' && element.textContent === '好的，先聊聊'
+    ))).toBeInTheDocument();
     expect(screen.getByLabelText('AI 正在输入')).toBeInTheDocument();
   });
 
@@ -352,5 +354,149 @@ describe('workspace presentation components', () => {
     // Cursor must be gone and only one assistant bubble may remain.
     expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument();
     expect(screen.getAllByText('已生成的回复文本')).toHaveLength(1);
+  });
+
+  it('renders completed assistant messages as standard chat Markdown', () => {
+    const items: TimelineItem[] = [
+      {
+        content: [
+          '# 回复标题',
+          '',
+          '包含 **粗体**、*斜体* 和 `行内代码`。',
+          '',
+          '- 第一项',
+          '- 第二项',
+          '',
+          '> 一段引用',
+          '',
+          '| 名称 | 值 |',
+          '| --- | --- |',
+          '| 状态 | 正常 |',
+          '',
+          '[访问官网](https://example.com/docs)',
+          '',
+          '```ts',
+          'const answer: number = 42;',
+          '```',
+          '',
+          '![示例图片](https://example.com/preview.png)',
+        ].join('\n'),
+        createdAt: '2026',
+        id: 'm-assistant-markdown',
+        role: 'assistant',
+        sequence: 1,
+        sessionId: 's1',
+        type: 'message',
+      },
+    ];
+
+    render(
+      <WorkspaceTimeline
+        items={items}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    expect(screen.getByRole('heading', { level: 1, name: '回复标题' })).toBeInTheDocument();
+    expect(screen.getByText('粗体').tagName).toBe('STRONG');
+    expect(screen.getByText('斜体').tagName).toBe('EM');
+    expect(screen.getByText('行内代码').tagName).toBe('CODE');
+    expect(screen.getByRole('list')).toHaveTextContent('第一项');
+    expect(screen.getByText('一段引用').closest('blockquote')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveTextContent('状态正常');
+
+    const link = screen.getByRole('link', { name: '访问官网' });
+    expect(link).toHaveAttribute('href', 'https://example.com/docs');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByText('const answer: number = 42;').tagName).toBe('CODE');
+
+    const image = screen.getByRole('img', { name: '示例图片' });
+    expect(image).toHaveAttribute('src', 'https://example.com/preview.png');
+  });
+
+  it('keeps user-authored Markdown literal instead of formatting it', () => {
+    render(
+      <WorkspaceTimeline
+        items={[
+          {
+            content: '# 用户标题\n\n**不要加粗**',
+            createdAt: '2026',
+            id: 'm-user-markdown',
+            role: 'user',
+            sequence: 1,
+            sessionId: 's1',
+            type: 'message',
+          },
+        ]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    expect(screen.getByText(/# 用户标题/)).toHaveTextContent('# 用户标题 **不要加粗**');
+    expect(screen.queryByRole('heading', { name: '用户标题' })).not.toBeInTheDocument();
+    expect(screen.queryByText('不要加粗')).not.toBeInTheDocument();
+  });
+
+  it('formats incomplete streaming Markdown while keeping a transient cursor', async () => {
+    render(
+      <WorkspaceTimeline
+        isChatStreaming
+        items={[]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText={'## 流式标题\n\n- 第一项\n- **未完成'}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { level: 2, name: '流式标题' })).toBeInTheDocument();
+    expect(await screen.findByRole('list')).toHaveTextContent('第一项');
+    expect(await screen.findByText((_text, element) => (
+      element?.tagName === 'STRONG' && element.textContent === '未完成'
+    ))).toBeInTheDocument();
+    expect(screen.getByTestId('chat-stream-cursor')).toBeInTheDocument();
+  });
+
+  it('does not execute raw HTML or load unsafe Markdown URLs', () => {
+    render(
+      <WorkspaceTimeline
+        items={[
+          {
+            content: [
+              '<script>window.markdownAttack = true</script>',
+              '<img alt="原始图片" src="https://example.com/raw.png" onerror="window.markdownAttack = true">',
+              '[危险链接](javascript:alert(1))',
+              '![危险图片](data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)',
+            ].join('\n\n'),
+            createdAt: '2026',
+            id: 'm-assistant-unsafe-markdown',
+            role: 'assistant',
+            sequence: 1,
+            sessionId: 's1',
+            type: 'message',
+          },
+        ]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    expect(document.querySelector('script')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '原始图片' })).not.toBeInTheDocument();
+    expect(screen.getByText('危险链接').closest('a')).not.toHaveAttribute('href', 'javascript:alert(1)');
+    expect(screen.queryByRole('img', { name: '危险图片' })).not.toBeInTheDocument();
   });
 });
