@@ -51,10 +51,15 @@ describe('image provider adapters', () => {
       prompt: 'A clean product photograph',
       response_format: 'b64_json',
       sequential_image_generation: 'disabled',
-      size: '1536x2048',
+      size: '1728x2304',
       stream: false,
       watermark: false,
     });
+  });
+
+  it('promotes Seedream 1K requests to the provider minimum supported size', () => {
+    expect(buildSeedreamRequest({ ...input, references: [], resolution: '1K' }).size)
+      .toBe('1728x2304');
   });
 
   it('omits the optional Seedream image field for text-to-image requests', () => {
@@ -64,12 +69,20 @@ describe('image provider adapters', () => {
   it('decodes a Seedream base64 response without trusting remote URLs', () => {
     expect(decodeSeedreamResponse({
       created: 123,
-      data: [{ b64_json: 'c2VlZHJlYW0=', size: '1536x2048' }],
+      data: [{ b64_json: 'iVBORw0KGgo=', size: '1728x2304' }],
       id: 'seedream-request',
     })).toEqual({
-      bytesBase64: 'c2VlZHJlYW0=',
+      bytesBase64: 'iVBORw0KGgo=',
       mimeType: 'image/png',
       providerRequestId: 'seedream-request',
+    });
+  });
+
+  it('preserves the JPEG format returned by Seedream 4.5', () => {
+    expect(decodeSeedreamResponse({ data: [{ b64_json: '/9j/4AAQSkZJRg==' }] })).toEqual({
+      bytesBase64: '/9j/4AAQSkZJRg==',
+      mimeType: 'image/jpeg',
+      providerRequestId: undefined,
     });
   });
 

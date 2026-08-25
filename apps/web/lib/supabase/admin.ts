@@ -6,10 +6,10 @@ import { resolveSupabaseServiceEnv } from './service-env';
 export function createSupabaseAdminClient() {
   const environment = resolveSupabaseServiceEnv({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
   });
 
-  return createClient<Database>(environment.url, environment.serviceRoleKey, {
+  return createClient<Database>(environment.url, environment.secretKey, {
     auth: {
       autoRefreshToken: false,
       detectSessionInUrl: false,

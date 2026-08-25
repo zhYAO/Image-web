@@ -47,14 +47,24 @@ describe('Supabase Web boundary', () => {
   it('accepts elevated credentials only through the server-only key boundary', () => {
     expect(resolveSupabaseServiceEnv({
       NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
-      SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_server_only_key',
+      SUPABASE_SECRET_KEY: 'sb_secret_server_only_key',
     })).toEqual({
-      serviceRoleKey: 'sb_secret_server_only_key',
+      secretKey: 'sb_secret_server_only_key',
       url: 'https://project.supabase.co',
     });
     expect(() => resolveSupabaseServiceEnv({
       NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
-      SUPABASE_SERVICE_ROLE_KEY: 'sb_publishable_not_elevated',
+      SUPABASE_SECRET_KEY: 'sb_publishable_not_elevated',
     })).toThrow(/server-only/);
+
+    const legacyServiceRoleKey = [
+      Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),
+      Buffer.from('{"role":"service_role"}').toString('base64url'),
+      'signature',
+    ].join('.');
+    expect(() => resolveSupabaseServiceEnv({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+      SUPABASE_SECRET_KEY: legacyServiceRoleKey,
+    })).toThrow(/sb_secret_/);
   });
 });

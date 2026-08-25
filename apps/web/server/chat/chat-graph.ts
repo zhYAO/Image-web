@@ -1,5 +1,4 @@
 import { Annotation, START, StateGraph } from '@langchain/langgraph';
-import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import type { ChatEvent } from '@zimage/domain';
 
 import { createChatTurnRunner } from './chat-service';
@@ -12,15 +11,13 @@ const GraphState = Annotation.Root({
   input: Annotation<RunnerInput>(),
 });
 
-let checkpointer: PostgresSaver | undefined;
-
-function getCheckpointer() {
-  const connectionString = process.env.SUPABASE_DB_URL?.trim();
-  if (!connectionString) throw new Error('SUPABASE_DB_URL is required for the chat checkpointer.');
-  checkpointer ??= PostgresSaver.fromConnString(connectionString, { schema: 'langgraph' });
-  return checkpointer;
-}
-
+// The single-node `START → chat → END` graph does not need langgraph
+// checkpointing: there is no human-in-the-loop, no resumable stream, and no
+// branching. Persisting a PostgresSaver on every chat turn was paying the
+// cost of an extra pg.Pool (and Supavisor's transaction-mode quirks) for
+// nothing useful. When a future feature actually needs resumption — interrupt
+// + resume, time-travel, etc. — wire `PostgresSaver.fromConnString` back here
+// with `keepAlive: true` on its pool.
 export async function executeChatGraph(
   input: RunnerInput,
   runner: Runner,
@@ -32,10 +29,9 @@ export async function executeChatGraph(
       return { completed: true };
     })
     .addEdge(START, 'chat')
-    .compile({ checkpointer: getCheckpointer() });
-
+    .compile();
   await graph.invoke(
     { completed: false, input },
-    { configurable: { checkpoint_ns: 'chat', thread_id: input.sessionId } },
+    { configurable: { thread_id: input.sessionId } },
   );
 }

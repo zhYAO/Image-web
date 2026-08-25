@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { ApiRouteError } from '@/server/api-error';
 
 const assetRowSchema = z.object({
-  asset_expires_at: z.iso.datetime().nullable(),
+  asset_expires_at: z.iso.datetime({ offset: true }).nullable(),
   asset_status: z.enum(['active', 'expired', 'deleted']).nullable(),
   error_code: z.string().nullable(),
   id: z.uuid(),
@@ -25,7 +25,7 @@ const batchRowSchema = z.object({
     count: z.number().int().min(1).max(4),
     resolution: z.enum(['1K', '2K']),
   }),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   model: z.string().min(1),
   prompt: z.string().min(1),
@@ -38,7 +38,7 @@ const batchRowSchema = z.object({
 const timelineRowSchema = z.object({
   batch: batchRowSchema.nullable(),
   batch_id: z.uuid().nullable(),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   error_code: z.string().nullable(),
   id: z.uuid(),
   kind: z.enum(['message', 'generation', 'error']),

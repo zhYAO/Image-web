@@ -65,7 +65,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   private providerStatusPromise?: Promise<ReturnType<typeof providerStatusResponseSchema.parse>>;
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? fetch.bind(globalThis);
   }
 
   async listSessions() {

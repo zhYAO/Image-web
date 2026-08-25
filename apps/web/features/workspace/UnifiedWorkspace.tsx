@@ -84,6 +84,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [skillPromptOverride, setSkillPromptOverride] = useState<string>();
   const [references, setReferences] = useState<UploadReference[]>([]);
   const localPreviewUrls = useRef(new Set<string>());
+  // Tracks the in-flight chat stream so re-submits or unmount can cancel the
+  // upstream fetch instead of leaking tokens and double-billing the quota
+  // reservation.
+  const chatAbortRef = useRef<AbortController | undefined>(undefined);
+  // Hard cap on a single chat turn's total wait so a stalled upstream fetch
+  // cannot block the UI past the platform timeout.
+  const CHAT_STREAM_TIMEOUT_MS = 75_000;
 
   const selectedSkill = skills.find((skill) => skill.id === selectedSkillId);
   const chatImageToolEnabled = resolveImageToolEnabled({
@@ -168,6 +175,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     () => () => {
       for (const previewUrl of localPreviewUrls.current) URL.revokeObjectURL(previewUrl);
       localPreviewUrls.current.clear();
+      chatAbortRef.current?.abort();
     },
     [],
   );
@@ -270,25 +278,46 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             type: 'message',
           },
         ]);
+        // Cancel any in-flight chat stream before starting a new one so the
+        // previous upstream fetch aborts and we don't double-charge the
+        // quota. Also bound the total wait so a stalled provider cannot block
+        // the UI past the platform function timeout.
+        chatAbortRef.current?.abort();
+        const chatController = new AbortController();
+        chatAbortRef.current = chatController;
+        const streamTimeout = window.setTimeout(
+          () => chatController.abort('chat_stream_timeout'),
+          CHAT_STREAM_TIMEOUT_MS,
+        );
         let resolvedSessionId = existingSessionId;
-        for await (const event of gateway.streamChat({
-          chatModel: selectedChatModel,
-          imageProvider: selectedProvider,
-          imageToolEnabled: chatImageToolEnabled,
-          message: prompt,
-          scenario,
-          sessionId: existingSessionId,
-          skillId: selectedSkillId,
-          skillValues,
-        })) {
-          if (event.type === 'session.created') {
-            resolvedSessionId = event.session.id;
-            setActiveSessionId(event.session.id);
-          } else if (event.type === 'message.delta') {
-            setStreamingText((value) => value + event.delta);
-          } else if (event.type === 'stream.failed') {
-            setFeedback({ error: event.error, message: event.error.message });
+        try {
+          for await (const event of gateway.streamChat({
+            chatModel: selectedChatModel,
+            imageProvider: selectedProvider,
+            imageToolEnabled: chatImageToolEnabled,
+            message: prompt,
+            scenario,
+            sessionId: existingSessionId,
+            skillId: selectedSkillId,
+            skillValues,
+          }, chatController.signal)) {
+            if (event.type === 'session.created') {
+              resolvedSessionId = event.session.id;
+              setActiveSessionId(event.session.id);
+            } else if (event.type === 'message.delta') {
+              setStreamingText((value) => value + event.delta);
+            } else if (event.type === 'stream.failed') {
+              setFeedback({ error: event.error, message: event.error.message });
+            }
           }
+        } catch (error: unknown) {
+          const safe = sanitizeError(error);
+          const isAbort = chatController.signal.aborted
+            && (error instanceof DOMException ? error.name === 'AbortError' : true);
+          if (!isAbort) setFeedback({ error: safe, message: safe.message });
+        } finally {
+          window.clearTimeout(streamTimeout);
+          if (chatAbortRef.current === chatController) chatAbortRef.current = undefined;
         }
         setDraft('chat', '');
         setStreamingText('');

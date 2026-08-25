@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { streamOpenAiCompatibleChat } from '@/server/chat/chat-providers';
+import { ChatProviderFailure, streamOpenAiCompatibleChat } from '@/server/chat/chat-providers';
 
 async function collect(stream: AsyncIterable<string>) {
   const values: string[] = [];
@@ -53,5 +53,64 @@ describe('chat provider SSE adapter', () => {
       message: 'hello',
       model: 'chat-model',
     }))).rejects.toMatchObject({ code: 'provider_unavailable', retryable: true });
+  });
+
+  it('aborts a stalled upstream read with a retryable provider_unavailable failure', async () => {
+    const body = new ReadableStream({
+      start() {
+        // No chunks ever — simulates a TCP half-open or a stalled provider.
+      },
+    });
+    const fetcher = vi.fn().mockResolvedValue(new Response(body, {
+      headers: { 'content-type': 'text/event-stream' }, status: 200,
+    }));
+
+    await expect(collect(streamOpenAiCompatibleChat({
+      apiKey: 'secret',
+      endpoint: 'https://provider.example/v1/chat/completions',
+      fetcher,
+      message: 'hi',
+      model: 'chat-model',
+      // 1ms guarantees the stall timer fires before the test's outer timeout.
+      stallTimeoutMs: 1,
+    }))).rejects.toBeInstanceOf(ChatProviderFailure);
+  });
+
+  it('rejects the in-flight read immediately when the browser aborts before the stall fires', async () => {
+    const body = new ReadableStream({
+      start() {
+        // Never enqueue.
+      },
+    });
+    const fetcher = vi.fn().mockResolvedValue(new Response(body, {
+      headers: { 'content-type': 'text/event-stream' }, status: 200,
+    }));
+    const controller = new AbortController();
+    const promise = collect(streamOpenAiCompatibleChat({
+      apiKey: 'secret',
+      endpoint: 'https://provider.example/v1/chat/completions',
+      fetcher,
+      message: 'hi',
+      model: 'chat-model',
+      signal: controller.signal,
+      stallTimeoutMs: 10_000,
+    }));
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ code: 'stream_interrupted', retryable: false });
+  });
+
+  it('classifies a fetch-level abort (browser cancelled) as stream_interrupted, not provider_unavailable', async () => {
+    const fetcher = vi.fn().mockRejectedValue(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    const controller = new AbortController();
+    const promise = collect(streamOpenAiCompatibleChat({
+      apiKey: 'secret',
+      endpoint: 'https://provider.example/v1/chat/completions',
+      fetcher,
+      message: 'hi',
+      model: 'chat-model',
+      signal: controller.signal,
+    }));
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ code: 'stream_interrupted', retryable: false });
   });
 });

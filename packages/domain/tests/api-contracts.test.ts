@@ -4,6 +4,8 @@ import {
   apiErrorSchema,
   createSessionRequestSchema,
   imageRequestSchema,
+  providerHealthSchema,
+  quotaSchema,
   recreateImageRequestSchema,
   renameSessionRequestSchema,
   timelineResponseSchema,
@@ -53,6 +55,19 @@ describe('Phase 1 public API contracts', () => {
       message: 'secret',
       retryable: false,
     })).toThrow();
+  });
+
+  it('accepts PostgreSQL UTC offsets in RPC-backed timestamps', () => {
+    expect(quotaSchema.parse({
+      limit: 30,
+      resetsAt: '2026-08-26T00:00:00+00:00',
+      used: 0,
+    })).toMatchObject({ limit: 30, used: 0 });
+    expect(providerHealthSchema.parse({
+      checkedAt: '2026-08-24T09:04:57.514905+00:00',
+      provider: 'doubao',
+      status: 'unavailable',
+    })).toMatchObject({ provider: 'doubao', status: 'unavailable' });
   });
 
   it('restores generation cards with immutable provider and parameter snapshots', () => {

@@ -7,11 +7,11 @@ import { ApiRouteError } from '@/server/api-error';
 import type { SessionDeletionResult, SessionStore } from './session-service';
 
 const sessionRowSchema = z.object({
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   status: z.enum(['active', 'deleting']),
   title: z.string(),
-  updated_at: z.iso.datetime(),
+  updated_at: z.iso.datetime({ offset: true }),
 });
 
 const sessionColumns = 'id,title,status,created_at,updated_at';

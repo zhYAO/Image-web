@@ -31,11 +31,11 @@ export const apiErrorSchema = z.strictObject({
 });
 
 export const sessionSchema = z.strictObject({
-  createdAt: z.iso.datetime(),
+  createdAt: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   status: z.enum(['active', 'deleting']),
   title: titleSchema,
-  updatedAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime({ offset: true }),
 });
 
 export const createSessionRequestSchema = z.strictObject({
@@ -92,7 +92,7 @@ export const safeWorkspaceErrorSchema = z.strictObject({
 export const generationAssetSchema = z.strictObject({
   error: safeWorkspaceErrorSchema.optional(),
   expired: z.boolean().optional(),
-  expiresAt: z.iso.datetime().optional(),
+  expiresAt: z.iso.datetime({ offset: true }).optional(),
   id: z.uuid(),
   status: z.enum(['pending', 'processing', 'succeeded', 'failed']),
   url: z.string().optional(),
@@ -105,7 +105,7 @@ export const generationBatchSchema = z.strictObject({
     count: z.number().int().min(1).max(4),
     resolution: z.enum(['1K', '2K']),
   }),
-  createdAt: z.iso.datetime(),
+  createdAt: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   model: providerIdentifierSchema,
   prompt: promptSchema,
@@ -116,7 +116,7 @@ export const generationBatchSchema = z.strictObject({
 });
 
 const timelineBaseSchema = z.object({
-  createdAt: z.iso.datetime(),
+  createdAt: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   sequence: z.number().int().positive(),
   sessionId: z.uuid(),
@@ -146,7 +146,7 @@ export const timelineResponseSchema = z.strictObject({
 });
 
 export const referenceUploadResponseSchema = z.strictObject({
-  expiresAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime({ offset: true }),
   height: z.number().int().positive(),
   id: z.uuid(),
   mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
@@ -156,14 +156,14 @@ export const referenceUploadResponseSchema = z.strictObject({
 });
 
 export const generationAssetUrlResponseSchema = z.strictObject({
-  expiresAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime({ offset: true }),
   generationId: z.uuid(),
   url: z.url(),
 });
 
 export const quotaSchema = z.strictObject({
   limit: z.number().int().positive(),
-  resetsAt: z.iso.datetime(),
+  resetsAt: z.iso.datetime({ offset: true }),
   used: z.number().int().nonnegative(),
 });
 
@@ -179,7 +179,7 @@ export const providerCapabilitySchema = z.strictObject({
 });
 
 export const providerHealthSchema = z.strictObject({
-  checkedAt: z.iso.datetime(),
+  checkedAt: z.iso.datetime({ offset: true }),
   message: z.string().max(500).optional(),
   provider: providerIdentifierSchema,
   status: z.enum(['healthy', 'degraded', 'unavailable']),

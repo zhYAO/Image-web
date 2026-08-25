@@ -10,6 +10,23 @@ function json(body: unknown, status = 200) {
 }
 
 describe('HttpWorkspaceGateway', () => {
+  it('preserves the browser receiver when using the global fetch implementation', async () => {
+    const browserFetch = vi.fn(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(json({ sessions: [] }));
+    });
+    vi.stubGlobal('fetch', browserFetch);
+
+    try {
+      const gateway = new HttpWorkspaceGateway();
+
+      await expect(gateway.listSessions()).resolves.toEqual([]);
+      expect(browserFetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('parses the session API contract', async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ sessions: [{
       createdAt: '2026-08-24T00:00:00.000Z',

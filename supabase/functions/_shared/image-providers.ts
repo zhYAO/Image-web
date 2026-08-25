@@ -32,19 +32,20 @@ export class ImageProviderError extends Error {
 }
 
 const seedreamSizes: Record<ImageResolution, Record<ImageAspectRatio, string>> = {
+  // Seedream 4.5 rejects outputs below 3,686,400 pixels, so logical 1K requests use its minimum 2K geometry.
   '1K': {
-    '1:1': '1024x1024',
-    '3:4': '768x1024',
-    '4:3': '1024x768',
-    '9:16': '576x1024',
-    '16:9': '1024x576',
+    '1:1': '2048x2048',
+    '3:4': '1728x2304',
+    '4:3': '2304x1728',
+    '9:16': '1600x2848',
+    '16:9': '2848x1600',
   },
   '2K': {
     '1:1': '2048x2048',
-    '3:4': '1536x2048',
-    '4:3': '2048x1536',
-    '9:16': '1152x2048',
-    '16:9': '2048x1152',
+    '3:4': '1728x2304',
+    '4:3': '2304x1728',
+    '9:16': '1600x2848',
+    '16:9': '2848x1600',
   },
 };
 
@@ -60,6 +61,13 @@ function string(value: unknown) {
 
 function imageMimeType(value: unknown): ProviderImageResult['mimeType'] | undefined {
   return value === 'image/jpeg' || value === 'image/png' || value === 'image/webp' ? value : undefined;
+}
+
+function base64ImageMimeType(value: string): ProviderImageResult['mimeType'] {
+  if (value.startsWith('/9j/')) return 'image/jpeg';
+  if (value.startsWith('iVBORw0KGgo')) return 'image/png';
+  if (value.startsWith('UklGR')) return 'image/webp';
+  throw new ImageProviderError('provider_error', 'provider_response_unsupported_image', false);
 }
 
 export function buildGeminiRequest(input: ProviderImageInput) {
@@ -129,7 +137,7 @@ export function decodeSeedreamResponse(value: unknown): ProviderImageResult {
   if (!bytesBase64) throw new ImageProviderError('provider_error', 'provider_response_missing_image', false);
   return {
     bytesBase64,
-    mimeType: 'image/png',
+    mimeType: base64ImageMimeType(bytesBase64),
     providerRequestId: string(response?.id ?? response?.request_id),
   };
 }

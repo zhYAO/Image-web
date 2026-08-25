@@ -15,7 +15,23 @@ interface OpenAiCompatibleChatInput {
   message: string;
   messages?: Array<{ content: string; role: 'assistant' | 'user' }>;
   model: string;
+  /**
+   * Optional stall budget (ms) for each chunk read. Defaults to
+   * `ZIMAGE_CHAT_PROVIDER_STALL_TIMEOUT_MS` (20000 ms). A stalled upstream
+   * (e.g. TCP half-open, headers-but-no-body) used to keep the SSE response
+   * alive forever and only fail at the platform's hard timeout. Bounding the
+   * wait per chunk lets the route handler fail fast and emit `stream.failed`.
+   */
+  stallTimeoutMs?: number;
   signal?: AbortSignal;
+}
+
+function resolveStallTimeoutMs(input: OpenAiCompatibleChatInput) {
+  if (typeof input.stallTimeoutMs === 'number' && input.stallTimeoutMs > 0) {
+    return input.stallTimeoutMs;
+  }
+  const envValue = Number(process.env.ZIMAGE_CHAT_PROVIDER_STALL_TIMEOUT_MS);
+  return Number.isFinite(envValue) && envValue > 0 ? envValue : 20000;
 }
 
 function contentDelta(value: unknown) {
@@ -47,11 +63,26 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
       method: 'POST',
       signal: input.signal,
     });
-  } catch {
+  } catch (error: unknown) {
+    // Distinguish a browser-side cancellation (which is never retryable) from
+    // an upstream network or timeout failure (which we treat as a transient
+    // provider_unavailable).
+    console.error('[chat-providers] fetch failed', {
+      endpoint: input.endpoint,
+      error: error instanceof Error ? { name: error.name, message: error.message } : error,
+    });
+    if (input.signal?.aborted) {
+      throw new ChatProviderFailure('stream_interrupted', false);
+    }
     throw new ChatProviderFailure('provider_unavailable', true);
   }
 
   if (!response.ok || !response.body) {
+    console.error('[chat-providers] non-ok response', {
+      endpoint: input.endpoint,
+      model: input.model,
+      status: response.status,
+    });
     if (response.status === 400 || response.status === 422) {
       throw new ChatProviderFailure('provider_error', false);
     }
@@ -63,10 +94,11 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  const stallTimeoutMs = resolveStallTimeoutMs(input);
   let buffer = '';
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithStallTimeout(reader, stallTimeoutMs, input.signal);
       buffer += decoder.decode(value, { stream: !done }).replaceAll('\r\n', '\n');
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
@@ -90,15 +122,63 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
     }
   } catch (error: unknown) {
     if (error instanceof ChatProviderFailure) throw error;
+    if (input.signal?.aborted) {
+      throw new ChatProviderFailure('stream_interrupted', false);
+    }
     throw new ChatProviderFailure('stream_interrupted', false);
   } finally {
-    reader.releaseLock();
+    try { reader.releaseLock(); } catch { /* already released */ }
+  }
+}
+
+async function readWithStallTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  stallTimeoutMs: number,
+  signal?: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stall = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('chat_provider_stall');
+      error.name = 'ChatProviderStallError';
+      reject(error);
+    }, stallTimeoutMs);
+  });
+  // If the browser cancels we want the read promise to reject immediately
+  // rather than waiting out the stall budget — otherwise a user clicking
+  // "stop" would still see the upstream waiting for the full stall window.
+  let onAbort: (() => void) | undefined;
+  const abortPromise = new Promise<never>((_, reject) => {
+    if (signal?.aborted) {
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      return;
+    }
+    onAbort = () => {
+      if (timer) clearTimeout(timer);
+      reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([reader.read(), stall, abortPromise]);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'ChatProviderStallError') {
+      throw new ChatProviderFailure('provider_unavailable', true);
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
 }
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new ChatProviderFailure('provider_unavailable', true);
+  // `replace_*` placeholders from .env.example must surface as a real config
+  // failure rather than a 400 from the upstream — otherwise the request hangs
+  // for the full upstream stall budget before failing.
+  if (/^replace_/i.test(value)) throw new ChatProviderFailure('provider_unavailable', true);
   return value;
 }
 

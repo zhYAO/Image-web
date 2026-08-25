@@ -12,9 +12,37 @@ import { createPreviewUsageGuard, withPreviewUsageReservation } from '@/server/p
 import { assertTrustedOrigin, executeRoute, readJson, requireVerifiedUserId } from '@/server/route-context';
 
 export const runtime = 'nodejs';
+// SSE chat streams routinely exceed the platform's default 10s/15s function
+// timeout (Vercel Hobby/Pro). Without this directive the streaming response is
+// terminated mid-flight even though it is technically a long-lived handler.
+export const maxDuration = 60;
 
 function encodeEvent(event: ChatEvent) {
   return new TextEncoder().encode(`data: ${JSON.stringify(chatEventSchema.parse(event))}\n\n`);
+}
+
+function safeEnqueue(controller: ReadableStreamDefaultController<Uint8Array>, chunk: Uint8Array) {
+  try {
+    controller.enqueue(chunk);
+  } catch {
+    // controller already closed/errored — ignore so the catch arm below stays silent.
+  }
+}
+
+function safeClose(controller: ReadableStreamDefaultController<Uint8Array>) {
+  try {
+    controller.close();
+  } catch {
+    // already closed or errored — no-op.
+  }
+}
+
+function safeError(controller: ReadableStreamDefaultController<Uint8Array>, error: unknown) {
+  try {
+    controller.error(error);
+  } catch {
+    // already terminated — no-op.
+  }
 }
 
 export async function POST(request: Request) {
@@ -61,6 +89,20 @@ export async function POST(request: Request) {
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        // Propagate browser-side disconnect (also fires on platform hard-kill
+        // once the runtime forwards it) into the controller so the upstream
+        // fetch aborts and the runner stops instead of leaking tokens.
+        let aborted = false;
+        const onClientAbort = () => {
+          aborted = true;
+          safeError(controller, new Error('client_disconnected'));
+        };
+        if (request.signal.aborted) {
+          onClientAbort();
+        } else {
+          request.signal.addEventListener('abort', onClientAbort, { once: true });
+        }
+
         void executeChatGraph(
           {
             ...input,
@@ -71,9 +113,25 @@ export async function POST(request: Request) {
             userId,
           },
           prepared.runner,
-          async (event) => controller.enqueue(encodeEvent(event)),
-        ).catch(() => {
-          controller.enqueue(encodeEvent({
+          async (event) => {
+            if (aborted) return;
+            safeEnqueue(controller, encodeEvent(event));
+          },
+        ).catch((error: unknown) => {
+          // Always log so the route never fails silently. Without this the only
+          // signal a developer has is the generic "聊天服务暂时不可用" toast
+          // even when the real failure is a checkpointer 42P01, a 4xx from
+          // the upstream, or a quota exhaustion.
+          console.error('[api/chat] executeChatGraph failed', {
+            correlationId,
+            error: error instanceof Error
+              ? { name: error.name, message: error.message, stack: error.stack }
+              : error,
+            sessionId: input.sessionId,
+            userId,
+          });
+          if (aborted) return;
+          safeEnqueue(controller, encodeEvent({
             error: {
               code: 'NETWORK',
               message: '聊天服务暂时不可用，请稍后重试。',
@@ -81,7 +139,10 @@ export async function POST(request: Request) {
             },
             type: 'stream.failed',
           }));
-        }).finally(() => controller.close());
+        }).finally(() => {
+          request.signal.removeEventListener('abort', onClientAbort);
+          safeClose(controller);
+        });
       },
     });
 

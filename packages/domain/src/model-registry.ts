@@ -1,6 +1,6 @@
 import type { ProviderCapability, Skill } from './types';
 
-export const MODEL_REGISTRY_VERSION = '2026-08-24.1';
+export const MODEL_REGISTRY_VERSION = '2026-08-25.1';
 
 export const CHAT_PROVIDER_MODELS = [
   { id: 'doubao', label: '豆包', provider: 'doubao' },
@@ -24,7 +24,7 @@ export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
       id: 'seedream-4.5',
       label: 'Seedream 4.5',
       maxImages: 4,
-      resolutions: ['1K', '2K'],
+      resolutions: ['2K'],
     }],
     provider: 'seedream',
   },

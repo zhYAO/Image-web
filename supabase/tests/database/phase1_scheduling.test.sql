@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(23);
 
 select has_extension('pg_cron', 'pg_cron is installed');
 select has_extension('pg_net', 'pg_net is installed');
@@ -66,7 +66,7 @@ update private.provider_runtime_config
 set enabled = true, evidence = 'phase1b scheduling transaction probe'
 where provider = 'gemini';
 delete from vault.secrets
-where name in ('zimage_project_url', 'zimage_service_role_key', 'zimage_worker_cron_secret');
+where name in ('zimage_project_url', 'zimage_secret_key', 'zimage_service_role_key', 'zimage_worker_cron_secret');
 select throws_ok(
   'select private.schedule_generation_worker()',
   'P0001',
@@ -82,6 +82,34 @@ select matches(
   coalesce(pg_get_functiondef(to_regprocedure('private.schedule_generation_worker()')), ''),
   'zimage-generation-worker',
   'generation scheduling uses the dedicated worker job name'
+);
+select matches(
+  coalesce(pg_get_functiondef(to_regprocedure('private.schedule_cleanup_worker()')), ''),
+  'zimage_secret_key',
+  'cleanup scheduling reads the modern Supabase secret key from Vault'
+);
+select matches(
+  coalesce(pg_get_functiondef(to_regprocedure('private.schedule_cleanup_worker()')), ''),
+  '''apikey''',
+  'cleanup scheduling sends the modern secret through the apikey header'
+);
+select ok(
+  position('''Authorization''' in coalesce(pg_get_functiondef(to_regprocedure('private.schedule_cleanup_worker()')), '')) = 0,
+  'cleanup scheduling does not send a modern secret as a Bearer token'
+);
+select matches(
+  coalesce(pg_get_functiondef(to_regprocedure('private.schedule_generation_worker()')), ''),
+  'zimage_secret_key',
+  'generation scheduling reads the modern Supabase secret key from Vault'
+);
+select matches(
+  coalesce(pg_get_functiondef(to_regprocedure('private.schedule_generation_worker()')), ''),
+  '''apikey''',
+  'generation scheduling sends the modern secret through the apikey header'
+);
+select ok(
+  position('''Authorization''' in coalesce(pg_get_functiondef(to_regprocedure('private.schedule_generation_worker()')), '')) = 0,
+  'generation scheduling does not send a modern secret as a Bearer token'
 );
 
 select * from finish();
