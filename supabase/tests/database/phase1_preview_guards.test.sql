@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(23);
+select plan(26);
 
 select has_table('private', 'provider_runtime_config', 'provider runtime configuration is private');
 select has_table('private', 'runtime_flags', 'runtime flags are private');
@@ -38,8 +38,35 @@ select ok(
   ),
   'service role can reserve usage after server authorization'
 );
-select is(public.assert_chat_provider_available('doubao'), false, 'chat providers fail closed by default');
-select is(public.assert_chat_provider_available('minimax'), false, 'all chat providers require explicit enablement');
+select is(public.assert_chat_provider_available('doubao'), false, 'doubao chat provider still requires explicit enablement');
+-- MiniMax ships pre-enabled so a configured MINIMAX_API_KEY +
+-- ZIMAGE_MINIMAX_CHAT_MODEL pair works without manual SQL toggling.
+select is(public.assert_chat_provider_available('minimax'), true, 'minimax chat provider is enabled by default in phase 1');
+select is(
+  (select item ->> 'status' from jsonb_array_elements(public.get_provider_health()) item where item ->> 'provider' = 'minimax'),
+  'degraded',
+  'the default-enabled minimax provider has no recent health sample, so it surfaces as degraded until the first run'
+);
+
+-- config.enabled is the authoritative gate. Once an operator has explicitly
+-- enabled a provider, a stale `unavailable` health window must not veto
+-- either the assert or the health-surface status. Both must stay `true` /
+-- `degraded` regardless of recent failure records.
+insert into private.provider_health_windows
+  (provider, window_start, total_count, error_count, state)
+values
+  ('minimax', timezone('utc', now()), 10, 9, 'unavailable')
+on conflict (provider, window_start) do update set state = excluded.state;
+select is(
+  public.assert_chat_provider_available('minimax'),
+  true,
+  'minimax stays assertable even with a recent unavailable health window because config.enabled is the gate'
+);
+select is(
+  (select item ->> 'status' from jsonb_array_elements(public.get_provider_health()) item where item ->> 'provider' = 'minimax'),
+  'degraded',
+  'a stale unavailable window does not flip an enabled provider back to unavailable status'
+);
 select is(
   (select item ->> 'status' from jsonb_array_elements(public.get_provider_health()) item where item ->> 'provider' = 'gemini'),
   'unavailable',

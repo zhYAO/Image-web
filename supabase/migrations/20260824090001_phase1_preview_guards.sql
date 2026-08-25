@@ -14,7 +14,11 @@ values
   ('gemini', false, 'strict_zero_no_free_image_api_tier'),
   ('seedream', false, 'strict_zero_free_credit_not_verified'),
   ('doubao', false, 'strict_zero_free_credit_not_verified'),
-  ('minimax', false, 'strict_zero_free_credit_not_verified');
+  -- Phase 1 chat ships with MiniMax pre-enabled so a configured
+  -- MINIMAX_API_KEY / ZIMAGE_MINIMAX_CHAT_MODEL pair is usable out of the
+  -- box. Image and the other chat provider stay disabled until their
+  -- respective cost / hard-limit gates are independently approved.
+  ('minimax', true, 'phase1_default_enabled_minimax_chat_provider');
 
 create table private.runtime_flags (
   flag text primary key,

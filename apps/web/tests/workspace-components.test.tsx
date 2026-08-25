@@ -246,4 +246,111 @@ describe('workspace presentation components', () => {
       sessionDrawerOpen: true,
     });
   });
+
+  it('shows the three-dot typing indicator before the first delta arrives', () => {
+    render(
+      <WorkspaceTimeline
+        awaitingFirstDelta
+        items={[
+          {
+            content: '给我一些配色建议',
+            createdAt: '2026',
+            id: 'm-user',
+            role: 'user',
+            sequence: 1,
+            sessionId: 's1',
+            type: 'message',
+          },
+        ]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+    const indicator = screen.getByTestId('chat-typing-indicator');
+    expect(indicator).toHaveAttribute('aria-label', 'AI 正在思考');
+    expect(indicator.querySelectorAll('span')).toHaveLength(3);
+    // Empty hero must not appear while we are waiting for the assistant.
+    expect(screen.queryByText('你好，想创作什么？')).not.toBeInTheDocument();
+  });
+
+  it('replaces the typing indicator with streaming text once the first delta arrives', () => {
+    render(
+      <WorkspaceTimeline
+        isChatStreaming
+        items={[
+          {
+            content: '给我一些配色建议',
+            createdAt: '2026',
+            id: 'm-user',
+            role: 'user',
+            sequence: 1,
+            sessionId: 's1',
+            type: 'message',
+          },
+        ]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText="好的，先聊聊"
+      />,
+    );
+    expect(screen.queryByTestId('chat-typing-indicator')).not.toBeInTheDocument();
+    expect(screen.getByText('好的，先聊聊')).toBeInTheDocument();
+    expect(screen.getByLabelText('AI 正在输入')).toBeInTheDocument();
+  });
+
+  it('hides the trailing cursor the instant the chat stream ends', () => {
+    const { rerender } = render(
+      <WorkspaceTimeline
+        isChatStreaming
+        items={[]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText="已生成的回复文本"
+      />,
+    );
+    expect(screen.getByTestId('chat-stream-cursor')).toBeInTheDocument();
+
+    // Simulate the post-stream render where the parent promotes the
+    // streaming text into the timeline items and clears streamingText.
+    rerender(
+      <WorkspaceTimeline
+        items={[
+          {
+            content: '给我一些配色建议',
+            createdAt: '2026',
+            id: 'm-user',
+            role: 'user',
+            sequence: 1,
+            sessionId: 's1',
+            type: 'message',
+          },
+          {
+            content: '已生成的回复文本',
+            createdAt: '2026',
+            id: 'm-assistant',
+            role: 'assistant',
+            sequence: 2,
+            sessionId: 's1',
+            type: 'message',
+          },
+        ]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    // Cursor must be gone and only one assistant bubble may remain.
+    expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument();
+    expect(screen.getAllByText('已生成的回复文本')).toHaveLength(1);
+  });
 });

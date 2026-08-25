@@ -125,7 +125,10 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
   async renameSession(sessionId: string, title: string) {
     const session = this.requireSession(sessionId);
-    session.title = title.trim() || '未命名创作';
+    // Centralize title normalization (trim, collapse whitespace, cap length,
+    // fall back to the placeholder) inside the gateway so the UI can pass
+    // either a user-typed name or a raw prompt and get a consistent title.
+    session.title = this.titleFrom(title);
     session.updatedAt = this.timestamp();
     this.persist();
     return clone(session);

@@ -73,6 +73,25 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [health, setHealth] = useState<ProviderHealth[]>([]);
   const [busy, setBusy] = useState(false);
   const [streamingText, setStreamingText] = useState('');
+  // Tracks the in-flight chat stream so re-submits or unmount can cancel the
+  // upstream fetch instead of leaking tokens and double-billing the quota
+  // reservation.
+  const chatAbortRef = useRef<AbortController | undefined>(undefined);
+  // Mirrors streamingText so the submit() finally block can read the latest
+  // accumulated text without waiting for a re-render. Without this ref the
+  // closure variable captured at render time would be stale, leaving the
+  // assistant bubble empty when we promote the partial response into the
+  // timeline.
+  const streamingTextRef = useRef('');
+  // True while the chat stream is producing deltas. Drives the trailing ▍
+  // cursor in WorkspaceTimeline so it disappears the moment the model stops,
+  // matching ChatGPT's "stream ends → cursor gone" behavior.
+  const [isChatStreaming, setIsChatStreaming] = useState(false);
+  // True after the chat stream starts and before the first assistant delta
+  // arrives; drives the three bouncing-dots loading indicator in the timeline.
+  // Flips back to false the moment the first delta lands so the bubble can
+  // transition seamlessly into the existing typing-text render.
+  const [chatAwaitingFirstDelta, setChatAwaitingFirstDelta] = useState(false);
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
   const [resolution, setResolution] = useState<ImageResolution>('2K');
@@ -84,10 +103,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [skillPromptOverride, setSkillPromptOverride] = useState<string>();
   const [references, setReferences] = useState<UploadReference[]>([]);
   const localPreviewUrls = useRef(new Set<string>());
-  // Tracks the in-flight chat stream so re-submits or unmount can cancel the
-  // upstream fetch instead of leaking tokens and double-billing the quota
-  // reservation.
-  const chatAbortRef = useRef<AbortController | undefined>(undefined);
   // Hard cap on a single chat turn's total wait so a stalled upstream fetch
   // cannot block the UI past the platform timeout.
   const CHAT_STREAM_TIMEOUT_MS = 75_000;
@@ -208,6 +223,20 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     return session.id;
   };
 
+  // Rename the active session so its title reflects the first message.
+  // No-op when the session was already titled manually or by an earlier
+  // stream, so subsequent turns don't clobber a customized name.
+  const renameIfDefaultTitle = async (sessionId: string, prompt: string) => {
+    const current = sessions.find((item) => item.id === sessionId);
+    if (!current || current.title !== zhCN.workspace.defaultSessionTitle) return;
+    try {
+      const renamed = await gateway.renameSession(sessionId, prompt);
+      setSessions((items) => items.map((item) => (item.id === renamed.id ? renamed : item)));
+    } catch {
+      // Non-fatal: the user can rename manually from the sidebar.
+    }
+  };
+
   const submit = async () => {
     const prompt = (mode === 'image' ? imageSubmissionPrompt : drafts.chat).trim();
     if (!prompt || busy) return;
@@ -227,6 +256,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
 
     setBusy(true);
     setFeedback(undefined);
+    // Mirror ChatGPT: the input clears the instant the user submits so they
+    // can keep typing without their draft getting stuck behind a busy button.
+    // The optimistic timeline bubble preserves what they sent.
+    if (mode === 'chat') setDraft('chat', '');
+    // Title the conversation after the first message so the sidebar reflects
+    // what the user actually asked, instead of staying "新的创作" forever.
+    if (activeSessionId) void renameIfDefaultTitle(activeSessionId, prompt);
     try {
       const activeProvider = mode === 'image' ? selectedProvider : selectedChatModel;
       if (health.find((item) => item.provider === activeProvider)?.status === 'unavailable') {
@@ -278,6 +314,15 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             type: 'message',
           },
         ]);
+        // Show the three bouncing dots until the first assistant delta lands,
+        // and reveal the trailing ▍ cursor from the very first delta onward.
+        setChatAwaitingFirstDelta(true);
+        setIsChatStreaming(true);
+        // Reset the streaming text mirror so the previous turn's bytes don't
+        // leak into the next one if the for-await body is somehow entered
+        // twice (defensive: the busy guard makes this unreachable today).
+        streamingTextRef.current = '';
+        setStreamingText('');
         // Cancel any in-flight chat stream before starting a new one so the
         // previous upstream fetch aborts and we don't double-charge the
         // quota. Also bound the total wait so a stalled provider cannot block
@@ -305,7 +350,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               resolvedSessionId = event.session.id;
               setActiveSessionId(event.session.id);
             } else if (event.type === 'message.delta') {
-              setStreamingText((value) => value + event.delta);
+              // First content byte has arrived; switch from bouncing dots to
+              // streaming text with cursor.
+              setChatAwaitingFirstDelta(false);
+              streamingTextRef.current += event.delta;
+              setStreamingText(streamingTextRef.current);
             } else if (event.type === 'stream.failed') {
               setFeedback({ error: event.error, message: event.error.message });
             }
@@ -318,9 +367,34 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         } finally {
           window.clearTimeout(streamTimeout);
           if (chatAbortRef.current === chatController) chatAbortRef.current = undefined;
+          setChatAwaitingFirstDelta(false);
+          // Stop the cursor from blinking the moment the stream ends so the
+          // final bubble looks like a completed message rather than a half-
+          // finished draft.
+          setIsChatStreaming(false);
+          // Promote the locally accumulated text into the timeline in the
+          // same render batch so the assistant bubble transitions seamlessly
+          // from the streaming bubble into a persisted timeline item instead
+          // of vanishing for a frame between clear-stream and refresh.
+          const finalText = streamingTextRef.current;
+          streamingTextRef.current = '';
+          if (finalText.trim() && resolvedSessionId) {
+            const fallbackSessionId = resolvedSessionId;
+            setTimeline((items) => [
+              ...items,
+              {
+                content: finalText,
+                createdAt: new Date().toISOString(),
+                id: `local-assistant-${Date.now()}`,
+                role: 'assistant',
+                sequence: items.length + 1,
+                sessionId: fallbackSessionId,
+                type: 'message',
+              },
+            ]);
+          }
+          setStreamingText('');
         }
-        setDraft('chat', '');
-        setStreamingText('');
         const [, , nextQuota] = await Promise.all([
           refreshTimeline(resolvedSessionId), refreshSessions(), gateway.getQuota(),
         ]);
@@ -583,6 +657,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         )}
         <div className={styles.timelineScroll}>
           <WorkspaceTimeline
+            awaitingFirstDelta={chatAwaitingFirstDelta}
+            isChatStreaming={isChatStreaming}
             items={timeline}
             onDownloadBatch={downloadBatch}
             onRecreate={(batch, scope) => void recreate(batch, scope)}

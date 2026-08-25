@@ -1,4 +1,4 @@
-import type { ChatRequest, ImageRequest, ProviderCapability } from '@zimage/domain';
+import type { ChatRequest, ImageRequest, ProviderCapability, Session } from '@zimage/domain';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +18,22 @@ class TestStorage implements StorageLike {
 
 class CapturingGateway extends MockWorkspaceGateway {
   lastChatRequest?: ChatRequest;
+  lastCreatedSession?: Session;
   lastImageRequest?: ImageRequest;
+  lastRenamedTitle?: string;
+
+  override async createSession(title?: string) {
+    const session = await super.createSession(title);
+    this.lastCreatedSession = session;
+    return session;
+  }
+
+  override async renameSession(sessionId: string, title: string) {
+    this.lastRenamedTitle = title;
+    const session = await super.renameSession(sessionId, title);
+    if (this.lastCreatedSession?.id === sessionId) this.lastCreatedSession = session;
+    return session;
+  }
 
   override async *streamChat(request: ChatRequest, signal?: AbortSignal) {
     this.lastChatRequest = request;
@@ -119,6 +134,111 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
     expect(gateway.lastChatRequest?.imageToolEnabled).toBe(false);
+  });
+
+  it('clears the chat draft the moment the user submits and shows a typing indicator until the first delta', async () => {
+    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.change(input, { target: { value: '给我三个秋天配色' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    // ChatGPT-style: the input clears synchronously with submission, before
+    // the stream produces its first delta.
+    expect(input).toHaveValue('');
+    expect(screen.getByTestId('chat-typing-indicator')).toHaveAttribute(
+      'aria-label',
+      'AI 正在思考',
+    );
+    expect(screen.queryByText('给我三个秋天配色')).toBeInTheDocument();
+
+    await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
+  });
+
+  it('keeps the assistant bubble stable across the stream-to-completed transition (no flash, cursor gone)', async () => {
+    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.change(input, { target: { value: '聊聊配色' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    // While the stream is producing bytes, the trailing cursor must be live.
+    await waitFor(() => expect(screen.getByTestId('chat-stream-cursor')).toBeInTheDocument());
+
+    // Wait for the mock stream to finish and the timeline refresh to settle.
+    await waitFor(() => expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument());
+
+    // The assistant text must be persisted as a timeline item exactly once,
+    // so the bubble stays visible instead of flashing off between clear-
+    // streaming and refresh.
+    const persisted = screen.getAllByText('可以。建议突出主体材质、光线、构图和使用场景，让画面目标更明确。');
+    expect(persisted).toHaveLength(1);
+    expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument();
+  });
+
+  it('renames the active session from the first message and leaves later messages alone', async () => {
+    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    // Explicitly click the sidebar "新对话" so a default-titled session
+    // becomes active, matching the production flow that previously left the
+    // sidebar stuck on "新的创作" forever.
+    fireEvent.click(screen.getByRole('button', { name: '新对话' }));
+    await waitFor(() => expect(gateway.lastCreatedSession).toBeDefined());
+    expect(gateway.lastCreatedSession?.title).toBe('新的创作');
+
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.change(input, { target: { value: '聊聊秋季风衣配色' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    // Title should follow the first message; long prompts are truncated
+    // through the gateway's titleFrom helper (20 chars + ellipsis).
+    await waitFor(() =>
+      expect(gateway.lastCreatedSession?.title).toBe('聊聊秋季风衣配色'),
+    );
+    expect(screen.getByRole('button', { name: '聊聊秋季风衣配色' })).toBeInTheDocument();
+
+    // A second message in the same session must not clobber the title.
+    await waitFor(() => expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument());
+    // Wait until the first turn has fully settled (refreshSessions has
+    // completed and busy is cleared) before firing the second submit. Without
+    // this the second click is silently swallowed by Antd's merged
+    // `loading` -> `disabled` mapping.
+    await screen.findByText('可以。建议突出主体材质、光线、构图和使用场景，让画面目标更明确。');
+    const previousTitle = gateway.lastCreatedSession?.title;
+    fireEvent.change(input, { target: { value: '继续聊一下材质' } });
+    // After change, the draft is non-empty so the only remaining reason the
+    // submit button could stay disabled is `loading={busy}`. Wait for that to
+    // clear before clicking so the second streamChat is actually called.
+    await waitFor(() => expect(screen.getByRole('button', { name: '发送创作请求' })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    await waitFor(() =>
+      expect(gateway.lastChatRequest?.message).toBe('继续聊一下材质'),
+    );
+    expect(gateway.lastCreatedSession?.title).toBe(previousTitle);
+  });
+
+  it('renames the active session in image mode too', async () => {
+    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '新对话' }));
+    await waitFor(() => expect(gateway.lastCreatedSession).toBeDefined());
+
+    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.change(input, { target: { value: '生成秋季外套海报' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() =>
+      expect(gateway.lastCreatedSession?.title).toBe('生成秋季外套海报'),
+    );
   });
 
   it('preserves an explicitly enabled chat image tool across mode switches', async () => {

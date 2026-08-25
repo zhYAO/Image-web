@@ -12,6 +12,8 @@ const statusLabels: Record<GenerationBatch['status'], string> = {
 };
 
 interface WorkspaceTimelineProps {
+  awaitingFirstDelta?: boolean;
+  isChatStreaming?: boolean;
   items: TimelineItem[];
   skills: Skill[];
   streamingText: string;
@@ -93,6 +95,8 @@ function GenerationCard({
 }
 
 export function WorkspaceTimeline({
+  awaitingFirstDelta = false,
+  isChatStreaming = false,
   items,
   skills,
   streamingText,
@@ -100,7 +104,7 @@ export function WorkspaceTimeline({
   onRecreate,
   onSelectSkill,
 }: WorkspaceTimelineProps) {
-  if (items.length === 0 && !streamingText) {
+  if (items.length === 0 && !streamingText && !awaitingFirstDelta) {
     return (
       <div className={styles.empty}>
         <h1 className={styles.heroTitle}>{zhCN.timeline.emptyTitle}</h1>
@@ -141,10 +145,33 @@ export function WorkspaceTimeline({
         }
         return <Alert action={item.actionLabel ? <Button size="small">{item.actionLabel}</Button> : undefined} description={item.error.message} key={item.id} showIcon type="error" />;
       })}
-      {streamingText && (
+      {(streamingText || awaitingFirstDelta) && (
         <article className={styles.message}>
           <div className={styles.avatar}><Bot size={16} /></div>
-          <div className={styles.bubble}>{streamingText}<span aria-label="正在输入"> ▍</span></div>
+          {streamingText ? (
+            <div className={styles.bubble}>
+              {streamingText}
+              {/* Trailing cursor only while the model is actively producing
+                  bytes. The instant the stream ends the cursor disappears so
+                  the bubble looks finalized rather than mid-typing. */}
+              {isChatStreaming && (
+                <span aria-label={zhCN.timeline.typing} data-testid="chat-stream-cursor"> ▍</span>
+              )}
+            </div>
+          ) : (
+            <div className={`${styles.bubble} ${styles.bubbleLoading}`}>
+              <span
+                aria-label={zhCN.timeline.thinking}
+                className={styles.typingIndicator}
+                data-testid="chat-typing-indicator"
+                role="status"
+              >
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+                <span className={styles.typingDot} />
+              </span>
+            </div>
+          )}
         </article>
       )}
     </div>
