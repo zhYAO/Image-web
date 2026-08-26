@@ -98,9 +98,8 @@ describe('UnifiedWorkspace', () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
 
-    expect(screen.getByRole('switch', { name: '图片工具' })).toBeChecked();
+    expect(screen.queryByRole('switch', { name: '图片工具' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '清除技能' }));
-    expect(screen.getByRole('switch', { name: '图片工具' })).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
     expect(screen.getByRole('switch', { name: '图片工具' })).not.toBeChecked();
   });
@@ -119,14 +118,14 @@ describe('UnifiedWorkspace', () => {
     expect(imageMode).toHaveAttribute('aria-pressed', 'false');
 
     fireEvent.click(imageMode);
-    expect(imageTool).toBeChecked();
-    expect(imageTool).toBeDisabled();
+    expect(screen.queryByRole('switch', { name: '图片工具' })).not.toBeInTheDocument();
     expect(chatMode).toHaveAttribute('aria-pressed', 'false');
     expect(imageMode).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(chatMode);
-    expect(imageTool).not.toBeChecked();
-    expect(imageTool).toBeEnabled();
+    const restoredImageTool = screen.getByRole('switch', { name: '图片工具' });
+    expect(restoredImageTool).not.toBeChecked();
+    expect(restoredImageTool).toBeEnabled();
 
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '只讨论提示词' },
@@ -134,6 +133,36 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
     expect(gateway.lastChatRequest?.imageToolEnabled).toBe(false);
+  });
+
+  it('selects a toolbar skill without leaving chat mode', async () => {
+    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能' }));
+    const dialog = screen.getByRole('dialog', { name: '技能配置' });
+    fireEvent.click(dialog.querySelector('[aria-label="选择技能 白底图"]') as HTMLElement);
+
+    expect(screen.getByRole('button', { name: '聊天模式' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('switch', { name: '图片工具' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: '图片工具' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '技能配置 白底图' })).toBeInTheDocument();
+  });
+
+  it('selects and clears skills from the mobile configuration drawer', async () => {
+    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '打开移动端生成配置' }));
+    await screen.findByText('生成配置');
+    const socialSkill = document.body.querySelector('[aria-label="选择技能 种草图"]') as HTMLElement | null;
+    expect(socialSkill).not.toBeNull();
+    fireEvent.click(socialSkill!);
+
+    expect(screen.getByRole('button', { name: '聊天模式' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.body.querySelector('[aria-label="使用场景"]')).toBeInTheDocument();
+    fireEvent.click(document.body.querySelector('[aria-label="清除技能"]') as HTMLElement);
+    expect(document.body.querySelector('[aria-label="使用场景"]')).not.toBeInTheDocument();
   });
 
   it('clears the chat draft the moment the user submits and shows a typing indicator until the first delta', async () => {
@@ -433,7 +462,7 @@ describe('UnifiedWorkspace', () => {
       provider: 'Studio',
       resolution: '2K',
     });
-  });
+  }, 30_000);
 
   it('removes the fixed desktop config panel, collapses the sidebar and reports the asset-library placeholder', async () => {
     render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);

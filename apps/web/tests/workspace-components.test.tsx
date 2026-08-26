@@ -23,6 +23,15 @@ const skill: Skill = {
   version: '1.0.0',
 };
 
+const socialSkill: Skill = {
+  ...skill,
+  description: '生活化社媒氛围',
+  fields: [{ key: 'scene', label: '使用场景', required: true }],
+  icon: '✦',
+  id: 'social',
+  name: '种草图',
+};
+
 describe('workspace presentation components', () => {
   it('lets image-mode users edit the resolved skill prompt before submission', () => {
     const onPromptChange = vi.fn();
@@ -32,10 +41,12 @@ describe('workspace presentation components', () => {
         onClear={vi.fn()}
         onOpenChange={vi.fn()}
         onPromptChange={onPromptChange}
+        onSelectSkill={vi.fn()}
         onSkillValueChange={vi.fn()}
         open
         prompt="生成 风衣"
         selectedSkill={skill}
+        skills={[skill, socialSkill]}
         skillValues={{ product: '风衣' }}
       />,
     );
@@ -43,6 +54,30 @@ describe('workspace presentation components', () => {
       target: { value: '生成高级感风衣白底图' },
     });
     expect(onPromptChange).toHaveBeenCalledWith('生成高级感风衣白底图');
+  });
+
+  it('lists available skills and selects one without closing the popover', () => {
+    const onOpenChange = vi.fn();
+    const onSelectSkill = vi.fn();
+    render(
+      <SkillPopover
+        onClear={vi.fn()}
+        onOpenChange={onOpenChange}
+        onSelectSkill={onSelectSkill}
+        onSkillValueChange={vi.fn()}
+        open
+        prompt=""
+        skills={[skill, socialSkill]}
+        skillValues={{}}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: '技能配置' });
+    expect(dialog).toHaveTextContent('白底图商品白底图');
+    expect(dialog).toHaveTextContent('种草图生活化社媒氛围');
+    fireEvent.click(screen.getByRole('button', { name: '选择技能 种草图' }));
+    expect(onSelectSkill).toHaveBeenCalledWith('social');
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it('selects chat providers independently and shows shared health', () => {
@@ -498,5 +533,77 @@ describe('workspace presentation components', () => {
     expect(screen.queryByRole('img', { name: '原始图片' })).not.toBeInTheDocument();
     expect(screen.getByText('危险链接').closest('a')).not.toHaveAttribute('href', 'javascript:alert(1)');
     expect(screen.queryByRole('img', { name: '危险图片' })).not.toBeInTheDocument();
+  });
+
+  it('expands streaming reasoning and collapses it after completion', () => {
+    const { rerender } = render(
+      <WorkspaceTimeline
+        isChatStreaming
+        items={[]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText="<think>正在分析 **构图**"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '正在思考' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('构图').closest('strong')).toBeInTheDocument();
+
+    rerender(
+      <WorkspaceTimeline
+        items={[{
+          content: '<think>正在分析 **构图**</think>最终答案',
+          createdAt: '2026',
+          id: 'm-reasoning',
+          role: 'assistant',
+          sequence: 1,
+          sessionId: 's1',
+          type: 'message',
+        }]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    const summary = screen.getByRole('button', { name: '已思考' });
+    expect(summary).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('构图')).not.toBeInTheDocument();
+    fireEvent.click(summary);
+    expect(screen.getByText('构图').tagName).toBe('STRONG');
+    expect(screen.getByText('最终答案')).toBeInTheDocument();
+  });
+
+  it('renders tool calls and results as inert collapsible blocks', () => {
+    render(
+      <WorkspaceTimeline
+        items={[{
+          content: '<tool_call name="search">输入参数</tool_call><tool_result status="ok">返回结果</tool_result>',
+          createdAt: '2026',
+          id: 'm-tools',
+          role: 'assistant',
+          sequence: 1,
+          sessionId: 's1',
+          type: 'message',
+        }]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[skill]}
+        streamingText=""
+      />,
+    );
+
+    const toolCall = screen.getByRole('button', { name: '调用工具 · search' });
+    const toolResult = screen.getByRole('button', { name: '工具结果 · ok' });
+    expect(toolCall).toHaveAttribute('aria-expanded', 'false');
+    expect(toolResult).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('输入参数')).not.toBeInTheDocument();
+    fireEvent.click(toolCall);
+    expect(screen.getByText('输入参数')).toBeInTheDocument();
   });
 });

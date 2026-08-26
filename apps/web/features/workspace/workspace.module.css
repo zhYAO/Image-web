@@ -505,7 +505,7 @@
 }
 
 .skillPopover {
-  width: 420px;
+  width: min(680px, calc(100vw - 310px));
 }
 
 .popoverSection + .popoverSection {
@@ -675,6 +675,16 @@
   gap: 22px;
 }
 
+.mobileSkillHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobileSkillHeading .popoverLabel {
+  margin-bottom: 0;
+}
+
 .mobileConfig label {
   display: flex;
   flex-direction: column;
@@ -770,6 +780,181 @@
   overflow: hidden;
   margin-block: 10px;
   border-radius: 10px;
+}
+
+.skillPopoverLayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr);
+  min-height: 260px;
+}
+
+.skillCatalog {
+  padding-right: 16px;
+  border-right: 1px solid #eceef0;
+}
+
+.skillDetail {
+  min-width: 0;
+  padding-left: 18px;
+}
+
+.skillList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.skillOption {
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f7f8f9;
+  color: #35383d;
+  font: inherit;
+  text-align: left;
+}
+
+.skillOption:hover {
+  border-color: #e2e5e8;
+  background: #f2f4f5;
+}
+
+.skillOption:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 1px;
+}
+
+.skillOptionActive {
+  border-color: #bce2e9;
+  background: #eff9fb;
+  color: #0a7185;
+}
+
+.skillOptionIcon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #eaf8fb;
+  color: #0aa6c4;
+  font-size: 16px;
+}
+
+.skillOptionText {
+  min-width: 0;
+}
+
+.skillOptionText strong,
+.skillOptionText small {
+  display: block;
+}
+
+.skillOptionText strong {
+  font-size: 13px;
+}
+
+.skillOptionText small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: #8c939d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structuredBlock {
+  overflow: hidden;
+  margin-block: 9px;
+  border: 1px solid #e3e6ea;
+  border-radius: 12px;
+  background: #f8f9fa;
+}
+
+.structuredBlock_reasoning {
+  border-color: #e0e3e7;
+  background: #f7f7f8;
+}
+
+.structuredBlock_tool_call {
+  border-color: #dce5ef;
+  background: #f5f8fb;
+}
+
+.structuredBlock_tool_result {
+  border-color: #dce8e2;
+  background: #f5f9f7;
+}
+
+.structuredBlockSummary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: #5f6670;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.structuredBlockSummary:hover {
+  background: rgba(25, 31, 38, 0.035);
+  color: #363c44;
+}
+
+.structuredBlockSummary:focus-visible {
+  outline: 2px solid #8ab4f8;
+  outline-offset: -2px;
+}
+
+.structuredBlockSummary > span:nth-child(2) {
+  flex: 1;
+}
+
+.structuredPulse {
+  flex: none !important;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7e8792;
+  animation: structuredPulse 1.2s ease-in-out infinite;
+}
+
+.structuredChevron {
+  flex: none;
+  transition: transform 160ms ease;
+}
+
+.structuredChevronExpanded {
+  transform: rotate(180deg);
+}
+
+.structuredBlockBody {
+  padding: 2px 12px 11px 34px;
+  color: #565d67;
+  font-size: 14px;
+}
+
+.structuredBlockBody .markdown {
+  color: inherit;
+  font-size: inherit;
+}
+
+@keyframes structuredPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .streamCursor {
@@ -946,6 +1131,10 @@
 
 @media (max-width: 1199px) {
   .parameterPopover {
+    width: min(680px, calc(100vw - 96px));
+  }
+
+  .skillPopover {
     width: min(680px, calc(100vw - 96px));
   }
 }

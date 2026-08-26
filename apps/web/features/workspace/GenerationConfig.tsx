@@ -357,11 +357,43 @@ interface SkillPopoverProps {
   onClear: () => void;
   onOpenChange: (open: boolean) => void;
   onPromptChange?: (value: string) => void;
+  onSelectSkill: (skillId: string) => void;
   onSkillValueChange: (key: string, value: string) => void;
   open: boolean;
   prompt: string;
   selectedSkill?: Skill;
+  skills: Skill[];
   skillValues: Record<string, string>;
+}
+
+interface SkillListProps {
+  onSelectSkill: (skillId: string) => void;
+  selectedSkillId?: string;
+  skills: Skill[];
+}
+
+export function SkillList({ onSelectSkill, selectedSkillId, skills }: SkillListProps) {
+  return (
+    <div aria-label="可用技能" className={styles.skillList}>
+      {skills.map((skill) => (
+        <button
+          aria-label={`选择技能 ${skill.name}`}
+          aria-pressed={selectedSkillId === skill.id}
+          className={`${styles.skillOption} ${selectedSkillId === skill.id ? styles.skillOptionActive : ''}`}
+          key={skill.id}
+          onClick={() => onSelectSkill(skill.id)}
+          type="button"
+        >
+          <span aria-hidden className={styles.skillOptionIcon}>{skill.icon}</span>
+          <span className={styles.skillOptionText}>
+            <strong>{skill.name}</strong>
+            <small>{skill.description}</small>
+          </span>
+          {selectedSkillId === skill.id && <Check aria-hidden size={16} />}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function SkillPopover({
@@ -370,10 +402,12 @@ export function SkillPopover({
   onClear,
   onOpenChange,
   onPromptChange,
+  onSelectSkill,
   onSkillValueChange,
   open,
   prompt,
   selectedSkill,
+  skills,
   skillValues,
 }: SkillPopoverProps) {
   const inputRefs = useRef<Record<string, InputRef | null>>({});
@@ -403,45 +437,58 @@ export function SkillPopover({
         </Button>
       )}
     >
-      <div className={styles.popoverHeading}>
-        <div>
-          <div className={styles.popoverTitle}>{selectedSkill?.name ?? '创作技能'}</div>
-          <div className={styles.popoverHint}>{selectedSkill?.description ?? '从首页选择一个技能开始配置'}</div>
+      <div className={styles.skillPopoverLayout}>
+        <div className={styles.skillCatalog}>
+          <div className={styles.popoverTitle}>创作技能</div>
+          <div className={styles.popoverHint}>选择一个技能附加到当前创作</div>
+          <SkillList
+            onSelectSkill={onSelectSkill}
+            selectedSkillId={selectedSkill?.id}
+            skills={skills}
+          />
         </div>
-        {selectedSkill && <Button aria-label="清除技能" onClick={onClear} size="small" type="text">清除</Button>}
+        <div className={styles.skillDetail}>
+          <div className={styles.popoverHeading}>
+            <div>
+              <div className={styles.popoverTitle}>{selectedSkill?.name ?? '技能配置'}</div>
+              <div className={styles.popoverHint}>{selectedSkill?.description ?? '选择左侧技能后配置生成要求'}</div>
+            </div>
+            {selectedSkill && <Button aria-label="清除技能" onClick={onClear} size="small" type="text">清除</Button>}
+          </div>
+          {selectedSkill ? (
+            <>
+              <div className={styles.skillFields}>
+                {selectedSkill.fields.map((field) => (
+                  <label className={styles.skillField} key={field.key}>
+                    <span>{field.label}{field.required && <i>*</i>}</span>
+                    <Input
+                      aria-label={field.label}
+                      onChange={(event) => onSkillValueChange(field.key, event.target.value)}
+                      placeholder={field.placeholder}
+                      ref={(node) => { inputRefs.current[field.key] = node; }}
+                      status={focusFieldKey === field.key && !skillValues[field.key]?.trim() ? 'error' : undefined}
+                      value={skillValues[field.key] ?? ''}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className={styles.promptPreviewBlock}>
+                <span>实时提示词预览</span>
+                {editablePrompt ? (
+                  <Input.TextArea
+                    aria-label="最终提示词"
+                    autoSize={{ maxRows: 6, minRows: 3 }}
+                    onChange={(event) => onPromptChange?.(event.target.value)}
+                    value={prompt}
+                  />
+                ) : <p>{preview}</p>}
+              </div>
+            </>
+          ) : (
+            <div className={styles.popoverEmpty}>请选择一个技能开始配置。</div>
+          )}
+        </div>
       </div>
-      {selectedSkill ? (
-        <>
-          <div className={styles.skillFields}>
-            {selectedSkill.fields.map((field) => (
-              <label className={styles.skillField} key={field.key}>
-                <span>{field.label}{field.required && <i>*</i>}</span>
-                <Input
-                  aria-label={field.label}
-                  onChange={(event) => onSkillValueChange(field.key, event.target.value)}
-                  placeholder={field.placeholder}
-                  ref={(node) => { inputRefs.current[field.key] = node; }}
-                  status={focusFieldKey === field.key && !skillValues[field.key]?.trim() ? 'error' : undefined}
-                  value={skillValues[field.key] ?? ''}
-                />
-              </label>
-            ))}
-          </div>
-          <div className={styles.promptPreviewBlock}>
-            <span>实时提示词预览</span>
-            {editablePrompt ? (
-              <Input.TextArea
-                aria-label="最终提示词"
-                autoSize={{ maxRows: 6, minRows: 3 }}
-                onChange={(event) => onPromptChange?.(event.target.value)}
-                value={prompt}
-              />
-            ) : <p>{preview}</p>}
-          </div>
-        </>
-      ) : (
-        <div className={styles.popoverEmpty}>从上方推荐卡片选择技能后，可在这里补充生成要求。</div>
-      )}
     </PopoverShell>
   );
 }

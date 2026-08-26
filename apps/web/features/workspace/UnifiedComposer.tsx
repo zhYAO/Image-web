@@ -43,6 +43,7 @@ interface UnifiedComposerProps {
   selectedProvider?: string;
   selectedSkill?: Skill;
   skillPrompt: string;
+  skills: Skill[];
   skillValues: Record<string, string>;
   onAspectRatioChange: (ratio: AspectRatio) => void;
   onClearSkill: () => void;
@@ -58,6 +59,7 @@ interface UnifiedComposerProps {
   onReferenceAdd: (files: FileList) => void;
   onReferenceRemove: (index: number) => void;
   onResolutionChange: (resolution: ImageResolution) => void;
+  onSkillSelect: (skillId: string) => void;
   onSkillValueChange: (key: string, value: string) => void;
   onSubmit: () => void;
 }
@@ -81,6 +83,7 @@ export function UnifiedComposer({
   selectedProvider,
   selectedSkill,
   skillPrompt,
+  skills,
   skillValues,
   onAspectRatioChange,
   onClearSkill,
@@ -96,6 +99,7 @@ export function UnifiedComposer({
   onReferenceAdd,
   onReferenceRemove,
   onResolutionChange,
+  onSkillSelect,
   onSkillValueChange,
   onSubmit,
 }: UnifiedComposerProps) {
@@ -241,24 +245,28 @@ export function UnifiedComposer({
             onClear={onClearSkill}
             onOpenChange={(open) => onPopoverChange(open ? 'skill' : undefined)}
             onPromptChange={onSkillPromptChange}
+            onSelectSkill={onSkillSelect}
             onSkillValueChange={onSkillValueChange}
             open={activePopover === 'skill'}
             prompt={skillPrompt}
             selectedSkill={selectedSkill}
+            skills={skills}
             skillValues={skillValues}
           />
-          <Tooltip title={zhCN.composer.imageToolHint}>
-            <span className={styles.imageToolToggle}>
-              <Switch
-                aria-label={zhCN.composer.imageTool}
-                checked={imageToolEnabled}
-                disabled={mode === 'image' || Boolean(selectedSkill?.requiresImageTool)}
-                onChange={onImageToolChange}
-                size="small"
-              />
-              <span>{zhCN.composer.imageTool}</span>
-            </span>
-          </Tooltip>
+          {mode === 'chat' && (
+            <Tooltip title={zhCN.composer.imageToolHint}>
+              <span className={styles.imageToolToggle}>
+                <Switch
+                  aria-label={zhCN.composer.imageTool}
+                  checked={imageToolEnabled}
+                  disabled={Boolean(selectedSkill?.requiresImageTool)}
+                  onChange={onImageToolChange}
+                  size="small"
+                />
+                <span>{zhCN.composer.imageTool}</span>
+              </span>
+            </Tooltip>
+          )}
           <Button
             aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}

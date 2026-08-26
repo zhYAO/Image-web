@@ -53,9 +53,8 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   selectSkill: (selectedSkillId) =>
     set((state) => ({
       activePopover: selectedSkillId ? 'skill' : state.activePopover,
-      mode: selectedSkillId ? 'image' : state.mode,
       selectedSkillId,
-      skillValues: selectedSkillId ? {} : state.skillValues,
+      skillValues: selectedSkillId === state.selectedSkillId ? state.skillValues : {},
     })),
   setConfigDrawerOpen: (configDrawerOpen) => set({ configDrawerOpen }),
   setActivePopover: (activePopover) => set({ activePopover }),

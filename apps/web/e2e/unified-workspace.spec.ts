@@ -46,8 +46,7 @@ test('keeps the image composer usable on a mobile viewport', async ({ page }) =>
   await expect(page.getByRole('button', { name: '移除 mobile.webp' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '创作输入' })).toBeVisible();
   await expect(page.getByRole('button', { name: '发送创作请求' })).toBeVisible();
-  await expect(page.getByRole('switch', { name: '图片工具' })).toBeChecked();
-  await expect(page.getByRole('switch', { name: '图片工具' })).toBeDisabled();
+  await expect(page.getByRole('switch', { name: '图片工具' })).toHaveCount(0);
 });
 
 test('redirects legacy routes to the unified home', async ({ page }) => {

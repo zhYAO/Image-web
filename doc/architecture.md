@@ -30,9 +30,9 @@ flowchart LR
 | 模块 ID | 模块 | 职责与边界 |
 | --- | --- | --- |
 | M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 两栏布局、可折叠会话侧栏、会话选择和匿名恢复提示；旧路径只做重定向。 |
-| M02 | `Timeline` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态。 |
-| M03 | `UnifiedComposer` / `ToolSelector` | 显式聊天/生图模式、草稿、图片工具许可和提交；图片工具默认关闭，不直接调用 provider。 |
-| M04 | `ModelPopover` / `GenerationParameterPopover` / `SkillPopover` | 输入框上方互斥浮层：provider/model 与健康状态、能力驱动的比例/分辨率/数量、技能必填字段与实时提示词预览；窄屏保留兼容抽屉。参考图由输入框单点维护。 |
+| M02 | `Timeline` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态，并在展示层把白名单消息标签分段为只读折叠块，保留原始消息内容。 |
+| M03 | `UnifiedComposer` / `ToolSelector` | 显式聊天/生图模式、独立草稿、图片工具许可和提交；图片工具默认关闭且仅在聊天模式显示，显式聊天偏好独立于模式与技能强制启用状态，不直接调用 provider。 |
+| M04 | `ModelPopover` / `GenerationParameterPopover` / `SkillPopover` | 输入框上方互斥浮层：provider/model 与健康状态、能力驱动的比例/分辨率/数量、左侧技能列表及右侧必填字段与实时提示词预览；窄屏抽屉复用同一技能和字段状态。工具栏选择保持当前模式，首页快捷卡明确进入生图模式；参考图由输入框单点维护。 |
 | M05 | Chat Route + LangGraph | 认证、用户消息持久化、SSE、请求级 workflow/checkpointer、Doubao/MiniMax 与聊天 tool 编排。 |
 | M06 | Application API | 会话、生图、重生成、配额、技能、健康和资产 URL 的 Route Handlers。 |
 | M07 | Skill Registry | 三个内置技能、版本、指令和 provider/model capability。 |
@@ -163,7 +163,9 @@ sequenceDiagram
 
 首个内容块前遇到可重试的 LLM 瞬时错误，M05 最多自动重试一次；已有内容输出后失败则发送 `stream.failed` 并结束。未完成的 assistant 临时文本不作为刷新后的持久事实。
 
-图片工具默认不在 `tools` 中。用户主动勾选或选择声明该工具的技能后，M05 才绑定 `generate_image`；开启时明确出图意图必须触发，普通讨论不得创建批次。Doubao 与 MiniMax 分别实现 chat adapter，切换聊天 provider 不改变图片 provider，反之亦然。
+M02 仅在展示层识别 `think/reasoning`、`tool/tool_call`、`tool_result/observation`。解析器支持多块、嵌套和跨 SSE 分片；Markdown 围栏代码和行内代码中的标签不解析，未知、错配或流结束时仍残缺的标签按安全 Markdown 文本显示。流式未闭合的已识别块展开显示，收到完成事件后折叠；标签属性只展示经过过滤的 `name/tool/status`，不会触发工具执行、改写持久化正文或改变 HTTP/SSE 契约。真实 `tool.queued` 事件仍由现有生成卡片承载。
+
+图片工具默认不在 `tools` 中。开关只在聊天模式显示；进入生图模式时隐藏但保留用户显式聊天偏好，返回聊天模式后恢复。用户主动勾选或选择声明该工具的技能后，M05 才绑定 `generate_image`；技能要求该工具时聊天开关显示为启用且不可关闭，清除技能只解除强制状态。开启时明确出图意图必须触发，普通讨论不得创建批次。Doubao 与 MiniMax 分别实现 chat adapter，切换聊天 provider 不改变图片 provider，反之亦然。
 
 ### F03：直接生图与持久队列
 
@@ -349,7 +351,7 @@ stateDiagram-v2
 
 - 完成 M01–M04 和 Zustand slices。
 - 使用 mock adapter 覆盖聊天 delta、1–4 张 pending/processing/partial/succeeded/failed、expired、删除中和 provider unavailable。
-- 覆盖图片工具默认关闭/技能联动、参考图上传状态、技能必填字段、提示词预览、批量下载与 zh-CN key。
+- 覆盖受控标签的流式分段与折叠展示、图片工具显隐和技能联动、桌面/窄屏技能列表与配置、参考图上传状态、技能必填字段、提示词预览、批量下载与 zh-CN key。
 - `/chat`、`/image` 重定向到 `/`。
 - 完成响应式和三浏览器关键流程。
 

@@ -27,7 +27,7 @@ import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
-import { buildSkillPromptPreview, findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
+import { buildSkillPromptPreview, findModelCapability, normalizeGenerationSelection, SkillList } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { UnifiedComposer } from './UnifiedComposer';
 import { WorkspaceTimeline } from './WorkspaceTimeline';
@@ -112,7 +112,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     explicitEnabled: explicitImageToolEnabled,
     skillRequiresImage: selectedSkill?.requiresImageTool ?? false,
   });
-  const displayedImageToolEnabled = mode === 'image' || chatImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
   const resolvedSkillPrompt = buildSkillPromptPreview(selectedSkill, skillValues, drafts.image);
   const imageSubmissionPrompt = selectedSkill ? (skillPromptOverride ?? resolvedSkillPrompt) : drafts.image;
@@ -539,6 +538,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const chooseSkill = (skillId: string) => {
     setFocusSkillFieldKey(undefined);
     setSkillPromptOverride(undefined);
+    setMode('image');
+    selectSkill(skillId);
+  };
+
+  const selectToolbarSkill = (skillId: string) => {
+    setFocusSkillFieldKey(undefined);
+    setSkillPromptOverride(undefined);
     selectSkill(skillId);
   };
 
@@ -556,6 +562,30 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const activeSession = sessions.find((session) => session.id === activeSessionId);
   const mobileConfig = (
     <div className={styles.mobileConfig}>
+      <div>
+        <div className={styles.mobileSkillHeading}>
+          <span className={styles.popoverLabel}>技能</span>
+          {selectedSkill && (
+            <Button
+              aria-label="清除技能"
+              onClick={() => {
+                setFocusSkillFieldKey(undefined);
+                setSkillPromptOverride(undefined);
+                selectSkill(undefined);
+              }}
+              size="small"
+              type="text"
+            >
+              清除
+            </Button>
+          )}
+        </div>
+        <SkillList
+          onSelectSkill={selectToolbarSkill}
+          selectedSkillId={selectedSkillId}
+          skills={skills}
+        />
+      </div>
       <label>
         <span className={styles.popoverLabel}>生成模型</span>
         <Select
@@ -677,7 +707,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             draft={drafts[mode]}
             focusSkillFieldKey={focusSkillFieldKey}
             health={health}
-            imageToolEnabled={displayedImageToolEnabled}
+            imageToolEnabled={chatImageToolEnabled}
             mode={mode}
             onAspectRatioChange={setAspectRatio}
             onClearSkill={() => {
@@ -702,6 +732,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             onReferenceAdd={addReferences}
             onReferenceRemove={removeReference}
             onResolutionChange={setResolution}
+            onSkillSelect={selectToolbarSkill}
             onSkillPromptChange={setSkillPromptOverride}
             onSkillValueChange={(key, value) => {
               setSkillPromptOverride(undefined);
@@ -716,6 +747,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             selectedProvider={selectedProvider}
             selectedSkill={selectedSkill}
             skillPrompt={mode === 'image' ? imageSubmissionPrompt : drafts.chat}
+            skills={skills}
             skillValues={skillValues}
           />
         </div>

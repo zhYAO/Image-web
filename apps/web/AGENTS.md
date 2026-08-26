@@ -20,7 +20,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `/` is the only workspace. `/chat` and `/image` remain redirects; do not introduce a second chat/image session store, timeline, or route implementation.
 - Chat and image drafts stay independent. Server sessions and timeline items come from the gateway; Zustand holds only UI and request-transient state.
-- In image mode, the image-tool switch is a checked, locked presentation state. It must not mutate the user's explicit chat-tool preference; returning to chat restores that preference.
+- In image mode, the image-tool switch is not rendered. Image mode still derives image capability internally without mutating the user's explicit chat-tool preference; returning to chat restores that preference, while a selected skill may force-enable it.
+- Toolbar and mobile-drawer skill selection preserve the current mode; only the empty-state quick skill cards explicitly enter image mode. Desktop and mobile configuration must share `selectedSkillId` and `skillValues` rather than creating a second skill state.
+- Controlled assistant tags are presentation-only. Parse only the documented whitelist, keep raw persisted/SSE content unchanged, and render unknown, mismatched, code-contained, or finally incomplete tags through the existing safe Markdown path.
 - Direct image generation and chat-tool generation use the same timeline card and status semantics, while preserving their `direct` and `chat_tool` sources.
 
 ## Reference-image ownership
