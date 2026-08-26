@@ -13,6 +13,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Sources of truth
 
 - `../../doc/requirements.md` is the only product-requirements source. `../../doc/tech-selection.md` records implementation decisions, and `../../doc/architecture.md` records runtime boundaries; neither may invent requirements.
+- `../../doc/project-progress.md` is the only source for current delivery status, blockers, and next actions. Requirements marked `covered`, commit titles, existing code, or historical reports must not be used to infer that a task is `done`.
 - The workspace supports versioned mock and real HTTP modes behind the same gateway contract. Phase 1B integration code exists, but real Supabase, SSE, provider, queue, and private Storage readiness must only be claimed after the corresponding environment evidence is recorded.
 - Keep the generated Next.js rules block above intact. Before using a Next.js API, read the matching local guide under `node_modules/next/dist/docs/`.
 
@@ -35,4 +36,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 ## Change and verification discipline
 
 - Preserve unrelated staged, unstaged, and untracked work. Keep patches narrow and do not format or rewrite project documents unless the task explicitly requires it.
+- When a task completes acceptance, update `../../doc/project-progress.md` in the same change with its status, validation date, automated results, and applicable real-environment evidence. A task is `done` only when all evidence required by that ledger is current; downgrade it when evidence expires or the environment drifts.
 - Run `pnpm lint`, `pnpm typecheck`, `pnpm test:run`, `pnpm build`, and `pnpm e2e` before claiming the web workspace is ready.
