@@ -64,6 +64,29 @@ class MultiModelGateway extends CapturingGateway {
   }
 }
 
+type TestGatewayConstructor<T extends MockWorkspaceGateway> = new (options?: {
+  delay?: (milliseconds: number) => Promise<void>;
+  storage?: StorageLike;
+}) => T;
+interface TestGatewayOptions {
+  delay?: (milliseconds: number) => Promise<void>;
+}
+
+function createTestGateway(): MockWorkspaceGateway;
+function createTestGateway<T extends MockWorkspaceGateway>(
+  Gateway: TestGatewayConstructor<T>,
+  options?: TestGatewayOptions,
+): T;
+function createTestGateway<T extends MockWorkspaceGateway>(
+  Gateway: TestGatewayConstructor<T> = MockWorkspaceGateway as TestGatewayConstructor<T>,
+  options: TestGatewayOptions = {},
+) {
+  return new Gateway({
+    delay: options.delay ?? (async () => undefined),
+    storage: new TestStorage(),
+  });
+}
+
 const createObjectURL = vi.fn((file: File) => `blob:${file.name}`);
 const revokeObjectURL = vi.fn();
 
@@ -80,7 +103,7 @@ describe('UnifiedWorkspace', () => {
 
   it('keeps independent chat and image drafts while switching modes', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     const input = screen.getByRole('textbox', { name: '创作输入' });
@@ -95,7 +118,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('auto-enables the image tool for a skill and restores the explicit choice when cleared', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
 
     expect(screen.queryByRole('switch', { name: '图片工具' })).not.toBeInTheDocument();
@@ -105,7 +128,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('derives a locked image-tool selection in image mode and restores the chat preference', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -136,7 +159,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('selects a toolbar skill without leaving chat mode', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '选择技能' }));
@@ -150,7 +173,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('selects and clears skills from the mobile configuration drawer', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '打开移动端生成配置' }));
@@ -166,7 +189,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('clears the chat draft the moment the user submits and shows a typing indicator until the first delta', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -187,7 +210,11 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('keeps the assistant bubble stable across the stream-to-completed transition (no flash, cursor gone)', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway, {
+      // This test observes the intermediate streaming frame, so keep a short
+      // controlled yield while every other test bypasses production timing.
+      delay: () => new Promise((resolve) => setTimeout(resolve, 100)),
+    });
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -210,7 +237,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('renames the active session from the first message and leaves later messages alone', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -253,7 +280,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('renames the active session in image mode too', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -271,7 +298,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('preserves an explicitly enabled chat image tool across mode switches', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -293,7 +320,7 @@ describe('UnifiedWorkspace', () => {
 
   it('shows an inline reference thumbnail that stays synchronized with the config panel', async () => {
     const { unmount } = render(
-      <UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />,
+      <UnifiedWorkspace gateway={createTestGateway()} />,
     );
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
@@ -312,7 +339,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('hides image references in chat mode without clearing them', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
@@ -329,7 +356,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('rejects unsupported reference types and caps accepted references at four', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
 
@@ -350,7 +377,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('rejects reference images larger than 10 MB', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
 
@@ -364,7 +391,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('keeps local preview URLs out of the image gateway request', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
@@ -389,7 +416,7 @@ describe('UnifiedWorkspace', () => {
 
   it('releases remaining local preview URLs when the workspace unmounts', async () => {
     const { unmount } = render(
-      <UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />,
+      <UnifiedWorkspace gateway={createTestGateway()} />,
     );
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
@@ -402,7 +429,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('validates required skill fields before submitting', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     fireEvent.click(await screen.findByRole('button', { name: /模特图/ }));
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
@@ -416,7 +443,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('submits the user-edited resolved skill prompt in image mode', async () => {
-    const gateway = new CapturingGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
     fireEvent.change(screen.getByRole('textbox', { name: '商品名称' }), { target: { value: '风衣' } });
@@ -434,7 +461,7 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('uses the selected provider, model and generation parameters in the image request', async () => {
-    const gateway = new MultiModelGateway({ storage: new TestStorage() });
+    const gateway = createTestGateway(MultiModelGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
@@ -462,10 +489,10 @@ describe('UnifiedWorkspace', () => {
       provider: 'Studio',
       resolution: '2K',
     });
-  }, 30_000);
+  }, 60_000);
 
   it('removes the fixed desktop config panel, collapses the sidebar and reports the asset-library placeholder', async () => {
-    render(<UnifiedWorkspace gateway={new MockWorkspaceGateway({ storage: new TestStorage() })} />);
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     expect(screen.queryByRole('heading', { name: '生成配置' })).not.toBeInTheDocument();

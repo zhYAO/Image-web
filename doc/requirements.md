@@ -1,8 +1,8 @@
 # zimage 需求文档（PRD / SRS）
 
-> **版本**：v1.3
+> **版本**：v1.4
 > **状态**：开发基线
-> **更新日期**：2026-08-21
+> **更新日期**：2026-08-27
 > **唯一需求源**：本文件。`tech-selection.md` 负责技术决策，`architecture.md` 负责运行时结构；两者不得反向创造需求。
 
 ## 1. 产品边界与交付顺序
@@ -16,6 +16,15 @@ ZImage 是面向电商设计师的对话式图片工作台。Phase 1 只提供�
 3. 接入会话 API、SSE、持久队列、模型服务、私有 Storage 与运维能力。
 
 本轮文档修订不代表前端或后端已经实现。
+
+### 1.1 Phase 1A / 1B 零费内测口径
+
+- Phase 1A 的浏览器门禁固定为 Chromium、Microsoft Edge 与 Playwright WebKit；本轮不要求真实 Safari。
+- Phase 1B 在本地 Next.js 生产模式 HTTP 服务上验收，环境必须使用 `NEXT_PUBLIC_DATA_MODE=http` 与 `ZIMAGE_DEPLOYMENT_ENV=acceptance`，不依赖 Vercel。
+- Phase 1C 在本轮表示“零费内测门禁”，通过后只允许受控内测，不得表述为生产就绪。
+- SC-05、SC-07 中的真实 Safari 部分、SC-08、SC-10、SC-15，以及 OPS-06、OPS-07、OPS-11 的生产发布部分保留原稳定 ID，但归入后续生产门禁。本轮不因这些外部门禁未完成而阻断 Phase 1A/1B 的零费内测验收。
+- 需求追溯矩阵的 `covered` 只表示已有实现或验证落点，不表示对应生产证据已经完成，也不自动将阶段任务提升为 `done`。
+- 阿里云 ECS、Docker、TLS、反向代理、生产发布与回滚另立计划；本轮不创建或部署相关资源。
 
 ## 2. 成功指标
 
@@ -406,7 +415,16 @@ ZImage 是面向电商设计师的对话式图片工作台。Phase 1 只提供�
 | NG-17 | TS-I18N-01 | M01/M18 | deferred | en-US Phase 2 |
 | NG-18 | TS-SCOPE-04 | M18 | deferred | 完整无障碍认证 Phase 2 |
 
-## 9. 发布门禁
+## 9. 零费内测与生产门禁
+
+Phase 1C 零费内测前必须同时满足：
+
+- Chromium、Edge、Playwright WebKit 的 mock 关键流程通过；不要求真实 Safari。
+- 本地 HTTP 验收完成匿名恢复、跨用户拒绝、上传、Doubao/MiniMax、Seedream 三个单图场景、signed URL 与清理闭环。
+- Web 与 Domain 的 branches/functions/lines/statements 均不低于 70%，并完成 moderation 故障注入、Sentry 脱敏 replay 和 Free 项目手工联合恢复。
+- Gemini 保持 disabled；正常验收只生成 3 张 Seedream 图片，累计硬上限 5 张，未知提交结果不得自动重试。
+
+以下条款是后续生产门禁，不属于零费内测完成声明：真实 Safari、1000 条/95% 安全集、Seedream/Gemini 各 n≥30 与 2K P95、Supabase Pro 自动每日数据库备份、独立 Storage 每日备份、生产部署和回滚。
 
 Phase 1 发布前必须同时满足：
 

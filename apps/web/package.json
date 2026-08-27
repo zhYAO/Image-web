@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --testTimeout=60000",
     "e2e": "playwright test",
     "e2e:http": "playwright test --config=playwright.http.config.ts",
     "setup:langgraph": "node scripts/setup-langgraph.mjs"

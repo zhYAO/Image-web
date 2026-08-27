@@ -67,6 +67,33 @@ describe('chat service', () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
+  it('maps moderation failures to the public MODERATION contract without leaking provider details', async () => {
+    const rawDetail = 'prompt=https://private.example/image.png token=provider-secret';
+    const providerFailure = Object.assign(new ChatProviderFailure('moderation', false), { rawDetail });
+    const runner = createChatTurnRunner({
+      complete: vi.fn(),
+      recordProviderResult: vi.fn(),
+      start: vi.fn().mockResolvedValue({ created: false, session }),
+      streamProvider: async function* () {
+        throw providerFailure;
+      },
+      submitImage: vi.fn(),
+    });
+
+    const events = await collect(runner({ message: 'unsafe input', tools: [], userId: crypto.randomUUID() }));
+    expect(events).toEqual([{
+      error: {
+        code: 'MODERATION',
+        message: '内容未通过安全检查，请调整后重试。',
+        retryable: false,
+      },
+      type: 'stream.failed',
+    }]);
+    expect(JSON.stringify(events)).not.toContain(rawDetail);
+    expect(JSON.stringify(events)).not.toContain('private.example');
+    expect(JSON.stringify(events)).not.toContain('provider-secret');
+  });
+
   it('queues explicit image intent through the shared image transaction only when the tool is enabled', async () => {
     const submitImage = vi.fn().mockResolvedValue({
       batchId: '30000000-0000-4000-8000-000000000003',

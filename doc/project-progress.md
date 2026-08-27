@@ -6,11 +6,11 @@
 
 | 项目 | 当前值 |
 | --- | --- |
-| 审计日期 | 2026-08-26 |
-| Git 基线 | `setup2@80db326d8c34` |
-| 远端对齐 | 审计开始时与 `origin/setup2` 一致 |
-| 工作区 | 审计开始时干净 |
-| 审计边界 | 本地代码与自动化检查；Supabase、Vercel 只读复核；未修改数据库、云端开关或部署状态 |
+| 审计日期 | 2026-08-27 |
+| Git 基线 | `setup2@64eab6d874a6` |
+| 远端对齐 | 本轮不以远端分支或部署状态作为验收前提 |
+| 工作区 | 基线干净；本文件与同批实现变更尚未提交 |
+| 审计边界 | 本地代码、自动化检查、主/恢复 Supabase 受控写入与现有免费 Provider 验收；不操作 Vercel、不测试真实 Safari、不创建阿里云资源、不升级或充值 |
 
 ## 状态与 Done 定义
 
@@ -33,10 +33,19 @@
 
 | 阶段 | 状态 | 当前结论 |
 | --- | --- | --- |
-| Phase 1A：统一工作区与 mock | `in_progress` | 核心实现、静态门禁和完整 Vitest 已闭环；覆盖率与隔离浏览器矩阵仍待闭环。 |
-| Phase 1B：真实运行链路 | `blocked` | 主项目基础设施已落地，但恢复项目、真实图片链路、HTTP/RLS、Sentry、安全集和 Provider 证据未闭环。 |
-| Phase 1C：发布验收 | `blocked` | 需求状态矩阵完成；CI、Preview、性能、Safari、备份和联合恢复等发布证据不足。 |
+| Phase 1A：统一工作区与 mock | `done` | 2026-08-27 静态检查、98/98 Web 与 27/27 Domain Vitest、四项覆盖率 ≥70%、Chromium/Edge/Playwright WebKit mock E2E 全部闭环。 |
+| Phase 1B：真实运行链路 | `in_progress` | 恢复项目迁移、142 条 pgTAP、HTTP/RLS、Doubao、MiniMax 工具路径及 Seedream 三单图场景已取得证据；Sentry 三端真实事件和联合恢复仍受环境前置阻塞。 |
+| Phase 1C：零费内测门禁 | `in_progress` | 需求矩阵与主要本地/真实链路已完成，但必须等 Phase 1B 的 Sentry 与联合恢复证据闭环；此状态不代表生产就绪。 |
 | Phase 2 | `todo` | 必须在 Phase 1C 全部必需任务 `done` 后重新立项。 |
+
+## 阶段结束判定与剩余工期
+
+| 阶段 | 结束判定 | 当前剩余开发量 |
+| --- | --- | --- |
+| Phase 1A | lint、typecheck、普通 Vitest、Web/Domain 四项覆盖率均 ≥70%、Chromium/Edge/Playwright WebKit mock E2E 全绿，且测试产物可清理。 | 已完成；无剩余开发。 |
+| Phase 1B | 主/恢复项目均为 13 个迁移，8 套/142 条 pgTAP 与生成类型一致；本地真实 HTTP 身份、RLS、上传、Doubao、MiniMax 工具、Seedream 三单图、signed URL 与 cleanup 通过；moderation 与 Sentry 三端脱敏事件通过；Free 联合恢复通过。 | 约 1–2 人日，排除等待 Sentry 凭证、Docker/`pg_dump` 和恢复项目服务端密钥的时间。 |
+| Phase 1C：零费内测 | Phase 1A/1B 均完成，最终证据账本、环境开关、临时诊断入口撤销、工作区与测试产物检查通过。 | Phase 1B 解阻后约 0.5 人日，包含最终复验与文档收口。 |
+| 后续生产门禁 | 真实 Safari、Gemini、1000 条/95% 安全集、双图片 Provider 各 30 次及 P95、Supabase Pro 自动备份、每日独立对象备份、生产部署与回滚全部取得证据。 | 不属于本轮；需在阿里云部署方案确定后另行估算。 |
 
 ## 任务账本
 
@@ -44,26 +53,34 @@
 
 | ID | 任务 | 状态 | 当前证据 | 缺口 / 下一验收 |
 | --- | --- | --- | --- | --- |
-| P1A-01 | 统一工作区与 mock | `in_progress` | 当前代码包含统一工作区与版本化 mock；2026-08-26 的 lint、typecheck、生产构建通过，`pnpm test:run` 为 Web 97/97、Domain 27/27。 | `pnpm test:coverage` 未通过：Web 的 `unified-workspace.test.tsx` 在覆盖率插桩下 10/20 失败，主要为 15/30 秒超时；修复后重新取得完整覆盖率与隔离 mock E2E 成功结果。 |
-| P1A-02 | 浏览器矩阵 | `blocked` | Playwright 已配置 Chromium desktop、Edge tablet 和 WebKit mobile 三个 mock 项目。 | 2026-08-26 隔离运行因同目录已有 Next dev（PID 74688、端口 3000）占用单实例锁而未启动 3100 测试服务器；真实 Safari 验收仍缺失。不得占用或结束用户现有开发服务器。 |
+| P1A-01 | 统一工作区与 mock | `done` | 2026-08-27：测试 Gateway 注入立即完成 delay，生产 mock 的 180/700/900ms 语义未改；`pnpm test:run` 为 Web 98/98、Domain 27/27；`unified-workspace.test.tsx` 为 20/20。Web 覆盖率 89.75/85.64/76.30/89.75，Domain 为 95.83/82.60/72.72/95.83（statements/branches/functions/lines）。 | 代码或测试基线变化时重新运行全部门禁。 |
+| P1A-02 | 浏览器矩阵 | `done` | 2026-08-27 `pnpm e2e`：Chromium desktop、Edge tablet、Playwright WebKit mobile 共 15 passed，6 个桌面专属用例按设计跳过。 | 真实 Safari 已移入后续生产门禁，不影响本轮状态。 |
 
 ### Phase 1B：真实运行链路
 
 | ID | 任务 | 状态 | 当前证据 | 缺口 / 下一验收 |
 | --- | --- | --- | --- | --- |
 | P1B-01 | 主项目迁移同步 | `done` | 2026-08-26 只读复核：本地与主 Supabase 项目均为 13 个迁移。 | 若本地迁移或主项目迁移历史发生变化，立即重新核验并按证据降级。 |
-| P1B-02 | 恢复项目同步 | `blocked` | 2026-08-26 只读复核：恢复项目为 10 个迁移。 | 补齐 `generation_emergency_stop`、`modern_secret_key_scheduling`、`enabled_overrides_health`，运行当前 142 条 pgTAP，并验证生成类型一致。 |
+| P1B-02 | 恢复项目同步 | `done` | 2026-08-27 仅向恢复项目依次应用仓库已有的 3 个迁移；主/恢复项目均为 13 个迁移。恢复项目 8 套 pgTAP 共 142 条断言全绿；两项目实时生成类型字节一致，仓库类型仅同步 PostgREST 14.17 版本标记。两项目 Advisor 均无 ERROR，WARN 已按暴露面记录。 | 迁移或项目配置漂移时重新核验；本项不等于联合恢复演练完成。 |
 | P1B-03 | 运行基础设施 | `in_progress` | 主项目存在 LangGraph 表、`uploads`/`generated` 两个私有 bucket、`generation-worker`/`cleanup-worker` 两个 ACTIVE Worker；generation/cleanup Cron 最近运行成功。 | 仍需与真实图片、清理、告警和恢复链路联合验收；单项资源存在不等于运行闭环。 |
-| P1B-04 | 匿名身份与聊天 | `in_progress` | 2026-08-26 只读复核：16 个匿名用户、3 个会话、13 条时间线消息。 | 缺当前 HTTP E2E、跨用户 RLS 隔离和完整恢复证据。 |
-| P1B-05 | 图片生成与 Storage | `blocked` | 生成和上传运行开关已启用；相关 bucket 为私有。当前 generation、reference upload 和 Storage object 均为 0；Seedream 最新仅 2 个样本且状态为 warning。 | 先确认费用授权与硬上限，再完成上传、排队、生成、signed URL、清理和恢复闭环。 |
-| P1B-06 | Sentry、安全与 Provider 验收 | `blocked` | 当前无足以关闭任务的真实环境证据。 | 补齐脱敏 Sentry replay、1000 条安全集，以及每个 Provider 30 个样本的验收闭环。 |
+| P1B-04 | 匿名身份与聊天 | `done` | 2026-08-27 本地生产模式 HTTP：匿名身份建立/刷新、第二身份跨用户读取与重命名拒绝、1×1 PNG 上传所有权/MIME/尺寸、Doubao 短 SSE 首块/完成/持久化/清理均通过；另取得一次真实 MiniMax 普通聊天响应。 | 身份、RLS 或聊天路由变化时重新验收。 |
+| P1B-05 | 图片生成与 Storage | `done` | 2026-08-27 真实 Seedream：MiniMax 显式工具 `source=chat_tool`、直接无参考图、直接带 16×16 受控 PNG 三个单图场景成功；均验证批次/active 资产/signed URL/所有权拒绝/刷新恢复与 cleanup。累计硬上限 5/5：1 次明确未提交、3 张成功、1 次因 1×1 参考图不满足 Provider 最小边长而明确失败；未发生未知结果重试。结束后验收会话、批次、生成、Storage 对象和待处理 cleanup 均为 0。 | 真实图片预算已封顶，本轮禁止再调用；双图片 Provider 各 30 次及 P95 属后续生产门禁。 |
+| P1B-06 | 安全与脱敏 | `in_progress` | Provider moderation 错误归一化测试、Chat `MODERATION` 公共错误以及图片 Provider 原始 prompt/URL/token 不泄漏测试通过；现有 Sentry 统一脱敏单测通过。 | 仍缺浏览器、Next 服务端、Edge helper 三类 Sentry Developer Free 真实诊断事件；1000 条/95% 安全集属于后续生产门禁。 |
+| P1B-07 | Free 联合恢复 | `blocked` | 恢复项目 schema/fixture 基线和 1×1 PNG 固定 SHA-256 已核对；迁移与 pgTAP 已通过。CLI 逻辑 dump 在写入仓库外临时目录前因本机缺 Docker Desktop/`pg_dump` 失败，恢复项目 Storage 上传也缺服务端密钥。 | 提供可用 Docker Desktop 或独立 `pg_dump`，并配置恢复项目服务端密钥后，完成 dump、fixture 导入、1×1 PNG 上传、signed URL、跨用户拒绝及 cleanup；只能声明手工恢复通过。 |
 
-### Phase 1C：发布验收
+### Phase 1C：零费内测门禁
 
 | ID | 任务 | 状态 | 当前证据 | 缺口 / 下一验收 |
 | --- | --- | --- | --- | --- |
 | P1C-01 | 需求状态矩阵 | `done` | 145 个需求 ID 均已归入 `covered`、`deferred` 或 `non-goal`；当前统计为 125 / 5 / 15。 | 需求或映射变化时重新审核；`covered` 不自动提升其他交付任务状态。 |
-| P1C-02 | 覆盖率、CI、性能、Safari、备份和发布 | `blocked` | 本地 lint、typecheck、普通 Vitest 和生产构建通过；2026-08-26 只读复核未发现 Vercel 项目。 | 当前 Web 覆盖率命令失败；同时缺远端 CI、Vercel Preview、性能、真实 Safari、备份、联合恢复和生产证据。 |
+| P1C-02 | 零费内测证据收口 | `in_progress` | 本地 lint、typecheck、普通 Vitest、覆盖率、生产构建、三引擎 mock E2E、真实 HTTP/Provider 链路已取得证据；不依赖 Vercel 或真实 Safari。 | 等 P1B-06 的 Sentry 三端事件与 P1B-07 的 Free 联合恢复完成后，撤销临时诊断配置并做最终干净工作区检查。 |
+
+### 后续生产门禁（不计入 Phase 1A/1B 完成）
+
+| ID | 门禁 | 状态 | 完成条件 |
+| --- | --- | --- | --- |
+| PROD-01 | 浏览器与安全规模证据 | `todo` | 真实 Safari、Gemini、1000 条安全集且准确率 ≥95%、双图片 Provider 各 30 次及 P95。 |
+| PROD-02 | 备份与发布 | `todo` | Supabase Pro 自动备份、每日独立对象备份、阿里云 ECS/Docker/TLS/反向代理、生产发布与回滚演练。 |
 
 ### Phase 2
 
@@ -73,16 +90,23 @@
 
 ## 高优先级风险
 
-> **费用与授权风险：** 主 Supabase 项目当前已启用 generation、Seedream 和 generation Cron，但尚无图片成功样本。在继续任何真实图片调用前，必须由有权限的负责人确认费用授权、可核验的硬上限和紧急停止路径。确认前 P1B-05 保持 `blocked`。
+> **费用硬停止：** 2026-08-27 真实图片验收已达到累计硬上限 5/5。本轮不得继续调用 Seedream 或新增图片 Provider；Gemini 必须保持 disabled。
 
 ## 下一阶段执行顺序
 
-1. 核验 generation / Seedream 的费用授权与硬限制。
-2. 补齐 restore 项目最后 3 个迁移，运行当前 142 条 pgTAP，并验证生成类型一致。
-3. 完成真实图片上传、排队、生成、signed URL、清理和恢复闭环。
-4. 创建 Vercel Preview，运行 HTTP / RLS E2E 和 Sentry 脱敏 replay。
-5. 完成 Provider 样本、安全集、性能、Safari、备份与联合恢复后关闭 Phase 1C。
-6. Phase 1C 全部 `done` 后再讨论 Phase 2。
+1. 配置 Sentry Developer Free 的浏览器/Next/Edge DSN 与只读 Token，完成三类脱敏事件并撤销诊断入口。
+2. 提供 Docker Desktop 或独立 `pg_dump`，并配置恢复项目服务端密钥，完成 Free 联合恢复。
+3. 重新运行最终本地门禁、清理测试产物并更新本账本，关闭 Phase 1B 与零费 Phase 1C。
+4. 阿里云 ECS、Docker、TLS、反向代理与生产回滚另立计划；Phase 2 仅在零费 Phase 1C 完成后讨论。
+
+## 2026-08-27 零费内测证据快照
+
+- 本地门禁：`pnpm lint`、`pnpm typecheck`、`pnpm test:run`、`pnpm test:coverage`、`pnpm build` 均退出码 0；Web 98/98、Domain 27/27，四项覆盖率均 ≥70%。
+- 浏览器：`pnpm e2e` 在 Chromium desktop、Edge tablet、Playwright WebKit mobile 上 15 passed / 6 skipped；不要求真实 Safari。
+- Worker/Provider：图片 Provider adapter 9/9，Chat adapter 与 Edge 依赖 9/9；moderation 归一化与脱敏用例通过。
+- Supabase：主/恢复项目均 13 个迁移；恢复项目 8 套/142 条 pgTAP 全绿；实时类型字节一致；Advisor 无 ERROR。
+- 真实 HTTP：身份/RLS、1×1 上传、Doubao SSE、MiniMax 普通聊天与显式工具路径、Seedream 三个单图场景取得证据；所有验收实体与 Storage 对象清理为 0。
+- 当前阻塞：本地未配置 Sentry DSN/只读 Token；CLI dump 缺 Docker Desktop/`pg_dump`；恢复项目 Storage 上传缺服务端密钥。不得据此声明 Phase 1B 或 Phase 1C 完成。
 
 ## 2026-08-26 证据快照
 

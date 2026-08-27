@@ -5,6 +5,8 @@ import {
   buildSeedreamRequest,
   decodeGeminiResponse,
   decodeSeedreamResponse,
+  generateSeedreamImage,
+  ImageProviderError,
   type ProviderImageInput,
 } from '../_shared/image-providers';
 
@@ -90,5 +92,35 @@ describe('image provider adapters', () => {
     expect(() => decodeGeminiResponse({ candidates: [] })).toThrow('provider_response_missing_image');
     expect(() => decodeSeedreamResponse({ data: [{ url: 'https://example.com/result.png' }] }))
       .toThrow('provider_response_missing_image');
+  });
+
+  it('normalizes a provider safety response without retaining its prompt, URL or token', async () => {
+    const rawProviderBody = {
+      error: {
+        message: 'sensitive prompt=https://private.example/image.png token=provider-secret',
+        type: 'moderation_blocked',
+      },
+    };
+    const fetcher = async () => new Response(JSON.stringify(rawProviderBody), {
+      headers: { 'content-type': 'application/json' },
+      status: 400,
+    });
+
+    let failure: unknown;
+    try {
+      await generateSeedreamImage(input, 'provider-secret', fetcher as typeof fetch);
+    } catch (error: unknown) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ImageProviderError);
+    expect(failure).toMatchObject({
+      code: 'moderation',
+      message: 'provider_content_blocked',
+      retryable: false,
+    });
+    expect(JSON.stringify(failure)).not.toContain('sensitive prompt');
+    expect(JSON.stringify(failure)).not.toContain('private.example');
+    expect(JSON.stringify(failure)).not.toContain('provider-secret');
   });
 });

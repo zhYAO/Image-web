@@ -1,8 +1,8 @@
 # zimage 架构文档
 
-> **版本**：v1.3
-> **状态**：与 `requirements.md`、`tech-selection.md` v1.3 对齐
-> **更新日期**：2026-08-21
+> **版本**：v1.4
+> **状态**：与 `requirements.md`、`tech-selection.md` v1.4 对齐
+> **更新日期**：2026-08-27
 
 ## 1. 架构目标
 
@@ -340,7 +340,8 @@ stateDiagram-v2
 | Provider 健康 | 30% warning；>50% 且 n≥10 unavailable | UI 警示、禁止默认选择、用户确认替代 |
 | 内容安全 | 固定集 ≥95% | 未达标阻断发布 |
 | 测试覆盖率 | 前后端均 ≥70% | CI 阻断 |
-| 浏览器 | Chrome/Edge/Safari 最近两版 | 关键 E2E 阻断 |
+| 浏览器（零费内测） | Chromium/Edge/Playwright WebKit | mock 关键 E2E 阻断 |
+| 浏览器（生产） | Chrome/Edge/真实 Safari 最近两版 | 后续生产门禁 |
 | 灾备 | RPO ≤24h、RTO ≤4h | 每日双备份、季度演练 |
 
 并发保护按用户/API/provider 分层：速率限制先于队列；配额预占与 batch 创建同事务；worker 有全局与 provider 级并发上限；队列积压达到 critical 时停止接受新的付费图片任务，但聊天和历史读取可继续。
@@ -353,7 +354,7 @@ stateDiagram-v2
 - 使用 mock adapter 覆盖聊天 delta、1–4 张 pending/processing/partial/succeeded/failed、expired、删除中和 provider unavailable。
 - 覆盖受控标签的流式分段与折叠展示、图片工具显隐和技能联动、桌面/窄屏技能列表与配置、参考图上传状态、技能必填字段、提示词预览、批量下载与 zh-CN key。
 - `/chat`、`/image` 重定向到 `/`。
-- 完成响应式和三浏览器关键流程。
+- 完成响应式和 Chromium、Edge、Playwright WebKit 三引擎关键流程；不要求真实 Safari。
 
 ### Phase 1B：服务接入
 
@@ -361,13 +362,21 @@ stateDiagram-v2
 - 接入 F02、F03、F04、F05、F06、F07，完成故障注入。
 - 接入 Sentry、共享健康窗口、配额和内容安全固定集。
 - 接入 Doubao/MiniMax chat adapter，并验证与 Seedream/Gemini 图片选择相互独立。
+- 使用平台无关的本地或 HTTPS Next.js HTTP 服务验收；本轮固定本地生产模式服务，不依赖 Vercel。
+- 真实调用限于 Doubao 一次短 SSE、MiniMax 一次显式聊天工具生图和 Seedream 三个 `count=1` 场景；累计第 6 次图片请求必须停止。
 
-### Phase 1C：生产门禁
+### Phase 1C：零费内测门禁
 
-- 达到 70% 覆盖率、95% 安全准确率与浏览器矩阵。
-- 达到 2K P95、provider 成功率、恢复率、错误 schema、告警准确率和侧栏性能门禁。
+- 该阶段只证明受控内测可用，不代表生产就绪。
+- 完成 70% 覆盖率、三引擎 mock E2E、本地 HTTP/RLS/Provider/Storage/cleanup、moderation 故障注入、Sentry Free 脱敏 replay 与 Free 项目手工联合恢复。
+- Gemini 保持 disabled；不升级套餐、不充值、不创建生产部署。
+
+### 后续生产门禁
+
+- 达到 1000 条固定安全集 95% 准确率与真实 Safari 浏览器矩阵。
+- 达到 Seedream/Gemini 各 n≥30 的 2K P95/成功率、恢复率、错误 schema、告警准确率和侧栏性能门禁。
 - 启用每日数据库备份、每日 Storage 外部复制并完成一次联合恢复演练。
-- 以 preview 验证后人工 promote 生产；应用可回退上一制品，数据库变更遵循 expand/contract。
+- 完成另立的阿里云 ECS/Docker/TLS/反向代理或其他目标平台方案，再进行生产发布和回滚演练；数据库变更遵循 expand/contract。
 - 所有 `requirements.md` 稳定 ID 状态只能为 `covered`、`deferred` 或 `non-goal`；不得存在未决冲突。
 - CI 必须通过 secret、env schema、生成数据库类型、migration drift、显式 GRANT/RLS 和负向权限门禁。
 

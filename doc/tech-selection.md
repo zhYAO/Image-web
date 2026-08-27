@@ -1,18 +1,20 @@
 # zimage 技术选型文档
 
-> **版本**：v1.3
-> **状态**：与 `requirements.md` v1.3 对齐的开发决策
-> **更新日期**：2026-08-21
+> **版本**：v1.4
+> **状态**：与 `requirements.md` v1.4 对齐的开发决策
+> **更新日期**：2026-08-27
 
 ## 1. 选型原则与实施顺序
 
 技术选型服务于统一首页，不再按独立页面拆分系统。Phase 1 按以下顺序实施：
 
 1. `UnifiedWorkspace` 前端 mock：覆盖聊天流、排队、部分成功、失败、过期和删除等状态。
-2. Chrome、Edge、Safari 最近两个主版本完成关键流程验收。
+2. Chromium、Microsoft Edge、Playwright WebKit 完成零费内测关键流程验收；真实 Safari 留在生产门禁。
 3. 接入会话、SSE、Supabase Queues、provider、private Storage、告警与备份。
 
 当前文档只批准技术方向，不表示任何代码已经交付。
+
+本轮 Phase 1B 使用本地 Next.js 生产模式 HTTP 服务，不依赖 Vercel。`PHASE1B_CHAT_MODEL` 只接受 `doubao`，`PHASE1B_CHAT_TOOL_MODEL` 只接受 `minimax`，`PHASE1B_IMAGE_PROVIDER` 只接受 `seedream`；所有图片请求固定 `count=1`，正常 3 张、累计最多 5 张。阿里云 ECS、容器、TLS、反向代理和生产回滚不在本轮技术交付范围。
 
 ## 2. 基础栈
 
@@ -210,8 +212,8 @@ Supabase 数据库备份只包含 Storage 元数据，不包含对象本体，�
 | 决策 ID | 门禁 |
 | --- | --- |
 | TS-TEST-01 | 单元、组件、集成、pgTAP 与 E2E 纳入 CI；前端和后端语句覆盖率分别不低于 70%。 |
-| TS-TEST-02 | Playwright 覆盖 Chrome、Edge、Safari 最近两个主版本的关键流程；Safari 可使用对应 WebKit 版本并在真实 Safari 做发布前抽测。 |
-| TS-TEST-03 | 契约/恢复/provider 回归门禁：失败结构 100% 可解析、同浏览器恢复 100%、双图片 provider 各 n≥30 且成功率≥95%，健康告警回放满足误报/漏报阈值。 |
+| TS-TEST-02 | 零费内测用 Chromium、Microsoft Edge、Playwright WebKit 覆盖关键流程；真实 Safari 最近两个主版本只属于后续生产门禁。 |
+| TS-TEST-03 | 零费内测验证失败结构 100% 可解析、同浏览器恢复 100%、Doubao/MiniMax 各一次聊天路径及 Seedream 三个单图场景；双图片 provider 各 n≥30、成功率≥95% 与 P95 属于后续生产门禁。 |
 
 关键测试清单：
 
