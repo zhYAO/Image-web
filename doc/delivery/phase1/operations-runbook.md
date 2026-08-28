@@ -38,7 +38,11 @@ Vercel Preview, Alibaba Cloud ECS, Docker, TLS, reverse proxy, production deploy
 3. Record only event IDs and correlation IDs. Confirm the payload contains no prompt, image, Cookie, token, user identity or original exception message.
 4. Disable/delete the diagnostic entry point, revoke the key and rebuild before accepting the run. No diagnostic route may remain in the final public API.
 
-## Restore drill
+The 2026-08-28 acceptance run completed all three event classes. Browser event `87022e71135d446e91b11a72452eaf72` used correlation `16b6d502-ae83-44fb-a29b-45eca4bfb98e`; Next server event `d387fa02d7534a54b51f766e94e5ac44` used `41a9db0f-6577-4d3e-b7f4-2e9fab90e3e9`; Supabase Edge event `52f32dc230a5490d88e4a8aaac952cd1` used `b5352834-4ff3-41a6-a718-4ffbf607513e`. Each retained only the approved tags and redacted error text, with no request, original diagnostic content, identity or Geo values. Organization IP and `user.geo` scrubbing remain required; application and Edge sanitizers also set an unspecified address so Relay cannot infer the transport IP when the user object is absent. All temporary routes and Edge branches were removed after validation.
+
+## Production restore drill (deferred)
+
+This drill was removed from the zero-cost Phase 1B/1C acceptance gate on 2026-08-28. It remains mandatory before a production-readiness claim or Alibaba Cloud production release.
 
 1. Create a CLI logical dump in a temporary directory outside the repository. Supabase Free does not provide the production automatic daily backup evidence required by the later gate.
 2. Apply the same migrations to the same-region free restore project.

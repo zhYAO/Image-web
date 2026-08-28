@@ -22,7 +22,7 @@ describe('Sentry event sanitization', () => {
 
     expect(event).not.toHaveProperty('breadcrumbs');
     expect(event).not.toHaveProperty('extra');
-    expect(event).not.toHaveProperty('user');
+    expect(event.user).toEqual({ ip_address: '0.0.0.0' });
     expect(event).not.toHaveProperty('request');
     expect(event.exception?.values?.[0]?.value).toBe('redacted_application_error');
     expect(event.message).toBe('redacted_application_error');

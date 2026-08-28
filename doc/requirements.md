@@ -421,10 +421,10 @@ Phase 1C 零费内测前必须同时满足：
 
 - Chromium、Edge、Playwright WebKit 的 mock 关键流程通过；不要求真实 Safari。
 - 本地 HTTP 验收完成匿名恢复、跨用户拒绝、上传、Doubao/MiniMax、Seedream 三个单图场景、signed URL 与清理闭环。
-- Web 与 Domain 的 branches/functions/lines/statements 均不低于 70%，并完成 moderation 故障注入、Sentry 脱敏 replay 和 Free 项目手工联合恢复。
+- Web 与 Domain 的 branches/functions/lines/statements 均不低于 70%，并完成 moderation 故障注入和 Sentry 脱敏 replay。
 - Gemini 保持 disabled；正常验收只生成 3 张 Seedream 图片，累计硬上限 5 张，未知提交结果不得自动重试。
 
-以下条款是后续生产门禁，不属于零费内测完成声明：真实 Safari、1000 条/95% 安全集、Seedream/Gemini 各 n≥30 与 2K P95、Supabase Pro 自动每日数据库备份、独立 Storage 每日备份、生产部署和回滚。
+以下条款是后续生产门禁，不属于零费内测完成声明：真实 Safari、1000 条/95% 安全集、Seedream/Gemini 各 n≥30 与 2K P95、Supabase Pro 自动每日数据库备份、独立 Storage 每日备份、数据库与 Storage 联合恢复、生产部署和回滚。
 
 Phase 1 发布前必须同时满足：
 

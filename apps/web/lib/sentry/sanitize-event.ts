@@ -5,7 +5,9 @@ export function sanitizeSentryEvent<T extends Event>(event: T): T {
   delete event.contexts;
   delete event.extra;
   delete event.request;
-  delete event.user;
+  // Relay infers the transport IP when user is absent. An unspecified address
+  // prevents that inference without carrying a real user identity or location.
+  event.user = { ip_address: '0.0.0.0' };
 
   const tags = event.tags ?? {};
   event.tags = Object.fromEntries(

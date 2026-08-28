@@ -368,7 +368,7 @@ stateDiagram-v2
 ### Phase 1C：零费内测门禁
 
 - 该阶段只证明受控内测可用，不代表生产就绪。
-- 完成 70% 覆盖率、三引擎 mock E2E、本地 HTTP/RLS/Provider/Storage/cleanup、moderation 故障注入、Sentry Free 脱敏 replay 与 Free 项目手工联合恢复。
+- 完成 70% 覆盖率、三引擎 mock E2E、本地 HTTP/RLS/Provider/Storage/cleanup、moderation 故障注入与 Sentry Free 脱敏 replay。
 - Gemini 保持 disabled；不升级套餐、不充值、不创建生产部署。
 
 ### 后续生产门禁
