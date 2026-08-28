@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createImageService, type GenerationSubmissionStore } from '@/server/image/image-service';
+import { createImageService, toImageSubmissionResponse, type GenerationSubmissionStore } from '@/server/image/image-service';
 
 const userId = '00000000-0000-4000-8000-0000000000a1';
 const sessionId = '10000000-0000-4000-8000-0000000000a1';
 
 describe('image submission service', () => {
+  it('removes internal submission metadata from the public response', () => {
+    expect(toImageSubmissionResponse({
+      batchId: '30000000-0000-4000-8000-0000000000a1',
+      deduplicated: false,
+      sessionId,
+      status: 'pending',
+    })).toEqual({
+      batchId: '30000000-0000-4000-8000-0000000000a1',
+      sessionId,
+      status: 'pending',
+    });
+  });
+
   it('resolves the registry snapshot and produces a stable request hash', async () => {
     const submit = vi.fn().mockResolvedValue({
       batchId: '30000000-0000-4000-8000-0000000000a1',

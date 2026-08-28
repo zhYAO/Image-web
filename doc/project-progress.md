@@ -87,9 +87,17 @@
 | --- | --- | --- | --- | --- |
 | P2-00 | 重新立项 | `todo` | 当前没有已批准的 Phase 2 交付范围。 | Phase 1C 全部必需任务 `done` 后再讨论目标、需求、架构和验收计划。 |
 
+### 2026-08-28 聊天生图与单图重建缺陷修复
+
+- 实现：初始化时从健康状态非 `unavailable` 的图片 Provider 中选择首项；聊天图片工具只在明确出图意图时预检图片 Provider，普通聊天仍只受聊天 Provider 约束；时间线单图重建完整透传 `generationId`；HTTP Gateway 不再显示 Mock 场景控件。
+- 浏览器验收额外发现并修复：`recreate_image_generation` RPC 已成功创建批次后，严格公开响应 schema 因内部 `deduplicated` 字段返回 400；现统一摘取 `{ batchId, sessionId, status }`，未修改数据库、迁移或公开 API schema。
+- 自动化：`pnpm lint`、`pnpm typecheck`、`pnpm test:run`、`pnpm build`、`pnpm e2e` 均退出码 0；Web Vitest 108/108、Domain Vitest 27/27；Playwright 15 passed / 6 个按设备条件跳过。
+- 内部浏览器（`http://localhost:3000`，HTTP 模式）：Mock 控件计数为 0；聊天工具请求携带 `imageProvider=seedream` 并生成 1 张 `seedream-4.5` 图片；普通聊天前后图片批次卡片保持 4→4；单图重建请求携带具体 `generationId` 且返回 HTTP 202；控制台 error 为 0。Gemini 未进行真实调用，既有 Next Image LCP 警告按范围保留。
+- 验收副作用：原计划最多新增 2 个真实 Seedream 任务；第一次单图重建的 HTTP 400 发生在数据库已写入批次之后，修复后重试又创建一批，因此本轮实际新增 3 个成功任务，额度显示由 29 降至 26。未擅自删除这些验收数据，后续禁止继续调用图片 Provider。
+
 ## 高优先级风险
 
-> **费用硬停止：** 2026-08-27 真实图片验收已达到累计硬上限 5/5。本轮不得继续调用 Seedream 或新增图片 Provider；Gemini 必须保持 disabled。
+> **费用硬停止：** 2026-08-28 用户批准的缺陷验收已结束；因一次“数据库成功、HTTP 响应序列化失败”的隐藏写入，本轮实际新增 3 个 Seedream 成功任务，额度由 29 降至 26。后续不得继续调用 Seedream 或新增图片 Provider；Gemini 必须保持 disabled。
 
 ## 下一阶段执行顺序
 

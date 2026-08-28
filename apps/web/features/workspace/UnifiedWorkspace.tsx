@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  hasExplicitImageIntent,
   MAX_UPLOAD_BYTES,
   resolveImageToolEnabled,
   sanitizeError,
@@ -159,7 +160,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       setQuota(nextQuota);
       setCapabilities(nextCapabilities);
       setHealth(nextHealth);
-      const initialSelection = normalizeGenerationSelection(nextCapabilities, {
+      const availableCapabilities = nextCapabilities.filter(
+        (capability) => nextHealth.find((item) => item.provider === capability.provider)?.status !== 'unavailable',
+      );
+      const initialSelection = normalizeGenerationSelection(availableCapabilities.length > 0 ? availableCapabilities : nextCapabilities, {
         aspectRatio: '1:1',
         count: 2,
         resolution: '2K',
@@ -268,6 +272,19 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         setFeedback({
           error: { code: 'PROVIDER_UNAVAILABLE', message: '所选服务暂时不可用，请选择其他 provider。', retryable: true },
           message: '所选服务暂时不可用，请选择其他 provider。',
+        });
+        return;
+      }
+      if (
+        mode === 'chat' &&
+        chatImageToolEnabled &&
+        hasExplicitImageIntent(prompt) &&
+        health.find((item) => item.provider === selectedProvider)?.status === 'unavailable'
+      ) {
+        const message = '所选图片服务暂时不可用，请在图片生成模式切换 provider。';
+        setFeedback({
+          error: { code: 'PROVIDER_UNAVAILABLE', message, retryable: true },
+          message,
         });
         return;
       }
@@ -648,20 +665,22 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             <span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span>
           </Space>
           <Space>
-            <Select
-              aria-label={zhCN.workspace.mockScenario}
-              className={styles.devScenario}
-              onChange={changeScenario}
-              options={[
-                { label: 'Mock · 正常', value: 'happy' },
-                { label: 'Mock · 部分成功', value: 'partial' },
-                { label: 'Mock · 服务不可用', value: 'provider-unavailable' },
-                { label: 'Mock · 资源过期', value: 'expired' },
-                { label: 'Mock · 删除重试', value: 'delete-retry' },
-              ]}
-              size="small"
-              value={scenario}
-            />
+            {gateway instanceof MockWorkspaceGateway && (
+              <Select
+                aria-label={zhCN.workspace.mockScenario}
+                className={styles.devScenario}
+                onChange={changeScenario}
+                options={[
+                  { label: 'Mock · 正常', value: 'happy' },
+                  { label: 'Mock · 部分成功', value: 'partial' },
+                  { label: 'Mock · 服务不可用', value: 'provider-unavailable' },
+                  { label: 'Mock · 资源过期', value: 'expired' },
+                  { label: 'Mock · 删除重试', value: 'delete-retry' },
+                ]}
+                size="small"
+                value={scenario}
+              />
+            )}
             <Button
               aria-label={zhCN.workspace.assetLibrary}
               className={styles.assetLibraryButton}
@@ -691,7 +710,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             isChatStreaming={isChatStreaming}
             items={timeline}
             onDownloadBatch={downloadBatch}
-            onRecreate={(batch, scope) => void recreate(batch, scope)}
+            onRecreate={(batch, scope, generationId) => void recreate(batch, scope, generationId)}
             onSelectSkill={chooseSkill}
             skills={skills}
             streamingText={streamingText}

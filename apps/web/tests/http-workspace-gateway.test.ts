@@ -4,6 +4,7 @@ import { HttpWorkspaceGateway } from '@/gateways/http-workspace-gateway';
 
 const sessionId = '10000000-0000-4000-8000-0000000000a1';
 const batchId = '30000000-0000-4000-8000-0000000000a1';
+const generationId = '40000000-0000-4000-8000-0000000000a1';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' }, status });
@@ -87,5 +88,42 @@ describe('HttpWorkspaceGateway', () => {
       prompt: '商品图',
       sessionId,
     });
+  });
+
+  it.each([
+    {
+      expected: { batchId, generationId, mode: 'single' },
+      request: { batchId, generationId, scope: 'single' as const },
+    },
+    {
+      expected: { batchId, mode: 'failed' },
+      request: { batchId, scope: 'failed' as const },
+    },
+    {
+      expected: { batchId, mode: 'all' },
+      request: { batchId, scope: 'all' as const },
+    },
+  ])('sends the $request.scope recreation contract without extra fields', async ({ expected, request }) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({ batchId, sessionId, status: 'pending' }, 202))
+      .mockResolvedValueOnce(json({ batch: {
+        assets: [{ id: generationId, status: 'pending' }],
+        config: { aspectRatio: '1:1', count: 1, resolution: '2K' },
+        createdAt: '2026-08-24T00:00:00.000Z',
+        id: batchId,
+        model: 'seedream-4.5',
+        prompt: '商品图',
+        provider: 'seedream',
+        sessionId,
+        source: 'direct',
+        status: 'pending',
+      } }));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+
+    await expect(gateway.recreateGeneration(request)).resolves.toMatchObject({ id: batchId, status: 'pending' });
+
+    const recreateCall = fetcher.mock.calls[0];
+    expect(recreateCall?.[0]).toBe('/api/image/recreate');
+    expect(JSON.parse(String(recreateCall?.[1]?.body))).toEqual(expected);
   });
 });

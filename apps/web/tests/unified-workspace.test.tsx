@@ -1,4 +1,11 @@
-import type { ChatRequest, ImageRequest, ProviderCapability, Session } from '@zimage/domain';
+import type {
+  ChatRequest,
+  ImageRequest,
+  ProviderCapability,
+  RecreateRequest,
+  Session,
+  WorkspaceGateway,
+} from '@zimage/domain';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,6 +27,7 @@ class CapturingGateway extends MockWorkspaceGateway {
   lastChatRequest?: ChatRequest;
   lastCreatedSession?: Session;
   lastImageRequest?: ImageRequest;
+  lastRecreateRequest?: RecreateRequest;
   lastRenamedTitle?: string;
 
   override async createSession(title?: string) {
@@ -43,6 +51,22 @@ class CapturingGateway extends MockWorkspaceGateway {
   override async submitImage(request: ImageRequest) {
     this.lastImageRequest = request;
     return super.submitImage(request);
+  }
+
+  override async recreateGeneration(request: RecreateRequest) {
+    this.lastRecreateRequest = request;
+    return super.recreateGeneration(request);
+  }
+}
+
+class SeedreamOnlyGateway extends CapturingGateway {
+  override async getProviderHealth() {
+    return [
+      { checkedAt: '2026-08-28', provider: 'gemini', status: 'unavailable' as const },
+      { checkedAt: '2026-08-28', provider: 'seedream', status: 'degraded' as const },
+      { checkedAt: '2026-08-28', provider: 'doubao', status: 'healthy' as const },
+      { checkedAt: '2026-08-28', provider: 'minimax', status: 'healthy' as const },
+    ];
   }
 }
 
@@ -316,6 +340,109 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
     expect(gateway.lastChatRequest?.imageToolEnabled).toBe(true);
+  });
+
+  it('uses the first available image provider for the initial chat image-tool request', async () => {
+    const gateway = createTestGateway(SeedreamOnlyGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '请生成一张白底马克杯商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
+    expect(gateway.lastChatRequest?.imageProvider).toBe('seedream');
+  });
+
+  it('blocks explicit chat image intent before submitting an unavailable image provider', async () => {
+    const gateway = createTestGateway(SeedreamOnlyGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
+    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
+    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '请生成一张白底马克杯商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    expect(await screen.findByText('所选图片服务暂时不可用，请在图片生成模式切换 provider。')).toBeInTheDocument();
+    expect(gateway.lastChatRequest).toBeUndefined();
+  });
+
+  it('allows ordinary chat when only the selected image provider is unavailable', async () => {
+    const gateway = createTestGateway(SeedreamOnlyGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
+    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
+    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '只讨论白底商品图的构图原则' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
+    expect(gateway.lastChatRequest?.imageProvider).toBe('gemini');
+    expect(gateway.lastImageRequest).toBeUndefined();
+  });
+
+  it('forwards the generation id from a failed asset into single recreation', async () => {
+    const gateway = createTestGateway(CapturingGateway);
+    const session = await gateway.createSession('失败批次');
+    const pending = await gateway.submitImage({
+      aspectRatio: '1:1',
+      count: 1,
+      model: 'seedream-4.5',
+      prompt: '失败图片',
+      provider: 'seedream',
+      resolution: '2K',
+      scenario: 'provider-unavailable',
+      sessionId: session.id,
+    });
+    await waitFor(async () => expect((await gateway.getGenerationBatch(pending.id)).status).toBe('failed'));
+    const failed = await gateway.getGenerationBatch(pending.id);
+    const generationId = failed.assets[0]!.id;
+
+    render(<UnifiedWorkspace gateway={gateway} />);
+    fireEvent.click(await screen.findByRole('button', { name: '失败批次' }));
+    await screen.findByText('失败图片');
+    fireEvent.click(screen.getByRole('button', { name: '重新生成第 1 张' }));
+
+    await waitFor(() => expect(gateway.lastRecreateRequest).toBeDefined());
+    expect(gateway.lastRecreateRequest).toEqual({
+      batchId: failed.id,
+      generationId,
+      scope: 'single',
+    });
+  });
+
+  it('only renders the mock scenario selector for a real mock gateway', async () => {
+    const mockGateway = createTestGateway();
+    const delegatedGateway = new Proxy({} as WorkspaceGateway, {
+      get(_target, property) {
+        const value = Reflect.get(mockGateway, property, mockGateway) as unknown;
+        return typeof value === 'function' ? value.bind(mockGateway) : value;
+      },
+    });
+
+    const { unmount } = render(<UnifiedWorkspace gateway={delegatedGateway} />);
+    await screen.findByText('你好，想创作什么？');
+    expect(screen.queryByRole('combobox', { name: 'Mock 场景' })).not.toBeInTheDocument();
+    unmount();
+
+    render(<UnifiedWorkspace gateway={mockGateway} />);
+    await screen.findByText('你好，想创作什么？');
+    expect(screen.getByRole('combobox', { name: 'Mock 场景' })).toBeInTheDocument();
   });
 
   it('shows an inline reference thumbnail that stays synchronized with the config panel', async () => {

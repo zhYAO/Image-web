@@ -1,10 +1,10 @@
-import { imageSubmissionResponseSchema, recreateImageRequestSchema } from '@zimage/domain';
+import { recreateImageRequestSchema } from '@zimage/domain';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { hashCanonicalRequest } from '@/server/image/image-service';
+import { hashCanonicalRequest, toImageSubmissionResponse } from '@/server/image/image-service';
 import { SupabaseGenerationStore } from '@/server/image/supabase-generation-store';
 import { createPreviewUsageGuard, withPreviewUsageReservation } from '@/server/preview/preview-usage-guard';
 import { assertTrustedOrigin, executeRoute, readJson, requireVerifiedUserId } from '@/server/route-context';
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         requestHash: await hashCanonicalRequest({ input, userId }),
         userId,
       });
-      return NextResponse.json(imageSubmissionResponseSchema.parse(result), { status: 202 });
+      return NextResponse.json(toImageSubmissionResponse(result), { status: 202 });
     });
   });
 }

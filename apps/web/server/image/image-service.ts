@@ -117,14 +117,23 @@ export async function prepareImageSubmission(
   };
 }
 
+export function toImageSubmissionResponse(result: {
+  batchId: string;
+  deduplicated?: boolean;
+  sessionId: string;
+  status: 'pending';
+}) {
+  return imageSubmissionResponseSchema.parse({
+    batchId: result.batchId,
+    sessionId: result.sessionId,
+    status: result.status,
+  });
+}
+
 export function createImageService(store: GenerationSubmissionStore) {
   async function submitPrepared(prepared: GenerationSubmissionInput) {
     const result = await store.submit(prepared);
-      return imageSubmissionResponseSchema.parse({
-        batchId: result.batchId,
-        sessionId: result.sessionId,
-        status: result.status,
-      });
+    return toImageSubmissionResponse(result);
   }
 
   return {
