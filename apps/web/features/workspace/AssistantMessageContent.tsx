@@ -43,7 +43,7 @@ function SafeMarkdownImage({ alt, src, title }: ComponentProps<'img'> & { node?:
       maxHeight={520}
       maxWidth="100%"
       objectFit="contain"
-      preview={false}
+      preview
       src={src}
       title={title}
       variant="outlined"

@@ -283,6 +283,153 @@ export function ModelPopover({
   );
 }
 
+interface ImageSettingsPopoverProps {
+  aspectRatio: AspectRatio;
+  capabilities: ProviderCapability[];
+  count: number;
+  health: ProviderHealth[];
+  onAspectRatioChange: (ratio: AspectRatio) => void;
+  onCountChange: (count: number) => void;
+  onModelSelect: (provider: string, model: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onResolutionChange: (resolution: ImageResolution) => void;
+  open: boolean;
+  resolution: ImageResolution;
+  selectedModel?: ModelCapability;
+  selectedProvider?: string;
+}
+
+export function ImageSettingsPopover({
+  aspectRatio,
+  capabilities,
+  count,
+  health,
+  onAspectRatioChange,
+  onCountChange,
+  onModelSelect,
+  onOpenChange,
+  onResolutionChange,
+  open,
+  resolution,
+  selectedModel,
+  selectedProvider,
+}: ImageSettingsPopoverProps) {
+  const maxImages = Math.min(selectedModel?.maxImages ?? 1, 4);
+  const selectedHealth = health.find((item) => item.provider === selectedProvider);
+  return (
+    <PopoverShell
+      ariaLabel="图片生成设置"
+      className={styles.imageSettingsPopover}
+      onOpenChange={onOpenChange}
+      open={open}
+      trigger={(
+        <Button
+          aria-label={`图片设置 ${selectedProvider ?? ''} ${selectedModel?.label ?? ''} ${aspectRatio} ${resolution} ${count}张`.trim()}
+          className={`${styles.toolbarButton} ${styles.imageSettingsSummary} ${open ? styles.toolbarButtonActive : ''}`}
+          icon={<SlidersHorizontal size={15} />}
+          onClick={() => onOpenChange(!open)}
+        >
+          <span>{selectedProvider ?? selectedModel?.label ?? '图片设置'}</span>
+          <span className={styles.toolbarDivider} />
+          <span>{aspectRatio}</span>
+          <span className={styles.toolbarDivider} />
+          <span>{resolution}</span>
+          <span className={styles.toolbarDivider} />
+          <span>{count}张</span>
+          <ChevronDown size={13} />
+        </Button>
+      )}
+    >
+      <div className={styles.popoverHeading}>
+        <div>
+          <div className={styles.popoverTitle}>图片生成设置</div>
+          <div className={styles.popoverHint}>模型与高级参数仅在需要时调整</div>
+        </div>
+        <Tag color={selectedHealth?.status === 'healthy' ? 'green' : 'orange'}>
+          {selectedHealth?.status === 'healthy' ? '服务正常' : '服务降级'}
+        </Tag>
+      </div>
+      <div className={styles.imageSettingsLayout}>
+        <div className={styles.popoverSection}>
+          <div className={styles.popoverLabel}>生成模型</div>
+          <div className={styles.modelList}>
+            {capabilities.flatMap((capability) => capability.models.map((model) => {
+              const selected = capability.provider === selectedProvider && model.id === selectedModel?.id;
+              return (
+                <button
+                  aria-label={`${capability.provider} · ${model.label}`}
+                  className={`${styles.modelOption} ${selected ? styles.optionActive : ''}`}
+                  key={`${capability.provider}-${model.id}`}
+                  onClick={() => onModelSelect(capability.provider, model.id)}
+                  type="button"
+                >
+                  <span className={styles.modelIcon}><Sparkles size={16} /></span>
+                  <span><strong>{model.label}</strong><small>{capability.provider}</small></span>
+                  {selected && <Check size={16} />}
+                </button>
+              );
+            }))}
+          </div>
+        </div>
+        <div className={styles.imageParameterColumn}>
+          <div className={styles.popoverSection}>
+            <div className={styles.popoverLabel}>比例</div>
+            <div className={styles.ratioOptions}>
+              {selectedModel?.aspectRatios.map((ratio) => (
+                <button
+                  aria-label={`比例 ${ratio}`}
+                  aria-pressed={aspectRatio === ratio}
+                  className={`${styles.ratioOption} ${aspectRatio === ratio ? styles.optionActive : ''}`}
+                  key={ratio}
+                  onClick={() => onAspectRatioChange(ratio)}
+                  type="button"
+                >
+                  <span aria-hidden className={styles.ratioGlyph} style={{ height: ratioShape[ratio].height, width: ratioShape[ratio].width }} />
+                  <span>{ratio}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={styles.popoverSection}>
+            <div className={styles.popoverLabel}>分辨率</div>
+            <div className={styles.segmentedOptions}>
+              {selectedModel?.resolutions.map((item) => (
+                <button
+                  aria-label={`分辨率 ${item}`}
+                  aria-pressed={resolution === item}
+                  className={`${styles.segmentedOption} ${resolution === item ? styles.optionActive : ''}`}
+                  key={item}
+                  onClick={() => onResolutionChange(item)}
+                  type="button"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={styles.popoverSection}>
+            <div className={styles.popoverLabel}>数量</div>
+            <div className={styles.segmentedOptions}>
+              {Array.from({ length: maxImages }, (_, index) => index + 1).map((item) => (
+                <button
+                  aria-label={`生成数量 ${item}`}
+                  aria-pressed={count === item}
+                  className={`${styles.segmentedOption} ${count === item ? styles.optionActive : ''}`}
+                  key={item}
+                  onClick={() => onCountChange(item)}
+                  type="button"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </PopoverShell>
+  );
+}
+
 interface ChatModelPopoverProps {
   health: ProviderHealth[];
   onOpenChange: (open: boolean) => void;

@@ -10,6 +10,7 @@ if (deploymentEnvironment === 'production' && dataMode === 'mock') {
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   transpilePackages: ['@zimage/domain'],
 };

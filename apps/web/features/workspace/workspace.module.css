@@ -88,12 +88,25 @@
   background: #f3f4f6;
 }
 
+.sessionTitleRow {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
 .sessionTitle {
   overflow: hidden;
+  min-width: 0;
   color: #33363b;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sessionBusy {
+  flex: none;
+  transform: scale(0.72);
 }
 
 .sessionActions {
@@ -158,6 +171,8 @@
   overflow: auto;
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 
 .timeline {
@@ -167,7 +182,7 @@
   width: min(100%, 920px);
   min-height: 100%;
   margin: 0 auto;
-  padding: 34px 34px 210px;
+  padding: 34px;
 }
 
 .empty {
@@ -177,9 +192,9 @@
   align-items: center;
   justify-content: center;
   width: min(100%, 900px);
-  min-height: calc(100dvh - 230px);
+  min-height: 100%;
   margin: auto;
-  padding: 24px 24px 176px;
+  padding: 24px;
 }
 
 .heroTitle {
@@ -275,13 +290,25 @@
 }
 
 .composerDock {
-  position: absolute;
+  position: relative;
   z-index: 10;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  flex: 0 0 auto;
   padding: 28px 34px 18px;
   background: linear-gradient(transparent, #f7f8fa 28%);
+}
+
+.scrollToBottom {
+  position: absolute !important;
+  z-index: 12;
+  top: 0;
+  left: 50%;
+  width: 38px !important;
+  height: 38px !important;
+  border-color: #dfe3e7 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #34383e !important;
+  box-shadow: 0 5px 18px rgba(32, 33, 36, 0.13) !important;
+  transform: translate(-50%, -50%);
 }
 
 .composer {
@@ -351,6 +378,16 @@
   height: 100%;
   border-radius: 5px;
   color: #8f959e;
+}
+
+.referencePreviewImage {
+  width: 100%;
+  height: 100%;
+}
+
+.referencePreviewImage img {
+  width: 100%;
+  height: 100%;
 }
 
 .referenceRemove {
@@ -502,6 +539,25 @@
 
 .modelPopover {
   width: 360px;
+}
+
+.imageSettingsPopover {
+  width: min(620px, calc(100vw - 310px));
+}
+
+.imageSettingsSummary {
+  max-width: min(430px, 46vw);
+}
+
+.imageSettingsLayout {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(300px, 1.28fr);
+  gap: 18px;
+}
+
+.imageParameterColumn {
+  padding-left: 18px;
+  border-left: 1px solid #eceef0;
 }
 
 .skillPopover {
@@ -782,6 +838,58 @@
   border-radius: 10px;
 }
 
+.timelineLoading {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 28px 18px 80px;
+}
+
+.timelineSkeletonUser,
+.timelineSkeletonAssistant,
+.timelineSkeletonAssistantShort {
+  position: relative;
+  overflow: hidden;
+  height: 66px;
+  border-radius: 18px;
+  background: #eceef1;
+}
+
+.timelineSkeletonUser {
+  width: min(420px, 72%);
+  margin-left: auto;
+}
+
+.timelineSkeletonAssistant {
+  width: min(680px, 92%);
+}
+
+.timelineSkeletonAssistantShort {
+  width: min(500px, 68%);
+}
+
+.timelineSkeletonUser::after,
+.timelineSkeletonAssistant::after,
+.timelineSkeletonAssistantShort::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.78) 48%, transparent 70%);
+  content: '';
+  transform: translateX(-100%);
+  animation: timelineShimmer 1.6s ease-in-out infinite;
+}
+
+.timelineLoadError {
+  width: min(720px, calc(100% - 36px));
+  margin: 40px auto;
+}
+
+@keyframes timelineShimmer {
+  to { transform: translateX(100%); }
+}
+
 .skillPopoverLayout {
   display: grid;
   grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.1fr);
@@ -1028,10 +1136,23 @@
 
 .generationCard {
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  max-width: 760px;
   border: 1px solid #e5e7ea;
   border-radius: 18px;
   background: #fff;
   box-shadow: 0 8px 30px rgba(32, 33, 36, 0.04);
+}
+
+.generationTurn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.generationResponse {
+  width: 100%;
 }
 
 .generationHeader,
@@ -1044,12 +1165,16 @@
 }
 
 .generationPrompt {
-  overflow: hidden;
-  max-width: 72%;
+  padding: 0 16px 8px;
+  color: #4f5660;
   font-size: 13px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.55;
+}
+
+.generationStatusTitle {
+  color: #30343a;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .generationMeta {
@@ -1079,6 +1204,11 @@
   object-fit: cover;
 }
 
+.assetPreview {
+  width: 100%;
+  height: 100%;
+}
+
 .assetState {
   position: absolute;
   inset: 0;
@@ -1090,11 +1220,38 @@
   text-align: center;
 }
 
+.assetSkeleton {
+  overflow: hidden;
+  gap: 8px;
+  background: #eef0f3;
+}
+
+.assetSkeleton::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 28%, rgba(255, 255, 255, 0.72) 45%, transparent 62%);
+  content: '';
+  transform: translateX(-100%);
+  animation: assetShimmer 1.7s ease-in-out infinite;
+}
+
+.assetSkeleton > * {
+  position: relative;
+  z-index: 1;
+}
+
 .assetRecreate {
   position: absolute !important;
   z-index: 2;
   right: 8px;
   bottom: 8px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.asset:hover .assetRecreate,
+.asset:focus-within .assetRecreate {
+  opacity: 1;
 }
 
 .expired {
@@ -1107,6 +1264,19 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+@keyframes assetShimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assetSkeleton::before,
+  .timelineSkeletonUser::after,
+  .timelineSkeletonAssistant::after,
+  .timelineSkeletonAssistantShort::after {
+    animation: none;
+  }
 }
 
 .statusFeedback {
@@ -1169,12 +1339,12 @@
 
   .timeline {
     gap: 16px;
-    padding: 20px 14px 174px;
+    padding: 20px 14px;
   }
 
   .empty {
     justify-content: flex-start;
-    padding: 48px 14px 174px;
+    padding: 48px 14px;
   }
 
   .heroTitle {
@@ -1226,5 +1396,9 @@
 @media (hover: none), (pointer: coarse) {
   .inlineReferences {
     overflow-x: auto;
+  }
+
+  .assetRecreate {
+    opacity: 1;
   }
 }

@@ -47,13 +47,16 @@ workers                  生成、删除、到期与备份任务
 | --- | --- | --- |
 | TS-FE-01 | `UnifiedWorkspace` | `/` 唯一工作区；组合可折叠会话侧栏、主时间线、首页技能卡片、输入框和点击浮层。 |
 | TS-FE-02 | `UnifiedComposer` | 维护显式 `chat \| image` 模式，提交前完成模式对应的客户端校验。 |
-| TS-FE-03 | `Timeline` + `GenerationCard` | 文本、生成批次和错误使用同一排序；直接与工具生图复用同一卡片。 |
-| TS-FE-04 | `ModelPopover` + `GenerationParameterPopover` + `SkillPopover` | 桌面输入框上方的互斥点击浮层：模型与健康状态、能力驱动参数、技能字段与提示词预览；参考图只在输入框内维护，窄屏继续使用兼容抽屉。 |
+| TS-FE-03 | `Timeline` + `GenerationCard` | 文本、生成批次和错误使用同一排序；直接与工具生图复用同一结果组件，直接生图额外组合用户提示词气泡。 |
+| TS-FE-04 | `ImageSettingsPopover` + `SkillPopover` | 生图模型、健康状态、比例、分辨率和数量收敛到单一摘要及按需浮层；技能字段与提示词预览保持独立入口，参考图只在输入框内维护，窄屏继续使用共享状态的兼容抽屉。 |
 | TS-FE-05 | Next.js redirect | `/chat`、`/image` 只重定向到 `/`，不加载旧 store 或旧数据。 |
 | TS-FE-06 | `SessionSidebar` | 会话创建、选择、重命名、删除；匿名恢复边界提示。 |
 | TS-FE-07 | Zustand v5 | 仅保存 UI/请求瞬态；服务端会话和时间线始终以 API 返回为准。 |
 | TS-FE-08 | `ToolSelector` | 图片工具默认关闭；用户选技能时按 `triggers.tools` 开启，取消技能时恢复明确的用户选择；提交时把工具许可随请求发送。 |
 | TS-FE-09 | 上传/技能表单/批量下载 | 参考图状态机、技能必填字段、可编辑提示词预览；最多 4 个成功资产使用新签发 URL 批量下载。 |
+| TS-FE-10 | `AssistantMessageContent` | 只解析白名单受控标签并以惰性折叠块展示；未知、错配、代码内和流结束残缺标签走安全 Markdown。 |
+| TS-FE-11 | `useSmartAutoScroll` | 距底部 96 px 内自动跟随内容和高度变化；手动上滑暂停，发送恢复，切换会话即时定位，并尊重减少动态效果。 |
+| TS-FE-12 | `ImageSettingsPopover` + `GenerationTurn` | 生图高级设置默认收起；直接生图以用户提示词和助手结果组成对话轮次，工具生图只渲染结果以避免重复提示词。 |
 
 ### 3.2 Store slices
 

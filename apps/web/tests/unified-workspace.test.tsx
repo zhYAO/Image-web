@@ -88,6 +88,112 @@ class MultiModelGateway extends CapturingGateway {
   }
 }
 
+class SlowPostSubmitRefreshGateway extends CapturingGateway {
+  private releaseRefresh?: () => void;
+  private readonly refreshGate = new Promise<void>((resolve) => {
+    this.releaseRefresh = resolve;
+  });
+
+  releasePostSubmitRefresh() {
+    this.releaseRefresh?.();
+  }
+
+  override async getQuota() {
+    if (this.lastImageRequest) await this.refreshGate;
+    return super.getQuota();
+  }
+}
+
+class ControlledTimelineGateway extends CapturingGateway {
+  private readonly gates = new Map<string, { promise: Promise<void>; release: () => void }>();
+
+  holdTimeline(sessionId: string) {
+    let release: () => void = () => undefined;
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.gates.set(sessionId, { promise, release });
+  }
+
+  releaseTimeline(sessionId: string) {
+    this.gates.get(sessionId)?.release();
+    this.gates.delete(sessionId);
+  }
+
+  override async getTimeline(sessionId: string) {
+    await this.gates.get(sessionId)?.promise;
+    return super.getTimeline(sessionId);
+  }
+}
+
+class RetryTimelineGateway extends CapturingGateway {
+  private failingSessionId?: string;
+
+  failNextTimeline(sessionId: string) {
+    this.failingSessionId = sessionId;
+  }
+
+  override async getTimeline(sessionId: string) {
+    if (this.failingSessionId === sessionId) {
+      this.failingSessionId = undefined;
+      throw new Error('timeline unavailable');
+    }
+    return super.getTimeline(sessionId);
+  }
+}
+
+class BackgroundChatGateway extends CapturingGateway {
+  readonly requests: ChatRequest[] = [];
+  private heldSessionId?: string;
+  private releaseHeld?: () => void;
+
+  holdChat(sessionId: string) {
+    this.heldSessionId = sessionId;
+  }
+
+  releaseChat() {
+    this.releaseHeld?.();
+  }
+
+  override async *streamChat(request: ChatRequest, signal?: AbortSignal) {
+    this.requests.push(request);
+    if (request.sessionId === this.heldSessionId) {
+      await new Promise<void>((resolve) => {
+        this.releaseHeld = resolve;
+      });
+    }
+    yield* super.streamChat(request, signal);
+  }
+}
+
+class ControlledImageGateway extends CapturingGateway {
+  private releaseAdmission?: () => void;
+  private readonly admissionGate = new Promise<void>((resolve) => {
+    this.releaseAdmission = resolve;
+  });
+
+  releaseImageAdmission() {
+    this.releaseAdmission?.();
+  }
+
+  override async submitImage(request: ImageRequest) {
+    this.lastImageRequest = request;
+    await this.admissionGate;
+    return super.submitImage(request);
+  }
+}
+
+class FailOnceImageGateway extends CapturingGateway {
+  attempts = 0;
+
+  override async submitImage(request: ImageRequest) {
+    this.attempts += 1;
+    this.lastImageRequest = request;
+    if (this.attempts === 1) throw new Error('admission failed');
+    return super.submitImage(request);
+  }
+}
+
 type TestGatewayConstructor<T extends MockWorkspaceGateway> = new (options?: {
   delay?: (milliseconds: number) => Promise<void>;
   storage?: StorageLike;
@@ -125,54 +231,52 @@ describe('UnifiedWorkspace', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
   });
 
-  it('keeps independent chat and image drafts while switching modes', async () => {
+  it('keeps one draft while toggling the create-image tool', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     const input = screen.getByRole('textbox', { name: '创作输入' });
-    fireEvent.change(input, { target: { value: '聊天草稿' } });
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    fireEvent.change(input, { target: { value: '生图草稿' } });
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
-    expect(input).toHaveValue('聊天草稿');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    expect(input).toHaveValue('生图草稿');
+    fireEvent.change(input, { target: { value: '统一草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    expect(input).toHaveValue('统一草稿');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    expect(input).toHaveValue('统一草稿');
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain('NaN');
+  });
+
+  it('collapses image model and parameters behind one shared settings summary', async () => {
+    render(<UnifiedWorkspace gateway={createTestGateway()} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+
+    const summary = screen.getByRole('button', { name: /图片设置 .* 1:1 2K 2张/ });
+    expect(summary).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '图片生成设置' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^生成参数/ })).not.toBeInTheDocument();
+
+    fireEvent.click(summary);
+    expect(screen.getByRole('dialog', { name: '图片生成设置' })).toBeInTheDocument();
   });
 
   it('auto-enables the image tool for a skill and restores the explicit choice when cleared', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
 
-    expect(screen.queryByRole('switch', { name: '图片工具' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '创建图片' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '清除技能' }));
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
-    expect(screen.getByRole('switch', { name: '图片工具' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '创建图片' })).toBeEnabled();
   });
 
-  it('derives a locked image-tool selection in image mode and restores the chat preference', async () => {
+  it('uses the create-image tool as the only explicit request router', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
-    const imageTool = screen.getByRole('switch', { name: '图片工具' });
-    const chatMode = screen.getByRole('button', { name: '聊天模式' });
-    const imageMode = screen.getByRole('button', { name: '生图模式' });
-    expect(imageTool).not.toBeChecked();
-    expect(imageTool).toBeEnabled();
-    expect(chatMode).toHaveAttribute('aria-pressed', 'true');
-    expect(imageMode).toHaveAttribute('aria-pressed', 'false');
-
-    fireEvent.click(imageMode);
-    expect(screen.queryByRole('switch', { name: '图片工具' })).not.toBeInTheDocument();
-    expect(chatMode).toHaveAttribute('aria-pressed', 'false');
-    expect(imageMode).toHaveAttribute('aria-pressed', 'true');
-
-    fireEvent.click(chatMode);
-    const restoredImageTool = screen.getByRole('switch', { name: '图片工具' });
-    expect(restoredImageTool).not.toBeChecked();
-    expect(restoredImageTool).toBeEnabled();
+    const imageTool = screen.getByRole('button', { name: '创建图片' });
+    expect(imageTool).toHaveAttribute('aria-pressed', 'false');
 
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '只讨论提示词' },
@@ -180,9 +284,10 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
     expect(gateway.lastChatRequest?.imageToolEnabled).toBe(false);
+    expect(gateway.lastImageRequest).toBeUndefined();
   });
 
-  it('selects a toolbar skill without leaving chat mode', async () => {
+  it('selects a toolbar skill and locks the create-image tool', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
@@ -190,9 +295,8 @@ describe('UnifiedWorkspace', () => {
     const dialog = screen.getByRole('dialog', { name: '技能配置' });
     fireEvent.click(dialog.querySelector('[aria-label="选择技能 白底图"]') as HTMLElement);
 
-    expect(screen.getByRole('button', { name: '聊天模式' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('switch', { name: '图片工具' })).toBeChecked();
-    expect(screen.getByRole('switch', { name: '图片工具' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '创建图片' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '技能配置 白底图' })).toBeInTheDocument();
   });
 
@@ -206,7 +310,7 @@ describe('UnifiedWorkspace', () => {
     expect(socialSkill).not.toBeNull();
     fireEvent.click(socialSkill!);
 
-    expect(screen.getByRole('button', { name: '聊天模式' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(document.body.querySelector('[aria-label="使用场景"]')).toBeInTheDocument();
     fireEvent.click(document.body.querySelector('[aria-label="清除技能"]') as HTMLElement);
     expect(document.body.querySelector('[aria-label="使用场景"]')).not.toBeInTheDocument();
@@ -232,6 +336,129 @@ describe('UnifiedWorkspace', () => {
 
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
   });
+
+  it('shows a bottom affordance after manual upward scrolling and resumes follow when the user submits', async () => {
+    render(<UnifiedWorkspace gateway={createTestGateway(CapturingGateway)} />);
+    await screen.findByText('你好，想创作什么？');
+
+    const timeline = screen.getByRole('log', { name: '对话时间线' });
+    const scrollTo = vi.fn();
+    Object.defineProperties(timeline, {
+      clientHeight: { configurable: true, value: 300 },
+      scrollHeight: { configurable: true, value: 1_000 },
+      scrollTo: { configurable: true, value: scrollTo },
+      scrollTop: { configurable: true, value: 400, writable: true },
+    });
+    fireEvent.scroll(timeline);
+    expect(screen.getByRole('button', { name: '回到底部' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '继续最新对话' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    expect(screen.queryByRole('button', { name: '回到底部' })).not.toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', top: 1_000 });
+  });
+
+  it('shows a skeleton while switching sessions and ignores a late response from the previous selection', async () => {
+    const gateway = createTestGateway(ControlledTimelineGateway);
+    const slow = await gateway.createSession('慢会话');
+    const fast = await gateway.createSession('快会话');
+    for await (const _event of gateway.streamChat({ imageToolEnabled: false, message: '慢会话内容', sessionId: slow.id })) {
+      // Persist the controlled fixture through the real mock gateway.
+      void _event;
+    }
+    for await (const _event of gateway.streamChat({ imageToolEnabled: false, message: '快会话内容', sessionId: fast.id })) {
+      // Persist the controlled fixture through the real mock gateway.
+      void _event;
+    }
+
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '快会话' }));
+    await screen.findByText('快会话内容');
+    gateway.holdTimeline(slow.id);
+    fireEvent.click(screen.getByRole('button', { name: '慢会话' }));
+
+    expect(screen.getByTestId('timeline-loading')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toBeDisabled();
+    expect(screen.queryByText('快会话内容')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '快会话' }));
+    await screen.findByText('快会话内容');
+    gateway.releaseTimeline(slow.id);
+    await waitFor(() => expect(screen.queryByText('慢会话内容')).not.toBeInTheDocument());
+  });
+
+  it('shows a retry action when a session timeline fails to load', async () => {
+    const gateway = createTestGateway(RetryTimelineGateway);
+    const retrySession = await gateway.createSession('可重试会话');
+    for await (const _event of gateway.streamChat({ imageToolEnabled: false, message: '重试后的内容', sessionId: retrySession.id })) {
+      // Persist the fixture through the real mock gateway.
+      void _event;
+    }
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    gateway.failNextTimeline(retrySession.id);
+    fireEvent.click(screen.getByRole('button', { name: '可重试会话' }));
+
+    expect(await screen.findByText('会话加载失败')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '重试加载' }));
+    expect(await screen.findByText('重试后的内容')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toBeEnabled();
+  });
+
+  it('keeps a chat running in its original session and allows submission in another session', async () => {
+    const gateway = createTestGateway(BackgroundChatGateway);
+    const first = await gateway.createSession('会话 A');
+    await gateway.createSession('会话 B');
+    gateway.holdChat(first.id);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '会话 A' }));
+    await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: 'A 的问题' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    await waitFor(() => expect(gateway.requests).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole('button', { name: '会话 B' }));
+    await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: 'B 的问题' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    await waitFor(() => expect(gateway.requests.map((request) => request.message)).toContain('B 的问题'));
+
+    gateway.releaseChat();
+  });
+
+  it('keeps image admission in its original session and leaves another session interactive', async () => {
+    const gateway = createTestGateway(ControlledImageGateway);
+    await gateway.createSession('图片会话 A');
+    await gateway.createSession('聊天会话 B');
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '图片会话 A' }));
+    await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: 'A 的图片' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('A 的图片');
+
+    fireEvent.click(screen.getByRole('button', { name: '聊天会话 B' }));
+    await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: 'B 的聊天' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    expect(screen.getByText('B 的聊天')).toBeInTheDocument();
+
+    gateway.releaseImageAdmission();
+    fireEvent.click(screen.getByRole('button', { name: '图片会话 A' }));
+    await waitFor(() => expect(screen.queryByTestId('optimistic-image-turn')).not.toBeInTheDocument());
+    expect(screen.getByText('A 的图片')).toBeInTheDocument();
+  }, 30_000);
 
   it('keeps the assistant bubble stable across the stream-to-completed transition (no flash, cursor gone)', async () => {
     const gateway = createTestGateway(CapturingGateway, {
@@ -303,7 +530,7 @@ describe('UnifiedWorkspace', () => {
     expect(gateway.lastCreatedSession?.title).toBe(previousTitle);
   });
 
-  it('renames the active session in image mode too', async () => {
+  it('renames the active session from its first image request', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
@@ -311,7 +538,7 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '新对话' }));
     await waitFor(() => expect(gateway.lastCreatedSession).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     const input = screen.getByRole('textbox', { name: '创作输入' });
     fireEvent.change(input, { target: { value: '生成秋季外套海报' } });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
@@ -321,80 +548,111 @@ describe('UnifiedWorkspace', () => {
     );
   });
 
-  it('preserves an explicitly enabled chat image tool across mode switches', async () => {
+  it('keeps the create-image tool enabled after a queued request', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
-    const imageTool = screen.getByRole('switch', { name: '图片工具' });
+    const imageTool = screen.getByRole('button', { name: '创建图片' });
     fireEvent.click(imageTool);
-    expect(imageTool).toBeChecked();
-
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
-    expect(imageTool).toBeChecked();
+    expect(imageTool).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '生成商品图' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-    await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
-    expect(gateway.lastChatRequest?.imageToolEnabled).toBe(true);
-  });
-
-  it('uses the first available image provider for the initial chat image-tool request', async () => {
-    const gateway = createTestGateway(SeedreamOnlyGateway);
-    render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('你好，想创作什么？');
-
-    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '请生成一张白底马克杯商品图' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-
-    await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
-    expect(gateway.lastChatRequest?.imageProvider).toBe('seedream');
-  });
-
-  it('blocks explicit chat image intent before submitting an unavailable image provider', async () => {
-    const gateway = createTestGateway(SeedreamOnlyGateway);
-    render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('你好，想创作什么？');
-
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
-    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '请生成一张白底马克杯商品图' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-
-    expect(await screen.findByText('所选图片服务暂时不可用，请在图片生成模式切换 provider。')).toBeInTheDocument();
+    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
     expect(gateway.lastChatRequest).toBeUndefined();
+    expect(imageTool).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('renders an image conversation turn immediately while queue admission is pending', async () => {
+    const gateway = createTestGateway(ControlledImageGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '一只在海边奔跑的白猫' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('一只在海边奔跑的白猫');
+    expect(screen.getAllByText('等待队列处理')).toHaveLength(2);
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
+
+    gateway.releaseImageAdmission();
+    await waitFor(() => expect(screen.queryByTestId('optimistic-image-turn')).not.toBeInTheDocument());
+  });
+
+  it('retries a failed image admission in the same conversation turn', async () => {
+    const gateway = createTestGateway(FailOnceImageGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '需要重试的商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    const retry = await screen.findByRole('button', { name: '重试生成' });
+    expect(screen.getAllByText('需要重试的商品图')).toHaveLength(1);
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(gateway.attempts).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '重试生成' })).not.toBeInTheDocument());
+    expect(screen.getAllByText('需要重试的商品图')).toHaveLength(1);
+  });
+
+  it('uses the first available image provider for the initial image request', async () => {
+    const gateway = createTestGateway(SeedreamOnlyGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '请生成一张白底马克杯商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
+    expect(gateway.lastImageRequest?.provider).toBe('seedream');
+  });
+
+  it('blocks a direct image request for an unavailable image provider', async () => {
+    const gateway = createTestGateway(SeedreamOnlyGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.click(screen.getByRole('button', { name: /图片设置/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '请生成一张白底马克杯商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    expect(await screen.findByText('所选服务暂时不可用，请选择其他 provider。')).toBeInTheDocument();
+    expect(gateway.lastImageRequest).toBeUndefined();
+  }, 30_000);
 
   it('allows ordinary chat when only the selected image provider is unavailable', async () => {
     const gateway = createTestGateway(SeedreamOnlyGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
-    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.click(screen.getByRole('button', { name: /图片设置/ }));
     fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
-    fireEvent.click(screen.getByRole('switch', { name: '图片工具' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '只讨论白底商品图的构图原则' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
     await waitFor(() => expect(gateway.lastChatRequest).toBeDefined());
-    expect(gateway.lastChatRequest?.imageProvider).toBe('gemini');
     expect(gateway.lastImageRequest).toBeUndefined();
-  });
+  }, 30_000);
 
   it('forwards the generation id from a failed asset into single recreation', async () => {
     const gateway = createTestGateway(CapturingGateway);
@@ -450,13 +708,17 @@ describe('UnifiedWorkspace', () => {
       <UnifiedWorkspace gateway={createTestGateway()} />,
     );
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
     const reference = new File(['image'], 'ref.png', { type: 'image/png' });
     fireEvent.change(screen.getByLabelText('上传参考图'), { target: { files: [reference] } });
 
     expect(screen.getByRole('img', { name: '参考图 ref.png' })).toHaveAttribute('src', 'blob:ref.png');
     expect(screen.getByText('ref.png')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('img', { name: '参考图 ref.png' }));
+    expect(await screen.findByRole('dialog', { name: '参考图 ref.png' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '参考图 ref.png' })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '移除 ref.png' }));
     expect(screen.queryByRole('img', { name: '参考图 ref.png' })).not.toBeInTheDocument();
@@ -465,19 +727,19 @@ describe('UnifiedWorkspace', () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
   });
 
-  it('hides image references in chat mode without clearing them', async () => {
+  it('hides image references when the create-image tool is off without clearing them', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['image'], 'kept.webp', { type: 'image/webp' })] },
     });
     expect(screen.getByRole('img', { name: '参考图 kept.webp' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '聊天模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     expect(screen.queryByRole('img', { name: '参考图 kept.webp' })).not.toBeInTheDocument();
     expect(screen.queryByText('kept.webp')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     expect(screen.getByRole('img', { name: '参考图 kept.webp' })).toBeInTheDocument();
     expect(screen.getByText('kept.webp')).toBeInTheDocument();
   });
@@ -485,7 +747,7 @@ describe('UnifiedWorkspace', () => {
   it('rejects unsupported reference types and caps accepted references at four', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['text'], 'notes.txt', { type: 'text/plain' })] },
@@ -506,7 +768,7 @@ describe('UnifiedWorkspace', () => {
   it('rejects reference images larger than 10 MB', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
     const oversized = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.jpg', {
       type: 'image/jpeg',
@@ -521,7 +783,7 @@ describe('UnifiedWorkspace', () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     const file = new File(['image'], 'payload.png', { type: 'image/png' });
     fireEvent.change(screen.getByLabelText('上传参考图'), { target: { files: [file] } });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
@@ -541,12 +803,33 @@ describe('UnifiedWorkspace', () => {
     expect(gateway.lastImageRequest?.references?.[0]).not.toHaveProperty('previewUrl');
   });
 
+  it('clears image inputs and re-enables submission before post-queue refresh completes', async () => {
+    const gateway = createTestGateway(SlowPostSubmitRefreshGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByLabelText('上传参考图'), {
+      target: { files: [new File(['image'], 'queued.png', { type: 'image/png' })] },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
+      target: { value: '生成排队后的商品图' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+
+    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue(''));
+    expect(screen.queryByRole('img', { name: '参考图 queued.png' })).not.toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:queued.png');
+    expect(screen.getByRole('button', { name: '发送创作请求' })).not.toHaveClass('ant-btn-loading');
+    gateway.releasePostSubmitRefresh();
+  });
+
   it('releases remaining local preview URLs when the workspace unmounts', async () => {
     const { unmount } = render(
       <UnifiedWorkspace gateway={createTestGateway()} />,
     );
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByLabelText('上传参考图'), {
       target: { files: [new File(['image'], 'cleanup.png', { type: 'image/png' })] },
     });
@@ -569,7 +852,7 @@ describe('UnifiedWorkspace', () => {
     expect(screen.getByRole('textbox', { name: '模特风格' })).toHaveFocus();
   });
 
-  it('submits the user-edited resolved skill prompt in image mode', async () => {
+  it('submits the user-edited resolved skill prompt with image creation enabled', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
@@ -591,16 +874,13 @@ describe('UnifiedWorkspace', () => {
     const gateway = createTestGateway(MultiModelGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
-    fireEvent.click(screen.getByRole('button', { name: '生图模式' }));
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 1K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '图片设置 Studio Wide 1:1 1K 2张' }));
     fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
-    fireEvent.keyDown(document, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: /生成模型/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Studio · Portrait' }));
-    expect(screen.getByRole('button', { name: '生成参数 3:4 1K 2张' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '图片设置 Studio Portrait 3:4 1K 2张' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '生成参数 3:4 1K 2张' }));
     fireEvent.click(screen.getByRole('button', { name: '分辨率 2K' }));
     fireEvent.click(screen.getByRole('button', { name: '生成数量 4' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {

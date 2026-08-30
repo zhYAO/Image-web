@@ -1,14 +1,16 @@
 import type { GenerationBatch, ProviderCapability, Skill, TimelineItem } from '@zimage/domain';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   ChatModelPopover,
   GenerationParameterPopover,
+  ImageSettingsPopover,
   normalizeGenerationSelection,
   SkillPopover,
 } from '@/features/workspace/GenerationConfig';
 import { SessionSidebar } from '@/features/workspace/SessionSidebar';
+import { UnifiedComposer } from '@/features/workspace/UnifiedComposer';
 import { WorkspaceTimeline } from '@/features/workspace/WorkspaceTimeline';
 import { useWorkspaceStore } from '@/store/workspace-store';
 
@@ -33,6 +35,102 @@ const socialSkill: Skill = {
 };
 
 describe('workspace presentation components', () => {
+  it('uses one composer where Enter submits, Shift+Enter inserts a newline and IME Enter is ignored', () => {
+    const onSubmit = vi.fn();
+    const onDraftChange = vi.fn();
+    render(
+      <UnifiedComposer
+        activePopover={undefined}
+        aspectRatio="1:1"
+        busy={false}
+        capabilities={[]}
+        count={1}
+        draft="一条消息"
+        health={[]}
+        imageCreationEnabled={false}
+        onAspectRatioChange={vi.fn()}
+        onChatModelSelect={vi.fn()}
+        onClearSkill={vi.fn()}
+        onCountChange={vi.fn()}
+        onDraftChange={onDraftChange}
+        onImageCreationChange={vi.fn()}
+        onModelSelect={vi.fn()}
+        onOpenConfig={vi.fn()}
+        onPopoverChange={vi.fn()}
+        onReferenceAdd={vi.fn()}
+        onReferenceRemove={vi.fn()}
+        onResolutionChange={vi.fn()}
+        onSkillPromptChange={vi.fn()}
+        onSkillSelect={vi.fn()}
+        onSkillValueChange={vi.fn()}
+        onSubmit={onSubmit}
+        references={[]}
+        resolution="2K"
+        selectedChatModel="doubao"
+        skillPrompt="一条消息"
+        skills={[]}
+        skillValues={{}}
+      />,
+    );
+
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(input, { isComposing: true, key: 'Enter' });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onDraftChange).not.toHaveBeenCalled();
+  });
+
+  it('replaces chat/image modes with a single create-image tool', () => {
+    const onImageCreationChange = vi.fn();
+    const sharedProps = {
+      activePopover: undefined,
+      aspectRatio: '1:1' as const,
+      busy: false,
+      capabilities: [] as ProviderCapability[],
+      count: 1,
+      draft: '',
+      health: [],
+      onAspectRatioChange: vi.fn(),
+      onChatModelSelect: vi.fn(),
+      onClearSkill: vi.fn(),
+      onCountChange: vi.fn(),
+      onDraftChange: vi.fn(),
+      onImageCreationChange,
+      onModelSelect: vi.fn(),
+      onOpenConfig: vi.fn(),
+      onPopoverChange: vi.fn(),
+      onReferenceAdd: vi.fn(),
+      onReferenceRemove: vi.fn(),
+      onResolutionChange: vi.fn(),
+      onSkillPromptChange: vi.fn(),
+      onSkillSelect: vi.fn(),
+      onSkillValueChange: vi.fn(),
+      onSubmit: vi.fn(),
+      references: [],
+      resolution: '2K' as const,
+      selectedChatModel: 'doubao',
+      skillPrompt: '',
+      skills: [],
+      skillValues: {},
+    };
+    const { rerender } = render(<UnifiedComposer {...sharedProps} imageCreationEnabled={false} />);
+
+    expect(screen.queryByRole('button', { name: '聊天模式' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '生图模式' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    expect(onImageCreationChange).toHaveBeenCalledWith(true);
+
+    rerender(<UnifiedComposer {...sharedProps} imageCreationEnabled />);
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('参考图')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /聊天模型/ })).not.toBeInTheDocument();
+  });
+
   it('lets image-mode users edit the resolved skill prompt before submission', () => {
     const onPromptChange = vi.fn();
     render(
@@ -167,6 +265,40 @@ describe('workspace presentation components', () => {
     })).toEqual({ aspectRatio: '3:4', count: 2, model: 'portrait', provider: 'Studio', resolution: '1K' });
   });
 
+  it('keeps image settings collapsed behind one summary and edits all advanced values in one panel', () => {
+    const onOpenChange = vi.fn();
+    const capabilities: ProviderCapability[] = [{
+      models: [{ aspectRatios: ['1:1', '16:9'], id: 'image', label: 'Image Pro', maxImages: 2, resolutions: ['1K', '2K'] }],
+      provider: 'Studio',
+    }];
+    const props = {
+      aspectRatio: '1:1' as const,
+      capabilities,
+      count: 2,
+      health: [{ checkedAt: '2026', provider: 'Studio', status: 'healthy' as const }],
+      onAspectRatioChange: vi.fn(),
+      onCountChange: vi.fn(),
+      onModelSelect: vi.fn(),
+      onOpenChange,
+      onResolutionChange: vi.fn(),
+      resolution: '2K' as const,
+      selectedModel: capabilities[0]!.models[0],
+      selectedProvider: 'Studio',
+    };
+    const { rerender } = render(<ImageSettingsPopover {...props} open={false} />);
+
+    expect(screen.queryByRole('dialog', { name: '图片生成设置' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '图片设置 Studio Image Pro 1:1 2K 2张' }));
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+
+    rerender(<ImageSettingsPopover {...props} open />);
+    const panel = screen.getByRole('dialog', { name: '图片生成设置' });
+    expect(panel).toContainElement(screen.getByRole('button', { name: 'Studio · Image Pro' }));
+    expect(panel).toContainElement(screen.getByRole('button', { name: '比例 16:9' }));
+    expect(panel).toContainElement(screen.getByRole('button', { name: '分辨率 1K' }));
+    expect(panel).toContainElement(screen.getByRole('button', { name: '生成数量 2' }));
+  });
+
   it('supports create, select, rename, cancel and delete session actions', () => {
     const onCreate = vi.fn();
     const onDelete = vi.fn();
@@ -195,7 +327,7 @@ describe('workspace presentation components', () => {
     expect(onDelete).toHaveBeenCalledWith('s1');
   });
 
-  it('renders all generation states and forwards batch actions', () => {
+  it('renders all generation states, previews successful assets and forwards batch actions', async () => {
     const batch: GenerationBatch = {
       assets: [
         { id: 'ok', status: 'succeeded', url: 'data:image/svg+xml,ok' },
@@ -239,6 +371,10 @@ describe('workspace presentation components', () => {
     );
 
     expect(screen.getByText('Google Gemini · gemini-3-pro-image · 3:4 · 2K')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('img', { name: '生成结果 1' }));
+    expect(await screen.findByRole('dialog', { name: '生成结果 1' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '生成结果 1' })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: '重新生成第 1 张' }));
     fireEvent.click(screen.getByRole('button', { name: '批量下载' }));
     fireEvent.click(screen.getByRole('button', { name: '重试失败项' }));
@@ -247,6 +383,50 @@ describe('workspace presentation components', () => {
     expect(onRecreate).toHaveBeenNthCalledWith(1, batch, 'single', 'ok');
     expect(onRecreate).toHaveBeenNthCalledWith(2, batch, 'failed');
     expect(onRecreate).toHaveBeenNthCalledWith(3, batch, 'all');
+  });
+
+  it('renders direct image generation as a user prompt followed by an assistant result without duplicating chat-tool prompts', () => {
+    const directBatch: GenerationBatch = {
+      assets: [{ id: 'pending', status: 'pending' }],
+      config: { aspectRatio: '16:9', count: 1, resolution: '2K' },
+      createdAt: '2026',
+      id: 'direct',
+      model: 'image-pro',
+      prompt: '海边的白色跑鞋',
+      provider: 'Studio',
+      sessionId: 's1',
+      source: 'direct',
+      status: 'pending',
+    };
+    const { rerender } = render(
+      <WorkspaceTimeline
+        items={[{ batch: directBatch, createdAt: '2026', id: 'g-direct', sequence: 1, sessionId: 's1', type: 'generation' }]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[]}
+        streamingText=""
+      />,
+    );
+
+    expect(screen.getByTestId('direct-generation-prompt')).toHaveTextContent('海边的白色跑鞋');
+    expect(screen.getByRole('article', { name: '图片生成结果' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText('正在创作')).toBeInTheDocument();
+
+    rerender(
+      <WorkspaceTimeline
+        items={[{
+          batch: { ...directBatch, id: 'tool', source: 'chat_tool' },
+          createdAt: '2026', id: 'g-tool', sequence: 1, sessionId: 's1', type: 'generation',
+        }]}
+        onDownloadBatch={vi.fn()}
+        onRecreate={vi.fn()}
+        onSelectSkill={vi.fn()}
+        skills={[]}
+        streamingText=""
+      />,
+    );
+    expect(screen.queryByTestId('direct-generation-prompt')).not.toBeInTheDocument();
   });
 
   it('forwards empty-state skill selection and exercises all store actions', () => {
@@ -265,8 +445,7 @@ describe('workspace presentation components', () => {
     expect(onSelectSkill).toHaveBeenCalledWith('white');
 
     const store = useWorkspaceStore.getState();
-    store.setMode('image');
-    store.setDraft('image', 'draft');
+    store.setDraft('draft');
     store.setExplicitImageToolEnabled(true);
     store.selectSkill('white');
     store.setSkillValue('product', 'coat');
@@ -275,8 +454,8 @@ describe('workspace presentation components', () => {
     store.setConfigDrawerOpen(true);
     expect(useWorkspaceStore.getState()).toMatchObject({
       configDrawerOpen: true,
+      draft: 'draft',
       explicitImageToolEnabled: true,
-      mode: 'image',
       scenario: 'partial',
       sessionDrawerOpen: true,
     });
@@ -391,7 +570,7 @@ describe('workspace presentation components', () => {
     expect(screen.getAllByText('已生成的回复文本')).toHaveLength(1);
   });
 
-  it('renders completed assistant messages as standard chat Markdown', () => {
+  it('renders completed assistant messages as standard chat Markdown with image preview', async () => {
     const items: TimelineItem[] = [
       {
         content: [
@@ -452,6 +631,10 @@ describe('workspace presentation components', () => {
 
     const image = screen.getByRole('img', { name: '示例图片' });
     expect(image).toHaveAttribute('src', 'https://example.com/preview.png');
+    fireEvent.click(image);
+    expect(await screen.findByRole('dialog', { name: '示例图片' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '示例图片' })).not.toBeInTheDocument());
   });
 
   it('keeps user-authored Markdown literal instead of formatting it', () => {

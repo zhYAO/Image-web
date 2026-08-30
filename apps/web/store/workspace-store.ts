@@ -1,8 +1,8 @@
-import type { ComposerMode, MockScenario } from '@zimage/domain';
+import type { MockScenario } from '@zimage/domain';
 import { create } from 'zustand';
 
 interface WorkspaceSlice {
-  activePopover?: 'model' | 'parameters' | 'skill';
+  activePopover?: 'image-settings' | 'model' | 'skill';
   sidebarCollapsed: boolean;
   sessionDrawerOpen: boolean;
   configDrawerOpen: boolean;
@@ -13,13 +13,11 @@ interface WorkspaceSlice {
 }
 
 interface ComposerSlice {
-  mode: ComposerMode;
-  drafts: Record<ComposerMode, string>;
+  draft: string;
   explicitImageToolEnabled: boolean;
   selectedSkillId?: string;
   skillValues: Record<string, string>;
-  setMode: (mode: ComposerMode) => void;
-  setDraft: (mode: ComposerMode, value: string) => void;
+  setDraft: (value: string) => void;
   setExplicitImageToolEnabled: (enabled: boolean) => void;
   selectSkill: (skillId?: string) => void;
   setSkillValue: (key: string, value: string) => void;
@@ -37,9 +35,8 @@ type WorkspaceUiState = WorkspaceSlice & ComposerSlice & CapabilitySlice & {
 const initialState = {
   activePopover: undefined,
   configDrawerOpen: false,
-  drafts: { chat: '', image: '' },
+  draft: '',
   explicitImageToolEnabled: false,
-  mode: 'chat' as const,
   scenario: 'happy' as const,
   selectedSkillId: undefined,
   sessionDrawerOpen: false,
@@ -49,7 +46,7 @@ const initialState = {
 
 export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   ...initialState,
-  reset: () => set({ ...initialState, drafts: { ...initialState.drafts }, skillValues: {} }),
+  reset: () => set({ ...initialState, skillValues: {} }),
   selectSkill: (selectedSkillId) =>
     set((state) => ({
       activePopover: selectedSkillId ? 'skill' : state.activePopover,
@@ -58,9 +55,8 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
     })),
   setConfigDrawerOpen: (configDrawerOpen) => set({ configDrawerOpen }),
   setActivePopover: (activePopover) => set({ activePopover }),
-  setDraft: (mode, value) => set((state) => ({ drafts: { ...state.drafts, [mode]: value } })),
+  setDraft: (draft) => set({ draft }),
   setExplicitImageToolEnabled: (explicitImageToolEnabled) => set({ explicitImageToolEnabled }),
-  setMode: (mode) => set({ mode }),
   setScenario: (scenario) => set({ scenario }),
   setSessionDrawerOpen: (sessionDrawerOpen) => set({ sessionDrawerOpen }),
   setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),

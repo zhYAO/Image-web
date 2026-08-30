@@ -1,7 +1,8 @@
 import type { GenerationBatch, RecreateScope, Skill, TimelineItem } from '@zimage/domain';
+import LobeImage from '@lobehub/ui/es/Image/index';
 import { Alert, Button, Spin, Tag } from 'antd';
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
-import Image from 'next/image';
+import NextImage from 'next/image';
 
 import { zhCN } from '@/i18n';
 
@@ -16,28 +17,46 @@ interface WorkspaceTimelineProps {
   awaitingFirstDelta?: boolean;
   isChatStreaming?: boolean;
   items: TimelineItem[];
+  loadError?: string;
+  loading?: boolean;
+  optimisticImages?: OptimisticImageTurnView[];
   skills: Skill[];
   streamingText: string;
   onDownloadBatch: (batch: GenerationBatch) => void;
   onRecreate: (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => void;
+  onRetryImage?: (turnId: string) => void;
+  onRetryLoad?: () => void;
   onSelectSkill: (skillId: string) => void;
+}
+
+export interface OptimisticImageTurnView {
+  batch: GenerationBatch;
+  id: string;
+  submitting: boolean;
 }
 
 function GenerationCard({
   batch,
   onDownloadBatch,
   onRecreate,
+  optimistic,
+  onRetryImage,
 }: {
   batch: GenerationBatch;
   onDownloadBatch: (batch: GenerationBatch) => void;
   onRecreate: (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => void;
+  optimistic?: boolean;
+  onRetryImage?: () => void;
 }) {
   const completed = batch.assets.filter((asset) => asset.status === 'succeeded' && !asset.expired);
   const failed = batch.assets.filter((asset) => asset.status === 'failed');
+  const working = batch.status === 'pending' || batch.status === 'processing';
   return (
-    <article className={styles.generationCard} data-status={batch.status}>
+    <div className={styles.generationCard} data-status={batch.status}>
       <header className={styles.generationHeader}>
-        <span className={styles.generationPrompt}>{batch.prompt}</span>
+        <span className={styles.generationStatusTitle}>
+          {working ? '正在创作' : batch.status === 'failed' ? '生成失败' : '图片结果'}
+        </span>
         <Tag color={batch.status === 'failed' ? 'red' : batch.status === 'partial' ? 'orange' : 'purple'}>
           {statusLabels[batch.status]}
         </Tag>
@@ -47,15 +66,25 @@ function GenerationCard({
       </div>
       <div className={styles.assetGrid}>
         {batch.assets.map((asset, index) => (
-          <div className={styles.asset} key={asset.id}>
+          <div
+            className={styles.asset}
+            key={asset.id}
+            style={{ aspectRatio: batch.config.aspectRatio.replace(':', ' / ') }}
+          >
             {asset.status === 'succeeded' && asset.url ? (
-              <Image alt={`生成结果 ${index + 1}`} height={720} priority={false} src={asset.url} unoptimized width={720} />
+              <LobeImage
+                alt={`生成结果 ${index + 1}`}
+                className={styles.assetPreview}
+                objectFit="cover"
+                preview
+                src={asset.url}
+              />
             ) : null}
             {asset.status === 'pending' && (
-              <div className={styles.assetState}><span>{zhCN.timeline.state.pending}</span></div>
+              <div className={`${styles.assetState} ${styles.assetSkeleton}`}><span>{zhCN.timeline.state.pending}</span></div>
             )}
             {asset.status === 'processing' && (
-              <div className={styles.assetState}><Spin size="small" /><span>{zhCN.timeline.state.processing}</span></div>
+              <div className={`${styles.assetState} ${styles.assetSkeleton}`}><Spin size="small" /><span>{zhCN.timeline.state.processing}</span></div>
             )}
             {asset.status === 'failed' && (
               <div className={styles.assetState}><ImageOff size={23} /><span>{asset.error?.message}</span></div>
@@ -65,7 +94,7 @@ function GenerationCard({
                 <span>{zhCN.timeline.expired}</span>
               </div>
             )}
-            {(asset.status === 'succeeded' || asset.status === 'failed') && (
+            {!optimistic && (asset.status === 'succeeded' || asset.status === 'failed') && (
               <Button
                 aria-label={`重新生成第 ${index + 1} 张`}
                 className={styles.assetRecreate}
@@ -83,7 +112,10 @@ function GenerationCard({
           {completed.length > 0 && (
             <Button icon={<Download size={14} />} onClick={() => onDownloadBatch(batch)} size="small">{zhCN.timeline.batchDownload}</Button>
           )}
-          {failed.length > 0 && (
+          {optimistic && batch.status === 'failed' && onRetryImage && (
+            <Button icon={<RefreshCw size={14} />} onClick={onRetryImage}>重试生成</Button>
+          )}
+          {!optimistic && failed.length > 0 && (
             <Button icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'failed')} size="small">{zhCN.timeline.recreateFailed}</Button>
           )}
           {batch.assets.some((asset) => asset.expired) && (
@@ -91,7 +123,43 @@ function GenerationCard({
           )}
         </div>
       </footer>
-    </article>
+    </div>
+  );
+}
+
+function GenerationTurn({
+  batch,
+  onDownloadBatch,
+  onRecreate,
+  optimistic = false,
+  onRetryImage,
+}: {
+  batch: GenerationBatch;
+  onDownloadBatch: (batch: GenerationBatch) => void;
+  onRecreate: (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => void;
+  optimistic?: boolean;
+  onRetryImage?: () => void;
+}) {
+  const working = batch.status === 'pending' || batch.status === 'processing';
+  return (
+    <div className={styles.generationTurn} data-testid={optimistic ? 'optimistic-image-turn' : undefined}>
+      {batch.source === 'direct' && (
+        <article className={`${styles.message} ${styles.messageUser}`} data-testid="direct-generation-prompt">
+          <div className={styles.avatar}><UserRound size={15} /></div>
+          <div className={styles.bubble}>{batch.prompt}</div>
+        </article>
+      )}
+      <article aria-busy={working} aria-label="图片生成结果" className={`${styles.message} ${styles.generationResponse}`}>
+        <div className={styles.avatar}><Bot size={16} /></div>
+        <GenerationCard
+          batch={batch}
+          onDownloadBatch={onDownloadBatch}
+          onRecreate={onRecreate}
+          onRetryImage={onRetryImage}
+          optimistic={optimistic}
+        />
+      </article>
+    </div>
   );
 }
 
@@ -99,13 +167,42 @@ export function WorkspaceTimeline({
   awaitingFirstDelta = false,
   isChatStreaming = false,
   items,
+  loadError,
+  loading = false,
+  optimisticImages = [],
   skills,
   streamingText,
   onDownloadBatch,
   onRecreate,
+  onRetryImage,
+  onRetryLoad,
   onSelectSkill,
 }: WorkspaceTimelineProps) {
-  if (items.length === 0 && !streamingText && !awaitingFirstDelta) {
+  if (loading) {
+    return (
+      <div aria-label="正在加载会话" className={styles.timelineLoading} data-testid="timeline-loading" role="status">
+        <div className={styles.timelineSkeletonUser} />
+        <div className={styles.timelineSkeletonAssistant} />
+        <div className={styles.timelineSkeletonAssistantShort} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.timelineLoadError}>
+        <Alert
+          action={onRetryLoad ? <Button onClick={onRetryLoad}>重试加载</Button> : undefined}
+          description={loadError}
+          showIcon
+          title="会话加载失败"
+          type="error"
+        />
+      </div>
+    );
+  }
+
+  if (items.length === 0 && optimisticImages.length === 0 && !streamingText && !awaitingFirstDelta) {
     return (
       <div className={styles.empty}>
         <h1 className={styles.heroTitle}>{zhCN.timeline.emptyTitle}</h1>
@@ -114,7 +211,7 @@ export function WorkspaceTimeline({
             <button aria-label={`${skill.name}：${skill.description}`} className={styles.skillCard} key={skill.id} onClick={() => onSelectSkill(skill.id)} type="button">
               <span className={styles.skillCover}>
                 {skill.coverImageUrl ? (
-                  <Image alt="" fill sizes="(max-width: 900px) 100vw, 300px" src={skill.coverImageUrl} />
+                  <NextImage alt="" fill sizes="(max-width: 900px) 100vw, 300px" src={skill.coverImageUrl} />
                 ) : (
                   <span className={styles.skillIcon}>{skill.icon}</span>
                 )}
@@ -144,10 +241,20 @@ export function WorkspaceTimeline({
           );
         }
         if (item.type === 'generation') {
-          return <GenerationCard batch={item.batch} key={item.id} onDownloadBatch={onDownloadBatch} onRecreate={onRecreate} />;
+          return <GenerationTurn batch={item.batch} key={item.id} onDownloadBatch={onDownloadBatch} onRecreate={onRecreate} />;
         }
         return <Alert action={item.actionLabel ? <Button size="small">{item.actionLabel}</Button> : undefined} description={item.error.message} key={item.id} showIcon type="error" />;
       })}
+      {optimisticImages.map((turn) => (
+        <GenerationTurn
+          batch={turn.batch}
+          key={turn.id}
+          onDownloadBatch={onDownloadBatch}
+          onRecreate={onRecreate}
+          onRetryImage={onRetryImage ? () => onRetryImage(turn.id) : undefined}
+          optimistic
+        />
+      ))}
       {(streamingText || awaitingFirstDelta) && (
         <article className={styles.message}>
           <div className={styles.avatar}><Bot size={16} /></div>

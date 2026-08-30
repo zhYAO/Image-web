@@ -4,6 +4,7 @@ doc/LangGraphPj/
 node_modules
 .pnpm-store
 .next
+.next-playwright
 coverage
 playwright-report
 test-results

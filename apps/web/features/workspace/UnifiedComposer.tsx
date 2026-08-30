@@ -1,6 +1,5 @@
 import type {
   AspectRatio,
-  ComposerMode,
   ImageResolution,
   ProviderCapability,
   ProviderHealth,
@@ -8,33 +7,32 @@ import type {
   Skill,
   UploadReference,
 } from '@zimage/domain';
-import { Button, Input, Switch, Tooltip } from 'antd';
-import { ArrowUp, Image as ImageIcon, ImagePlus, MessageCircle, Settings2, X } from 'lucide-react';
-import Image from 'next/image';
+import LobeImage from '@lobehub/ui/es/Image/index';
+import { Button, Input, Tooltip } from 'antd';
+import { ArrowUp, Image as ImageIcon, ImagePlus, Settings2, X } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 
 import { zhCN } from '@/i18n';
 
 import {
   ChatModelPopover,
-  GenerationParameterPopover,
-  ModelPopover,
+  ImageSettingsPopover,
   SkillPopover,
   type ModelCapability,
 } from './GenerationConfig';
 import styles from './workspace.module.css';
 
 interface UnifiedComposerProps {
-  activePopover?: 'model' | 'parameters' | 'skill';
+  activePopover?: 'image-settings' | 'model' | 'skill';
   aspectRatio: AspectRatio;
   busy: boolean;
   capabilities: ProviderCapability[];
   count: number;
+  disabled?: boolean;
   draft: string;
   focusSkillFieldKey?: string;
   health: ProviderHealth[];
-  imageToolEnabled: boolean;
-  mode: ComposerMode;
+  imageCreationEnabled: boolean;
   quota?: Quota;
   references: UploadReference[];
   resolution: ImageResolution;
@@ -49,8 +47,7 @@ interface UnifiedComposerProps {
   onClearSkill: () => void;
   onCountChange: (count: number) => void;
   onDraftChange: (value: string) => void;
-  onImageToolChange: (enabled: boolean) => void;
-  onModeChange: (mode: ComposerMode) => void;
+  onImageCreationChange: (enabled: boolean) => void;
   onModelSelect: (provider: string, model: string) => void;
   onChatModelSelect: (model: string) => void;
   onOpenConfig: () => void;
@@ -70,11 +67,11 @@ export function UnifiedComposer({
   busy,
   capabilities,
   count,
+  disabled = false,
   draft,
   focusSkillFieldKey,
   health,
-  imageToolEnabled,
-  mode,
+  imageCreationEnabled,
   quota,
   references,
   resolution,
@@ -89,8 +86,7 @@ export function UnifiedComposer({
   onClearSkill,
   onCountChange,
   onDraftChange,
-  onImageToolChange,
-  onModeChange,
+  onImageCreationChange,
   onModelSelect,
   onChatModelSelect,
   onOpenConfig,
@@ -104,9 +100,14 @@ export function UnifiedComposer({
   onSubmit,
 }: UnifiedComposerProps) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    if (
+      event.key === 'Enter'
+      && !event.shiftKey
+      && !event.nativeEvent.isComposing
+      && event.keyCode !== 229
+    ) {
       event.preventDefault();
-      onSubmit();
+      if (!disabled && !busy && draft.trim()) onSubmit();
     }
   };
 
@@ -118,19 +119,18 @@ export function UnifiedComposer({
   return (
     <div className={styles.composer}>
       <div className={styles.composerBody}>
-        {mode === 'image' && (
+        {imageCreationEnabled && (
           <div aria-label={zhCN.composer.reference} className={styles.inlineReferences}>
             {references.map((reference, index) => (
               <div className={styles.referenceCard} key={`${reference.name}-${index}`}>
                 <div className={styles.referencePreview}>
                   {reference.previewUrl ? (
-                    <Image
+                    <LobeImage
                       alt={`参考图 ${reference.name}`}
-                      fill
-                      sizes="72px"
+                      className={styles.referencePreviewImage}
+                      objectFit="cover"
+                      preview
                       src={reference.previewUrl}
-                      style={{ objectFit: 'cover' }}
-                      unoptimized
                     />
                   ) : (
                     <ImageIcon aria-hidden size={22} />
@@ -177,60 +177,46 @@ export function UnifiedComposer({
           aria-label="创作输入"
           autoSize={{ maxRows: 5, minRows: 2 }}
           className={styles.composerInput}
+          disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={mode === 'chat' ? zhCN.composer.chatPlaceholder : zhCN.composer.imagePlaceholder}
+          placeholder={imageCreationEnabled ? zhCN.composer.imagePlaceholder : zhCN.composer.chatPlaceholder}
           value={draft}
           variant="borderless"
         />
       </div>
       <div className={styles.composerActions}>
         <div className={styles.composerTools}>
-          <div className={styles.modeSwitch}>
-            <button
-              aria-label={zhCN.composer.chatMode}
-              aria-pressed={mode === 'chat'}
-              className={`${styles.modeButton} ${mode === 'chat' ? styles.modeActive : ''}`}
-              onClick={() => onModeChange('chat')}
-              type="button"
+          <Tooltip title={selectedSkill?.requiresImageTool ? '所选技能需要创建图片' : '在当前会话中创建图片'}>
+            <Button
+              aria-label="创建图片"
+              aria-pressed={imageCreationEnabled}
+              className={`${styles.toolbarButton} ${imageCreationEnabled ? styles.toolbarButtonActive : ''}`}
+              disabled={Boolean(selectedSkill?.requiresImageTool) || disabled}
+              icon={<ImageIcon size={15} />}
+              onClick={() => onImageCreationChange(!imageCreationEnabled)}
             >
-              <MessageCircle size={14} />聊天
-            </button>
-            <button
-              aria-label={zhCN.composer.imageMode}
-              aria-pressed={mode === 'image'}
-              className={`${styles.modeButton} ${mode === 'image' ? styles.modeActive : ''}`}
-              onClick={() => onModeChange('image')}
-              type="button"
-            >
-              <ImageIcon size={14} />图片生成
-            </button>
-          </div>
-          {mode === 'image' && (
-            <>
-              <ModelPopover
-                capabilities={capabilities}
-                health={health}
-                onOpenChange={(open) => onPopoverChange(open ? 'model' : undefined)}
-                onSelect={onModelSelect}
-                open={activePopover === 'model'}
-                selectedModel={selectedModel}
-                selectedProvider={selectedProvider}
-              />
-              <GenerationParameterPopover
-                aspectRatio={aspectRatio}
-                count={count}
-                model={selectedModel}
-                onAspectRatioChange={onAspectRatioChange}
-                onCountChange={onCountChange}
-                onOpenChange={(open) => onPopoverChange(open ? 'parameters' : undefined)}
-                onResolutionChange={onResolutionChange}
-                open={activePopover === 'parameters'}
-                resolution={resolution}
-              />
-            </>
+              创建图片
+            </Button>
+          </Tooltip>
+          {imageCreationEnabled && (
+            <ImageSettingsPopover
+              aspectRatio={aspectRatio}
+              capabilities={capabilities}
+              count={count}
+              health={health}
+              onAspectRatioChange={onAspectRatioChange}
+              onCountChange={onCountChange}
+              onModelSelect={onModelSelect}
+              onOpenChange={(open) => onPopoverChange(open ? 'image-settings' : undefined)}
+              onResolutionChange={onResolutionChange}
+              open={activePopover === 'image-settings'}
+              resolution={resolution}
+              selectedModel={selectedModel}
+              selectedProvider={selectedProvider}
+            />
           )}
-          {mode === 'chat' && (
+          {!imageCreationEnabled && (
             <ChatModelPopover
               health={health}
               onOpenChange={(open) => onPopoverChange(open ? 'model' : undefined)}
@@ -240,7 +226,7 @@ export function UnifiedComposer({
             />
           )}
           <SkillPopover
-            editablePrompt={mode === 'image'}
+            editablePrompt={imageCreationEnabled}
             focusFieldKey={focusSkillFieldKey}
             onClear={onClearSkill}
             onOpenChange={(open) => onPopoverChange(open ? 'skill' : undefined)}
@@ -253,20 +239,6 @@ export function UnifiedComposer({
             skills={skills}
             skillValues={skillValues}
           />
-          {mode === 'chat' && (
-            <Tooltip title={zhCN.composer.imageToolHint}>
-              <span className={styles.imageToolToggle}>
-                <Switch
-                  aria-label={zhCN.composer.imageTool}
-                  checked={imageToolEnabled}
-                  disabled={Boolean(selectedSkill?.requiresImageTool)}
-                  onChange={onImageToolChange}
-                  size="small"
-                />
-                <span>{zhCN.composer.imageTool}</span>
-              </span>
-            </Tooltip>
-          )}
           <Button
             aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}
@@ -279,7 +251,7 @@ export function UnifiedComposer({
           <Button
             aria-label={zhCN.composer.submit}
             className={styles.submitButton}
-            disabled={!draft.trim()}
+            disabled={disabled || !draft.trim()}
             icon={<ArrowUp size={18} strokeWidth={2.5} />}
             loading={busy}
             onClick={onSubmit}

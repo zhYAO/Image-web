@@ -29,10 +29,10 @@ flowchart LR
 
 | 模块 ID | 模块 | 职责与边界 |
 | --- | --- | --- |
-| M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 两栏布局、可折叠会话侧栏、会话选择和匿名恢复提示；旧路径只做重定向。 |
-| M02 | `Timeline` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态，并在展示层把白名单消息标签分段为只读折叠块，保留原始消息内容。 |
-| M03 | `UnifiedComposer` / `ToolSelector` | 显式聊天/生图模式、独立草稿、图片工具许可和提交；图片工具默认关闭且仅在聊天模式显示，显式聊天偏好独立于模式与技能强制启用状态，不直接调用 provider。 |
-| M04 | `ModelPopover` / `GenerationParameterPopover` / `SkillPopover` | 输入框上方互斥浮层：provider/model 与健康状态、能力驱动的比例/分辨率/数量、左侧技能列表及右侧必填字段与实时提示词预览；窄屏抽屉复用同一技能和字段状态。工具栏选择保持当前模式，首页快捷卡明确进入生图模式；参考图由输入框单点维护。 |
+| M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 两栏布局、可折叠会话侧栏、会话选择和匿名恢复提示；按 `sessionId` 隔离加载、时间线、流式回复、临时生图回合和忙碌状态，控制骨架加载、后台任务标记、智能跟随与回到底部入口；旧路径只做重定向。 |
+| M02 | `Timeline` / `GenerationTurn` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态；直接生图组合用户提示词与助手结果，历史工具生图不重复提示词；生成图和 Markdown 图进入统一图片预览组，白名单消息标签分段为只读折叠块并保留原始内容。 |
+| M03 | `UnifiedComposer` | 单一草稿和输入框默认发送聊天；“创建图片”工具或图片技能启用后改走现有图片提交链路并展示参考图和生成配置；Enter 发送、Shift+Enter 换行且尊重输入法合成状态，不直接调用 provider。 |
+| M04 | `ImageSettingsPopover` / `SkillPopover` | 输入框上方互斥浮层：图片 provider/model、健康状态和能力驱动参数合并为按需设置面板，技能保留必填字段与实时提示词预览；窄屏抽屉复用同一状态。参考图由输入框单点维护并进入统一图片预览组，技能封面不进入会话预览。 |
 | M05 | Chat Route + LangGraph | 认证、用户消息持久化、SSE、请求级 workflow/checkpointer、Doubao/MiniMax 与聊天 tool 编排。 |
 | M06 | Application API | 会话、生图、重生成、配额、技能、健康和资产 URL 的 Route Handlers。 |
 | M07 | Skill Registry | 三个内置技能、版本、指令和 provider/model capability。 |

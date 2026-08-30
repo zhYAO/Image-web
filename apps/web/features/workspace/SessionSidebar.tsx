@@ -1,5 +1,5 @@
 import type { Session } from '@zimage/domain';
-import { Button, Input, Tooltip } from 'antd';
+import { Button, Input, Spin, Tooltip } from 'antd';
 import { Check, ChevronsLeft, MessageSquarePlus, Pencil, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -7,6 +7,7 @@ import styles from './workspace.module.css';
 
 interface SessionSidebarProps {
   activeSessionId?: string;
+  busySessionIds?: ReadonlySet<string>;
   sessions: Session[];
   onCreate: () => void;
   onCollapse?: () => void;
@@ -17,6 +18,7 @@ interface SessionSidebarProps {
 
 export function SessionSidebar({
   activeSessionId,
+  busySessionIds,
   sessions,
   onCreate,
   onCollapse,
@@ -74,14 +76,19 @@ export function SessionSidebar({
                 value={title}
               />
             ) : (
-              <button
-                className={styles.sessionTitle}
-                onClick={() => onSelect(session.id)}
-                style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                type="button"
-              >
-                {session.title}
-              </button>
+              <div className={styles.sessionTitleRow}>
+                <button
+                  className={styles.sessionTitle}
+                  onClick={() => onSelect(session.id)}
+                  style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                  type="button"
+                >
+                  {session.title}
+                </button>
+                {busySessionIds?.has(session.id) && (
+                  <Spin aria-label={`${session.title} 正在处理`} className={styles.sessionBusy} size="small" />
+                )}
+              </div>
             )}
             <div className={styles.sessionActions}>
               {editingId === session.id ? (
