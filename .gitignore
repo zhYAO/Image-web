@@ -1,6 +1,7 @@
 # External projects (local-only)
 doc/lobehub-canary/
 doc/LangGraphPj/
+doc/OpenChatCut/
 node_modules
 .pnpm-store
 .next
