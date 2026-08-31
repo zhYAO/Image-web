@@ -102,6 +102,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
       body: JSON.stringify({
         chatModel: request.chatModel,
         imageProvider: request.imageProvider,
+        images: request.images?.length ? request.images : undefined,
         message: request.message,
         sessionId: request.sessionId,
         skillId: request.skillId,

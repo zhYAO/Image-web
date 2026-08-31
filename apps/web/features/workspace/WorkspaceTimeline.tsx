@@ -1,6 +1,5 @@
 import type { GenerationBatch, RecreateScope, Skill, TimelineItem } from '@zimage/domain';
-import LobeImage from '@lobehub/ui/es/Image/index';
-import { Alert, Button, Spin, Tag } from 'antd';
+import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
 import NextImage from 'next/image';
 
@@ -72,11 +71,11 @@ function GenerationCard({
             style={{ aspectRatio: batch.config.aspectRatio.replace(':', ' / ') }}
           >
             {asset.status === 'succeeded' && asset.url ? (
-              <LobeImage
+              <AntdImage
                 alt={`生成结果 ${index + 1}`}
                 className={styles.assetPreview}
-                objectFit="cover"
-                preview
+                preview={{ mask: false }}
+                rootClassName={styles.assetPreview}
                 src={asset.url}
               />
             ) : null}

@@ -19,8 +19,8 @@ import {
   type UploadReference,
   type WorkspaceGateway,
 } from '@zimage/domain';
-import { PreviewGroup } from '@lobehub/ui/es/Image/index';
 import { Alert, Button, Drawer, Input, Select, Space } from 'antd';
+import PreviewGroup from 'antd/es/image/PreviewGroup';
 import { Archive, ArrowDown, ChevronRight, Menu } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 

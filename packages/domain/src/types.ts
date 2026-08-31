@@ -165,6 +165,7 @@ export interface UploadReference {
 export interface ChatRequest {
   chatModel?: string;
   imageProvider?: string;
+  images?: string[];
   sessionId?: string;
   message: string;
   imageToolEnabled: boolean;

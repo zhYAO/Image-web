@@ -716,9 +716,11 @@ describe('UnifiedWorkspace', () => {
     expect(screen.getByRole('img', { name: '参考图 ref.png' })).toHaveAttribute('src', 'blob:ref.png');
     expect(screen.getByText('ref.png')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('img', { name: '参考图 ref.png' }));
-    expect(await screen.findByRole('dialog', { name: '参考图 ref.png' })).toBeInTheDocument();
+    const previewDialog = await screen.findByRole('dialog');
+    expect(previewDialog).toBeInTheDocument();
+    expect(previewDialog.querySelector('img')).toHaveAttribute('src', 'blob:ref.png');
     fireEvent.keyDown(document, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '参考图 ref.png' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '移除 ref.png' }));
     expect(screen.queryByRole('img', { name: '参考图 ref.png' })).not.toBeInTheDocument();

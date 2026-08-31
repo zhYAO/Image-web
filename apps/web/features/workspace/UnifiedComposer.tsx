@@ -7,8 +7,7 @@ import type {
   Skill,
   UploadReference,
 } from '@zimage/domain';
-import LobeImage from '@lobehub/ui/es/Image/index';
-import { Button, Input, Tooltip } from 'antd';
+import { Button, Image as AntdImage, Input, Tooltip } from 'antd';
 import { ArrowUp, Image as ImageIcon, ImagePlus, Settings2, X } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 
@@ -125,11 +124,11 @@ export function UnifiedComposer({
               <div className={styles.referenceCard} key={`${reference.name}-${index}`}>
                 <div className={styles.referencePreview}>
                   {reference.previewUrl ? (
-                    <LobeImage
+                    <AntdImage
                       alt={`参考图 ${reference.name}`}
                       className={styles.referencePreviewImage}
-                      objectFit="cover"
-                      preview
+                      preview={{ mask: false }}
+                      rootClassName={styles.referencePreviewImage}
                       src={reference.previewUrl}
                     />
                   ) : (

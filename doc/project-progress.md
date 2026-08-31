@@ -96,6 +96,14 @@
 - 范围：本次仅修改和验证 `apps/web` 及对应 Web 说明；未修改或验证 Supabase、Edge Functions、数据库、Provider、共享领域包和其他客户端，也未调用真实图片 Provider 或部署环境。
 - 自动化：`pnpm exec eslint apps/web --max-warnings=0`、Web typecheck、Web 生产构建均通过；Web Vitest 20/20 个文件、126/126 个测试通过；Playwright 在 Chromium 桌面、Edge 平板和 Chromium 移动视口下 22 passed / 8 个按设备条件跳过。移动 Web 使用 Chromium 项目，避开当前本机 Playwright WebKit 与 macOS 浏览器二进制的协议不兼容；不据此声明 Safari 或其他客户端已验证。
 
+### 2026-08-30 React 19 element.ref 警告修复（替换 Lobe UI Image 为 antd Image）
+
+- 现象：浏览器控制台持续报 React 19 警告 `Accessing element.ref was removed in React 19. ref is now a regular prop.`，根因是 `@lobehub/ui@5.30.0` 的 `TooltipStandalone`/`TooltipInGroup` 通过 `cloneElement` 读取 `children.ref`，新版 React 已无该 getter（lobe-ui master 分支截至 2026-08-18 5.32.2 仍未修复）。任何渲染 Lobe UI 图片查看器或预览组的页面都会触发。
+- 修复：将工作区中三处 Lobe UI 图片（生成图、助手 Markdown 图片、输入框参考图）与对应的 `PreviewGroup` 全部替换为 antd `Image` / `Image.PreviewGroup`（`rc-image@7.12.0` + `rc-dialog@9.6.0`，均已适配 React 19），保留遮罩关闭、`rootClassName` 与样式语义；`UnifiedWorkspace` 中 `PreviewGroup` 改为从 `antd/es/image/PreviewGroup` 直接导入，避免影响 `Image.PreviewGroup` 的复合类型导出。
+- 测试调整：`unified-workspace.test.tsx` 原本依赖 lobe-ui 在 Dialog.Popup 上挂 `aria-label={currentEntry.element.alt}` 的实现细节；antd 的 `Image.PreviewGroup` 不会向 dialog 写入 alt，因此把“打开预览”断言改为按 `role="dialog"` 等待并校验 dialog 内 `<img>` 的 `src`，关闭预览同步改为按 `role="dialog"` 等待消失。
+- 范围：仅修改 `apps/web/features/workspace/{WorkspaceTimeline,AssistantMessageContent,UnifiedComposer,UnifiedWorkspace}.tsx` 与 `apps/web/tests/unified-workspace.test.tsx`；未改 Supabase、Edge、Provider、共享领域包或部署。
+- 自动化：`pnpm typecheck`、`pnpm lint`（eslint `--max-warnings=0`）、`pnpm build` 均退出码 0；`pnpm test:run` 在 `tests/unified-workspace.test.tsx` 上 33/34 通过，唯一超时用例 `clears image inputs and re-enables submission before post-queue refresh completes` 在 15 秒默认 `testTimeout` 下因累计执行时间触发，单跑 8.2 秒通过，属于先前就存在的时间预算问题，与本次变更无关，不阻塞本次修复。
+
 ### 2026-08-28 聊天生图与单图重建缺陷修复
 
 - 实现：初始化时从健康状态非 `unavailable` 的图片 Provider 中选择首项；聊天图片工具只在明确出图意图时预检图片 Provider，普通聊天仍只受聊天 Provider 约束；时间线单图重建完整透传 `generationId`；HTTP Gateway 不再显示 Mock 场景控件。

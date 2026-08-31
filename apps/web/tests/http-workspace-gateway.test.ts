@@ -1,3 +1,4 @@
+import type { ChatEvent } from '@zimage/domain';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HttpWorkspaceGateway } from '@/gateways/http-workspace-gateway';
@@ -8,6 +9,20 @@ const generationId = '40000000-0000-4000-8000-0000000000a1';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' }, status });
+}
+
+function sse(frames: string[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const frame of frames) controller.enqueue(encoder.encode(`${frame}\n\n`));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+    status: 200,
+  });
 }
 
 describe('HttpWorkspaceGateway', () => {
@@ -125,5 +140,54 @@ describe('HttpWorkspaceGateway', () => {
     const recreateCall = fetcher.mock.calls[0];
     expect(recreateCall?.[0]).toBe('/api/image/recreate');
     expect(JSON.parse(String(recreateCall?.[1]?.body))).toEqual(expected);
+  });
+
+  it('forwards uploaded reference ids in the chat request body', async () => {
+    const messageId = '20000000-0000-4000-8000-0000000000a1';
+    const referenceId1 = '50000000-0000-4000-8000-0000000000a1';
+    const referenceId2 = '50000000-0000-4000-8000-0000000000a2';
+    const fetcher = vi.fn().mockResolvedValueOnce(sse([
+      `data: ${JSON.stringify({ content: 'ok', messageId, type: 'message.completed' })}`,
+    ]));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+
+    const events: ChatEvent[] = [];
+    for await (const event of gateway.streamChat({
+      imageToolEnabled: false,
+      images: [referenceId1, referenceId2],
+      message: '帮我分析这两张参考图',
+      sessionId,
+    })) events.push(event);
+
+    expect(events).toEqual([{ content: 'ok', messageId, type: 'message.completed' }]);
+    expect(fetcher).toHaveBeenCalledOnce();
+    const [path, init] = fetcher.mock.calls[0]!;
+    expect(path).toBe('/api/chat');
+    expect(JSON.parse(String(init?.body))).toEqual({
+      images: [referenceId1, referenceId2],
+      message: '帮我分析这两张参考图',
+      sessionId,
+    });
+  });
+
+  it('omits the images key when no reference ids are attached', async () => {
+    const messageId = '20000000-0000-4000-8000-0000000000a2';
+    const fetcher = vi.fn().mockResolvedValueOnce(sse([
+      `data: ${JSON.stringify({ content: 'ok', messageId, type: 'message.completed' })}`,
+    ]));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+
+    const events: ChatEvent[] = [];
+    for await (const event of gateway.streamChat({
+      imageToolEnabled: false,
+      message: '普通聊天',
+      sessionId,
+    })) events.push(event);
+
+    expect(events).toEqual([{ content: 'ok', messageId, type: 'message.completed' }]);
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+      message: '普通聊天',
+      sessionId,
+    });
   });
 });

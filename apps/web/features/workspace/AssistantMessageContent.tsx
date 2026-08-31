@@ -2,7 +2,7 @@
 
 import Markdown from '@lobehub/ui/es/Markdown/Markdown';
 import type { MarkdownProps } from '@lobehub/ui/es/Markdown/type';
-import LobeImage from '@lobehub/ui/es/Image/index';
+import { Image as AntdImage } from 'antd';
 import { BrainCircuit, CheckCircle2, ChevronDown, Wrench } from 'lucide-react';
 import { useMemo, useState, type ComponentProps } from 'react';
 
@@ -36,17 +36,14 @@ function SafeMarkdownImage({ alt, src, title }: ComponentProps<'img'> & { node?:
   }
 
   return (
-    <LobeImage
+    <AntdImage
       alt={alt ?? ''}
       className={styles.markdownImage}
       loading="lazy"
-      maxHeight={520}
-      maxWidth="100%"
-      objectFit="contain"
-      preview
+      preview={{ mask: false }}
       src={src}
+      style={{ maxHeight: 520, maxWidth: '100%', objectFit: 'contain' }}
       title={title}
-      variant="outlined"
     />
   );
 }
