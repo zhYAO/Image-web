@@ -1,244 +1,1052 @@
 # zimage 技术选型文档
 
-> **版本**：v1.4
-> **状态**：与 `requirements.md` v1.4 对齐的开发决策
-> **更新日期**：2026-08-27
+> **版本**：v2.0
+> **状态**：Phase 2 技术选型已完成，尚未实施；Phase 1 已实施内容作为历史基线保留
+> **需求基线**：`doc/requirements.md` v2.0（2026-08-31）
+> **更新日期**：2026-09-01
+> **适用发布口径**：面向中国大陆用户的公开 Beta，非生产就绪
 
-## 1. 选型原则与实施顺序
+## 1. 文档边界与追溯规则
 
-技术选型服务于统一首页，不再按独立页面拆分系统。Phase 1 按以下顺序实施：
+### 1.1 唯一需求来源与状态口径
 
-1. `UnifiedWorkspace` 前端 mock：覆盖聊天流、排队、部分成功、失败、过期和删除等状态。
-2. Chromium、Microsoft Edge、Playwright WebKit 完成零费内测关键流程验收；真实 Safari 留在生产门禁。
-3. 接入会话、SSE、Supabase Queues、provider、private Storage、告警与备份。
+本文件是 Phase 2 的技术设计与后续开发指导，产品行为只来源于 `doc/requirements.md` v2.0。技术设计可以增加满足需求所必需的接口、表和模块，但不得反向改变产品行为。`doc/project-progress.md` 中 Phase 2 仍为未开始状态，因此本文件中的路径、接口、数据表和伪代码均表示计划实现，不表示代码、测试或真实环境证据已经交付。
 
-当前文档只批准技术方向，不表示任何代码已经交付。
+Phase 2 共追溯 83 个稳定 ID：6 个成功指标、47 个用户故事验收条目、8 个非目标、6 个发布依赖、7 个风险和 9 个编号验收场景。其中以下 6 项为 `withdrawn`，只保留撤销原因，不创建实现任务，也不得复用 ID：
 
-本轮 Phase 1B 使用本地 Next.js 生产模式 HTTP 服务，不依赖 Vercel。`PHASE1B_CHAT_MODEL` 只接受 `doubao`，`PHASE1B_CHAT_TOOL_MODEL` 只接受 `minimax`，`PHASE1B_IMAGE_PROVIDER` 只接受 `seedream`；所有图片请求固定 `count=1`，正常 3 张、累计最多 5 张。阿里云 ECS、容器、TLS、反向代理和生产回滚不在本轮技术交付范围。
+- `P2-US5-AC01`、`P2-US5-AC02`、`P2-US5-AC03`：撤销匿名历史归入及其去重、失败、重试行为。
+- `P2-US5-AC05`：撤销匿名进行中任务归入正式账号。
+- `P2-DEP04`：撤销“匿名历史保持可识别和可归入”的依赖。
+- `P2-RISK03`：撤销匿名归入中断或重复触发风险。
 
-## 2. 基础栈
+### 1.2 Phase 1 历史基线与 Phase 2 覆盖
 
-| 决策 ID | 选择 | 依据与约束 |
+Phase 1 的 Next.js 16、React、TypeScript strict、Zod、Zustand、LangGraphJS、Supabase Postgres/Auth/Queues/Storage、private bucket、SSE、持久队列、配额账本、RLS/显式 `GRANT`、清理任务和 provider adapter 继续作为回归基线。除下表列出的覆盖项外，不改变既有生成、费用、安全、删除、到期和可观察性行为。
+
+| Phase 1 决策/行为 | Phase 2 处理 | 对应需求 |
 | --- | --- | --- |
-| TS-BASE-01 | Next.js 16 App Router、React、TypeScript strict、pnpm workspace | Next.js 16 默认 Turbopack；ESLint 作为独立 CI 命令运行。应用目录统一为 `apps/web/app`。 |
-| TS-BASE-02 | Supabase Cloud：Postgres、Auth、Queues、Storage | Phase 1 复用单一平台的身份、数据和持久任务能力；生产使用 Pro 或更高方案。 |
-| TS-DB-01 | SQL migration + 生成数据库类型 + pgTAP | 每张公开业务表显式 `GRANT` 和 RLS。不能依赖新建表自动暴露给 Data API。 |
-| TS-TYPE-01 | Zod（或等价运行时 schema）+ `unknown` + 判别联合 | 请求、SSE 事件、provider 响应和队列消息均先验证后使用；不在示例或实现中使用 TypeScript 任意类型。 |
-| TS-I18N-01 | 结构化 zh-CN key | Phase 1 只暴露中文；组件禁止散落不可检索文案，为 Phase 2 en-US 保留 key 而不提前实现入口。 |
-| TS-PERF-01 | OpenTelemetry/Sentry timing + 固定性能夹具 | 分别测量 2K 生图端到端 P95 与 50 会话侧栏渲染；不把 queue 接收时间误当生成完成时间。 |
+| `TS-AUTH-01/02`：自动建立匿名身份并恢复同浏览器历史 | 被正式邮箱账号和 `requireFormalSession` 覆盖；关闭匿名注册并永久清理匿名数据 | `P2-US3-AC01`、`P2-US5-AC06`～`AC09`、`P2-NG08` |
+| `TS-FE-04/09`：Skill 固定字段、必填校验和提示词预览 | 被自然语言任务、会话追问和执行前默认值确认覆盖 | `P2-US2-AC02`、`AC11`、`AC12` |
+| `TS-FE-08`：取消 Skill 后恢复旧图片工具偏好 | 被按会话持久化的“创建图片”开关覆盖；任务结束后不自动关闭 | `P2-US2-AC07`、`P2-RISK04` |
+| Phase 1 提交后保留 Skill | Skill 只授权当前单次任务；历史固化名称和版本 | `P2-US2-AC03` |
+| `TS-SCOPE-02`：账号绑定与跨设备同步延后到 Phase 2 | 不做匿名绑定；仅正式账号按 `auth.uid()` 跨设备恢复 | `P2-US5-AC04`、`AC06` |
+| `TS-SCOPE-03`：外部告警延后到 Phase 2 | 本期不实施，移至未来阶段 | `P2-NG07` |
+| `TS-I18N-01` 中为 Phase 2 预留 en-US | 本期仍只提供 zh-CN，en-US 移至未来阶段 | `P2-NG05` |
 
-建议的工作区包：
+### 1.3 Phase 2 技术决策索引
+
+| 决策 ID | 决策摘要 | 主要页面/能力 |
+| --- | --- | --- |
+| `P2-TS-SCOPE-01` | 仅三个官方 Skill、邮箱密码账号、zh-CN、中国大陆公开 Beta | 全局 |
+| `P2-TS-SKILL-01` | 版本化只读 registry 作为三个 Skill 的唯一内容源 | `/skills`、`/skills/[skillId]` |
+| `P2-TS-SKILL-02` | 公开安全 DTO；Skill 页面不依赖用户会话 | `GET /api/skills` |
+| `P2-TS-AUTH-01` | 复用 LangGraphPj 的页面流程和职责分层，底层保留 ZImage `@supabase/ssr` + PKCE cookie + Proxy + `getClaims` | 认证页面与保护边界 |
+| `P2-TS-AUTH-02` | Supabase Free Auth；应用生成并编排邮件 action，阿里云 DirectMail SMTP 投递 | 注册、验证、找回 |
+| `P2-TS-AUTH-03` | 8～64 Unicode 字符、常见密码表、HIBP k-anonymity；HIBP 不可用时拒绝设置新密码 | 注册、改密、重置 |
+| `P2-TS-AUTH-04` | `v1:` + SHA-384 Base64URL 预哈希后交给 Supabase，所有密码入口仅在 ZImage 服务端调用 | 注册、登录、改密、重置 |
+| `P2-TS-AUTH-05` | HMAC 邮箱键记录全局失败；5 次后 Turnstile + 15 分钟等待 | 登录 |
+| `P2-TS-SESSION-01` | `app_sessions` 强制 30 天闲置和 90 天绝对期限 | 所有受保护入口 |
+| `P2-TS-WORKSPACE-01` | 自然语言 Skill 单任务状态机，执行前补充与确认 | 工作区/输入框 |
+| `P2-TS-WORKSPACE-02` | 每个 `skill_task` 最多原子触发一次生成 | 工作区/生成服务 |
+| `P2-TS-WORKSPACE-03` | 图片开关按会话持久化；待补充任务存在时不得单独关闭 | 工作区/会话 |
+| `P2-TS-ACCOUNT-01` | 独立 `profiles` 保存可选显示名称，不参与授权 | `/account` |
+| `P2-TS-ACCOUNT-02` | 主动改密保留当前应用会话；找回重置撤销全部会话 | `/account`、`/reset-password` |
+| `P2-TS-CUTOVER-01` | 正式账号仍以 `auth.uid() = user_id` 恢复，不复制数据 | 跨设备恢复 |
+| `P2-TS-CUTOVER-02` | 先关闭匿名入口和执行链，再按匿名用户清单永久删除对象、任务、用户和级联业务数据 | Phase 2 切换 |
+| `P2-TS-DATA-01` | 新增 `profiles`、`app_sessions`、`auth_action_requests`、`auth_login_guards`、`skill_tasks`；扩展 `sessions`、`timeline_items` | 数据与安全 |
+
+### 1.4 页面与访问边界
+
+| 页面/入口 | 访问级别 | 页面责任 | 技术决策 |
+| --- | --- | --- | --- |
+| `/skills`、`/skills/[skillId]` | 公开 | 浏览三个官方 Skill 与统一内容 | `P2-TS-SKILL-01/02` |
+| `/login`、`/register`、`/auth/check-email`、`/auth/confirm`、`/forgot-password`、`/reset-password` | 公开；确认/重置携带一次性 action | 注册、验证、登录、找回 | `P2-TS-AUTH-01`～`05` |
+| `/terms`、`/privacy` | 公开 | 展示经审批的正式文本和 Beta 边界 | `P2-TS-SCOPE-01` |
+| `/`、会话/生成/Skill 执行 API | 正式已验证账号 | 工作区、会话、生成、Skill 单次任务 | `P2-TS-SESSION-01`、`P2-TS-WORKSPACE-01`～`03` |
+| `/account` | 正式已验证账号 | 账号资料、主动改密、退出 | `P2-TS-ACCOUNT-01/02` |
+
+Proxy 只负责刷新 Supabase Auth cookie 和快速重定向；每个受保护 Route Handler、服务方法及 RLS 都必须在数据源附近再次验证正式应用会话。Worker 使用 server-only 凭证执行已提交任务，不要求浏览器会话持续有效，但必须重新验证任务属于正式非匿名账号、任务未取消且未被匿名退场 tombstone 阻断。公开 Skill 页面及其 API 不触发匿名登录，也不读取用户、会话、消息、生成或额度数据。
+
+## 2. 官方 Skill 列表与详情页
+
+### 2.1 需求来源
+
+| 需求 ID | 内容摘要 | 技术覆盖 |
+| --- | --- | --- |
+| `P2-US1-AC01`～`AC03` | 列表与详情公开；仅三个官方 Skill；详情包含用途、场景、建议信息、预期产出、限制和立即使用 | 公开路由、版本化 registry、公开 DTO |
+| `P2-US1-AC04` | 白底图、模特图、种草图具有明确且不同的产出语义 | registry 中固化 `purpose`、`expectedOutput` 和版本 |
+| `P2-US1-AC05` | 公共导航、工作区导航和输入框指向同一 Skill 内容 | 三处入口仅引用 registry 的 `id` 与详情路由 |
+| `P2-US1-AC06` | 立即使用创建空白会话并预选 Skill；登录前选择需恢复 | 签名/白名单化登录意图 `returnTo` + `skillId` |
+| `P2-US1-AC07`、`P2-NG01`、`P2-NG02` | 无案例、搜索、分类、收藏、安装、市场、编辑、第三方或多 Skill | DTO 不定义相关字段，页面不渲染相关入口 |
+| `P2-SC03` | 已登录用户打开列表、选中并发送不超过 3 个动作 | 工作区内直达入口 + 单击立即使用 + 发送 |
+| `P2-DEP03` | 三个 Skill 内容经产品审核且各入口口径一致 | registry 作为单一事实源，版本变更须评审 |
+| `P2-AT01`、`P2-AT07` | 验证公开访问、登录回跳、内容一致和非目标缺失 | 公开/登录态 E2E 固定场景 |
+
+### 2.2 技术方案与关键伪代码
+
+`packages/domain/src/model-registry.ts` 中现有 `PHASE1_SKILLS` 将演进为 `OFFICIAL_SKILLS`。Phase 2 公开定义移除 `fields` 和 `promptTemplate`，保留服务端执行策略的内部定义，但内部提示词绝不通过公开 DTO 返回。
 
 ```text
-apps/web                 Next.js Web 与 Route Handlers
-packages/domain          领域类型、状态机、错误码
-packages/provider        Seedream/Gemini adapter
-packages/skills          版本化技能定义与验证
-packages/fetch-sse       `@zimage/fetch-sse` 统一 SSE 解析
-supabase/migrations      schema、RLS、GRANT、queue 初始化
-workers                  生成、删除、到期与备份任务
+OfficialSkillPublic = {
+  id, version, name, coverImageUrl,
+  purpose, applicableScenarios[], suggestedInputs[],
+  expectedOutput, limitations[], requiresImageTool: true
+}
+
+OfficialSkillInternal = OfficialSkillPublic + {
+  executionPolicy, minimumInputPolicy, defaultProposalPolicy
+}
+
+GET /api/skills
+  registry = loadVersionedOfficialSkillRegistry()
+  return PublicSkillsResponse.parse(registry.map(toPublicSkill))
+  // 不创建 Supabase client，不读取 cookie，不返回内部执行提示词
+
+GET /skills/[skillId]
+  skill = registry.findByControlledId(skillId)
+  if missing -> notFound()
+  render purpose/scenarios/suggestedInputs/expectedOutput/limitations/useNow
+
+useNow(skillId, currentUser)
+  assert registry.contains(skillId)
+  intent = { returnTo: "/", skillId, mode: "new-session" }
+  if currentUser is absent:
+    redirect /login?intent=sealAndEncode(intent)
+  else:
+    session = POST /api/sessions { title?, preselectedSkillId: skillId }
+    redirect /?sessionId=session.id
+
+afterLogin(intent)
+  verified = verifySealedIntent(intent)
+  allow only path "/" and registry skill ID
+  create new blank session; restore one preselected Skill; redirect
 ```
 
-## 3. 前端：UnifiedWorkspace
+登录意图不得接受任意外部 URL，避免开放重定向；一次成功消费后从地址栏清除。新会话只预选 Skill，不创建 `skill_tasks`、生成批次或额度预占，直到用户发送自然语言任务。
 
-### 3.1 组件边界
+### 2.3 文件与模块范围
 
-| 决策 ID | 组件/选择 | 职责 |
+| 根目录 | 计划修改/新增 | 责任 |
 | --- | --- | --- |
-| TS-FE-01 | `UnifiedWorkspace` | `/` 唯一工作区；组合可折叠会话侧栏、主时间线、首页技能卡片、输入框和点击浮层。 |
-| TS-FE-02 | `UnifiedComposer` | 维护显式 `chat \| image` 模式，提交前完成模式对应的客户端校验。 |
-| TS-FE-03 | `Timeline` + `GenerationCard` | 文本、生成批次和错误使用同一排序；直接与工具生图复用同一结果组件，直接生图额外组合用户提示词气泡。 |
-| TS-FE-04 | `ImageSettingsPopover` + `SkillPopover` | 生图模型、健康状态、比例、分辨率和数量收敛到单一摘要及按需浮层；技能字段与提示词预览保持独立入口，参考图只在输入框内维护，窄屏继续使用共享状态的兼容抽屉。 |
-| TS-FE-05 | Next.js redirect | `/chat`、`/image` 只重定向到 `/`，不加载旧 store 或旧数据。 |
-| TS-FE-06 | `SessionSidebar` | 会话创建、选择、重命名、删除；匿名恢复边界提示。 |
-| TS-FE-07 | Zustand v5 | 仅保存 UI/请求瞬态；服务端会话和时间线始终以 API 返回为准。 |
-| TS-FE-08 | `ToolSelector` | 图片工具默认关闭；用户选技能时按 `triggers.tools` 开启，取消技能时恢复明确的用户选择；提交时把工具许可随请求发送。 |
-| TS-FE-09 | 上传/技能表单/批量下载 | 参考图状态机、技能必填字段、可编辑提示词预览；最多 4 个成功资产使用新签发 URL 批量下载。 |
-| TS-FE-10 | `AssistantMessageContent` | 只解析白名单受控标签并以惰性折叠块展示；未知、错配、代码内和流结束残缺标签走安全 Markdown。 |
-| TS-FE-11 | `useSmartAutoScroll` | 距底部 96 px 内自动跟随内容和高度变化；手动上滑暂停，发送恢复，切换会话即时定位，并尊重减少动态效果。 |
-| TS-FE-12 | `ImageSettingsPopover` + `GenerationTurn` | 生图高级设置默认收起；直接生图以用户提示词和助手结果组成对话轮次，工具生图只渲染结果以避免重复提示词。 |
+| `apps/web` | 新增 `app/skills/page.tsx`、`app/skills/[skillId]/page.tsx`、`features/skills/*`；修改导航、`app/api/skills/route.ts`、会话创建入口 | 公开页面、立即使用、登录意图恢复 |
+| `packages/domain` | 修改 `src/model-registry.ts`、`src/api-contracts.ts`、`src/types.ts` 及对应测试 | 版本化 registry、公开/内部 DTO 分离 |
+| `supabase` | 本页面无新增公开内容表 | 防止把三个固定 Skill 扩展成动态 CMS |
 
-### 3.2 Store slices
+### 2.4 选型依据与备选方案
 
-统一 store 分为以下 slices，禁止再创建聊天与生图两套会话 store：
+| 方案 | 优点 | 缺点/风险 | 结论 |
+| --- | --- | --- | --- |
+| 版本化 TypeScript registry | 与现有 registry 和构建流程一致；单一事实源；可代码审查、回滚和固化历史版本 | 内容更新需要发布 | 选择；最符合仅三个官方 Skill 的边界 |
+| Supabase 动态内容表/CMS | 运营可即时更新 | 引入编辑、发布、权限和缓存治理，容易演变为 Skill 平台 | 不选；超出 `P2-NG01/02` |
+| 第三方 Skill 市场 | 扩展快 | 内容、权限、供应链和可用性不可控 | 禁止；与明确非目标冲突 |
 
-| Slice | 客户端状态 | 明确不负责 |
+### 2.5 实施步骤
+
+1. 先定义公开/内部 Skill schema 和三个固定 ID，迁移现有内容并补 registry 快照测试。
+2. 将 `GET /api/skills` 改为无认证、无用户数据依赖的安全 DTO，并增加字段泄漏负向测试。
+3. 实现列表、详情及三处统一入口；所有页面显示公开 Beta、非生产就绪。
+4. 实现受控登录意图与“新空白会话 + 预选 Skill”。
+5. 以 `P2-AT01`、`P2-AT07` 覆盖登录前后、三个 Skill、桌面与窄屏路径。
+
+## 3. 注册、登录、验证与找回页面
+
+### 3.1 需求来源
+
+| 需求 ID | 内容摘要 | 技术覆盖 |
 | --- | --- | --- |
-| `workspaceSlice` | 当前 `sessionId`、侧栏折叠、活动浮层和窄屏抽屉开合 | 会话持久化 |
-| `composerSlice` | 模式、草稿、参考图本地预览 | 服务端消息 |
-| `timelineSlice` | 当前页缓存、乐观 pending 卡片、SSE 增量缓冲 | 跨刷新事实源 |
-| `generationSlice` | 当前图片 provider/model、能力归一化后的比例/分辨率/数量、批次轮询状态 | 任务执行与重试 |
-| `capabilitySlice` | 技能、provider 健康与配额缓存 | provider 真实状态 |
+| `P2-US3-AC01`～`AC03` | 受保护功能必须登录；仅邮箱密码；注册字段为邮箱、密码、确认密码和协议同意 | Auth 页面组、服务端 Route Handlers、正式会话守卫 |
+| `P2-US3-AC04`、`AC05` | 验证 24 小时、找回 1 小时、60 秒重发、同类新链接废止旧链接、过期可重申 | 私有 `auth_action_requests` + 单次 app action |
+| `P2-US3-AC06` | 8～64 Unicode 字符，允许空格/中文/符号，拒绝常见或泄露密码 | Unicode 计数、本地表、HIBP、SHA-384 预哈希 |
+| `P2-US3-AC07` | 注册和登录防邮箱枚举；已注册邮箱收到登录/找回指引 | 统一页面响应和时序预算，内部按账号状态发送不同邮件 |
+| `P2-US3-AC08` | 连续失败 5 次后跨环境 Turnstile + 15 分钟等待；重置/登录成功清除 | HMAC 邮箱 guard |
+| `P2-US3-AC09` | 主动同意正式条款与隐私政策 | 不预勾选 checkbox；服务端验证版本号 |
+| `P2-US3-AC10` | 30 天闲置、90 天最长；无记住我；按原目标/最近会话/空白会话落点 | `app_sessions` 与受控 intent |
+| `P2-US3-AC11` | 中国大陆公开 Beta，任何已验证邮箱可进入；不得声称生产就绪 | 公开页面统一 Beta 标识和发布门禁 |
+| `P2-NG03`、`P2-NG05` | 不做手机号、第三方、MFA、无密码、en-US、客户端扩张或完整无障碍认证 | API/UI 不暴露对应入口 |
+| `P2-DEP01`、`P2-DEP02`、`P2-DEP06` | 正式法律文本、邮件文案和实际投递、Beta/地域/匿名删除/无账号删除审批 | 发布阻断证据 |
+| `P2-RISK01`、`P2-RISK02`、`P2-RISK07` | 短密码无 MFA、法律文本缺失、Beta 被误认为生产 | 泄露检查、登录保护、审批和页面标识 |
+| `P2-SC01`、`P2-SC05` | 访问拦截与登录回跳 100%；关键任务全通过 | `P2-AT01`～`P2-AT03`、全场景门禁 |
+| `P2-AT01`～`P2-AT03` | 公开/受保护边界、完整邮箱闭环、失败锁定与会话期限 | E2E、集成测试、目标邮箱投递测试 |
 
-SSE 事件使用判别字段，例如 `session.created`、`message.delta`、`message.completed`、`tool.queued`、`stream.failed`。解析器收到 `unknown` 后先用 schema 验证；未知事件记录诊断并安全忽略。
+### 3.2 LangGraphPj 参考边界
 
-### 3.3 图片参数
+本期可完全参考 `doc/LangGraphPj` 的页面流和职责分层：`AuthContext` 负责客户端认证状态，`AuthForm` 负责交互，`auth.service` 负责调用认证 API，`ProtectedRoute` 的加载/跳转体验用于工作区恢复边界。以下底层实现不得复制：
 
-| 决策 ID | 决策 |
-| --- | --- |
-| TS-IMG-01 | 数量固定为 1–4；提示词支持中英文；前后端都校验长度、参考图数量和文件限制。 |
-| TS-IMG-02 | 每个 provider/model 维护服务端 capability manifest，前端据此渲染。Gemini 只映射官方支持的比例、尺寸、输出格式和参考图字段。未知字段不得透传。 |
-| TS-IMG-03 | 公共 UI 基线为五种比例、1K/2K 且默认 2K；空提示词禁用。参考图限 PNG/JPEG/WebP、单文件 10 MB、1–4 张，首图可初始化比例/尺寸。provider 更严格限制覆盖公共基线。 |
+- 不复制其浏览器手工写入 `sb-access-token` cookie、implicit OAuth、仅 access token 或无 refresh token 的实现。
+- 不复制 OAuth、姓名必填、6 位密码等超出/冲突行为。
+- ZImage 继续使用当前 `@supabase/ssr` browser/server client、PKCE access+refresh cookie、Proxy `getClaims()` 刷新；服务端授权不信任 `getSession()` 中未经重新验证的用户对象。
+- `AuthContext` 只是 UI 状态和恢复协调器，不是授权边界；真正授权由 `requireFormalSession` 和 RLS 完成。
 
-`GenerationRequest` 使用 `provider` 判别联合。provider adapter 负责把规范化领域参数转换成官方请求，不允许 UI 直接拼 provider payload。
+### 3.3 密码兼容与泄露检查
 
-## 4. 公共 API 决策
+Supabase Auth 当前密码实现按字节限制最大 72 字节，64 个中文字符会超过限制。为同时满足 `P2-US3-AC06`，所有设置和校验密码的入口都由 ZImage 服务端执行下列一致算法：
 
-### 4.1 接口全景
+```text
+validateNewPassword(rawPassword)
+  length = countUnicodeCodePoints(rawPassword)  // 不 trim，不做 Unicode 归一化
+  require 8 <= length <= 64
+  reject if localCommonPasswordSet.contains(rawPassword)
 
-| 决策 ID | 方法与路径 | 响应/职责 |
+  sha1 = SHA1(UTF8(rawPassword)).toUpperHex()
+  suffixes = GET https://api.pwnedpasswords.com/range/{sha1[0:5]}
+             with Add-Padding: true
+  if request unavailable/invalid -> reject with retryable password-check error
+  if suffixes contains sha1[5:] -> reject as leaked
+
+deriveSupabaseCredential(rawPassword)
+  digest = SHA384(UTF8(rawPassword))
+  return "v1:" + base64urlWithoutPadding(digest)  // 67 个 ASCII 字节，小于 72
+```
+
+原始密码和派生凭证都属于高敏感凭证：禁止日志、指标、Sentry、数据库和队列记录；响应只返回稳定错误码。预哈希不替代 Supabase 的 bcrypt，而是在其前面提供固定长度输入；Supabase 仍负责带盐慢哈希。算法版本前缀为未来迁移保留辨识能力，切换版本时必须采用“成功登录后升级”或强制重置方案，不能直接改变 `v1` 算法。
+
+浏览器不得直接调用 `supabase.auth.signUp`、`signInWithPassword` 或 `updateUser({ password })`；否则会绕过 Unicode、HIBP、枚举保护和锁定策略。HIBP 仅在注册、主动改密和找回重置等“设置新密码”路径调用，普通登录只派生凭证，不把每次登录可用性绑定到外部 HIBP。
+
+### 3.4 邮件 action 与 DirectMail
+
+使用 Supabase Free Auth 保存正式用户与密码；应用服务端以 Admin `generateLink` 生成 `signup`/`recovery` token，不使用 Supabase 默认 SMTP 直接投递。`auth_action_requests` 位于不暴露给 Data API 的 `private` schema，记录：
+
+```text
+id, purpose(confirm_email | recover_password), email_key_hmac,
+public_secret_hash, supabase_token_hash_encrypted,
+expires_at, resend_after, superseded_at, consumed_at,
+created_at, correlation_id
+```
+
+邮件只包含应用链接 `/auth/confirm?action=<id>&secret=<random>`。服务端校验 public secret 的哈希、用途、有效期、未消费且未被替代，再用受保护的 Supabase token hash 完成 `verifyOtp`。同一邮箱同一用途生成新 action 时，在事务中把旧 action 标记为 `superseded_at`；点击成功时条件更新 `consumed_at is null`，保证单次消费。Supabase Auth 的 email token 有效期配置为 24 小时，避免 provider token 早于验证需求过期；应用 action 再把找回用途收紧为 1 小时。`resend_after` 固定 60 秒。
+
+阿里云 DirectMail 采用独立发信子域名，通过杭州地域 SMTP 地址 `smtpdm.aliyun.com` 的 SSL 465 端口投递，并配置 SPF、DKIM、DMARC 和必要 MX。Nodemailer 只运行在服务端，SMTP 用户名和密码进入部署 secret，禁止 `NEXT_PUBLIC_*`。发布前必须用真实 QQ、163 和至少一个企业邮箱验证收件、链接、过期、重发和退信行为。
+
+### 3.5 核心流程伪代码
+
+```text
+POST /api/auth/register
+  assertSameOriginAndJson(request)
+  input = RegisterRequest.parse(body)
+  verifyTurnstile(input.captchaToken)
+  require input.termsAccepted == true
+  require input.termsVersion == approvedTermsVersion
+  require input.password == input.confirmPassword
+  validateNewPassword(input.password)
+  credential = deriveSupabaseCredential(input.password)
+
+  outcome = prepareRegistrationMailInternally(input.email, credential)
+    normalize email only for identity lookup; emailKey = HMAC(serverKey, normalizedEmail)
+    if account does not exist:
+      link = supabaseAdmin.generateLink(type=signup, email, password=credential)
+      create superseding confirm action (24h, resend 60s)
+      send verification mail through DirectMail
+    else:
+      create superseding recovery action (1h, resend 60s) when policy permits
+      send existing-account login/recovery guidance
+  audit only outcome class and correlationId; never expose account existence
+  return 202 { status: "accepted", next: "/auth/check-email" }
+
+POST /api/auth/resend
+  parse purpose + email; verify Turnstile/rate limit
+  lookup by HMAC email key without exposing existence
+  if before resend_after -> keep same public response
+  supersede old same-purpose action; generate and send replacement if eligible
+  return same 202 accepted response for every account state
+
+GET /auth/confirm?action=<id>&secret=<secret>
+  action = private.loadForSingleUse(hash(secret), expectedPurpose)
+  if expired/superseded/consumed -> render auth_email_action_expired + reapply action
+  result = supabase.verifyOtp(token_hash=decrypt(action.tokenHash), type)
+  atomically mark consumed; reject races
+  if confirm_email:
+    require result user is verified and non-anonymous
+    register app session from JWT session_id; redirect by validated intent
+  if recover_password:
+    mark recovery flow cookie; redirect /reset-password
+
+POST /api/auth/login
+  input = LoginRequest.parse(body)
+  emailKey = HMAC(serverKey, normalizeEmail(input.email))
+  guard = load auth_login_guards[emailKey]
+  if guard.lockedUntil > now:
+    require valid Turnstile token
+    return auth_login_locked with remaining seconds
+  if guard.failureCount >= 5: require valid Turnstile token
+
+  credential = deriveSupabaseCredential(input.password)
+  result = ssrClient.auth.signInWithPassword(email, credential)
+  if failure or user anonymous or user unverified:
+    record failure using the same path for nonexistent and existing email
+    after fifth failure set lockedUntil = now + 15m and captchaRequired = true
+    return auth_invalid_credentials or auth_login_locked without account details
+
+  register app_sessions(session_id from verified claims, user_id, now)
+  clear guard
+  destination = consume validated intent
+                ?? mostRecentOwnedSession
+                ?? create new blank session
+  return destination
+
+POST /api/auth/recover
+  validate origin/schema/Turnstile and purpose-specific rate limit
+  do not consult or change login lockedUntil; recovery remains available while locked
+  if a verified account exists, supersede old recovery action and send a new one
+  always return the same 202 accepted response
+
+requireFormalSession(request)
+  claims = ssrClient.auth.getClaims()
+  require claims.sub exists and claims.is_anonymous != true
+  sessionId = UUID(claims.session_id)
+  appSession = private.app_sessions[sessionId, claims.sub]
+  require not revoked
+  require now < createdAt + 90 days
+  require now < lastSeenAt + 30 days
+  update lastSeenAt at most once per 15 minutes
+  otherwise revoke and throw auth_session_expired
+  return { userId: claims.sub, sessionId }
+```
+
+注册/重发/找回对外使用相同状态码、结构和近似时序预算；内部邮件可因账号状态不同而不同。精确限流还需覆盖 IP、邮箱 HMAC 和 action purpose，但日志不得写明文邮箱或密码。
+
+### 3.6 文件与模块范围
+
+| 根目录 | 计划修改/新增 | 责任 |
 | --- | --- | --- |
-| TS-API-01 | `POST /api/chat` | SSE。事务内创建/验证 session 和用户消息；若新建会话，首个控制事件返回 `sessionId`。完整 assistant 消息完成后持久化。 |
-| TS-API-02 | `POST /api/image` | 事务内创建 session（按需）、batch、1–4 条 generation、timeline item、配额预占与 queue message；提交后返回 HTTP 202。 |
-| TS-API-03 | `POST /api/image/recreate` | 接收 `single \| failed \| all`，复制原参数为新批次并返回 HTTP 202。 |
-| TS-API-04 | `GET /api/image/{batchId}` | 返回批次和单张状态，不返回长期资产地址。 |
-| TS-API-05 | `GET/POST /api/sessions`；`PATCH/DELETE /api/sessions/{id}`；`GET /api/sessions/{id}/timeline` | 唯一历史 API。删除只接受一次并返回 HTTP 202。 |
-| TS-API-06 | `GET /api/openapi.json` | 由应用代码维护和验证，不读取 Supabase anon 角色的自动规范。 |
-| TS-API-07 | 统一 error schema 与错误码 registry | 基础码为 `bad_request`、`unauthorized`、`quota_exceeded`、`provider_error`、`network`、`moderation`；领域码扩展资产过期、删除中等状态。所有失败分支做 schema 测试。 |
+| `apps/web` | 新增认证页面组；`contexts/auth-context.tsx`、`features/auth/*`、`server/auth/{auth-service,password-service,hibp-service,login-guard,formal-session}.ts`、`server/mail/{mail-service,directmail-transport,templates}.ts`；认证 Route Handlers；修改 `proxy.ts` 与 Supabase clients | 页面流、服务编排、cookie、密码、邮件、会话守卫 |
+| `packages/domain` | 新增认证/账号 schema、错误码和安全响应 DTO | 浏览器与服务端契约 |
+| `supabase` | 新增 `private.auth_action_requests`、`private.auth_login_guards`、`private.app_sessions`、相关受控函数与 pgTAP | 单次 action、全局失败保护、应用会话期限 |
 
-辅助只读接口为 `GET /api/skills`、`GET /api/health/providers`、`GET /api/quotas` 和 `GET /api/generations/{id}/asset-url`。
+### 3.7 选型依据与备选方案
 
-请求字段固定为：
+| 决策 | 选择方案 | 备选方案 | 选择依据 |
+| --- | --- | --- | --- |
+| Auth UI/分层 | 参考 LangGraphPj 页面职责，保留 ZImage SSR 底层 | 整体复制 LangGraphPj | 复用成熟交互但避免 implicit flow、手工 token cookie 和需求外 OAuth |
+| 邮件 | Admin `generateLink` + app action + Nodemailer + DirectMail | Supabase 默认 SMTP；Supabase 直连自定义 SMTP；Send Email Hook | 应用层才能统一执行 24h/1h、60s、单次消费、旧链接废止和枚举保护；DirectMail适配国内目标邮箱 |
+| 泄露密码 | 本地常见表 + HIBP k-anonymity，设置密码时安全失败 | 仅 Supabase 弱密码检测；仅本地表；允许外部失败时放行 | Free 计划不提供泄露密码保护；组合方案覆盖常见与真实泄露，失败时不降低安全基线 |
+| Unicode 兼容 | 版本化 SHA-384 预哈希 + Supabase bcrypt | 限制 72 字节；浏览器直连；自建密码库 | 满足 8～64 Unicode 字符并保留 Supabase 会话/RLS生态；自建密码存储风险更高 |
+| 30/90 天期限 | `app_sessions` 补偿层 | 升级 Supabase Pro 原生 timeout；只依赖 refresh token | 暂用 Free 且需求要求精确期限；默认 Supabase session 可长期存在 |
 
-- Chat：`{ sessionId?, message, tools?, chatModel?, imageProvider?, skillId?, images? }`。
-- Image：`{ sessionId?, prompt, provider?, model?, params, skillId? }`，其中 `params` 由 capability schema 验证。
-- Recreate：`{ batchId, mode: "single"|"failed"|"all", generationId? }`。
+### 3.8 实施步骤
 
-### 4.2 统一错误与幂等
+1. 先实现认证 schema、错误码和失败测试，确认所有外部响应不泄露账号存在性。
+2. 实现密码计数、常见表、HIBP、`v1` 派生及测试向量；所有密码入口改走服务端。
+3. 建立 action、guard、app session 表与私有函数，完成 RLS/权限负向测试。
+4. 实现 `generateLink`、单次 app action、DirectMail 模板与目标邮箱投递测试。
+5. 按 LangGraphPj 职责实现页面和 Auth Context，再接入 ZImage SSR/PKCE/Proxy。
+6. 将 `requireFormalSession` 接入所有受保护 API、服务和 RLS；验证 30/90 天边界。
+7. 完成 `P2-AT01`～`P2-AT03` 及法律/邮件/Beta 发布审批证据。
 
-错误体为 `{ code, message, retryable, correlationId, details? }`，其中 `details` 必须通过白名单。稳定错误码至少覆盖：认证失效、无权访问、输入无效、配额不足、内容拦截、provider 不可用、任务失败、资产过期和删除处理中。
+## 4. 受保护工作区与输入框 Skill
 
-所有生图提交接收客户端幂等键。数据库对 `(user_id, idempotency_key)` 建唯一约束；相同键和相同请求返回原批次，相同键但不同请求返回冲突。
+### 4.1 需求来源
 
-## 5. AI 与 provider
-
-| 决策 ID | 选择 | 约束 |
+| 需求 ID | 内容摘要 | 技术覆盖 |
 | --- | --- | --- |
-| TS-AI-01 | LangGraphJS + Postgres checkpointer | `sessions.id` 直接作为 `thread_id`；workflow/checkpointer 按请求创建并 compile；聊天模型与图片 provider 独立选择。 |
-| TS-AI-02 | Seedream adapter + Gemini `gemini-3-pro-image` adapter | Gemini 使用稳定模型；请求只含 capability manifest 白名单字段。 |
-| TS-AI-03 | 服务端版本化 `SKILL.md`/结构化 manifest | Phase 1 只内置白底图、模特图、种草图；记录 `skill_id` 与 `skill_version`。 |
-| TS-AI-04 | provider 原生内容安全网关 + 统一审计映射 | 对提示词、参考图、上下文与输出生效；用固定数据集验证 95% 门槛。 |
-| TS-AI-05 | 只推荐、不自动付费切换图片 provider | 展示能力和价格差异，用户确认后才新建任务。 |
-| TS-AI-06 | Doubao + MiniMax 聊天 adapter | 两个聊天 provider 独立健康和选择；图片 provider 故障不改变聊天 provider。 |
+| `P2-US2-AC01`～`AC03` | 单选 Skill 标签、自然语言与参考图、只授权一次任务、历史固化名称和版本 | Composer 标签 + `skill_tasks` + 时间线快照 |
+| `P2-US2-AC04`～`AC06` | 最多执行一次；信息不足只追问；待补充可续接；替换前确认取消 | 持久状态机、原子执行约束、替换事务 |
+| `P2-US2-AC07`、`P2-RISK04` | 图片开关按会话保持；任务结束不自动关闭；待补充时不可关闭 | `sessions.image_creation_enabled` |
+| `P2-US2-AC08` | 数量、比例、分辨率、模型发送前可见；不兼容时阻止且不静默修改 | capability 校验先于任务/额度创建 |
+| `P2-US2-AC09` | 有参考图逐项保真；无参考图执行前显示非还原提示 | 执行快照 + 提示/盲评证据 |
+| `P2-US2-AC10` | Skill 不可用时说明、重试、保留编辑，不替代 | 稳定错误码和可恢复 UI |
+| `P2-US2-AC11`、`AC12` | 参考图或商品类别+主要外观为最低条件；默认值必须执行前展示 | 信息检查器 + `awaiting_confirmation` |
+| `P2-SC03`、`P2-SC04` | 3 动作内发送；三类图可用率 ≥80% 且参考图逐项保真 | 可用性脚本和盲评 |
+| `P2-AT08`、`P2-AT09` | 完整交互状态、设置、失败、历史、会话切换和质量验收 | 状态机/E2E/盲评证据 |
 
-聊天 tool `generate_image` 的职责止于调用同一个领域服务创建批次与 queue message，并向 SSE 发送 `tool.queued`；后续执行完全脱离聊天请求。
+### 4.2 状态模型与执行快照
 
-| 决策 ID | 重试规则 |
-| --- | --- |
-| TS-RETRY-01 | 聊天 LLM 仅在首个内容块输出前对瞬时失败自动重试一次；输出后不自动重放。图片 provider 请求一旦可能已提交就不自动重试。 |
+```text
+skill_tasks.status:
+  awaiting_input
+    -> awaiting_input        (用户补充后仍不足)
+    -> awaiting_confirmation (最低条件满足，但存在默认值或无参考图提示)
+    -> executing             (无需默认值且所有风险提示已确认)
+    -> cancelled | replaced
 
-## 6. 数据模型
+  awaiting_confirmation
+    -> executing             (用户确认实际默认值/非还原提示)
+    -> awaiting_input        (用户修改要求后需重新分析)
+    -> cancelled | replaced
 
-### 6.1 核心表
+  executing -> completed     (生成成功、部分成功或已终结失败)
 
-| 决策 ID | 表/选择 | 关键字段与约束 |
+终态: completed | cancelled | replaced
+```
+
+每个任务保存 `skill_id`、`skill_name_snapshot`、`skill_version_snapshot`、原始用户文本、补充文本、参考图 ID、图片设置快照、已提出默认值、已确认默认值、非还原确认、状态和 `generation_batch_id`。历史读取只使用快照，不回查当前 registry 覆盖旧名称或版本。
+
+数据库必须建立“每个 session 最多一个 `awaiting_input`/`awaiting_confirmation` 活动任务”的部分唯一索引，以及“每个 `skill_task.id` 最多对应一个 generation batch”的唯一约束；生成服务在同一事务中把 `awaiting_confirmation/awaiting_input` 条件更新为 `executing`、写 batch/generations/timeline、预占额度并发送 queue message。条件更新失败返回 `skill_task_conflict`，不得重放生成。Composer 从 timeline 响应取得活动任务，用户直接回复时由 gateway 自动附带其 `pendingSkillTaskId`，用户无需理解或手填任务 ID。
+
+有参考图时，内部 `executionPolicy` 把颜色、外形轮廓、主要结构、可见图案或标识作为不可变约束，并把原始参考图 ID 不经调色、裁剪或降级替换地传给声明支持参考图的 provider/model；不支持所选设置或参考图能力时在生成前阻止。该策略不能仅靠提示词宣称达标，最终仍以 `P2-AT09` 的逐项盲评证据判定；任何属性实质改变都计为失败，不能用整体“看起来相似”覆盖单项失败。
+
+### 4.3 完整分支伪代码
+
+```text
+POST /api/chat { sessionId?, message, skillId?, pendingSkillTaskId?, tools?, images? }
+  auth = requireFormalSession()
+  session = requireOwnedActiveSession(auth.userId, sessionId)
+  assert session.imageCreationEnabled when continuing a pending Skill task
+
+  if pendingSkillTaskId exists:
+    task = lock owned active task
+    require task.sessionId == session.id
+    append user supplement; analyze combined input
+  else if skillId exists:
+    skill = registry.requireAvailable(skillId)
+    task = create awaiting_input with skill name/version snapshot
+    set session.imageCreationEnabled = true
+    analyze message + owned reference images
+  else:
+    run existing ordinary chat/image-tool path
+
+  if image settings incompatible with selected provider/model:
+    keep task editable; emit skill.input_required(reason, retryAction)
+    do not create batch; do not reserve quota; do not alter settings
+
+  minimum = hasRecognizableReferenceImage
+            OR (hasExplicitProductCategory AND hasMainAppearance)
+  if not minimum:
+    save task as awaiting_input with missingFields[]
+    append assistant question that names what is missing
+    emit skill.input_required(task snapshot)
+    stop without generation or quota
+
+  proposal = deriveReasonableDefaults(skill, combinedInput)
+  notices = []
+  if no reference image: notices += "结果不代表对现有商品的还原"
+  if proposal not empty or notices not empty:
+    save awaiting_confirmation with exact defaults/settings/notices
+    emit skill.confirmation_required
+    stop without generation or quota
+
+  executeSkillTaskAtomically(task, confirmedSnapshot)
+
+POST /api/skill-tasks/{id}/confirm
+  auth = requireFormalSession(); lock owned task
+  require status == awaiting_confirmation
+  require confirmation fingerprint matches latest proposal
+  executeSkillTaskAtomically(task, latest confirmed snapshot)
+
+executeSkillTaskAtomically(task, snapshot)
+  transaction:
+    update skill_tasks set status='executing'
+      where id=task.id and status in ('awaiting_input','awaiting_confirmation')
+      and generation_batch_id is null
+    require exactly one row
+    validate owned reference uploads and immutable image settings
+    create generation batch with skill id/name/version/settings/reference snapshot
+    reserve quota and enqueue by existing Phase 1 idempotent path
+    set task.generation_batch_id = batch.id
+  emit skill.execution_started(batchId)
+
+selectDifferentSkill(newSkillId)
+  if active task is awaiting_input or awaiting_confirmation:
+    show destructive confirmation
+    if user cancels: retain old task and old Skill tag
+    if user confirms: atomically mark old replaced and create/select new Skill
+
+setImageCreationEnabled(sessionId, false)
+  if active pending skill task exists -> reject skill_task_conflict
+  else persist false on that session only
+
+onSessionChanged(targetSessionId)
+  load target session.imageCreationEnabled
+  load target active skill task and timeline
+  never copy source session's switch or pending task
+```
+
+SSE 增加 `skill.input_required`、`skill.confirmation_required`、`skill.cancelled`、`skill.replaced`、`skill.execution_started`；现有 `tool.queued` 和生成轮询继续负责批次状态。事件全部经 Zod 判别联合验证，未知事件安全忽略并记录诊断。
+
+登录失效由 `WorkspaceAuthRecoveryBoundary` 捕获 `auth_session_expired`：暂停新请求并覆盖登录界面，但不卸载 Zustand store、当前 Workspace React tree 或本地参考图预览。已提交任务继续由 queue/worker 执行；重新登录后按原目标刷新会话、timeline 和待补充任务，再与仍在内存中的草稿合并。跨页面刷新无法保留纯本地文件对象，因此退出/失效恢复实现必须优先采用同页覆盖层；若浏览器主动刷新，未上传的本地文件不承诺恢复。
+
+### 4.4 文件与模块范围
+
+| 根目录 | 计划修改/新增 | 责任 |
 | --- | --- | --- |
-| TS-DATA-01 | `sessions` | `id, user_id, title, status(active\|deleting), created_at, updated_at, deleted_at`；唯一工作区和 LangGraph thread。 |
-| TS-DATA-02 | `timeline_items` | `id, session_id, sequence, kind(message\|generation\|error), role, text, batch_id, status, timestamps`；`(session_id, sequence)` 唯一，sequence 由数据库函数原子分配。 |
-| TS-DATA-03 | `generation_batches` / `generations` | batch 含 `session_id, source(direct\|chat_tool), provider, model, config, parent_batch_id`；generation 含状态、参数、对象路径、到期状态和错误码。 |
-| TS-DATA-04 | `skills` 或版本化发布清单 | 保存技能版本与 capability；timeline/batch 固化使用时版本，避免历史漂移。 |
+| `apps/web` | 修改 `UnifiedComposer.tsx`、`UnifiedWorkspace.tsx`、`WorkspaceApplication.tsx`、workspace store/gateway/timeline；新增 `SkillTag`、`SkillTaskCard`、`SkillConfirmation`、`WorkspaceAuthRecoveryBoundary`；修改 chat/image/session handlers 与服务 | 单选标签、追问/确认/恢复、按会话开关 |
+| `packages/domain` | 修改 API contracts、types、registry、gateway；新增 skill task 状态机和 reducer 测试 | 状态、事件、错误码、快照契约 |
+| `supabase` | 新增 `skill_tasks`；扩展 `sessions`、`timeline_items`、`generation_batches`；修改原子生成函数、RLS、pgTAP 和 worker 守卫 | 持久任务、最多一次、历史快照、正式会话校验 |
 
-辅助表：
+### 4.5 选型依据与备选方案
 
-- `image_safety_audits`：provider 拦截类别、请求关联 ID、最小必要证据，不保存思维链。
-- `quota_ledger`：预占、结算、释放均为不可变账本记录。
-- `provider_health_windows`：provider、窗口、总量、错误量和计算状态。
-- `cleanup_jobs`：删除/到期工作的状态、尝试次数、下次执行时间和错误摘要。
-- LangGraph checkpointer 表与 Supabase Queues/pgmq 内部表。
+| 方案 | 优点 | 缺点/风险 | 结论 |
+| --- | --- | --- | --- |
+| 数据库持久状态机 + 原子生成 | 跨刷新/设备可恢复；可证明未扣额与最多一次；适配现有 Postgres 队列 | 模型和事务更复杂 | 选择；直接满足 `P2-US2-AC04/05` |
+| 仅 Zustand/React 状态 | 实现快 | 刷新丢失、跨设备不一致、重复提交难防 | 不选 |
+| LangGraph checkpoint 单独承载 | 对话上下文自然 | UI 查询、RLS、唯一约束和审计不透明 | 不作为事实源；可保存对话推理但任务状态仍结构化落库 |
+| 自动采用默认值直接生成 | 动作少 | 违反执行前展示和确认，可能错误扣额 | 不选 |
 
-### 6.2 权限
+### 4.6 实施步骤
 
-| 决策 ID | 决策 |
+1. 先定义状态机、事件和失败测试，再建立 `skill_tasks`、快照字段和唯一约束。
+2. 扩展 session/timeline DTO 和存储层，恢复每个会话自己的图片开关与活动任务。
+3. 把固定 Skill 表单改为单选标签、自然语言和参考图；删除固定字段/模板预览依赖。
+4. 实现最低条件、追问、默认值/非还原确认和原子生成分支。
+5. 实现取消、确认替换、失败重试与登录失效恢复边界。
+6. 用 `P2-AT08` 完成状态/E2E，用 `P2-AT09` 完成三个 Skill 的盲评和窄屏任务。
+
+## 5. 账号页与会话管理
+
+### 5.1 需求来源
+
+| 需求 ID | 内容摘要 | 技术覆盖 |
+| --- | --- | --- |
+| `P2-US4-AC01`、`AC02` | 显示邮箱、可选显示名称、修改密码、退出；空名称使用脱敏邮箱 | `/account` + `profiles` |
+| `P2-US4-AC03` | 主动改密保留当前设备，撤销其他设备 | 按当前 `session_id` 撤销其他 app session |
+| `P2-US4-AC04` | 找回重置撤销全部设备并要求重新登录 | 全局 app session + Supabase refresh session 撤销 |
+| `P2-US4-AC05` | 登录失效保留完整未发送现场和原目标；已提交任务继续 | Workspace 恢复边界 + 服务端任务 |
+| `P2-US4-AC06` | 有草稿/参考图/Skill 标签/待补充任务时退出确认 | 客户端统一 dirty-state 判定 |
+| `P2-US4-AC07` | 退出后受保护内容不可返回；不恢复匿名身份；Skill 页面仍公开 | cookie 清理 + 正式会话守卫 + no-store |
+| `P2-US4-AC08`、`P2-NG04` | 不做头像、改邮箱、注销/删除、多账号、设备管理、组织角色或删除支持渠道 | DTO 与页面不定义对应入口 |
+| `P2-RISK06`、`P2-DEP06` | 无账号删除途径是 Critical 发布风险，必须明确审批 | 页面/条款/Beta 文案门禁 |
+| `P2-SC05`、`P2-AT04` | 账号、改密、重置、失效、退出任务 100% 通过 | 固定 E2E 与多浏览器会话夹具 |
+
+### 5.2 技术方案与伪代码
+
+`profiles` 只保存 `user_id`、`display_name`、时间戳。邮箱来自经服务端验证的 Supabase user，不在 `profiles` 重复作为授权依据；显示名称可为空，输出前按长度和控制字符规则验证，仅用于 UI。
+
+```text
+GET /api/account
+  auth = requireFormalSession()
+  user = supabaseAdmin.getUserById(auth.userId)
+  profile = load owned profile
+  return { email: user.email, displayName: profile.displayName,
+           accountLabel: displayName ?? maskEmail(user.email) }
+
+PATCH /api/account { displayName }
+  auth = requireFormalSession()
+  normalize empty string to null; validate length/control characters
+  upsert profile by auth.userId
+
+POST /api/auth/change-password
+  auth = requireFormalSession()
+  validate current password through server sign-in/re-auth policy
+  validateNewPassword(newRaw); derive v1 credential
+  supabaseAdmin.updateUserById(userId, password=credential)
+  transaction revoke app_sessions
+    where user_id=userId and session_id != auth.sessionId
+  revoke other Supabase refresh sessions through auth.signOut(scope="others")
+  rotate/refresh current session; clear login guard
+
+POST /api/auth/reset-password
+  require valid, unconsumed recovery action/session
+  validateNewPassword(newRaw); derive v1 credential
+  update Supabase password
+  revoke every app_session for user; auth.signOut(scope="global")
+  consume action; clear login guard; clear recovery cookie
+  return { next: "/login", reauthenticationRequired: true }
+
+requestLogout()
+  dirty = draft not empty OR referenceImages not empty
+          OR selectedSkillId exists OR activePendingSkillTask exists
+  if dirty and user does not confirm -> keep workspace unchanged
+  if confirmed or clean:
+    discard unsubmitted uploaded references through the existing Storage cleanup path
+    POST /api/auth/logout with current formal session
+    clear local draft/references/skill/settings and auth cookies
+    replace navigation to /login; protected responses use Cache-Control: no-store
+```
+
+主动改密与 Supabase 自身“改密可能撤销 session”的默认行为必须通过集成测试确认。若 Admin 更新密码会撤销当前 Supabase refresh session，则服务端必须在验证当前身份后创建新的当前设备会话并更新 cookie，最终产品行为仍是“当前设备继续、其他设备失效”。不在 UI 提供设备列表或逐设备管理。
+
+### 5.3 文件与模块范围
+
+| 根目录 | 计划修改/新增 | 责任 |
+| --- | --- | --- |
+| `apps/web` | 新增 `app/account/page.tsx`、`features/account/*`、account handlers/service；修改 Auth Context、Workspace dirty-state 和 logout handler | 资料、改密、退出确认、状态恢复 |
+| `packages/domain` | 新增 account DTO、display name schema、change/reset/logout schema | 契约与错误 |
+| `supabase` | 新增 `profiles`、完善 `app_sessions` 撤销函数/RLS/pgTAP | 可选资料与多会话强制失效 |
+
+### 5.4 选型依据与备选方案
+
+| 方案 | 优点 | 缺点/风险 | 结论 |
+| --- | --- | --- | --- |
+| 独立 `profiles` | 不污染 auth metadata；RLS 清晰；显示名称不参与授权 | 增加一张表 | 选择 |
+| `user_metadata.display_name` | 表少 | 用户可编辑 metadata 不适合作授权，审计与 schema 较弱 | 不选为业务事实源 |
+| Supabase Pro 原生 session timeout | 平台原生 | 与“暂用 Free”冲突且仍需产品级当前/其他设备语义 | 后续可替换部分补偿层，Phase 2 不采用 |
+| 只清浏览器 cookie 退出 | 简单 | 已签发 token 仍可能访问，无法满足返回/刷新边界 | 不选；同时撤销服务端应用会话 |
+
+### 5.5 实施步骤
+
+1. 建立 `profiles` 和 account DTO/RLS，完成空名称与脱敏邮箱测试。
+2. 实现主动改密的当前/其他会话语义和跨浏览器集成测试。
+3. 实现找回重置的全会话撤销和强制重新登录。
+4. 将 Workspace dirty-state 收敛为单一选择器，接入退出确认与清理。
+5. 用 `P2-AT04` 验证账号页、失效恢复、有/无现场退出及非目标缺失。
+
+## 6. 跨设备恢复与匿名身份退场
+
+### 6.1 需求来源
+
+| 需求 ID | 内容摘要 | 技术覆盖 |
+| --- | --- | --- |
+| `P2-US5-AC04` | 同一正式账号跨设备恢复全部自身会话、消息和保留期生成记录 | 继续使用 `auth.uid() = user_id` 所有权查询 |
+| `P2-US5-AC06` | 注册、验证、登录、刷新和跨设备均不关联匿名数据 | 不提供迁移代码或映射表 |
+| `P2-US5-AC07`～`AC09` | 切换时关闭匿名访问并永久删除匿名数据/任务/资产；无通知/下载/恢复；正式账号零误删 | 分阶段 cutover、Storage API、固定夹具负向验证 |
+| `P2-US5-AC01`～`AC03`、`AC05` | 已撤销匿名历史/任务归入 | 仅记录撤销，不实现 |
+| `P2-NG08` | 不做匿名迁移、只读、下载、恢复或继续创作 | 不建立恢复副本与入口 |
+| `P2-DEP04`、`P2-RISK03` | 已撤销匿名归入依赖和风险 | 仅保留稳定 ID |
+| `P2-DEP05` | 切换前形成匿名范围清单并证明完整删除、正式数据未误删 | 盘点报告与前后对账 |
+| `P2-RISK05` | 无通知永久删除带来不可逆损失 | 已批准接受；以清单与零误删证据控制 |
+| `P2-SC02`、`P2-SC06` | 正式账号跨设备恢复 100%；匿名拦截/删除 100%，正式误删 0 | `P2-AT05`、`P2-AT06` |
+
+### 6.2 跨设备恢复方案
+
+正式账号的 `sessions.user_id`、`generation_batches.user_id`、Storage 路径和现有 RLS 所有权边界保持不变。不同浏览器登录后查询同一 `auth.uid()` 即恢复数据，不复制、不合并、不改写所有者。进行中的正式任务仍由持久 queue/worker 推进；新设备只重新获取 timeline、批次状态和短期 signed URL。
+
+RLS 从“`TO authenticated` + 所有权”加强为“正式活动应用会话 + 所有权”。Supabase 匿名用户也拥有 `authenticated` Postgres role，因此禁止仅依赖 `TO authenticated` 判断正式账号。
+
+```text
+private.has_active_formal_session()
+  uid = auth.uid(); sid = UUID(auth.jwt()->>'session_id')
+  return uid is not null
+    and coalesce((auth.jwt()->>'is_anonymous')::boolean, false) = false
+    and exists app_sessions where user_id=uid and session_id=sid
+        and revoked_at is null
+        and now < created_at + 90d
+        and now < last_seen_at + 30d
+
+RLS USING (
+  private.has_active_formal_session()
+  and user_id = (select auth.uid())
+)
+```
+
+如使用 `SECURITY DEFINER` 读取 private 表，该函数必须位于非暴露 schema、固定 `search_path`、显式校验 `auth.uid()`，并撤销 `PUBLIC EXECUTE` 后只授予所需角色；不能把 `SECURITY DEFINER` 当作跳过 RLS 的通用手段。
+
+### 6.3 匿名退场顺序与伪代码
+
+匿名删除是不可恢复的发布操作，只能在审批窗口内使用固定脚本/管理任务执行，禁止页面或普通 API 暴露。
+
+```text
+Stage 0: inventory and freeze
+  snapshot IDs/counts for auth.users where is_anonymous = true
+  derive owned sessions, timeline, batches, generations, uploads,
+         storage paths, queue/cleanup jobs and quota entries
+  record separate formal-account control fixture and hashes/counts
+  approve irreversible runbook
+
+Stage 1: close every anonymous ingress
+  remove AnonymousAuthGate and Proxy signInAnonymously bootstrap
+  disable anonymous sign-ins in Supabase Auth configuration
+  requireFormalSession in workspace/session/generation/upload/asset APIs
+  generation worker and result writer reject anonymous-owned jobs
+  deploy and prove anonymous protected-entry rejection = 100%
+
+Stage 2: stop anonymous work
+  mark anonymous pending/processing tasks cancelled by owned anonymous user IDs
+  archive/remove queue messages so no later visible result or quota mutation occurs
+  add worker tombstone guard checked immediately before provider call and before commit
+
+Stage 3: delete objects before metadata
+  for each inventory storage path:
+    delete through Supabase Storage API; retry idempotently; verify object missing
+  never delete storage.objects rows directly
+
+Stage 4: delete identities and business rows
+  delete only auth.users where id in frozen anonymous ID set
+    and is_anonymous = true at execution time
+  rely on reviewed foreign-key cascades for owned business rows
+  explicitly clean non-cascading operational rows by frozen anonymous IDs
+
+Stage 5: prove outcome
+  assert every anonymous fixture row/object/task is absent
+  assert no anonymous task can create visible result or quota change
+  compare every formal fixture row, task, asset and quota hash/count unchanged
+  retain only non-content audit evidence required to prove execution
+```
+
+清理条件必须同时使用冻结的匿名用户 ID 集合和执行时 `is_anonymous = true`，不得按日期、邮箱为空、路径前缀或“非正式用户”等宽泛条件删除。由于需求禁止恢复副本，盘点证据只能保存 ID、数量、哈希和状态等最小审计信息，不能备份匿名正文或图片内容。
+
+### 6.4 文件与模块范围
+
+| 根目录 | 计划修改/新增 | 责任 |
+| --- | --- | --- |
+| `apps/web` | 删除 `anonymous-auth-gate.tsx` 接入；修改 `lib/supabase/proxy.ts`、根布局、所有受保护 handlers/services/tests | 关闭匿名创建和访问，正式会话守卫 |
+| `packages/domain` | 移除匿名额度/身份对外语义，保留正式账号契约 | 阶段边界 |
+| `supabase` | 新增匿名盘点/清理 runbook 与固定夹具；修改 RLS、generation/cleanup worker；通过 Storage API 执行对象删除 | 冻结、取消、清理、零误删证明 |
+
+### 6.5 选型依据与备选方案
+
+| 方案 | 优点 | 缺点/风险 | 结论 |
+| --- | --- | --- | --- |
+| 关闭入口后按冻结匿名 ID 永久清理 | 范围可审计；能阻止删除过程中继续写入；可证明零误删 | 操作不可逆，需严格审批与演练 | 选择；符合已批准需求 |
+| 登录时迁移/绑定匿名数据 | 用户历史保留 | 与 4 个撤销 AC 和 `P2-NG08` 冲突，合并复杂且有越权风险 | 禁止 |
+| 保留只读/下载窗口或恢复备份 | 降低用户损失 | 与 `P2-US5-AC08` 明确冲突 | 禁止 |
+| 直接删除 `storage.objects` 或先删用户 | 操作少 | 可能留下对象、任务或孤儿数据，违反 Storage API 边界 | 不选 |
+
+### 6.6 实施步骤
+
+1. 用生产等价只读查询形成匿名/正式固定夹具范围清单和前置对账。
+2. 先部署匿名入口关闭、正式会话 RLS、API/Worker/结果落库守卫。
+3. 在隔离环境演练取消任务、Storage API 删除、用户删除和级联清理。
+4. 通过审批后执行正式切换；每一阶段满足断言后才进入下一阶段。
+5. 完成 `P2-AT05` 的匿名 100% 删除与正式零误删证据，以及 `P2-AT06` 跨设备隔离证据。
+
+## 7. 公共接口、领域契约与数据模型
+
+### 7.1 认证、账号与 Skill 接口
+
+所有接口使用 Zod 严格对象，拒绝未知字段；认证和账号响应设置 `Cache-Control: no-store`。Route Handler 只做来源、schema、认证和错误映射，业务事务进入 server service/domain service。
+
+| 方法与路径 | 访问级别 | 计划职责 |
+| --- | --- | --- |
+| `POST /api/auth/register` | 公开 + Turnstile/限流 | 注册编排、统一 accepted 响应、发送验证或账号指引邮件 |
+| `POST /api/auth/login` | 公开 + 条件 Turnstile | HMAC guard、服务端密码派生、Supabase SSR 登录、登记 app session |
+| `POST /api/auth/resend` | 公开 + Turnstile/限流 | 按 `confirm_email`/`recover_password` 重发并废止旧 action |
+| `POST /api/auth/recover` | 公开 + Turnstile/限流 | 统一响应，存在账号时创建 1 小时 recovery action |
+| `POST /api/auth/reset-password` | 有效 recovery action | 设置新密码、撤销全部会话、要求重新登录 |
+| `POST /api/auth/change-password` | 正式活动会话 | 主动改密，保留当前应用会话并撤销其他会话 |
+| `POST /api/auth/logout` | 正式活动会话 | 撤销当前 app/Supabase session 并清 cookie |
+| `GET /api/account` | 正式活动会话 | 返回邮箱、显示名称和脱敏账号标签 |
+| `PATCH /api/account` | 正式活动会话 | 添加、修改或清空显示名称 |
+| `GET /api/skills` | 公开 | 仅返回三个 Skill 的公开安全 DTO |
+
+`/auth/confirm` 是服务端页面/动作入口，消费邮件 action 后完成 Supabase token 验证；它不接受浏览器提供任意 redirect URL。服务条款与隐私政策内容不经 API 动态生成，只有经过审批的版本才能发布至 `/terms`、`/privacy`。
+
+### 7.2 工作区契约调整
+
+```text
+CreateSessionRequest = {
+  title?, preselectedSkillId?  // 仅接受 registry 中受控 ID
+}
+
+UpdateSessionRequest =
+  | { title }
+  | { imageCreationEnabled }
+
+ChatRequest = {
+  sessionId?, message, tools?, chatModel?, imageProvider?,
+  skillId?, pendingSkillTaskId?, images?
+}
+
+Session = {
+  id, title, status, imageCreationEnabled, createdAt, updatedAt
+}
+
+TimelineResponse = {
+  items: TimelineItem[],
+  activeSkillTask?: SkillTaskPublic,
+  nextCursor?
+}
+
+MessageTimelineItem += {
+  skill?: { id, name, version }  // 使用时快照，不回查当前 registry
+}
+
+SkillTaskPublic = {
+  id, sessionId, status,
+  skill: { id, name, version },
+  missingInputs[], proposedDefaults?, notices[],
+  imageSettings, referenceImageIds[], generationBatchId?
+}
+
+ChatSseEvent +=
+  | skill.input_required
+  | skill.confirmation_required
+  | skill.cancelled
+  | skill.replaced
+  | skill.execution_started
+```
+
+Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`、`POST /api/skill-tasks/{id}/cancel` 和 `POST /api/skill-tasks/{id}/replace`。确认请求携带最新 proposal fingerprint；取消和替换使用条件更新，终态任务不可再次操作。`PATCH /api/sessions/{id}` 使用判别联合分别修改标题或 `imageCreationEnabled`，不得在同一请求混改。
+
+`skillId` 只接受 registry 中受控 ID；`pendingSkillTaskId` 必须属于当前正式账号和当前 session。两者同时出现时，仅允许显式“确认替换”接口处理，普通 chat 请求返回冲突。现有图片参数 capability、1～4 张、1K/2K、参考图所有权、幂等键、配额预占和 queue 逻辑继续作为 Phase 1 回归边界。
+
+新增稳定错误码至少包括：
+
+| 错误码 | HTTP 建议 | 对外语义 |
+| --- | --- | --- |
+| `auth_invalid_credentials` | 401 | 邮箱或密码无效，不区分不存在、未验证或密码错误 |
+| `auth_login_locked` | 429 | 登录等待未结束，details 仅含剩余秒数和是否需 CAPTCHA |
+| `auth_email_action_expired` | 410 | action 过期、已消费或被新链接替代，可重新申请 |
+| `auth_session_expired` | 401 | app session 闲置/绝对期限到达或已撤销，工作区进入恢复边界 |
+| `auth_password_check_unavailable` | 503 | 泄露检查暂不可用；设置新密码安全失败并可重试 |
+| `skill_input_required` | 409 | 最低执行条件不足，返回缺少信息而不创建生成任务 |
+| `skill_confirmation_required` | 409 | 默认值、非还原提示或实际设置等待确认 |
+| `skill_task_conflict` | 409 | 重复执行、过期确认、跨会话任务或未确认替换冲突 |
+
+错误体继续沿用 `{ code, message, retryable, correlationId, details? }`；`details` 必须逐码白名单化，不含邮箱、密码、action secret、Supabase token、内部提示词或 Storage signed URL。
+
+### 7.3 数据模型
+
+| Schema/表 | 计划字段与约束 | 暴露与权限 |
+| --- | --- | --- |
+| `public.profiles` | `user_id PK/FK auth.users`、`display_name nullable`、时间戳 | 仅正式活动会话读取/更新本人；显式 `GRANT` + RLS |
+| `private.app_sessions` | `session_id PK`、`user_id`、`created_at`、`last_seen_at`、`revoked_at`、`revoke_reason` | 不暴露 Data API；仅受控函数/server role 访问 |
+| `private.auth_action_requests` | purpose、email HMAC、public secret hash、加密 Supabase token hash、期限/重发/替代/消费状态 | 不暴露 Data API；最小审计与定期过期清理 |
+| `private.auth_login_guards` | email HMAC PK、失败次数、`locked_until`、`captcha_required`、更新时间 | 不暴露 Data API；不存在与存在邮箱走相同记录路径 |
+| `public.skill_tasks` | user/session、Skill 名称/版本快照、输入/补充、参考图、设置、缺失项、默认值、确认指纹、状态、batch FK、时间戳 | 仅正式活动会话读取本人；写入经受控服务/RPC |
+| `public.sessions` 扩展 | `image_creation_enabled boolean not null default false` | 现有所有权 RLS 再叠加正式活动会话 |
+| `public.timeline_items` 扩展 | Skill ID/名称/版本快照或结构化 metadata；可关联 `skill_task_id` | 快照字段写入后不可改写 |
+| `public.generation_batches` 扩展 | `skill_task_id unique nullable`、Skill 名称快照；保留现有 `skill_id/version` | 一任务最多一个 batch；保留现有幂等和快照保护 |
+
+数据库实施规则：
+
+- 所有 `public` 表先 `REVOKE ALL FROM anon, authenticated`，再显式授予实际需要的最小权限并启用 RLS；`TO authenticated` 不能替代所有权和正式会话判断。
+- `profiles` 和 `skill_tasks` 的 UPDATE policy 同时提供 `USING` 与 `WITH CHECK`，阻止更改 `user_id`/`session_id` 越权。
+- 浏览器不得直接 INSERT `skill_tasks`、`generation_batches` 或认证私有表；受控 Route Handler/RPC 负责验证和事务。
+- 所有 private 函数固定 `search_path`、撤销默认 `PUBLIC EXECUTE` 并显式授权；迁移后运行 Supabase advisors 与 pgTAP。
+- 生成数据库类型并提交 diff，避免手写类型与迁移漂移。
+
+### 7.4 安全与运行约束
+
+```text
+受保护请求
+  -> Proxy 刷新 cookie/快速跳转
+  -> Route Handler requireFormalSession
+  -> service 校验资源所有权与状态
+  -> Postgres RLS 再校验 active formal session + auth.uid ownership
+  -> Worker 在 provider 前、结果提交前再检查匿名 tombstone/任务状态
+```
+
+`service_role`、DirectMail SMTP、HMAC key、action 加密 key 和 provider key 仅存在于 server/worker secret。HMAC key 与 action 加密 key 分离并带版本；轮换时允许短期双读，禁止把 email HMAC 当作可逆邮箱存储。公开页面和 CDN 不缓存带 `Set-Cookie` 的认证响应，受保护页面不做用户间共享缓存。
+
+## 8. 分阶段实施路径
+
+以下顺序是后续开发依赖顺序，不代表本次文档更新已经实施这些功能。
+
+### 8.1 第 1 阶段：契约、迁移和失败测试
+
+1. 增加 Phase 2 DTO、错误码、Skill registry 和状态机测试。
+2. 新建数据库迁移，定义 private/public 表、扩展字段、索引、唯一约束、显式权限和 RLS。
+3. 先写失败用例：匿名/未验证访问、跨用户、重复 Skill 执行、未确认默认值、登录锁定、action 重放、30/90 天边界。
+4. 生成数据库类型并核对 OpenAPI/应用契约。
+
+### 8.2 第 2 阶段：认证、邮件与正式会话
+
+1. 实现 Unicode 密码、常见密码、HIBP 和版本化预哈希。
+2. 实现 HMAC 登录 guard、Turnstile、统一枚举保护响应。
+3. 实现 app action、Admin `generateLink`、DirectMail 和确认/找回页面。
+4. 实现 `requireFormalSession` 并接入 Route Handler、RLS 和已提交任务边界。
+5. 使用新/已注册/未验证邮箱及真实 QQ、163、企业邮箱完成集成证据。
+
+### 8.3 第 3 阶段：公开 Skill 页面
+
+1. 发布版本化公开 registry 和无认证 `GET /api/skills`。
+2. 实现列表、详情、三处统一入口和受控登录意图。
+3. 验证新空白会话、Skill 预选和三个动作内发送。
+
+### 8.4 第 4 阶段：持久 Skill 任务
+
+1. 实现 `skill_tasks` 状态机、session 图片开关和 timeline 快照。
+2. 实现最低条件追问、补充、默认值/非还原确认、取消和替换。
+3. 复用 Phase 1 原子 batch/配额/queue 路径，实现每任务最多一次。
+4. 完成设置不兼容、Skill 加载失败、登录失效恢复和会话切换。
+
+### 8.5 第 5 阶段：账号和会话撤销
+
+1. 实现 `/account`、显示名称和脱敏邮箱。
+2. 实现主动改密保留当前会话与找回重置撤销全部会话。
+3. 实现 Workspace dirty-state 退出确认和退出后保护边界。
+
+### 8.6 第 6 阶段：匿名退场
+
+1. 形成匿名范围清单和正式对照夹具。
+2. 关闭匿名 Auth、前端 gate、API、Worker 与结果提交入口。
+3. 隔离演练后执行任务取消、Storage API 对象删除、匿名用户删除与级联清理。
+4. 证明匿名删除率 100%、匿名入口拦截率 100%、正式数据误删 0。
+
+### 8.7 第 7 阶段：发布证据
+
+1. 完成 `P2-AT01`～`P2-AT09`，所有固定场景必须全部满足通过条件。
+2. 完成三 Skill 可用率和逐项保真盲评、桌面/窄屏任务。
+3. 完成法律文本、Beta 文案、邮件文案、目标邮箱投递、匿名不可逆删除与无账号删除风险审批。
+4. 只有证据齐全后才能更新 `doc/project-progress.md` 和 `doc/architecture.md`；Phase 2 验收不能替代后续生产门禁。
+
+## 9. 验证与发布门禁
+
+### 9.1 自动化验证
+
+| 层级 | 必须覆盖 |
 | --- | --- |
-| TS-SEC-01 | 用户可达业务表启用 RLS，并只向 `authenticated` 显式授予所需操作；policy 用 `auth.uid() = user_id` 或经 session 所有权验证。queue、健康窗口和清理表不向客户端开放。 |
-| TS-SEC-02 | service role、provider key、S3 备份凭证仅在 server/worker secret 中；浏览器只使用 publishable/anon 凭证。 |
-| TS-SEC-03 | 上传 API 同时校验 MIME、扩展名、magic bytes、文件大小、像素和参考图数量；只接受允许的栅格格式。 |
-| TS-PRIVACY-01 | 日志和审计采用字段白名单及脱敏；不保存思维链，不记录可直接访问资产的 signed URL。 |
+| 单元 | Unicode 代码点计数、SHA-384 固定向量、常见/泄露密码、email HMAC、action 状态、Skill 状态机、dirty-state |
+| 组件 | 认证表单、Beta 标识、Skill 页面/标签、追问/确认卡、登录恢复覆盖层、退出确认 |
+| API 集成 | 防枚举、锁定跨浏览器、action 过期/替代/重放、正式会话期限、Skill 最多一次、无扣额追问 |
+| pgTAP | private 表不可达、显式 `GRANT`、正式活动会话 + 所有权 RLS、跨用户/匿名拒绝、唯一约束、正式夹具零误删 |
+| Worker | 匿名 tombstone、取消后不调用 provider、不写结果/额度、重复 queue 消费幂等 |
+| E2E | `P2-AT01`～`P2-AT08` 的页面和跨浏览器路径 |
+| 盲评/可用性 | `P2-AT09`：三 Skill 分别 ≥80%，有参考图逐项保真，无参考图提示，桌面/窄屏 ≤3 动作 |
 
-Supabase 2026 的 Data API 默认暴露行为已经变化，因此迁移必须包含显式权限语句并由 pgTAP 验证“授权角色可访问、其他用户不可访问、未授权表不可访问”。
+### 9.2 发布阻断条件
 
-## 7. 持久队列与状态机
+下列任一项未满足均不得发布公开 Beta，也不得将状态写为已完成：
 
-| 决策 ID | 决策 |
+- `P2-SC01`～`P2-SC06` 没有全部取得可复核证据。
+- 任一 planned 用户故事或 `P2-AT01`～`P2-AT09` 未通过。
+- `P2-DEP01`、`P2-DEP02`、`P2-DEP03`、`P2-DEP05`、`P2-DEP06` 任一未完成。
+- 法律文本没有明确中国大陆公开 Beta、非生产就绪、匿名数据无通知永久删除和无正式账号删除途径。
+- 邮件未在真实 QQ、163 和企业邮箱验证，或 SPF/DKIM/DMARC/链接期限不符合要求。
+- 匿名清理不能证明正式账号数据、任务、资产和额度逐项不变。
+- Phase 1 既有生成、状态、费用、安全、删除或到期回归失败。
+
+### 9.3 文档自身验收
+
+本文件交付时执行以下静态核对：
+
+1. 从 `requirements.md` Phase 2 追溯矩阵提取 83 个唯一 ID，并确认本文件逐项出现且映射到技术决策或撤销说明。
+2. 确认 6 个 withdrawn ID 只标记撤销，不出现在实施任务中。
+3. 确认第 2～6 节每个页面功能章节都包含需求来源、技术方案/伪代码、文件模块范围、选型依据和实施步骤。
+4. 确认接口、错误码、表名、状态名和文件范围前后一致。
+5. 确认文档未声称 Phase 2 已实施、已测试或生产就绪，并且本次只修改 `doc/tech-selection.md`。
+
+## 10. Phase 2 全量需求追溯矩阵
+
+| 需求 ID | 内容摘要 | 技术决策/处理 | 设计章节 | 状态 |
+| --- | --- | --- | --- | --- |
+| `P2-SC01` | 受保护入口拦截和登录回跳 100% | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 3、7、9 | planned |
+| `P2-SC02` | 正式账号跨设备恢复 100% | `P2-TS-CUTOVER-01` | 6 | planned |
+| `P2-SC03` | Skill 选择发送不超过 3 个动作 | `P2-TS-SKILL-01`、`P2-TS-WORKSPACE-01` | 2、4 | planned |
+| `P2-SC04` | 三 Skill 可用率与逐项保真 | `P2-TS-WORKSPACE-01/02` | 4、9 | planned |
+| `P2-SC05` | Phase 2 九类关键任务 100% 通过 | 全部 Phase 2 决策 | 8、9 | planned |
+| `P2-SC06` | 匿名拦截/删除 100%，正式误删 0 | `P2-TS-CUTOVER-02` | 6、9 | planned |
+| `P2-US1-AC01` | Skill 列表/详情公开且不泄露用户数据 | `P2-TS-SKILL-02` | 2 | planned |
+| `P2-US1-AC02` | 只展示三个官方 Skill | `P2-TS-SKILL-01` | 2 | planned |
+| `P2-US1-AC03` | 独立详情含六类说明和立即使用 | `P2-TS-SKILL-01` | 2 | planned |
+| `P2-US1-AC04` | 三 Skill 的产出语义 | `P2-TS-SKILL-01` | 2、4 | planned |
+| `P2-US1-AC05` | 三处入口使用同一内容 | `P2-TS-SKILL-01` | 2 | planned |
+| `P2-US1-AC06` | 立即使用的新会话和登录选择恢复 | `P2-TS-SKILL-01`、`P2-TS-AUTH-01` | 2、3 | planned |
+| `P2-US1-AC07` | 不提供市场/编辑/安装等入口 | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
+| `P2-US2-AC01` | 输入框单选 Skill 标签 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC02` | 自然语言/参考图和会话追问 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC03` | 单次授权和历史版本快照 | `P2-TS-WORKSPACE-01`、`P2-TS-DATA-01` | 4、7 | planned |
+| `P2-US2-AC04` | 最多生成一次，不满足条件不扣额 | `P2-TS-WORKSPACE-02` | 4 | planned |
+| `P2-US2-AC05` | 待补充任务可续接且不得重复 | `P2-TS-WORKSPACE-01/02` | 4 | planned |
+| `P2-US2-AC06` | 替换 Skill 前确认取消 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC07` | 图片开关按会话持久化 | `P2-TS-WORKSPACE-03` | 4、7 | planned |
+| `P2-US2-AC08` | 图片设置可见且不静默修改 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC09` | 参考图逐项保真和无图提示 | `P2-TS-WORKSPACE-01` | 4、9 | planned |
+| `P2-US2-AC10` | Skill 失败可重试且不替代 | `P2-TS-WORKSPACE-01` | 4、7 | planned |
+| `P2-US2-AC11` | 最低执行条件 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC12` | 默认值执行前展示并确认 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US3-AC01` | Skill 公开，其余核心能力需登录 | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 1、3 | planned |
+| `P2-US3-AC02` | 仅邮箱密码注册/验证/登录/找回 | `P2-TS-AUTH-01/02`、`P2-TS-SCOPE-01` | 3 | planned |
+| `P2-US3-AC03` | 注册四字段，显示名称非必填 | `P2-TS-AUTH-01` | 3 | planned |
+| `P2-US3-AC04` | 验证 24h、60s 重发、旧链失效 | `P2-TS-AUTH-02` | 3 | planned |
+| `P2-US3-AC05` | 找回 1h、60s 重发、旧链失效 | `P2-TS-AUTH-02` | 3 | planned |
+| `P2-US3-AC06` | 8～64 Unicode 且拒绝常见/泄露密码 | `P2-TS-AUTH-03/04` | 3 | planned |
+| `P2-US3-AC07` | 注册/登录防邮箱枚举 | `P2-TS-AUTH-02/05` | 3 | planned |
+| `P2-US3-AC08` | 5 次失败、Turnstile、15 分钟全局等待 | `P2-TS-AUTH-05` | 3 | planned |
+| `P2-US3-AC09` | 主动勾选正式条款和隐私 | `P2-TS-SCOPE-01`、`P2-TS-AUTH-01` | 3 | planned |
+| `P2-US3-AC10` | 30 天闲置/90 天最长和登录落点 | `P2-TS-SESSION-01`、`P2-TS-AUTH-01` | 3、7 | planned |
+| `P2-US3-AC11` | 中国大陆公开 Beta、非生产就绪 | `P2-TS-SCOPE-01` | 1、3、9 | planned |
+| `P2-US4-AC01` | 基础账号页 | `P2-TS-ACCOUNT-01` | 5 | planned |
+| `P2-US4-AC02` | 显示名称可增改清空 | `P2-TS-ACCOUNT-01` | 5、7 | planned |
+| `P2-US4-AC03` | 主动改密只退出其他设备 | `P2-TS-ACCOUNT-02` | 5 | planned |
+| `P2-US4-AC04` | 找回重置退出全部设备 | `P2-TS-ACCOUNT-02` | 5 | planned |
+| `P2-US4-AC05` | 登录失效保留完整现场 | `P2-TS-SESSION-01`、`P2-TS-WORKSPACE-01` | 4、5 | planned |
+| `P2-US4-AC06` | 有未发送现场时退出确认 | `P2-TS-ACCOUNT-02` | 5 | planned |
+| `P2-US4-AC07` | 退出后保护内容不可恢复且不匿名化 | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 5、6 | planned |
+| `P2-US4-AC08` | 无扩展账号管理和删除途径 | `P2-TS-SCOPE-01`、`P2-TS-ACCOUNT-01` | 5、9 | planned |
+| `P2-US5-AC01` | 撤销匿名历史自动归入 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-US5-AC02` | 撤销归入去重/覆盖/顺序行为 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-US5-AC03` | 撤销归入失败和重试入口 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-US5-AC04` | 正式账号跨设备历史 | `P2-TS-CUTOVER-01` | 6 | planned |
+| `P2-US5-AC05` | 撤销匿名进行中任务归入 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-US5-AC06` | 全流程不关联匿名数据 | `P2-TS-CUTOVER-01/02` | 6 | planned |
+| `P2-US5-AC07` | 切换时永久删除匿名数据/任务/资产 | `P2-TS-CUTOVER-02` | 6 | planned |
+| `P2-US5-AC08` | 无通知、只读、下载、迁移或恢复 | `P2-TS-CUTOVER-02` | 6 | planned |
+| `P2-US5-AC09` | 正式账号数据/任务/额度零改变 | `P2-TS-CUTOVER-02` | 6、9 | planned |
+| `P2-NG01` | 不扩 Skill/搜索/分类/收藏/案例 | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
+| `P2-NG02` | 不做 Skill 平台或多 Skill | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
+| `P2-NG03` | 不新增登录方式 | `P2-TS-SCOPE-01`、`P2-TS-AUTH-01` | 3 | planned |
+| `P2-NG04` | 不做扩展账号管理/删除 | `P2-TS-SCOPE-01`、`P2-TS-ACCOUNT-01` | 5 | planned |
+| `P2-NG05` | 不扩语言、客户端、浏览器或完整无障碍认证 | `P2-TS-SCOPE-01` | 1、3 | planned |
+| `P2-NG06` | 需求不规定技术方案且技术不得改产品行为 | 本文件第 1.1 节边界 | 1 | planned |
+| `P2-NG07` | 不做外部告警 | `P2-TS-SCOPE-01` | 1 | planned |
+| `P2-NG08` | 不做匿名迁移/只读/下载/恢复/继续创作 | `P2-TS-CUTOVER-02` | 6 | planned |
+| `P2-DEP01` | 经批准的条款与隐私正式文本 | `P2-TS-SCOPE-01`、`P2-TS-AUTH-01` | 3、9 | planned |
+| `P2-DEP02` | 邮件文案审核和目标邮箱可达 | `P2-TS-AUTH-02` | 3、9 | planned |
+| `P2-DEP03` | 三 Skill 内容审核且口径一致 | `P2-TS-SKILL-01` | 2、9 | planned |
+| `P2-DEP04` | 撤销匿名历史可识别/可归入依赖 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-DEP05` | 匿名范围清单、完整删除与零误删 | `P2-TS-CUTOVER-02` | 6、9 | planned |
+| `P2-DEP06` | Beta/地域/匿名删除/无账号删除审批 | `P2-TS-SCOPE-01` | 3、5、9 | planned |
+| `P2-RISK01` | 8 位无 MFA 的猜测/填充风险 | `P2-TS-AUTH-03/05` | 3 | planned |
+| `P2-RISK02` | 法律文本缺失或不完整 | `P2-TS-SCOPE-01` | 3、9 | planned |
+| `P2-RISK03` | 撤销匿名归入中断/重复风险 | 不实现；保留撤销记录 | 1、6 | withdrawn |
+| `P2-RISK04` | 图片开关持续开启导致额度风险 | `P2-TS-WORKSPACE-03` | 4 | planned |
+| `P2-RISK05` | 匿名永久删除的不可逆损失 | `P2-TS-CUTOVER-02` | 6、9 | planned |
+| `P2-RISK06` | 无正式账号删除途径 | `P2-TS-SCOPE-01`、`P2-TS-ACCOUNT-01` | 5、9 | planned |
+| `P2-RISK07` | 公开 Beta 被误认为生产服务 | `P2-TS-SCOPE-01` | 1、3、9 | planned |
+| `P2-AT01` | 公开 Skill、保护入口和登录落点场景 | `P2-TS-SKILL-02`、`P2-TS-AUTH-01` | 2、3、9 | planned |
+| `P2-AT02` | 注册/验证/重发/找回/密码/邮件场景 | `P2-TS-AUTH-02/03/04` | 3、9 | planned |
+| `P2-AT03` | 登录锁定、重置清除和 30/90 天场景 | `P2-TS-AUTH-05`、`P2-TS-SESSION-01` | 3、9 | planned |
+| `P2-AT04` | 账号、改密、失效恢复与退出场景 | `P2-TS-ACCOUNT-01/02` | 5、9 | planned |
+| `P2-AT05` | 匿名切换删除与正式零误删场景 | `P2-TS-CUTOVER-02` | 6、9 | planned |
+| `P2-AT06` | 正式账号跨设备及负向隔离场景 | `P2-TS-CUTOVER-01` | 6、9 | planned |
+| `P2-AT07` | 三 Skill 入口、详情和立即使用场景 | `P2-TS-SKILL-01/02` | 2、9 | planned |
+| `P2-AT08` | Skill 状态、设置、失败、历史和切换场景 | `P2-TS-WORKSPACE-01/02/03` | 4、9 | planned |
+| `P2-AT09` | 三 Skill 质量、保真、提示和可用性场景 | `P2-TS-WORKSPACE-01/02` | 4、9 | planned |
+
+## 11. Phase 1 已实施技术基线索引
+
+本节保留 v1.4 的历史决策语义，用于 Phase 2 回归。状态以实际代码和 `doc/project-progress.md` 证据为准；本次只重编技术文档，不重新声明 Phase 1 的交付结论。
+
+### 11.1 基础栈与前端
+
+| 历史决策 ID | 保留基线 |
 | --- | --- |
-| TS-QUEUE-01 | 图片任务先在同一数据库事务中写 batch/generation/timeline/配额，再发送 Supabase Queue message；请求提交后才返回 202。禁止依赖请求结束后的后台回调。 |
-| TS-QUEUE-02 | queue message 含版本、`jobId`、`generationId`、`idempotencyKey` 和 correlation ID；使用可见性超时、归档/死信和积压监控。 |
-| TS-QUEUE-03 | worker 以条件更新取得任务，执行 `pending → processing → succeeded\|failed`；重复消费首先读取终态并安全退出。 |
-| TS-QUEUE-04 | 只有连接 provider 前即可证明未提交的基础设施故障可由队列退避重试；超时或未知提交结果进入人工/用户重试路径，避免重复计费。 |
+| `TS-BASE-01` | Next.js 16 App Router、React、TypeScript strict、pnpm workspace；应用位于 `apps/web/app` |
+| `TS-DB-01` | SQL migration、生成数据库类型、pgTAP、公开表显式 `GRANT` 和 RLS |
+| `TS-TYPE-01` | Zod/等价运行时 schema、`unknown` 和判别联合；请求、SSE、provider、queue 先验证后使用 |
+| `TS-I18N-01` | 结构化 zh-CN key；Phase 2 仍不开放 en-US |
+| `TS-PERF-01` | 以固定夹具区分生图端到端 P95、SSE、队列等待和侧栏渲染性能 |
+| `TS-FE-01`～`TS-FE-03` | `UnifiedWorkspace`、`UnifiedComposer`、统一 `Timeline/GenerationCard`，聊天和生图共享会话/时间线 |
+| `TS-FE-04`、`TS-FE-09` | 图片设置浮层、参考图上传与批量下载继续保留；固定 Skill 表单和模板预览被 Phase 2 覆盖 |
+| `TS-FE-05`～`TS-FE-07` | `/chat`、`/image` 重定向统一工作区；SessionSidebar；Zustand 只保存 UI/请求瞬态，服务端是事实源 |
+| `TS-FE-08` | 显式图片工具许可继续保留；Skill 取消恢复旧偏好的部分被按会话开关覆盖 |
+| `TS-FE-10`～`TS-FE-12` | 受控标签安全 Markdown、智能滚动、高级图片设置和生成轮次布局继续回归 |
+| `TS-IMG-01`～`TS-IMG-03` | 1～4 张、服务端 capability manifest、五种比例、1K/2K、PNG/JPEG/WebP、单图 10 MB、1～4 张参考图 |
 
-| 决策 ID | 配额 |
+### 11.2 API、AI 与数据
+
+| 历史决策 ID | 保留基线 |
 | --- | --- |
-| TS-QUOTA-01 | 匿名用户每日额度为 30 张；在创建批次的事务中原子预占每张额度，成功结算，确定未提交的失败释放，未知提交结果等待对账。 |
+| `TS-API-01` | `POST /api/chat` 使用 SSE，事务创建/验证 session 与用户消息，完整 assistant 消息后持久化 |
+| `TS-API-02`～`TS-API-04` | 图片提交、重建和批次查询继续走事务、HTTP 202、轮询和短期资产地址 |
+| `TS-API-05` | sessions/timeline 是唯一历史 API，删除先返回 202 并进入异步清理 |
+| `TS-API-06` | 应用代码维护 `GET /api/openapi.json`，不读取 Supabase anon OpenAPI spec |
+| `TS-API-07` | 统一错误体、稳定错误码和 details 白名单；Phase 2 在同一 registry 扩展认证/Skill 错误 |
+| `TS-AI-01` | LangGraphJS + Postgres checkpointer，`sessions.id` 作为 `thread_id` |
+| `TS-AI-02`、`TS-AI-05` | Seedream/Gemini 图片 adapter 与显式用户选择；不自动付费切换 provider |
+| `TS-AI-03` | 版本化 Skill 定义并记录 `skill_id/version`；Phase 2 扩展为公开/内部 registry 和历史名称快照 |
+| `TS-AI-04` | provider 原生内容安全与统一审计映射，固定数据集验证 |
+| `TS-AI-06` | Doubao/MiniMax 聊天 adapter 与图片 provider 独立选择、健康和故障边界 |
+| `TS-RETRY-01` | 聊天仅在首个内容块前对瞬时失败重试一次；图片可能已提交后不自动重放 |
+| `TS-DATA-01`～`TS-DATA-03` | sessions、timeline_items、generation_batches/generations 及唯一序列、幂等、批次状态继续作为事实源 |
+| `TS-DATA-04` | 版本化 Skill 与 timeline/batch 快照；Phase 2 明确 registry 为三 Skill 内容源 |
+| `TS-SEC-01`～`TS-SEC-03` | RLS/所有权、server-only secrets、上传 MIME/扩展名/magic bytes/大小/像素/数量校验 |
+| `TS-PRIVACY-01` | 日志/审计白名单脱敏，不保存思维链或 signed URL |
 
-## 8. Storage、删除与到期
+### 11.3 队列、Storage、运维与测试
 
-| 决策 ID | 决策 |
+| 历史决策 ID | 保留基线 |
 | --- | --- |
-| TS-STORAGE-01 | `uploads` 和 `generated` 均为 private bucket。 |
-| TS-STORAGE-02 | 路径为 `{userId}/{sessionId}/{batchId}/{generationId}/...`；资产 API 验证 RLS/所有权后签发短期 signed URL，客户端过期时按 generation ID 续签。 |
-| TS-STORAGE-03 | generation 元数据保留到主动删除；成功原图设置 `asset_expires_at = created_at + 90 days`，到期后标记 `expired` 并保留重生成参数。 |
-| TS-STORAGE-04 | worker 只调用 Storage API 删除对象，成功后再更新业务状态；不得直接操作 Storage 内部对象行。 |
-| TS-STORAGE-05 | reference upload 设置 30 天到期时间；到期或删会话时经 Storage API 清理。依赖已过期参考图的 recreate 要求重新上传。 |
-| TS-DELETE-01 | DELETE 先原子把 session 标记 `deleting` 并入 cleanup queue；UI 立即隐藏。worker 依次清 checkpoint、Storage 对象、子记录和 session；步骤可重复执行，失败告警并重试。 |
+| `TS-QUEUE-01`～`TS-QUEUE-04` | 数据、配额和 queue 在事务中创建；消息版本化；条件更新抢占；重复消费幂等；未知 provider 提交不自动重试 |
+| `TS-QUOTA-01` | 生成前原子预占、成功结算、确定未提交失败释放、未知结果待对账；匿名每日额度随匿名退场而失效 |
+| `TS-STORAGE-01`～`TS-STORAGE-05` | uploads/generated private bucket、受控路径、短期 signed URL、生成图 90 天/参考图 30 天、Storage API 删除 |
+| `TS-DELETE-01` | 会话先标记 deleting 并入清理队列，UI 隐藏；checkpoint、对象、子记录和 session 可重入清理 |
+| `TS-HEALTH-01` | provider 共享健康窗口及 warning/unavailable 阈值 |
+| `TS-OBS-01`～`TS-OBS-03` | Sentry、结构化日志、correlation ID 和 API/SSE/queue/provider/Storage/配额/清理指标 |
+| `TS-OPS-03`～`TS-OPS-07` | 数据库/Storage 独立备份、季度恢复、制品回滚、expand/contract、secret/type/migration/pgTAP CI 门禁仍属生产边界 |
+| `TS-AUTH-01`、`TS-AUTH-02` | 匿名 bootstrap 与同浏览器恢复是历史行为，Phase 2 被 `P2-TS-AUTH-01`、`P2-TS-CUTOVER-02` 明确覆盖 |
+| `TS-SCOPE-01`～`TS-SCOPE-04` | Web、无协作/精修/训练/市场/4K/付费/原生客户端等边界继续保留；账号绑定、外部告警延后表述按第 1.2 节修正 |
+| `TS-TEST-01`～`TS-TEST-03` | 单元/组件/集成/pgTAP/E2E、零费内测浏览器矩阵和统一错误/恢复/模型路径回归继续保留 |
 
-到期清理与会话删除共用可恢复清理框架，但任务类型和审计原因分开。删除用户主动选择的会话时，清理记录可保留最小运维审计，不保留用户内容。
-
-## 9. 健康、监控与灾备
-
-| 决策 ID | 决策 |
-| --- | --- |
-| TS-HEALTH-01 | provider 结果写入 Postgres 5 分钟共享窗口；错误率达到 30% 为 warning，超过 50% 且样本不少于 10 为 unavailable 并告警。 |
-| TS-OBS-01 | Sentry + 结构化日志；错误对外归一化，对内以 correlation ID 关联 API、queue、provider 和 Storage。 |
-| TS-OBS-02 | Phase 1 用 Sentry 告警队列积压/死信、清理失败、provider 高错误率、备份失败和关键 SLO。 |
-| TS-OBS-03 | 指标覆盖 API QPS/成功率/错误率/P95、SSE 首块、队列等待、生成耗时/成功率/费用、配额 80% 阈值、signed URL、清理与备份。 |
-| TS-OPS-03 | 生产 Supabase Pro 每日数据库备份，RPO 目标 24 小时；Phase 1 不承诺 PITR 或多区域主动容灾。 |
-| TS-OPS-04 | 每日把两个 private bucket 增量复制到独立 S3-compatible 目标，并校验对象数、大小与抽样哈希。 |
-| TS-OPS-05 | 每季度从数据库备份和 Storage 备份联合恢复到隔离环境，执行完整性脚本并满足 RTO 不超过 4 小时。 |
-| TS-OPS-06 | PR 生成隔离 preview；生产人工 promote，可回退上一制品。数据库使用 expand/contract 迁移，破坏性收缩在兼容版本稳定后执行。 |
-| TS-OPS-07 | CI 运行 secret scanning、环境变量 schema 校验、生成数据库类型 diff、migration drift 与 pgTAP 权限测试；生产控制台不得成为 schema 事实源。 |
-
-Supabase 数据库备份只包含 Storage 元数据，不包含对象本体，因此 TS-OPS-03 与 TS-OPS-04 缺一不可。
-
-## 10. 匿名身份与阶段边界
-
-| 决策 ID | 决策 |
-| --- | --- |
-| TS-AUTH-01 | 首次访问建立 Supabase 匿名用户，cookie/session 有效时用 `auth.uid()` 恢复同浏览器历史。 |
-| TS-AUTH-02 | 侧栏和删除确认中提示：换设备、退出或清理浏览器数据后匿名历史可能不可恢复。 |
-| TS-SCOPE-01 | Phase 1 仅 Web；不做多人协作、在线精修、模型训练、技能市场或首页监控图表。 |
-| TS-SCOPE-02 | 匿名账号绑定和跨设备同步推迟到 Phase 2。 |
-| TS-SCOPE-03 | 飞书、钉钉、PagerDuty 等外部告警通道推迟到 Phase 2；Phase 1 以 Sentry 为准。 |
-| TS-SCOPE-04 | 套图自动编排、视频/文档/Canvas、4K、付费/短信、离线/PWA 与完整无障碍认证均不进入 Phase 1。 |
-
-## 11. 验证策略
-
-| 决策 ID | 门禁 |
-| --- | --- |
-| TS-TEST-01 | 单元、组件、集成、pgTAP 与 E2E 纳入 CI；前端和后端语句覆盖率分别不低于 70%。 |
-| TS-TEST-02 | 零费内测用 Chromium、Microsoft Edge、Playwright WebKit 覆盖关键流程；真实 Safari 最近两个主版本只属于后续生产门禁。 |
-| TS-TEST-03 | 零费内测验证失败结构 100% 可解析、同浏览器恢复 100%、Doubao/MiniMax 各一次聊天路径及 Seedream 三个单图场景；双图片 provider 各 n≥30、成功率≥95% 与 P95 属于后续生产门禁。 |
-
-关键测试清单：
-
-- SSE 分片、断流、首块前重试一次、输出后失败。
-- 图片工具默认关闭、技能自动开启/取消、明确意图触发和普通讨论不误触。
-- 1–4 张任务原子入队、部分成功、重复消息、实例重启和未知 provider 提交结果。
-- 空提示词、五种比例、1K/2K、参考图格式/10 MB/上传状态、技能必填字段、提示词预览和批量下载。
-- 聊天工具生图刷新恢复、直接生图轮询、三种 recreate。
-- private URL 续签、越权拒绝、生成原图 90 天/参考图 30 天到期与原参数重生成。
-- 删除 UI 隐藏、各清理步骤失败重试、Storage API 删除与最终物理删除。
-- 每日 30 张配额并发预占/释放、provider 健康窗口、告警误报/漏报和用户确认降级。
-- Doubao/MiniMax 聊天切换与 Seedream/Gemini 图片选择隔离；双图片 provider 的 2K P95/成功率回归。
-- 95% 内容安全固定集、日志脱敏、RLS/GRANT 负向用例。
-- 同浏览器恢复 100%、统一错误 schema 100%、50 会话侧栏 200 ms 和 zh-CN key 检查。
-- 每日数据库/Storage 备份验证与季度恢复演练。
+Phase 2 必须继续验证：SSE 分片/断流、图片工具许可、1～4 张原子入队与部分成功、参考图限制、生成重建、private URL 续签、到期、删除重试、配额并发、provider 隔离、内容安全、日志脱敏、RLS/GRANT、备份恢复等 Phase 1 行为。唯一批准的破坏性变化是匿名身份永久退场，且必须按第 6 节取得证据。
 
 ## 12. 参考依据
 
+以下资料用于验证技术可行性，不替代 `requirements.md` 的产品行为：
+
+- [Supabase：Next.js SSR client、Proxy 与 getClaims](https://supabase.com/docs/guides/auth/server-side/creating-a-client)
+- [Supabase：用户会话、session_id 与 Pro 才提供的会话期限配置](https://supabase.com/docs/guides/auth/sessions)
+- [Supabase：密码安全](https://supabase.com/docs/guides/auth/password-security)
+- [Supabase Auth 源码：72 字节密码上限](https://github.com/supabase/auth/blob/master/internal/api/password.go)
+- [Supabase Admin generateLink](https://supabase.com/docs/reference/javascript/auth-admin-generatelink)
+- [Supabase：自定义 SMTP](https://supabase.com/docs/guides/auth/auth-smtp)
+- [Have I Been Pwned：Pwned Passwords k-anonymity API](https://haveibeenpwned.com/API/V3)
+- [阿里云 DirectMail：SMTP 服务地址与端口](https://help.aliyun.com/en/direct-mail/smtp-endpoints)
+- [阿里云 DirectMail：计费方式](https://help.aliyun.com/zh/direct-mail/billing-methods)
+- [Supabase：匿名身份](https://supabase.com/docs/guides/auth/auth-anonymous)
+- [Supabase：Storage 删除对象](https://supabase.com/docs/guides/storage/management/delete-objects)
+- [Supabase：Data API 安全与显式授权](https://supabase.com/docs/guides/api/securing-your-api)
+- [Supabase：Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Next.js 16 升级说明](https://nextjs.org/docs/app/guides/upgrading/version-16)
-- [Gemini 图片模型](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image)
-- [Supabase Queues](https://supabase.com/docs/guides/queues)
-- [Supabase 匿名身份](https://supabase.com/docs/guides/auth/auth-anonymous)
-- [Supabase Storage 删除对象](https://supabase.com/docs/guides/storage/management/delete-objects)
-- [Supabase 数据库备份](https://supabase.com/docs/guides/platform/backups)
-- [Supabase Data API 默认暴露变更](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically)
+
+Supabase 相关实现开始前还应复核当日 changelog。2026-09-01 复核到的变更中，没有要求改变本文的托管 Auth/SSR 方案；自托管 Auth URL 变更与本项目无关，Data API 默认暴露和 OpenAPI 匿名访问收紧进一步支持显式 `GRANT`、RLS 及应用自维护 OpenAPI 的既有决策。
