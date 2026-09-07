@@ -31,8 +31,9 @@ describe('versioned Phase 1 model and skill registry', () => {
       .toEqual(['1K', '2K']);
   });
 
-  it('publishes exactly three immutable Phase 1 skill versions', () => {
+  it('publishes exactly three official versioned skills without execution instructions', () => {
     expect(PHASE1_SKILLS).toHaveLength(3);
-    expect(PHASE1_SKILLS.every((skill) => /^1\.0\.0$/.test(skill.version))).toBe(true);
+    expect(PHASE1_SKILLS.every((skill) => !('promptTemplate' in skill) && !('fields' in skill))).toBe(true);
+    expect(PHASE1_SKILLS.every((skill) => /^2\.0\.0$/.test(skill.version))).toBe(true);
   });
 });

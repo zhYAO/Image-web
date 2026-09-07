@@ -6,9 +6,9 @@ import {
   type ProviderHealth,
   type Skill,
 } from '@zimage/domain';
-import { Button, Input, Tag, type InputRef } from 'antd';
+import { Button, Input, Tag } from 'antd';
 import { Box, Check, ChevronDown, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { zhCN } from '@/i18n';
 
@@ -493,9 +493,7 @@ export function ChatModelPopover({
 }
 
 export function buildSkillPromptPreview(skill: Skill | undefined, values: Record<string, string>, prompt: string) {
-  let preview = skill?.promptTemplate ?? (prompt || '输入内容后，这里会展示最终提示词。');
-  for (const [key, value] of Object.entries(values)) preview = preview.replaceAll(`{${key}}`, value || `{${key}}`);
-  return skill && prompt.trim() ? `${preview}\n\n用户补充：${prompt.trim()}` : preview;
+  return skill ? `${skill.defaults}\n\n用户要求：${prompt.trim()}` : prompt;
 }
 
 interface SkillPopoverProps {
@@ -545,28 +543,15 @@ export function SkillList({ onSelectSkill, selectedSkillId, skills }: SkillListP
 
 export function SkillPopover({
   editablePrompt = false,
-  focusFieldKey,
   onClear,
   onOpenChange,
   onPromptChange,
   onSelectSkill,
-  onSkillValueChange,
   open,
   prompt,
   selectedSkill,
   skills,
-  skillValues,
 }: SkillPopoverProps) {
-  const inputRefs = useRef<Record<string, InputRef | null>>({});
-  const preview = useMemo(
-    () => buildSkillPromptPreview(selectedSkill, skillValues, prompt),
-    [prompt, selectedSkill, skillValues],
-  );
-
-  useEffect(() => {
-    if (open && focusFieldKey) inputRefs.current[focusFieldKey]?.focus();
-  }, [focusFieldKey, open]);
-
   return (
     <PopoverShell
       ariaLabel="技能配置"
@@ -587,7 +572,7 @@ export function SkillPopover({
       <div className={styles.skillPopoverLayout}>
         <div className={styles.skillCatalog}>
           <div className={styles.popoverTitle}>创作技能</div>
-          <div className={styles.popoverHint}>选择一个技能附加到当前创作</div>
+          <div className={styles.popoverHint}>选择一个技能附加到当前任务 · <a href="/skills">了解官方 Skill</a></div>
           <SkillList
             onSelectSkill={onSelectSkill}
             selectedSkillId={selectedSkill?.id}
@@ -604,31 +589,16 @@ export function SkillPopover({
           </div>
           {selectedSkill ? (
             <>
-              <div className={styles.skillFields}>
-                {selectedSkill.fields.map((field) => (
-                  <label className={styles.skillField} key={field.key}>
-                    <span>{field.label}{field.required && <i>*</i>}</span>
-                    <Input
-                      aria-label={field.label}
-                      onChange={(event) => onSkillValueChange(field.key, event.target.value)}
-                      placeholder={field.placeholder}
-                      ref={(node) => { inputRefs.current[field.key] = node; }}
-                      status={focusFieldKey === field.key && !skillValues[field.key]?.trim() ? 'error' : undefined}
-                      value={skillValues[field.key] ?? ''}
-                    />
-                  </label>
-                ))}
-              </div>
               <div className={styles.promptPreviewBlock}>
-                <span>实时提示词预览</span>
+                <span>本次方案（发送前可修改）</span>
                 {editablePrompt ? (
                   <Input.TextArea
-                    aria-label="最终提示词"
+                    aria-label="本次 Skill 方案"
                     autoSize={{ maxRows: 6, minRows: 3 }}
                     onChange={(event) => onPromptChange?.(event.target.value)}
                     value={prompt}
                   />
-                ) : <p>{preview}</p>}
+                ) : <p>{selectedSkill.defaults}</p>}
               </div>
             </>
           ) : (

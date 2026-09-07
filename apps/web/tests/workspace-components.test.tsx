@@ -16,11 +16,10 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 
 const skill: Skill = {
   description: '商品白底图',
-  fields: [{ key: 'product', label: '商品名称', required: true }],
   icon: '◇',
   id: 'white',
   name: '白底图',
-  promptTemplate: '生成 {product}',
+  defaults: '纯白背景、商品居中', suggestedInput: '商品类别与外观', output: '商品图片', limitations: '需人工核验',
   requiresImageTool: true,
   version: '1.0.0',
 };
@@ -28,7 +27,6 @@ const skill: Skill = {
 const socialSkill: Skill = {
   ...skill,
   description: '生活化社媒氛围',
-  fields: [{ key: 'scene', label: '使用场景', required: true }],
   icon: '✦',
   id: 'social',
   name: '种草图',
@@ -148,7 +146,7 @@ describe('workspace presentation components', () => {
         skillValues={{ product: '风衣' }}
       />,
     );
-    fireEvent.change(screen.getByRole('textbox', { name: '最终提示词' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '本次 Skill 方案' }), {
       target: { value: '生成高级感风衣白底图' },
     });
     expect(onPromptChange).toHaveBeenCalledWith('生成高级感风衣白底图');

@@ -1,3 +1,4 @@
+import type { SkillTask } from './skill-contracts';
 import type {
   ChatEvent,
   ChatRequest,
@@ -13,6 +14,9 @@ import type {
 } from './types';
 
 export interface WorkspaceGateway {
+  getActiveTasks?(sessionId: string): Promise<SkillTask[]>;
+  cancelTask?(task: SkillTask, action?: 'cancel' | 'replace'): Promise<SkillTask>;
+
   listSessions(): Promise<Session[]>;
   createSession(title?: string): Promise<Session>;
   renameSession(sessionId: string, title: string): Promise<Session>;

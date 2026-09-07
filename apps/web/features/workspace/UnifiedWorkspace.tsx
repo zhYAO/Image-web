@@ -4,10 +4,8 @@ import {
   MAX_UPLOAD_BYTES,
   resolveImageToolEnabled,
   sanitizeError,
-  type AspectRatio,
   type GenerationBatch,
   type ImageRequest,
-  type ImageResolution,
   type ProviderCapability,
   type ProviderHealth,
   type Quota,
@@ -27,9 +25,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
-import { useWorkspaceStore } from '@/store/workspace-store';
+import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
 
-import { buildSkillPromptPreview, findModelCapability, normalizeGenerationSelection, SkillList } from './GenerationConfig';
+import { findModelCapability, normalizeGenerationSelection, SkillList } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
@@ -54,6 +52,7 @@ interface SessionRuntime {
   optimisticImages: OptimisticImageTurn[];
   streamingText: string;
   timeline: TimelineItem[];
+  retainedItems: TimelineItem[];
 }
 
 const MAX_REFERENCES = 4;
@@ -68,6 +67,7 @@ const createRuntime = (loadStatus: SessionRuntime['loadStatus'] = 'idle'): Sessi
   optimisticImages: [],
   streamingText: '',
   timeline: [],
+  retainedItems: [],
 });
 
 const nextSequence = (items: TimelineItem[]) => (
@@ -77,6 +77,16 @@ const nextSequence = (items: TimelineItem[]) => (
 export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceProps) {
   const gateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
   const {
+    activateComposer,
+    forgetComposer,
+    aspectRatio, setAspectRatio,
+    resolution, setResolution,
+    count, setCount,
+    selectedProvider, setSelectedProvider,
+    selectedModelId, setSelectedModelId,
+    selectedChatModel, setSelectedChatModel,
+    skillPromptOverride, setSkillPromptOverride,
+    references, setReferences,
     activePopover,
     configDrawerOpen,
     draft,
@@ -98,7 +108,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   } = useWorkspaceStore();
   const [sessions, setSessions] = useState<Session[]>([]);
   const sessionsRef = useRef<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string>();
+  const [activeSessionId, setActiveSessionState] = useState<string>();
+  const composerDefaults = useRef<Partial<ComposerState>>({});
+  const setActiveSessionId = useCallback((id?: string) => {
+    activateComposer(id, composerDefaults.current);
+    setActiveSessionState(id);
+  }, [activateComposer]);
   const [runtimes, setRuntimes] = useState<Record<string, SessionRuntime>>({});
   const runtimesRef = useRef<Record<string, SessionRuntime>>({});
   const timelineRequestVersions = useRef(new Map<string, number>());
@@ -108,15 +123,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [capabilities, setCapabilities] = useState<ProviderCapability[]>([]);
   const [health, setHealth] = useState<ProviderHealth[]>([]);
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
-  const [resolution, setResolution] = useState<ImageResolution>('2K');
-  const [count, setCount] = useState(2);
-  const [selectedProvider, setSelectedProvider] = useState<string>();
-  const [selectedModelId, setSelectedModelId] = useState<string>();
-  const [selectedChatModel, setSelectedChatModel] = useState('doubao');
   const [focusSkillFieldKey, setFocusSkillFieldKey] = useState<string>();
-  const [skillPromptOverride, setSkillPromptOverride] = useState<string>();
-  const [references, setReferences] = useState<UploadReference[]>([]);
   const localPreviewUrls = useRef(new Set<string>());
 
   const updateSessions = useCallback((next: Session[]) => {
@@ -156,7 +163,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     try {
       const timeline = await gateway.getTimeline(sessionId);
       if (timelineRequestVersions.current.get(sessionId) !== version) return;
-      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: undefined, loadStatus: 'ready', timeline }));
+      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: undefined, loadStatus: 'ready', timeline: [...timeline, ...runtime.retainedItems.filter((item) => !timeline.some((saved) => saved.id === item.id))] }));
     } catch (error: unknown) {
       if (timelineRequestVersions.current.get(sessionId) !== version) return;
       const safe = sanitizeError(error);
@@ -164,7 +171,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         updateRuntime(sessionId, (runtime) => ({ ...runtime, loadStatus: 'ready', timeline: [] }));
         return;
       }
-      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: safe, loadStatus: 'error', timeline: [] }));
+      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: safe, loadStatus: 'error' }));
     }
   }, [gateway, updateRuntime]);
 
@@ -191,6 +198,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         availableCapabilities.length > 0 ? availableCapabilities : nextCapabilities,
         { aspectRatio: '1:1', count: 2, resolution: '2K' },
       );
+      composerDefaults.current = {
+        aspectRatio: initialSelection.aspectRatio, count: initialSelection.count,
+        resolution: initialSelection.resolution, selectedProvider: initialSelection.provider,
+        selectedModelId: initialSelection.model,
+      };
       setAspectRatio(initialSelection.aspectRatio);
       setCount(initialSelection.count);
       setResolution(initialSelection.resolution);
@@ -207,13 +219,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     void initialize().catch((error: unknown) => {
       if (!cancelled) {
         const safe = sanitizeError(error);
+        if (safe.code === 'UNAUTHORIZED') return;
         setFeedback({ error: safe, message: safe.message });
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [gateway, refreshTimeline, updateSessions]);
+  }, [gateway, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
 
   useEffect(
     () => () => {
@@ -258,8 +271,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     skillRequiresImage: selectedSkill?.requiresImageTool ?? false,
   });
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
-  const resolvedSkillPrompt = buildSkillPromptPreview(selectedSkill, skillValues, draft);
-  const imageSubmissionPrompt = selectedSkill ? (skillPromptOverride ?? resolvedSkillPrompt) : draft;
+  const imageSubmissionPrompt = selectedSkill ? `${skillPromptOverride ?? selectedSkill.defaults}\n\n用户要求：${draft}` : draft;
   const activeRuntime = activeSessionId ? runtimes[activeSessionId] : undefined;
   const activeBusy = Boolean(activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
   const composerDisabled = activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
@@ -301,11 +313,16 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const createSession = async () => {
-    const session = await gateway.createSession();
-    updateRuntime(session.id, () => createRuntime('ready'));
-    setActiveSessionId(session.id);
-    await refreshSessions();
-    setSessionDrawerOpen(false);
+    try {
+      const session = await gateway.createSession();
+      updateRuntime(session.id, () => createRuntime('ready'));
+      setActiveSessionId(session.id);
+      await refreshSessions();
+      setSessionDrawerOpen(false);
+    } catch (error: unknown) {
+      const safe = sanitizeError(error);
+      if (safe.code !== 'UNAUTHORIZED') setFeedback({ error: safe, message: safe.message });
+    }
   };
 
   const ensureSession = async (prompt: string) => {
@@ -390,12 +407,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     const turnId = `optimistic-image-${crypto.randomUUID()}`;
     const previewUrls = references.flatMap((reference) => reference.previewUrl ? [reference.previewUrl] : []);
     const request: ImageRequest = {
+      requestId: crypto.randomUUID(),
       aspectRatio,
       count,
       model: selectedModelId,
       prompt,
       provider: selectedProvider,
       references: references.map((reference) => ({
+        id: reference.id,
         file: reference.file,
         mimeType: reference.mimeType,
         name: reference.name,
@@ -435,13 +454,15 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setSkillPromptOverride(undefined);
     void renameIfDefaultTitle(sessionId, prompt);
     void admitImageTurn(sessionId, turnId, turn);
-  }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, selectedSkillId, skillValues, updateRuntime]);
+  }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, selectedSkillId, skillValues, updateRuntime, setReferences, setSkillPromptOverride]);
 
   const runChat = useCallback(async (sessionId: string, prompt: string) => {
     const controller = new AbortController();
     chatControllers.current.set(sessionId, controller);
     const timeout = window.setTimeout(() => controller.abort('chat_stream_timeout'), CHAT_STREAM_TIMEOUT_MS);
     let finalText = '';
+    let completed = false;
+    let streamFailure: SafeError | undefined;
     try {
       for await (const event of gateway.streamChat({
         chatModel: selectedChatModel,
@@ -456,55 +477,39 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         if (event.type === 'message.delta') {
           finalText += event.delta;
           updateRuntime(sessionId, (runtime) => ({ ...runtime, awaitingFirstDelta: false, streamingText: finalText }));
+        } else if (event.type === 'message.completed') {
+          completed = true;
+          finalText = event.content;
         } else if (event.type === 'stream.failed') {
-          updateRuntime(sessionId, (runtime) => ({
-            ...runtime,
-            timeline: [...runtime.timeline, {
-              createdAt: new Date().toISOString(),
-              error: event.error,
-              id: `chat-error-${crypto.randomUUID()}`,
-              sequence: nextSequence(runtime.timeline),
-              sessionId,
-              type: 'error',
-            }],
-          }));
+          streamFailure = event.error;
         }
       }
     } catch (error: unknown) {
-      const isAbort = controller.signal.aborted && (error instanceof DOMException ? error.name === 'AbortError' : true);
-      if (!isAbort) {
-        const safe = sanitizeError(error);
-        updateRuntime(sessionId, (runtime) => ({
-          ...runtime,
-          timeline: [...runtime.timeline, {
-            createdAt: new Date().toISOString(),
-            error: safe,
-            id: `chat-error-${crypto.randomUUID()}`,
-            sequence: nextSequence(runtime.timeline),
-            sessionId,
-            type: 'error',
-          }],
-        }));
-      }
+      streamFailure = sanitizeError(error);
     } finally {
       window.clearTimeout(timeout);
       if (chatControllers.current.get(sessionId) === controller) chatControllers.current.delete(sessionId);
-      updateRuntime(sessionId, (runtime) => ({
-        ...runtime,
-        awaitingFirstDelta: false,
-        chatBusy: false,
-        isChatStreaming: false,
-        streamingText: '',
-        timeline: finalText.trim() ? [...runtime.timeline, {
-          content: finalText,
-          createdAt: new Date().toISOString(),
-          id: `local-assistant-${crypto.randomUUID()}`,
-          role: 'assistant',
-          sequence: nextSequence(runtime.timeline),
-          sessionId,
-          type: 'message' as const,
-        }] : runtime.timeline,
-      }));
+      if (!completed && !streamFailure) streamFailure = {
+        code: 'STREAM_INTERRUPTED', message: '回复未完成，已保留收到的内容。请重试。', retryable: true,
+      };
+      updateRuntime(sessionId, (runtime) => {
+        const additions: TimelineItem[] = [];
+        if (finalText.trim()) additions.push({
+          content: finalText, createdAt: new Date().toISOString(),
+          id: `local-assistant-${crypto.randomUUID()}`, role: 'assistant',
+          sequence: nextSequence(runtime.timeline), sessionId, type: 'message',
+        });
+        if (streamFailure) additions.push({
+          createdAt: new Date().toISOString(), error: streamFailure,
+          id: `chat-error-${crypto.randomUUID()}`, sequence: nextSequence(runtime.timeline) + additions.length,
+          sessionId, type: 'error',
+        });
+        return {
+          ...runtime, awaitingFirstDelta: false, chatBusy: false, isChatStreaming: false, streamingText: '',
+          timeline: [...runtime.timeline, ...additions],
+          retainedItems: streamFailure ? [...runtime.retainedItems, ...additions] : runtime.retainedItems,
+        };
+      });
       void refreshTimeline(sessionId);
       void refreshSessions();
       void gateway.getQuota().then(setQuota).catch(() => undefined);
@@ -536,15 +541,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const submit = () => {
     const prompt = (imageCreationEnabled ? imageSubmissionPrompt : draft).trim();
     if (!prompt || activeBusy || composerDisabled) return;
-    const missingField = selectedSkill?.fields.find((field) => field.required && !skillValues[field.key]?.trim());
-    if (missingField) {
-      const error: SafeError = { code: 'VALIDATION_PROMPT_REQUIRED', message: `请填写必填技能参数：${missingField.label}`, retryable: false };
-      setFeedback({ error, message: error.message });
-      setFocusSkillFieldKey(missingField.key);
-      setActivePopover('skill');
-      if (window.matchMedia('(max-width: 767px)').matches) setConfigDrawerOpen(true);
-      return;
-    }
     const activeProvider = imageCreationEnabled ? selectedProvider : selectedChatModel;
     if (health.find((item) => item.provider === activeProvider)?.status === 'unavailable') {
       const error: SafeError = { code: 'PROVIDER_UNAVAILABLE', message: '所选服务暂时不可用，请选择其他 provider。', retryable: true };
@@ -561,6 +557,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     if (activeSessionId) start(activeSessionId);
     else void ensureSession(prompt).then(start).catch((error: unknown) => {
       const safe = sanitizeError(error);
+      if (safe.code === 'UNAUTHORIZED') return;
       setFeedback({ error: safe, message: safe.message });
       setDraft(prompt);
     });
@@ -573,8 +570,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       chatControllers.current.get(sessionId)?.abort();
       chatControllers.current.delete(sessionId);
       removeRuntime(sessionId);
+      forgetComposer(sessionId);
     } catch (error: unknown) {
       const safe = sanitizeError(error);
+      if (safe.code === 'UNAUTHORIZED') return;
       setFeedback({ error: safe, message: safe.message, retrySessionId: safe.retryable ? sessionId : undefined });
     }
     const next = await refreshSessions();
@@ -586,8 +585,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const renameSession = async (sessionId: string, title: string) => {
-    await gateway.renameSession(sessionId, title);
-    await refreshSessions();
+    try {
+      await gateway.renameSession(sessionId, title);
+      await refreshSessions();
+    } catch (error: unknown) {
+      const safe = sanitizeError(error);
+      if (safe.code !== 'UNAUTHORIZED') setFeedback({ error: safe, message: safe.message });
+    }
   };
 
   const selectSession = (sessionId: string) => {
@@ -612,6 +616,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       }));
     } catch (error: unknown) {
       const safe = sanitizeError(error);
+      if (safe.code === 'UNAUTHORIZED') return;
       setFeedback({ error: safe, message: safe.message });
     }
   };
@@ -675,6 +680,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const chooseSkill = (skillId: string) => {
     setFocusSkillFieldKey(undefined);
     setSkillPromptOverride(undefined);
+    setExplicitImageToolEnabled(true);
     selectSkill(skillId);
   };
 
@@ -718,9 +724,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
           <div><span className={styles.popoverLabel}>数量</span><div className={styles.mobileOptionGrid}>{Array.from({ length: Math.min(selectedModel?.maxImages ?? 1, 4) }, (_, index) => index + 1).map((item) => <Button key={item} onClick={() => setCount(item)} type={item === count ? 'primary' : 'default'}>{item}</Button>)}</div></div>
         </>
       )}
-      {selectedSkill?.fields.map((field) => (
-        <label key={field.key}><span className={styles.popoverLabel}>{field.label}</span><Input aria-label={field.label} onChange={(event) => setSkillValue(field.key, event.target.value)} value={skillValues[field.key] ?? ''} /></label>
-      ))}
+      {selectedSkill && <label><span>本次 Skill 方案</span><Input.TextArea aria-label="本次 Skill 方案" value={skillPromptOverride ?? selectedSkill.defaults} onChange={(event) => setSkillPromptOverride(event.target.value)} /></label>}
     </div>
   );
 
@@ -733,6 +737,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         <header className={styles.header}>
           <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
+            <a href="/skills">官方 Skill</a><a href="/account">账号</a>
             {gateway instanceof MockWorkspaceGateway && (
               <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
@@ -777,7 +782,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               onChatModelSelect={setSelectedChatModel}
               onClearSkill={() => { setActivePopover(undefined); setSkillPromptOverride(undefined); selectSkill(undefined); }}
               onCountChange={setCount}
-              onDraftChange={(value) => { if (imageCreationEnabled) setSkillPromptOverride(undefined); setDraft(value); }}
+              onDraftChange={setDraft}
               onImageCreationChange={(enabled) => { setActivePopover(undefined); setExplicitImageToolEnabled(enabled); }}
               onModelSelect={selectModel}
               onOpenConfig={() => setConfigDrawerOpen(true)}

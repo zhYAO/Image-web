@@ -71,6 +71,12 @@ describe('chat provider SSE adapter', () => {
     );
   });
 
+  it('rejects a truncated upstream even after receiving text', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n'));
+    await expect(collect(streamOpenAiCompatibleChat({ apiKey: 'test', endpoint: 'https://provider.example', fetcher, message: 'hi', model: 'test' })))
+      .rejects.toMatchObject({ code: 'stream_interrupted' });
+  });
+
   it('normalizes transient HTTP failures without exposing provider bodies', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response('provider-secret-detail', { status: 503 }));
     await expect(collect(streamOpenAiCompatibleChat({

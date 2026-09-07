@@ -1,3 +1,4 @@
+import type { SkillTask } from './skill-contracts';
 export type ComposerMode = 'chat' | 'image';
 
 export type GenerationStatus = 'pending' | 'processing' | 'succeeded' | 'failed';
@@ -122,10 +123,13 @@ export interface Skill {
   name: string;
   description: string;
   icon: string;
-  promptTemplate: string;
+  defaults: string;
+  suggestedInput: string;
+  output: string;
+  limitations: string;
   requiresImageTool: boolean;
   version: string;
-  fields: SkillField[];
+
 }
 
 export interface ProviderCapability {
@@ -163,6 +167,13 @@ export interface UploadReference {
 }
 
 export interface ChatRequest {
+  requestId?: string;
+  taskId?: string;
+  taskRevision?: number;
+  targetGenerationId?: string;
+  references?: UploadReference[];
+  proposal?: string;
+  imageSettings?: GenerationConfigSnapshot & { provider: string; model: string };
   chatModel?: string;
   imageProvider?: string;
   images?: string[];
@@ -175,6 +186,7 @@ export interface ChatRequest {
 }
 
 export type ChatEvent =
+  | { type: 'task.updated'; task: SkillTask }
   | { type: 'session.created'; session: Session }
   | { type: 'message.delta'; messageId: string; delta: string }
   | { type: 'message.completed'; messageId: string; content: string }
@@ -182,6 +194,7 @@ export type ChatEvent =
   | { type: 'stream.failed'; error: SafeError };
 
 export interface ImageRequest {
+  requestId?: string;
   sessionId?: string;
   prompt: string;
   count: number;
@@ -196,6 +209,7 @@ export interface ImageRequest {
 }
 
 export interface RecreateRequest {
+  requestId?: string;
   batchId: string;
   scope: RecreateScope;
   generationId?: string;

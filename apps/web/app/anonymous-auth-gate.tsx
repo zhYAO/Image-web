@@ -1,10 +1,13 @@
 'use client';
 
 import Script from 'next/script';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { resetAuthRequiredNotification } from '@/gateways/http-workspace-gateway';
+import { safeReturnTo } from '@/features/auth/return-to';
 
 interface TurnstileOptions {
   callback(token: string): void;
@@ -29,16 +32,18 @@ type GateStatus = 'challenge' | 'checking' | 'error' | 'ready' | 'signing-in';
 
 function GateMessage({ children }: { children: ReactNode }) {
   return (
-    <main
-      aria-label="ZImage 身份验证"
-      style={{ display: 'grid', height: '100dvh', padding: 24, placeItems: 'center', textAlign: 'center' }}
-    >
+    <main aria-label="ZImage 身份验证" className="glass-page" style={{ display: 'grid', placeItems: 'center', textAlign: 'center' }}>
       <div>{children}</div>
     </main>
   );
 }
 
 export function AnonymousAuthGate({ children }: { children: ReactNode }) {
+  if (process.env.NEXT_PUBLIC_PHASE2_AUTH === 'true') return <FormalAuthGate>{children}</FormalAuthGate>;
+  return <LegacyAnonymousAuthGate>{children}</LegacyAnonymousAuthGate>;
+}
+
+function LegacyAnonymousAuthGate({ children }: { children: ReactNode }) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
   const captchaRequired = process.env.NEXT_PUBLIC_DATA_MODE === 'http' && Boolean(siteKey);
   const [client] = useState(() => captchaRequired ? createSupabaseBrowserClient() : null);
@@ -119,4 +124,38 @@ export function AnonymousAuthGate({ children }: { children: ReactNode }) {
       ) : null}
     </GateMessage>
   );
+}
+
+function FormalAuthGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const [status, setStatus] = useState<'checking' | 'authorized' | 'error' | 'redirecting'>('checking');
+  const redirectingRef = useRef(false);
+  const redirectToLogin = useCallback(() => {
+    if (redirectingRef.current) return;
+    redirectingRef.current = true;
+    setStatus('redirecting');
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/auth')) return;
+    router.replace(`/login?returnTo=${encodeURIComponent(safeReturnTo(current))}`);
+  }, [router]);
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/account', { cache: 'no-store' }).then(async (response) => {
+      if (!active) return;
+      if (!response.ok) {
+        if (response.status === 401) redirectToLogin();
+        else setStatus('error');
+        return;
+      }
+      resetAuthRequiredNotification();
+      setStatus('authorized');
+    }).catch(() => { if (active) setStatus('error'); });
+    const requireAuth = () => redirectToLogin();
+    window.addEventListener('zimage:auth-required', requireAuth);
+    return () => { active = false; window.removeEventListener('zimage:auth-required', requireAuth); };
+  }, [redirectToLogin]);
+  if (status === 'checking') return <GateMessage>正在检查登录状态…</GateMessage>;
+  if (status === 'redirecting') return <GateMessage>登录已失效，正在跳转登录页…</GateMessage>;
+  if (status === 'error') return <GateMessage><p>暂时无法检查登录状态，请重试。</p><button onClick={() => window.location.reload()} type="button">重新检查</button></GateMessage>;
+  return <>{children}</>;
 }

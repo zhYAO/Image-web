@@ -22,10 +22,17 @@ import {
   type ProviderHealth,
   type RecreateRequest,
   type WorkspaceGateway,
+  type TimelineItem,
 } from '@zimage/domain';
 import type { ZodType } from 'zod';
 
 type Fetcher = typeof fetch;
+
+let authRequiredNotificationSent = false;
+
+export function resetAuthRequiredNotification() {
+  authRequiredNotificationSent = false;
+}
 
 interface HttpWorkspaceGatewayOptions {
   fetcher?: Fetcher;
@@ -45,6 +52,10 @@ const errorCodes: Record<string, ErrorCode> = {
 };
 
 function workspaceError(input: unknown, status: number) {
+  if (status === 401 && typeof window !== 'undefined' && !authRequiredNotificationSent) {
+    authRequiredNotificationSent = true;
+    window.dispatchEvent(new Event('zimage:auth-required'));
+  }
   const parsed = apiErrorSchema.safeParse(input);
   if (parsed.success) {
     return new WorkspaceError({
@@ -54,7 +65,7 @@ function workspaceError(input: unknown, status: number) {
     });
   }
   return new WorkspaceError({
-    code: status >= 500 ? 'NETWORK' : 'UNKNOWN',
+    code: status === 401 ? 'UNAUTHORIZED' : status >= 500 ? 'NETWORK' : 'UNKNOWN',
     message: status >= 500 ? '服务暂时不可用，请稍后重试。' : '请求失败，请刷新后重试。',
     retryable: status >= 500,
   });
@@ -62,6 +73,7 @@ function workspaceError(input: unknown, status: number) {
 
 export class HttpWorkspaceGateway implements WorkspaceGateway {
   private readonly fetcher: Fetcher;
+  private readonly submissions = new WeakMap<ImageRequest | RecreateRequest, { key: string; batchId?: string; body?: string; sessionId?: string; referenceIds: string[]; pending?: Promise<GenerationBatch> }>();
   private providerStatusPromise?: Promise<ReturnType<typeof providerStatusResponseSchema.parse>>;
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
@@ -91,8 +103,17 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   }
 
   async getTimeline(sessionId: string) {
-    const response = await this.json(`/api/sessions/${sessionId}/timeline?limit=100`, timelineResponseSchema);
-    return Promise.all(response.items.map(async (item) => (
+    const items = new Map<string, TimelineItem>();
+    let after: number | undefined;
+    do {
+      const response = await this.json(`/api/sessions/${sessionId}/timeline?limit=100${after === undefined ? '' : `&after=${after}`}`, timelineResponseSchema);
+      for (const item of response.items) items.set(item.id, item as TimelineItem);
+      if (response.nextCursor !== undefined && response.nextCursor <= (after ?? 0)) {
+        throw new WorkspaceError({ code: 'NETWORK', message: '历史分页暂时无法继续，请重试。', retryable: true });
+      }
+      after = response.nextCursor;
+    } while (after !== undefined);
+    return Promise.all([...items.values()].sort((a, b) => a.sequence - b.sequence).map(async (item) => (
       item.type === 'generation' ? { ...item, batch: await this.hydrateBatch(item.batch) } : item
     )));
   }
@@ -117,65 +138,78 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const frames = buffer.split('\n\n');
-      buffer = frames.pop() ?? '';
-      for (const frame of frames) {
-        const data = frame.split('\n').find((line) => line.startsWith('data:'))?.slice(5).trim();
-        if (!data) continue;
-        const event = chatEventSchema.safeParse(JSON.parse(data) as unknown);
-        if (event.success) yield event.data as ChatEvent;
+    let terminal = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        // Normalize complete CRLF pairs, including pairs split across chunks.
+        buffer = buffer.replaceAll('\r\n', '\n');
+        const frames = buffer.split('\n\n');
+        buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
+          if (!data) continue;
+          const event = chatEventSchema.safeParse(JSON.parse(data) as unknown);
+          if (event.success) {
+            terminal ||= event.data.type === 'message.completed' || event.data.type === 'stream.failed';
+            yield event.data as ChatEvent;
+          }
+        }
+        if (done) break;
       }
-      if (done) break;
+    } catch (error) {
+      if (signal?.aborted) throw error;
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
     }
+    if (!terminal && !signal?.aborted) yield {
+      type: 'stream.failed',
+      error: { code: 'STREAM_INTERRUPTED', message: '回复中断，已收到的内容暂时保留，可重新发送。', retryable: true },
+    };
   }
 
-  async submitImage(request: ImageRequest) {
-    let sessionId = request.sessionId;
-    if (!sessionId && request.references?.length) sessionId = (await this.createSession()).id;
-    const referenceIds: string[] = [];
-    for (const reference of request.references ?? []) {
-      if (reference.id) {
-        referenceIds.push(reference.id);
-        continue;
-      }
-      if (!reference.file || !sessionId) {
-        throw new WorkspaceError({
-          code: 'BAD_REQUEST',
-          message: '参考图缺少可上传文件，请重新选择。',
-          retryable: false,
+  private submission(request: ImageRequest | RecreateRequest) {
+    let state = this.submissions.get(request);
+    if (!state) {
+      state = { key: request.requestId ?? crypto.randomUUID(), referenceIds: [] };
+      this.submissions.set(request, state);
+    }
+    return state;
+  }
+
+  async submitImage(request: ImageRequest): Promise<GenerationBatch> {
+    const state = this.submission(request);
+    if (state.pending) return state.pending;
+    const run = async () => {
+      if (state.batchId) return this.getGenerationBatch(state.batchId);
+      if (!state.body) {
+        state.sessionId ??= request.sessionId;
+        if (!state.sessionId && request.references?.length) state.sessionId = (await this.createSession()).id;
+        for (const reference of (request.references ?? []).slice(state.referenceIds.length)) {
+          if (reference.id) { state.referenceIds.push(reference.id); continue; }
+          if (!reference.file || !state.sessionId) throw new WorkspaceError({ code: 'BAD_REQUEST', message: '参考图缺少可上传文件，请重新选择。', retryable: false });
+          const form = new FormData();
+          form.set('file', reference.file);
+          form.set('sessionId', state.sessionId);
+          const uploaded = await this.json('/api/uploads', referenceUploadResponseSchema, { body: form, method: 'POST' });
+          state.referenceIds.push(uploaded.id);
+        }
+        state.body = JSON.stringify({
+          model: request.model,
+          params: { aspectRatio: request.aspectRatio, count: request.count, referenceIds: state.referenceIds.length ? state.referenceIds : undefined, resolution: request.resolution },
+          prompt: request.prompt, provider: request.provider, sessionId: state.sessionId, skillId: request.skillId,
         });
       }
-      const form = new FormData();
-      form.set('file', reference.file);
-      form.set('sessionId', sessionId);
-      const uploaded = await this.json('/api/uploads', referenceUploadResponseSchema, {
-        body: form,
-        method: 'POST',
+      const submitted = await this.json('/api/image', imageSubmissionResponseSchema, {
+        body: state.body, headers: { 'idempotency-key': state.key }, method: 'POST',
       });
-      referenceIds.push(uploaded.id);
-    }
-
-    const submitted = await this.json('/api/image', imageSubmissionResponseSchema, {
-      body: JSON.stringify({
-        model: request.model,
-        params: {
-          aspectRatio: request.aspectRatio,
-          count: request.count,
-          referenceIds: referenceIds.length ? referenceIds : undefined,
-          resolution: request.resolution,
-        },
-        prompt: request.prompt,
-        provider: request.provider,
-        sessionId,
-        skillId: request.skillId,
-      }),
-      headers: { 'idempotency-key': crypto.randomUUID() },
-      method: 'POST',
-    });
-    return this.getGenerationBatch(submitted.batchId);
+      state.batchId = submitted.batchId;
+      return this.getGenerationBatch(state.batchId);
+    };
+    state.pending = run();
+    try { return await state.pending; } finally { state.pending = undefined; }
   }
 
   async getGenerationBatch(batchId: string) {
@@ -183,17 +217,21 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     return this.hydrateBatch(response.batch);
   }
 
-  async recreateGeneration(request: RecreateRequest) {
-    const submitted = await this.json('/api/image/recreate', imageSubmissionResponseSchema, {
-      body: JSON.stringify({
-        batchId: request.batchId,
-        generationId: request.generationId,
-        mode: request.scope,
-      }),
-      headers: { 'idempotency-key': crypto.randomUUID() },
-      method: 'POST',
-    });
-    return this.getGenerationBatch(submitted.batchId);
+  async recreateGeneration(request: RecreateRequest): Promise<GenerationBatch> {
+    const state = this.submission(request);
+    if (state.pending) return state.pending;
+    const run = async () => {
+      if (!state.batchId) {
+        state.body ??= JSON.stringify({ batchId: request.batchId, generationId: request.generationId, mode: request.scope });
+        const submitted = await this.json('/api/image/recreate', imageSubmissionResponseSchema, {
+          body: state.body, headers: { 'idempotency-key': state.key }, method: 'POST',
+        });
+        state.batchId = submitted.batchId;
+      }
+      return this.getGenerationBatch(state.batchId);
+    };
+    state.pending = run();
+    try { return await state.pending; } finally { state.pending = undefined; }
   }
 
   async getSkills() {

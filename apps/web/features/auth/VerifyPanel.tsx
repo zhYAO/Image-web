@@ -1,0 +1,68 @@
+'use client';
+
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState, type FormEvent } from 'react';
+import { authFeedback } from './feedback';
+import { safeReturnTo } from './return-to';
+
+export function VerifyPanel() {
+  const params = useSearchParams();
+  const [email, setEmail] = useState(params.get('email') ?? '');
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const data = new FormData(event.currentTarget);
+    setPending(true); setMessage(''); setFailed(false);
+    try {
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, token: data.get('token'), returnTo: params.get('returnTo') ?? undefined }),
+      });
+      const result = await response.json() as { returnTo?: string; message?: string };
+      if (response.ok) location.assign(safeReturnTo(result.returnTo));
+      else { setFailed(true); setMessage(authFeedback(result, '验证码无效或已过期，请重新申请。')); }
+    } catch { setFailed(true); setMessage('网络连接失败，请检查网络后重试。'); }
+    finally { setPending(false); }
+  }
+
+  async function resend() {
+    if (pending || cooldown > 0) return;
+    setPending(true); setMessage(''); setFailed(false);
+    try {
+      const response = await fetch('/api/auth/resend', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }),
+      });
+      const result = await response.json() as { accepted?: boolean; message?: string };
+      if (response.ok && result.accepted === true) {
+        setMessage('如果该邮箱正在等待验证，你将收到新验证码。请检查收件箱和垃圾邮件。');
+        setCooldown(60);
+      } else {
+        setFailed(true); setMessage(authFeedback(result, '验证码暂时无法发送，请稍后重试。'));
+        if (response.status === 429) setCooldown(60);
+      }
+    } catch { setFailed(true); setMessage('网络连接失败，请检查网络后重试。'); }
+    finally { setPending(false); }
+  }
+
+  return <main className="glass-page"><section className="glass-card glass-form">
+    <p className="glass-kicker">账号验证</p><h1>验证邮箱</h1>
+    <p className="glass-muted">请手动输入邮件中的 6 位验证码继续。</p>
+    <form onSubmit={submit}>
+      <label>邮箱<input autoComplete="email" name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
+      <label>验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
+      {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
+      <button disabled={pending} type="submit">继续验证</button>
+      <button disabled={pending || cooldown > 0 || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
+    </form><a href="/login">返回登录</a>
+  </section></main>;
+}

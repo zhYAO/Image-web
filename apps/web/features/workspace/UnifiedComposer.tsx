@@ -118,6 +118,12 @@ export function UnifiedComposer({
   return (
     <div className={styles.composer}>
       <div className={styles.composerBody}>
+        {selectedSkill && <section aria-label="当前 Skill 方案" className={styles.promptPreviewBlock}>
+          <strong>{selectedSkill.name} · v{selectedSkill.version}</strong>
+          <Button aria-label="移除当前 Skill" onClick={onClearSkill} size="small" type="text">移除</Button>
+          <Input.TextArea aria-label="发送前 Skill 方案" autoSize={{ minRows: 1, maxRows: 4 }} value={skillPrompt} onChange={(event) => onSkillPromptChange(event.target.value)} />
+          {!references.length && <small>未提供参考图：本次按文字创作，不代表对现有商品的还原。</small>}
+        </section>}
         {imageCreationEnabled && (
           <div aria-label={zhCN.composer.reference} className={styles.inlineReferences}>
             {references.map((reference, index) => (

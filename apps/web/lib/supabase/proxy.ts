@@ -46,6 +46,7 @@ export async function updateSupabaseSession(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
   if (data?.claims) return response;
+  if (process.env.NEXT_PUBLIC_PHASE2_AUTH === 'true') return response;
 
   const bootstrapRequest = {
     accept: request.headers.get('accept'),

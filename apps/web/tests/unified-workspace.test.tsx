@@ -231,9 +231,27 @@ describe('UnifiedWorkspace', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
   });
 
+  it('preserves partial output and its error after timeline refresh', async () => {
+    class InterruptedGateway extends CapturingGateway {
+      override async *streamChat() {
+        yield { type: 'message.delta' as const, messageId: 'partial', delta: '已收到的部分回复' };
+        yield { type: 'stream.failed' as const, error: { code: 'STREAM_INTERRUPTED' as const, message: '回复连接已中断', retryable: true } };
+      }
+    }
+    render(<UnifiedWorkspace gateway={createTestGateway(InterruptedGateway)} />);
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '解释构图' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
+    await screen.findByText('回复连接已中断');
+    await waitFor(() => expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument());
+    expect(screen.getByText('已收到的部分回复')).toBeInTheDocument();
+    expect(screen.getByText('回复连接已中断')).toBeInTheDocument();
+  });
+
   it('keeps one draft while toggling the create-image tool', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    render(<UnifiedWorkspace gateway={createTestGateway()} />);
+    const gateway = createTestGateway(CapturingGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
     const input = screen.getByRole('textbox', { name: '创作输入' });
@@ -259,14 +277,14 @@ describe('UnifiedWorkspace', () => {
     expect(screen.getByRole('dialog', { name: '图片生成设置' })).toBeInTheDocument();
   });
 
-  it('auto-enables the image tool for a skill and restores the explicit choice when cleared', async () => {
+  it('auto-enables the image tool for a skill and keeps it enabled after clearing the Skill', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
 
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '创建图片' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '清除技能' }));
-    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '创建图片' })).toBeEnabled();
   });
 
@@ -311,9 +329,9 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(socialSkill!);
 
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
-    expect(document.body.querySelector('[aria-label="使用场景"]')).toBeInTheDocument();
+    expect(screen.getAllByRole('textbox', { name: '本次 Skill 方案' }).length).toBeGreaterThan(0);
     fireEvent.click(document.body.querySelector('[aria-label="清除技能"]') as HTMLElement);
-    expect(document.body.querySelector('[aria-label="使用场景"]')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '本次 Skill 方案' })).not.toBeInTheDocument();
   });
 
   it('clears the chat draft the moment the user submits and shows a typing indicator until the first delta', async () => {
@@ -822,7 +840,7 @@ describe('UnifiedWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue(''));
     expect(screen.queryByRole('img', { name: '参考图 queued.png' })).not.toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:queued.png');
-    expect(screen.getByRole('button', { name: '发送创作请求' })).not.toHaveClass('ant-btn-loading');
+    await waitFor(() => expect(screen.getByRole('button', { name: '发送创作请求' })).not.toHaveClass('ant-btn-loading'));
     gateway.releasePostSubmitRefresh();
   });
 
@@ -840,8 +858,9 @@ describe('UnifiedWorkspace', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:cleanup.png');
   });
 
-  it('validates required skill fields before submitting', async () => {
-    render(<UnifiedWorkspace gateway={createTestGateway()} />);
+  it('allows a natural-language Skill request without fixed required fields', async () => {
+    const gateway = createTestGateway(CapturingGateway);
+    render(<UnifiedWorkspace gateway={gateway} />);
     fireEvent.click(await screen.findByRole('button', { name: /模特图/ }));
     fireEvent.keyDown(document, { key: 'Escape' });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
@@ -849,18 +868,16 @@ describe('UnifiedWorkspace', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('请填写必填技能参数'));
-    expect(screen.getByRole('dialog', { name: '技能配置' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: '模特风格' })).toHaveFocus();
+    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('submits the user-edited resolved skill prompt with image creation enabled', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: '商品名称' }), { target: { value: '风衣' } });
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '秋季新品' } });
-    fireEvent.change(screen.getByRole('textbox', { name: '最终提示词' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '本次 Skill 方案' }), {
       target: { value: '生成高级感秋季风衣白底图' },
     });
     expect(screen.getByRole('button', { name: '发送创作请求' })).toBeEnabled();
@@ -869,7 +886,7 @@ describe('UnifiedWorkspace', () => {
       gateway.lastImageRequest,
       screen.queryByRole('alert')?.textContent ?? 'image request was not submitted',
     ).toBeDefined());
-    expect(gateway.lastImageRequest?.prompt).toBe('生成高级感秋季风衣白底图');
+    expect(gateway.lastImageRequest?.prompt).toBe('生成高级感秋季风衣白底图\n\n用户要求：秋季新品');
   });
 
   it('uses the selected provider, model and generation parameters in the image request', async () => {

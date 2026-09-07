@@ -1,7 +1,7 @@
 import type { ChatEvent } from '@zimage/domain';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HttpWorkspaceGateway } from '@/gateways/http-workspace-gateway';
+import { HttpWorkspaceGateway, resetAuthRequiredNotification } from '@/gateways/http-workspace-gateway';
 
 const sessionId = '10000000-0000-4000-8000-0000000000a1';
 const batchId = '30000000-0000-4000-8000-0000000000a1';
@@ -26,6 +26,22 @@ function sse(frames: string[]): Response {
 }
 
 describe('HttpWorkspaceGateway', () => {
+  it('emits one auth-required event for concurrent unauthorized responses', async () => {
+    resetAuthRequiredNotification();
+    const onAuthRequired = vi.fn();
+    window.addEventListener('zimage:auth-required', onAuthRequired);
+    const gateway = new HttpWorkspaceGateway({ fetcher: vi.fn().mockResolvedValue(json({ code: 'unauthorized', message: 'expired', retryable: false }, 401)) });
+
+    await Promise.all([
+      expect(gateway.listSessions()).rejects.toThrow(),
+      expect(gateway.listSessions()).rejects.toThrow(),
+    ]);
+
+    expect(onAuthRequired).toHaveBeenCalledOnce();
+    window.removeEventListener('zimage:auth-required', onAuthRequired);
+    resetAuthRequiredNotification();
+  });
+
   it('preserves the browser receiver when using the global fetch implementation', async () => {
     const browserFetch = vi.fn(function (this: unknown) {
       if (this !== globalThis) throw new TypeError('Illegal invocation');

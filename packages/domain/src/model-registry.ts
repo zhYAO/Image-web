@@ -1,4 +1,5 @@
-import type { ProviderCapability, Skill } from './types';
+import { OFFICIAL_SKILLS } from './official-skills';
+import type { ProviderCapability } from './types';
 
 export const MODEL_REGISTRY_VERSION = '2026-08-25.1';
 
@@ -30,41 +31,8 @@ export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
   },
 ];
 
-export const PHASE1_SKILLS: Skill[] = [
-  {
-    coverImageUrl: '/skills/white-background.webp',
-    description: '干净背景与清晰商品轮廓',
-    fields: [{ key: 'product', label: '商品名称', required: true, placeholder: '例如：羊毛大衣' }],
-    icon: '◇',
-    id: 'white-background',
-    name: '白底图',
-    promptTemplate: '为 {product} 生成专业电商白底图',
-    requiresImageTool: true,
-    version: '1.0.0',
-  },
-  {
-    coverImageUrl: '/skills/model.webp',
-    description: '自然姿态与真实穿着效果',
-    fields: [{ key: 'style', label: '模特风格', required: true, placeholder: '例如：都市简约' }],
-    icon: '◉',
-    id: 'model',
-    name: '模特图',
-    promptTemplate: '生成 {style} 风格的模特展示图',
-    requiresImageTool: true,
-    version: '1.0.0',
-  },
-  {
-    coverImageUrl: '/skills/social.webp',
-    description: '生活化构图与社媒氛围',
-    fields: [{ key: 'scene', label: '使用场景', required: true, placeholder: '例如：周末咖啡馆' }],
-    icon: '✦',
-    id: 'social',
-    name: '种草图',
-    promptTemplate: '生成 {scene} 中的生活方式种草图',
-    requiresImageTool: true,
-    version: '1.0.0',
-  },
-];
+// Compatibility name retained for existing mock fixtures; content is the Phase 2 registry.
+export { OFFICIAL_SKILLS as PHASE1_SKILLS } from './official-skills';
 
 export function resolveImageModel(input: { model?: string; provider?: string }) {
   const provider = input.provider ?? IMAGE_PROVIDER_CAPABILITIES[0]?.provider;
@@ -79,7 +47,7 @@ export function resolveImageModel(input: { model?: string; provider?: string }) 
 
 export function resolveSkill(skillId?: string) {
   if (!skillId) return undefined;
-  const skill = PHASE1_SKILLS.find((candidate) => candidate.id === skillId);
+  const skill = OFFICIAL_SKILLS.find((candidate) => candidate.id === skillId);
   if (!skill) throw new Error('不支持的技能版本。');
   return skill;
 }

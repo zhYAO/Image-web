@@ -96,10 +96,11 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
   const decoder = new TextDecoder();
   const stallTimeoutMs = resolveStallTimeoutMs(input);
   let buffer = '';
+  let terminal = false;
   try {
     while (true) {
       const { done, value } = await readWithStallTimeout(reader, stallTimeoutMs, input.signal);
-      buffer += decoder.decode(value, { stream: !done }).replaceAll('\r\n', '\n');
+      buffer = (buffer + decoder.decode(value, { stream: !done })).replaceAll('\r\n', '\n');
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
       for (const frame of frames) {
@@ -108,7 +109,8 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
           .filter((line) => line.startsWith('data:'))
           .map((line) => line.slice(5).trimStart())
           .join('\n');
-        if (!payload || payload === '[DONE]') continue;
+        if (!payload) continue;
+        if (payload === '[DONE]') { terminal = true; continue; }
         let parsed: unknown;
         try {
           parsed = JSON.parse(payload) as unknown;
@@ -118,7 +120,8 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
         const delta = contentDelta(parsed);
         if (delta) yield delta;
       }
-      if (done) break;
+      if (terminal) break;
+      if (done) throw new ChatProviderFailure('stream_interrupted', false);
     }
   } catch (error: unknown) {
     if (error instanceof ChatProviderFailure) throw error;
@@ -127,6 +130,7 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
     }
     throw new ChatProviderFailure('stream_interrupted', false);
   } finally {
+    try { await reader.cancel(); } catch { /* disconnected */ }
     try { reader.releaseLock(); } catch { /* already released */ }
   }
 }

@@ -7,12 +7,12 @@ import { ApiRouteError } from './api-error';
 import { reportServerError } from './observability';
 
 export async function requireVerifiedUserId(client: SupabaseClient) {
-  const { data, error } = await client.auth.getClaims();
-  const parsed = z.uuid().safeParse(data?.claims?.sub);
+  const { data, error } = await client.rpc('require_verified_user_id');
+  const parsed = z.uuid().safeParse(data);
   if (error || !parsed.success) {
     throw new ApiRouteError({
       code: 'unauthorized',
-      message: '匿名身份无效或已过期，请刷新后重试。',
+      message: '登录状态无效或已过期，请重新登录。',
       retryable: true,
       status: 401,
     });

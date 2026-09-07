@@ -43,7 +43,7 @@ describe('image submission service', () => {
       model: 'gemini-3-pro-image',
       prompt: '极简商品图',
       provider: 'gemini',
-      skillVersion: '1.0.0',
+      skillVersion: '2.0.0',
       source: 'direct',
       userId,
     });

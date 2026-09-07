@@ -3,6 +3,7 @@ import { withSupabase } from '@supabase/server';
 import { captureWorkerException } from '../_shared/sentry.ts';
 
 type AdminClient = {
+  auth: { admin: { deleteUser(userId: string): Promise<{ error: unknown }> } };
   rpc(name: string, input?: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
   storage: { from(bucket: string): { remove(paths: string[]): Promise<{ error: unknown }> } };
 };
@@ -11,7 +12,7 @@ interface CleanupObject { bucket: 'generated' | 'uploads'; path: string }
 interface CleanupClaim {
   attempt: number;
   jobId: string;
-  jobType: 'generation_expiry' | 'reference_expiry' | 'session_delete';
+  jobType: 'account_delete' | 'generation_expiry' | 'reference_expiry' | 'session_delete';
   objects: CleanupObject[];
   targetId: string;
 }
@@ -35,10 +36,10 @@ function parseClaim(value: unknown): CleanupClaim | null {
     return object as unknown as CleanupObject;
   }) : [];
   if (
-    typeof claim.jobId !== 'string'
+    (claim.jobType !== 'account_delete' && typeof claim.jobId !== 'string')
     || typeof claim.targetId !== 'string'
     || !Number.isSafeInteger(claim.attempt)
-    || !['generation_expiry', 'reference_expiry', 'session_delete'].includes(String(claim.jobType))
+    || !['account_delete', 'generation_expiry', 'reference_expiry', 'session_delete'].includes(String(claim.jobType))
   ) throw new Error('invalid_cleanup_claim');
   return { ...claim, objects } as CleanupClaim;
 }
@@ -66,19 +67,29 @@ export default {
     }
     const admin = context.supabaseAdmin as unknown as AdminClient;
     await rpc<unknown>(admin, 'prune_preview_usage');
-    const claim = parseClaim(await rpc<unknown>(admin, 'claim_cleanup_job'));
+    const claim = parseClaim(await rpc<unknown>(admin, 'claim_cleanup_job'))
+      ?? parseClaim(await rpc<unknown>(admin, 'claim_account_cleanup_job'));
     if (!claim) return Response.json({ status: 'idle' });
     try {
       await removeObjects(admin, claim.objects);
-      const completed = await rpc<boolean>(admin, 'complete_cleanup_job', { p_job_id: claim.jobId });
+      let completed: boolean;
+      if (claim.jobType === 'account_delete') {
+        const { error } = await admin.auth.admin.deleteUser(claim.targetId);
+        if (error) throw new Error('auth_user_cleanup_failed');
+        // Deleting auth.users cascades the account cleanup row and all owned business rows.
+        completed = true;
+      } else {
+        completed = await rpc<boolean>(admin, 'complete_cleanup_job', { p_job_id: claim.jobId });
+      }
       if (!completed) throw new Error('cleanup_state_conflict');
       console.log(JSON.stringify({ action: 'completed', jobId: claim.jobId, jobType: claim.jobType }));
       return Response.json({ action: 'completed', jobType: claim.jobType });
     } catch (error: unknown) {
       await captureWorkerException(error, { jobId: claim.jobId, operation: 'cleanup_worker' });
-      const result = await rpc<{ attempts: number; dead: boolean }>(admin, 'fail_cleanup_job', {
+      const result = await rpc<{ attempts: number; dead: boolean }>(admin,
+        claim.jobType === 'account_delete' ? 'fail_account_cleanup_job' : 'fail_cleanup_job', {
         p_error_code: error instanceof Error ? error.message : 'cleanup_failed',
-        p_job_id: claim.jobId,
+        ...(claim.jobType === 'account_delete' ? { p_user_id: claim.targetId } : { p_job_id: claim.jobId }),
       });
       console.error(JSON.stringify({
         action: result.dead ? 'dead' : 'retry', attempts: result.attempts, jobId: claim.jobId, jobType: claim.jobType,

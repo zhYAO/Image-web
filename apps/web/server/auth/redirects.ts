@@ -1,0 +1,12 @@
+const PROTECTED_PREFIXES = ['/api/', '/auth/'];
+
+export function normalizeReturnTo(value: string | null | undefined) {
+  if (!value?.startsWith('/') || value.startsWith('//')) return '/';
+  try {
+    const url = new URL(value, 'https://local.invalid');
+    if (url.origin !== 'https://local.invalid' || PROTECTED_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return '/';
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/';
+  }
+}

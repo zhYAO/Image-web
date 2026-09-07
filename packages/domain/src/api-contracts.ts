@@ -1,3 +1,4 @@
+import { skillTaskSchema, visibleImageSettingsSchema } from './skill-contracts';
 import { z } from 'zod';
 
 const titleSchema = z.string().trim().min(1).max(100);
@@ -141,6 +142,7 @@ export const timelineItemSchema = z.discriminatedUnion('type', [
 ]);
 
 export const timelineResponseSchema = z.strictObject({
+  activeTasks: z.array(skillTaskSchema).optional(),
   items: z.array(timelineItemSchema),
   nextCursor: z.number().int().positive().optional(),
 });
@@ -194,16 +196,13 @@ export const providerStatusResponseSchema = z.strictObject({
 export const skillSchema = z.strictObject({
   coverImageUrl: z.string().optional(),
   description: z.string().min(1).max(500),
-  fields: z.array(z.strictObject({
-    key: z.string().min(1).max(100),
-    label: z.string().min(1).max(100),
-    placeholder: z.string().max(200).optional(),
-    required: z.boolean(),
-  })),
   icon: z.string().min(1).max(20),
   id: providerIdentifierSchema,
   name: z.string().min(1).max(100),
-  promptTemplate: z.string().min(1).max(2000),
+  defaults: z.string().min(1).max(2000),
+  suggestedInput: z.string().min(1).max(2000),
+  output: z.string().min(1).max(2000),
+  limitations: z.string().min(1).max(2000),
   requiresImageTool: z.boolean(),
   version: z.string().min(1).max(50),
 });
@@ -253,6 +252,9 @@ export const recreateImageRequestSchema = z.strictObject({
 });
 
 export const chatRequestSchema = z.strictObject({
+  requestId: z.uuid().optional(), taskId: z.uuid().optional(),
+  taskRevision: z.number().int().positive().optional(), targetGenerationId: z.uuid().optional(),
+  proposal: z.string().max(2000).optional(), imageSettings: visibleImageSettingsSchema.optional(),
   chatModel: providerIdentifierSchema.optional(),
   imageProvider: providerIdentifierSchema.optional(),
   images: z.array(z.uuid()).max(4).optional(),
@@ -263,6 +265,7 @@ export const chatRequestSchema = z.strictObject({
 });
 
 export const chatEventSchema = z.discriminatedUnion('type', [
+  z.strictObject({ task: skillTaskSchema, type: z.literal('task.updated') }),
   z.strictObject({ session: sessionSchema, type: z.literal('session.created') }),
   z.strictObject({ delta: z.string().min(1), messageId: z.uuid(), type: z.literal('message.delta') }),
   z.strictObject({ content: z.string().min(1), messageId: z.uuid(), type: z.literal('message.completed') }),
