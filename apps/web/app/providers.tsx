@@ -8,7 +8,7 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <ThemeProvider
       appearance="light"
-      customTheme={{ neutralColor: 'slate', primaryColor: 'geekblue' }}
+      customTheme={{ neutralColor: 'slate', primaryColor: 'blue' }}
       defaultAppearance="light"
       defaultThemeMode="light"
       enableCustomFonts={false}
@@ -17,11 +17,11 @@ export function AppProviders({ children }: PropsWithChildren) {
         theme={{
           token: {
             borderRadius: 12,
-            colorPrimary: '#4f46e5',
-            colorInfo: '#4f46e5',
+            colorPrimary: '#0066cc',
+            colorInfo: '#0066cc',
             colorWarning: '#f97316',
             fontFamily:
-              'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif',
           },
         }}
       >

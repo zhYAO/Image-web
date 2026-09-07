@@ -7,7 +7,8 @@ export const accountSchema = z.object({
   status: z.enum(['active', 'deleting']),
 });
 
-export const credentialsSchema = z.object({ email: z.email(), password: z.string() });
+export const emailAuthSchema = z.object({ email: z.email(), captchaToken: z.string().min(1).max(2048).optional() });
+export const credentialsSchema = emailAuthSchema.extend({ password: z.string() });
 export const registrationSchema = credentialsSchema.extend({
   legalVersion: z.string().min(1).max(80),
 });

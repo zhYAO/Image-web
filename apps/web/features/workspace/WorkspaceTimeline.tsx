@@ -207,7 +207,7 @@ export function WorkspaceTimeline({
         <h1 className={styles.heroTitle}>{zhCN.timeline.emptyTitle}</h1>
         <div className={styles.skillGrid}>
           {skills.map((skill) => (
-            <button aria-label={`${skill.name}：${skill.description}`} className={styles.skillCard} key={skill.id} onClick={() => onSelectSkill(skill.id)} type="button">
+            <button aria-label={`${skill.name}：${skill.description}`} className={`${styles.skillCard} ${!skill.coverImageUrl ? styles.skillCardCompact : ''}`} key={skill.id} onClick={() => onSelectSkill(skill.id)} type="button">
               <span className={styles.skillCover}>
                 {skill.coverImageUrl ? (
                   <NextImage alt="" fill sizes="(max-width: 900px) 100vw, 300px" src={skill.coverImageUrl} />

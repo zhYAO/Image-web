@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFeedback } from './feedback';
 import { safeReturnTo } from './return-to';
+import { useAuthCaptcha } from './use-auth-captcha';
 
 type Mode = 'login' | 'register' | 'recovery';
 
@@ -14,13 +15,14 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const [nextStep, setNextStep] = useState<string | null>(null);
+  const { captcha, captchaToken, captchaPending, resetCaptcha } = useAuthCaptcha();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || captchaPending) return;
     setMessage(''); setFailed(false); setNextStep(null);
     const data = new FormData(event.currentTarget);
     const endpoint = mode === 'register' ? 'register' : mode === 'recovery' ? 'recovery' : 'login';
-    const body: Record<string, unknown> = { email: data.get('email') };
+    const body: Record<string, unknown> = { email: data.get('email'), captchaToken };
     if (mode !== 'recovery') body.password = data.get('password');
     if (mode === 'register') {
       if (!legalVersion) { setFailed(true); setMessage('注册暂未开放，请等待服务条款确认后再试。'); return; }
@@ -44,9 +46,9 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
       setMessage('如果该邮箱可以接收此类邮件，你将收到验证码。请检查收件箱和垃圾邮件。');
     } catch {
       setFailed(true); setMessage('网络连接失败，请检查网络后重试。');
-    } finally { setPending(false); }
+    } finally { setPending(false); resetCaptcha(); }
   }
-  function changeMode(value: Mode) { setMode(value); setMessage(''); setFailed(false); setNextStep(null); }
+  function changeMode(value: Mode) { setMode(value); setMessage(''); setFailed(false); setNextStep(null); resetCaptcha(); }
 
   return <main className="glass-page"><section className="glass-card glass-form"><p className="glass-kicker">ZIMAGE · 中国大陆公开 BETA</p><h1>{mode === 'login' ? '登录' : mode === 'register' ? '创建账号' : '找回密码'}</h1>
     <p className="glass-muted">{mode === 'login' ? '登录后继续你的图片创作。' : mode === 'register' ? '创建账号，跨设备保留会话与生成记录。' : '输入邮箱，我们会发送找回密码指引。'}</p>
@@ -55,8 +57,9 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
       {mode === 'register' && <><label>确认密码<input autoComplete="new-password" name="confirmPassword" required type="password" /></label>
         <label><input name="legal" type="checkbox" />我已阅读并同意 <a href="/terms">服务条款</a> 与 <a href="/privacy">隐私政策</a></label></>}
       {mode === 'register' && !legalVersion && <p className="glass-error" role="alert">注册暂未开放，请等待服务条款确认后再试。</p>}
+      {captcha}
       {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
-      {nextStep && <a href={nextStep}>输入邮箱验证码</a>}<button disabled={pending || (mode === 'register' && !legalVersion)} type="submit">{mode === 'login' ? '登录' : mode === 'register' ? '注册' : '发送重置邮件'}</button></form>
+      {nextStep && <a href={nextStep}>输入邮箱验证码</a>}<button disabled={pending || captchaPending || (mode === 'register' && !legalVersion)} type="submit">{mode === 'login' ? '登录' : mode === 'register' ? '注册' : '发送重置邮件'}</button></form>
     <nav><button disabled={pending} onClick={() => changeMode('login')} type="button">登录</button><button disabled={pending} onClick={() => changeMode('register')} type="button">注册</button><button disabled={pending} onClick={() => changeMode('recovery')} type="button">忘记密码</button></nav>
   </section></main>;
 }

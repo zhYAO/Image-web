@@ -29,6 +29,7 @@ import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
 
 import { findModelCapability, normalizeGenerationSelection, SkillList } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
+import { downloadImages } from './download-images';
 import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
@@ -110,8 +111,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const sessionsRef = useRef<Session[]>([]);
   const [activeSessionId, setActiveSessionState] = useState<string>();
   const composerDefaults = useRef<Partial<ComposerState>>({});
-  const setActiveSessionId = useCallback((id?: string) => {
-    activateComposer(id, composerDefaults.current);
+  const setActiveSessionId = useCallback((id?: string, inheritCurrent = false) => {
+    activateComposer(id, composerDefaults.current, inheritCurrent);
     setActiveSessionState(id);
   }, [activateComposer]);
   const [runtimes, setRuntimes] = useState<Record<string, SessionRuntime>>({});
@@ -125,6 +126,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
   const [focusSkillFieldKey, setFocusSkillFieldKey] = useState<string>();
   const localPreviewUrls = useRef(new Set<string>());
+  const downloadingBatches = useRef(new Set<string>());
 
   const updateSessions = useCallback((next: Session[]) => {
     sessionsRef.current = next;
@@ -208,8 +210,23 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       setResolution(initialSelection.resolution);
       setSelectedProvider(initialSelection.provider);
       setSelectedModelId(initialSelection.model);
-      const initialId = nextSessions[0]?.id;
+      const launchUrl = new URL(window.location.href);
+      const launchSkill = nextSkills.find((skill) => skill.id === launchUrl.searchParams.get('skill'));
+      let initialId = nextSessions[0]?.id;
+      if (launchSkill) {
+        const session = await gateway.createSession();
+        if (cancelled) return;
+        updateSessions([session, ...nextSessions]);
+        initialId = session.id;
+      }
       setActiveSessionId(initialId);
+      if (launchSkill) {
+        selectSkill(launchSkill.id);
+        setExplicitImageToolEnabled(true);
+        launchUrl.searchParams.delete('skill');
+        launchUrl.searchParams.delete('new');
+        window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+      }
       if (initialId) await refreshTimeline(initialId, true);
       if (!cancelled && gateway instanceof MockWorkspaceGateway) {
         const recoveryNotice = gateway.getRecoveryNotice();
@@ -226,7 +243,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     return () => {
       cancelled = true;
     };
-  }, [gateway, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
+  }, [gateway, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId, selectSkill, setExplicitImageToolEnabled]);
 
   useEffect(
     () => () => {
@@ -329,7 +346,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     if (activeSessionId) return activeSessionId;
     const session = await gateway.createSession(prompt);
     updateRuntime(session.id, () => createRuntime('ready'));
-    setActiveSessionId(session.id);
+    setActiveSessionId(session.id, true);
     await refreshSessions();
     return session.id;
   };
@@ -621,21 +638,18 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     }
   };
 
-  const downloadBatch = (batch: GenerationBatch) => {
-    batch.assets.forEach((asset, index) => {
-      if (!asset.url || asset.expired || asset.status !== 'succeeded') return;
-      const link = document.createElement('a');
-      const extension = (() => {
-        try {
-          return new URL(asset.url, window.location.href).pathname.match(/\.(png|jpe?g|webp)$/i)?.[1] ?? 'png';
-        } catch {
-          return 'png';
-        }
-      })();
-      link.download = `zimage-${batch.id}-${index + 1}.${extension}`;
-      link.href = asset.url;
-      link.click();
-    });
+  const downloadBatch = async (batch: GenerationBatch) => {
+    if (downloadingBatches.current.has(batch.id)) return;
+    downloadingBatches.current.add(batch.id);
+    setFeedback({ message: '正在准备图片下载…' });
+    try {
+      const result = await downloadImages(batch);
+      setFeedback({ message: result.failed > 0
+        ? `有 ${result.failed} 张图片下载失败，请刷新页面后重试。`
+        : result.downloaded > 0 ? `已发起 ${result.downloaded} 张图片下载。` : '当前没有可下载的图片。' });
+    } finally {
+      downloadingBatches.current.delete(batch.id);
+    }
   };
 
   const addReferences = (files: FileList) => {
@@ -801,7 +815,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
               selectedSkill={selectedSkill}
-              skillPrompt={imageCreationEnabled ? imageSubmissionPrompt : draft}
+              skillPrompt={selectedSkill ? (skillPromptOverride ?? selectedSkill.defaults) : draft}
               skills={skills}
               skillValues={skillValues}
             />

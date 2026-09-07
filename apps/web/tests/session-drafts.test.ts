@@ -3,6 +3,16 @@ import { useWorkspaceStore } from '@/store/workspace-store';
 
 describe('session composer ownership', () => {
   beforeEach(() => useWorkspaceStore.getState().reset());
+  it('binds the first submission to a session without resetting image settings', () => {
+    const store = useWorkspaceStore.getState;
+    store().setExplicitImageToolEnabled(true);
+    store().setCount(4);
+    store().selectSkill('white-background');
+    store().activateComposer('first', {}, true);
+    expect(store()).toMatchObject({ activeComposerSessionId: 'first', explicitImageToolEnabled: true, count: 4, selectedSkillId: 'white-background' });
+    store().activateComposer('second');
+    expect(store()).toMatchObject({ explicitImageToolEnabled: false, count: 2, selectedSkillId: undefined });
+  });
   it('starts a new session empty and restores the previous session draft and settings', () => {
     const store = useWorkspaceStore.getState;
     store().activateComposer('A');

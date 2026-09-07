@@ -4,6 +4,11 @@ import { z } from 'zod';
 import { createSupabaseAdminClient } from '../../lib/supabase/admin';
 import { ApiRouteError } from '../api-error';
 import { assertTrustedOrigin, executeRoute, readJson } from '../route-context';
+import { throwCaptchaError } from './auth-service';
+
+export function requireCaptcha(captchaToken?: string) {
+  if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() && !captchaToken?.trim()) throwCaptchaError();
+}
 
 export function authPost<T>(schema: z.ZodType<T>, handler: (input: T, request: Request) => Promise<unknown>) {
   return (request: Request) => executeRoute(async () => {

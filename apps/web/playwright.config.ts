@@ -8,6 +8,8 @@ export default defineConfig({
     toHaveScreenshot: { animations: 'disabled', maxDiffPixelRatio: 0.02 },
   },
   fullyParallel: true,
+  // Multi-navigation flows include a cold Next.js compilation and a page reload.
+  timeout: 60_000,
   projects: [
     {
       name: 'chromium-desktop',
@@ -34,8 +36,8 @@ export default defineConfig({
   },
   webServer: externalBaseUrl ? undefined : {
     command: 'pnpm dev --hostname 127.0.0.1 --port 3100',
-    env: { NEXT_DIST_DIR: '.next-playwright', NEXT_PUBLIC_DATA_MODE: 'mock' },
-    reuseExistingServer: !process.env.CI,
+    env: { NEXT_DIST_DIR: '.next-playwright', NEXT_PUBLIC_DATA_MODE: 'mock', NEXT_PUBLIC_PHASE2_AUTH: 'false' },
+    reuseExistingServer: false,
     timeout: 120_000,
     url: 'http://127.0.0.1:3100',
   },

@@ -1,10 +1,11 @@
-import { z } from 'zod';
+import { emailAuthSchema } from '../../../../../../packages/domain/src/auth-contracts';
 import { createSupabaseServerClient } from '../../../../lib/supabase/server';
 import { AuthService } from '../../../../server/auth/auth-service';
-import { authPost, rateLimit } from '../../../../server/auth/http';
+import { authPost, rateLimit, requireCaptcha } from '../../../../server/auth/http';
 
-export const POST = authPost(z.object({ email: z.email() }), async ({ email }, request) => {
+export const POST = authPost(emailAuthSchema, async ({ email, captchaToken }, request) => {
+  requireCaptcha(captchaToken);
   await rateLimit(request, 'resend', email);
-  await new AuthService(await createSupabaseServerClient()).resendSignup(email);
+  await new AuthService(await createSupabaseServerClient()).resendSignup(email, captchaToken);
   return { accepted: true };
 });

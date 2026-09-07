@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import { authFeedback } from './feedback';
 import { safeReturnTo } from './return-to';
+import { useAuthCaptcha } from './use-auth-captcha';
 
 export function VerifyPanel() {
   const params = useSearchParams();
@@ -12,6 +13,7 @@ export function VerifyPanel() {
   const [failed, setFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const { captcha, captchaToken, captchaPending, resetCaptcha } = useAuthCaptcha();
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
@@ -36,11 +38,11 @@ export function VerifyPanel() {
   }
 
   async function resend() {
-    if (pending || cooldown > 0) return;
+    if (pending || cooldown > 0 || captchaPending) return;
     setPending(true); setMessage(''); setFailed(false);
     try {
       const response = await fetch('/api/auth/resend', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }),
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, captchaToken }),
       });
       const result = await response.json() as { accepted?: boolean; message?: string };
       if (response.ok && result.accepted === true) {
@@ -51,7 +53,7 @@ export function VerifyPanel() {
         if (response.status === 429) setCooldown(60);
       }
     } catch { setFailed(true); setMessage('网络连接失败，请检查网络后重试。'); }
-    finally { setPending(false); }
+    finally { setPending(false); resetCaptcha(); }
   }
 
   return <main className="glass-page"><section className="glass-card glass-form">
@@ -62,7 +64,8 @@ export function VerifyPanel() {
       <label>验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
       {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
       <button disabled={pending} type="submit">继续验证</button>
-      <button disabled={pending || cooldown > 0 || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
+      {captcha}
+      <button disabled={pending || cooldown > 0 || captchaPending || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
     </form><a href="/login">返回登录</a>
   </section></main>;
 }

@@ -15,18 +15,19 @@ export class PublicAuthError extends ApiRouteError {
 export class AuthService {
   constructor(private readonly client: AuthClient) {}
 
-  async register(input: { email: string; password: string; legalVersion: string }) {
+  async register(input: { email: string; password: string; legalVersion: string; captchaToken?: string }) {
     const result = await this.client.auth.signUp?.({
       email: input.email,
       password: input.password,
-      options: { data: { accepted_legal_version: input.legalVersion } },
+      options: { data: { accepted_legal_version: input.legalVersion }, captchaToken: input.captchaToken },
     });
     if (result?.error && result.error.code !== 'user_already_exists') throwMailError(result.error);
     return { accepted: true as const };
   }
 
-  async signIn(input: { email: string; password: string }) {
-    const result = await this.client.auth.signInWithPassword?.(input);
+  async signIn(input: { email: string; password: string; captchaToken?: string }) {
+    const result = await this.client.auth.signInWithPassword?.({ email: input.email, password: input.password, options: { captchaToken: input.captchaToken } });
+    if (result?.error?.code === 'captcha_failed') throwCaptchaError();
     if (result?.error || !result?.data?.user) throw new PublicAuthError('invalid_credentials');
     return result.data.user;
   }
@@ -37,13 +38,13 @@ export class AuthService {
     return { returnTo: normalizeReturnTo(input.returnTo), userId: result.data.user.id };
   }
 
-  async resendSignup(email: string) {
-    const result = await this.client.auth.resend({ email, type: 'signup' });
+  async resendSignup(email: string, captchaToken?: string) {
+    const result = await this.client.auth.resend({ email, type: 'signup', options: { captchaToken } });
     if (result.error) throwMailError(result.error);
     return { accepted: true as const };
   }
-  async requestPasswordReset(email: string, redirectTo: string) {
-    const result = await this.client.auth.resetPasswordForEmail(email, { redirectTo });
+  async requestPasswordReset(email: string, redirectTo: string, captchaToken?: string) {
+    const result = await this.client.auth.resetPasswordForEmail(email, { redirectTo, captchaToken });
     if (result.error) throwMailError(result.error);
     return { accepted: true as const };
   }
@@ -60,6 +61,7 @@ export class AuthService {
 }
 
 function throwMailError(error: { code?: string; status?: number }): never {
+  if (error.code === 'captcha_failed') throwCaptchaError();
   const limited = error.status === 429 || error.code === 'over_email_send_rate_limit';
   throw new ApiRouteError({
     code: 'network',
@@ -67,6 +69,10 @@ function throwMailError(error: { code?: string; status?: number }): never {
     retryable: true,
     status: limited ? 429 : 503,
   });
+}
+
+export function throwCaptchaError(): never {
+  throw new ApiRouteError({ code: 'bad_request', message: '安全验证未完成或已过期，请重新验证后再试。', retryable: true, status: 400 });
 }
 
 export type AuthenticatedAccount = Account;

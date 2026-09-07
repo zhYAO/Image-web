@@ -8,6 +8,14 @@ import { reportServerError } from './observability';
 
 export async function requireVerifiedUserId(client: SupabaseClient) {
   const { data, error } = await client.rpc('require_verified_user_id');
+  if (error?.code === 'PGRST202') {
+    throw new ApiRouteError({
+      code: 'network',
+      message: '身份验证服务暂时不可用，请稍后重试。',
+      retryable: true,
+      status: 503,
+    });
+  }
   const parsed = z.uuid().safeParse(data);
   if (error || !parsed.success) {
     throw new ApiRouteError({

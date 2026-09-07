@@ -17,7 +17,7 @@
   z-index: 8;
   overflow: hidden;
   border-right: 1px solid var(--z-border);
-  background: rgba(255, 255, 255, .48);
+  background: rgba(246, 248, 251, .64);
   -webkit-backdrop-filter: blur(var(--z-glass-blur)) saturate(145%);
   backdrop-filter: blur(var(--z-glass-blur)) saturate(145%);
 }
@@ -55,14 +55,14 @@
   margin-bottom: 18px;
   border: 0 !important;
   border-radius: 10px !important;
-  background: #f1f2f4 !important;
+  background: rgba(255, 255, 255, .82) !important;
   color: #202124 !important;
   box-shadow: none !important;
 }
 
 .sectionLabel {
   margin: 14px 8px 8px;
-  color: #a1a6af;
+  color: #737780;
   font-size: 11px;
   font-weight: 600;
 }
@@ -87,7 +87,7 @@
 
 .sessionItem:hover,
 .sessionActive {
-  background: #f3f4f6;
+  background: var(--z-primary-soft);
 }
 
 .sessionTitleRow {
@@ -141,8 +141,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, .5);
-  background: rgba(255, 255, 255, .24);
+  border-bottom: 1px solid var(--z-border);
+  background: rgba(255, 255, 255, .5);
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
 }
@@ -207,7 +207,7 @@
 .heroTitle {
   margin: 0 0 34px;
   color: #25272b;
-  font-size: clamp(24px, 2.2vw, 32px);
+  font-size: clamp(26px, 2.7vw, 38px);
   font-weight: 700;
   letter-spacing: -0.035em;
 }
@@ -215,7 +215,7 @@
 .skillGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 18px;
   width: 100%;
 }
 
@@ -241,7 +241,7 @@
   display: block;
   overflow: hidden;
   aspect-ratio: 1.78;
-  background: #e8eaed;
+  background: linear-gradient(150deg, #f5f8fc, #e7edf5);
 }
 
 .skillCover img {
@@ -251,7 +251,7 @@
 .skillCoverShade {
   position: absolute;
   inset: 35% 0 0;
-  background: linear-gradient(transparent, rgba(15, 16, 19, 0.72));
+  background: linear-gradient(transparent, rgba(243, 246, 251, .96));
 }
 
 .skillCoverTitle {
@@ -260,7 +260,7 @@
   bottom: 12px;
   left: 12px;
   overflow: hidden;
-  color: #fff;
+  color: var(--z-text);
   font-size: 15px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -272,9 +272,10 @@
   right: 10px;
   bottom: 9px;
   padding: 4px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--z-border);
+  background: rgba(255, 255, 255, .72);
   border-radius: 7px;
-  color: #fff;
+  color: var(--z-text);
   font-size: 11px;
 }
 
@@ -291,17 +292,36 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  color: #7a8089;
+  color: var(--z-primary);
   font-size: 32px;
   transform: translate(-50%, -50%);
 }
+
+.skillCardCompact { border-radius: 22px; }
+.skillCardCompact .skillCover { height: 116px; aspect-ratio: auto; background: transparent; }
+.skillCardCompact .skillCoverShade { display: none; }
+.skillCardCompact .skillIcon {
+  display: grid;
+  place-items: center;
+  top: 22px;
+  left: 22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--z-primary-soft);
+  font-size: 26px;
+  transform: none;
+}
+.skillCardCompact .skillCoverTitle { bottom: 4px; left: 22px; font-size: 17px; }
+.skillCardCompact .tryButton { right: 18px; bottom: 2px; color: var(--z-muted); }
+.skillCardCompact .skillDescription { min-height: 76px; padding: 10px 22px 24px; font-size: 13px; }
 
 .composerDock {
   position: relative;
   z-index: 10;
   flex: 0 0 auto;
   padding: 28px 34px 18px;
-  background: linear-gradient(transparent, rgba(238, 242, 255, .9) 28%);
+  background: linear-gradient(transparent, rgba(245, 245, 247, .92) 36%);
 }
 
 .scrollToBottom {
@@ -469,8 +489,8 @@
 }
 
 .modeActive {
-  background: #eff9fc;
-  color: #0aa6c4;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
   font-weight: 650;
 }
 
@@ -518,7 +538,7 @@
 .submitButton {
   width: 38px !important;
   height: 38px !important;
-  background: #1ca9c5 !important;
+  background: var(--z-primary) !important;
   box-shadow: none !important;
 }
 
@@ -535,8 +555,8 @@
   padding: 18px;
   border: 1px solid #eceef0;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 24px 70px rgba(32, 33, 36, 0.16);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 18px 55px rgba(31, 40, 54, .12);
   backdrop-filter: blur(18px);
 }
 
@@ -692,8 +712,8 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: #eaf8fb;
-  color: #0aa6c4;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
 }
 
 .skillField > span {
@@ -778,8 +798,8 @@
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: #eaf8fb;
-  color: #0aa6c4;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
 }
 
 .messageUser .avatar {
@@ -949,9 +969,9 @@
 }
 
 .skillOptionActive {
-  border-color: #bce2e9;
-  background: #eff9fb;
-  color: #0a7185;
+  border-color: rgba(0, 102, 204, .22);
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
 }
 
 .skillOptionIcon {
@@ -960,8 +980,8 @@
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: #eaf8fb;
-  color: #0aa6c4;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
   font-size: 16px;
 }
 
@@ -1139,8 +1159,8 @@
 .messageUser .bubble {
   border: 0;
   border-radius: 16px 6px 16px 16px;
-  background: #25272b;
-  color: #fff;
+  background: #e8f1fc;
+  color: #15395f;
 }
 
 .generationCard {
@@ -1342,7 +1362,7 @@
     padding: 0 10px;
   }
 
-  .assetLibraryButton span {
+  .assetLibraryButton > span:not(:global(.ant-btn-icon)) {
     display: none;
   }
 
@@ -1402,7 +1422,7 @@
   }
 }
 
-/* Phase 2 glass surface pass: keep status colors while sharing one material language. */
+/* Shared translucent surfaces retain readable foregrounds. */
 .timelineItem,
 .assistantBubble,
 .userBubble,
@@ -1421,7 +1441,7 @@
 .skillCard:hover,
 .toolbarButton:hover,
 .newButton:hover {
-  border-color: rgba(79, 70, 229, .26) !important;
+  border-color: rgba(0, 102, 204, .26) !important;
   background: var(--z-primary-soft) !important;
 }
 
@@ -1434,3 +1454,9 @@
     opacity: 1;
   }
 }
+
+.header a { color: var(--z-muted); font-size: 13px; text-decoration: none; }
+.header a:hover { color: var(--z-primary); }
+.composer:focus-within { border-color: rgba(0, 102, 204, .3); }
+.sessionItem:focus-within .sessionActions { opacity: 1; }
+.submitButton:disabled { background: #e5e7eb !important; color: #93979e !important; }

@@ -19,8 +19,9 @@ const zeroLengthProperties = new Set([
 ]);
 
 Object.defineProperty(window, 'getComputedStyle', {
-  value: (element: Element, pseudoElement?: string | null) => {
-    const declaration = nativeGetComputedStyle(element, pseudoElement);
+  value: (element: Element) => {
+    // jsdom does not implement pseudo-element layout (used by Ant Design's scroll lock).
+    const declaration = nativeGetComputedStyle(element);
     const getPropertyValue = declaration.getPropertyValue.bind(declaration);
     Object.defineProperty(declaration, 'getPropertyValue', {
       configurable: true,

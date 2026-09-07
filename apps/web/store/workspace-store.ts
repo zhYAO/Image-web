@@ -30,7 +30,7 @@ export interface ComposerState {
 interface ComposerSlice extends ComposerState {
   activeComposerSessionId?: string;
   composers: Record<string, ComposerState>;
-  activateComposer: (sessionId?: string, defaults?: Partial<ComposerState>) => void;
+  activateComposer: (sessionId?: string, defaults?: Partial<ComposerState>, inheritCurrent?: boolean) => void;
   forgetComposer: (sessionId: string) => void;
   setAspectRatio: (value: AspectRatio) => void;
   setResolution: (value: ImageResolution) => void;
@@ -81,10 +81,11 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   ...emptyComposer(),
   composers: {},
   reset: () => set({ ...initialState, ...emptyComposer(), composers: {}, activeComposerSessionId: undefined }),
-  activateComposer: (sessionId, defaults) => set((state) => {
+  activateComposer: (sessionId, defaults, inheritCurrent = false) => set((state) => {
     if (sessionId === state.activeComposerSessionId) return {};
     const composers = { ...state.composers };
     if (state.activeComposerSessionId) composers[state.activeComposerSessionId] = snapshot(state);
+    else if (inheritCurrent && sessionId) composers[sessionId] = snapshot(state);
     return { ...emptyComposer(), ...defaults, ...composers[sessionId ?? ''], composers,
       activeComposerSessionId: sessionId, activePopover: undefined, configDrawerOpen: false };
   }),
