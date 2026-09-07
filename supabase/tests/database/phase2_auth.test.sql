@@ -46,6 +46,7 @@ select set_config('request.jwt.claims','{"sub":"00000000-0000-0000-0000-00000000
 select ok(public.request_account_deletion(),'first deletion accepted');
 select ok(public.request_account_deletion(),'duplicate deletion is idempotent');
 select throws_ok($$select public.require_verified_user_id()$$,'P0001','unauthorized','deleting account blocked immediately');
+reset role;
 select is((select count(*) from private.account_cleanup_jobs where user_id='00000000-0000-0000-0000-0000000000a1'),1::bigint,'duplicate deletion queues once');
 select * from finish();
 rollback;
