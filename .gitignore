@@ -16,3 +16,6 @@ test-results
 .env.local
 
 .superdesign/tmp/
+
+# Isolated Next.js verification builds
+.next-*

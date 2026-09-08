@@ -1,3 +1,4 @@
+import { HttpCommerceGateway } from './http-commerce-gateway';
 import {
   WorkspaceError,
   apiErrorSchema,
@@ -72,12 +73,14 @@ function workspaceError(input: unknown, status: number) {
 }
 
 export class HttpWorkspaceGateway implements WorkspaceGateway {
+  readonly commerce: HttpCommerceGateway;
   private readonly fetcher: Fetcher;
   private readonly submissions = new WeakMap<ImageRequest | RecreateRequest, { key: string; batchId?: string; body?: string; sessionId?: string; referenceIds: string[]; pending?: Promise<GenerationBatch> }>();
   private providerStatusPromise?: Promise<ReturnType<typeof providerStatusResponseSchema.parse>>;
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
     this.fetcher = options.fetcher ?? fetch.bind(globalThis);
+    this.commerce = new HttpCommerceGateway((path,schema,init)=>this.json(path,schema,init));
   }
 
   async listSessions() {
@@ -121,6 +124,12 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   async *streamChat(request: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatEvent> {
     const response = await this.fetcher('/api/chat', {
       body: JSON.stringify({
+        requestId: request.requestId,
+        taskId: request.taskId,
+        taskRevision: request.taskRevision,
+        targetGenerationId: request.targetGenerationId,
+        proposal: request.proposal,
+        imageSettings: request.imageSettings,
         chatModel: request.chatModel,
         imageProvider: request.imageProvider,
         images: request.images?.length ? request.images : undefined,

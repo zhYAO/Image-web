@@ -69,6 +69,13 @@ describe('skill/tool linkage', () => {
     ['帮我分析这张商品图的构图', false],
     ['如何生成更好的商品图？', false],
     ['不要生成图片，只讨论提示词', false],
+    ['帮我生成商品套图方案', false],
+    ['生成一张海报之前先给我提示词', false],
+    ['Create a prompt for a product photo', false],
+    ['生成商品主图的方案，先讨论构图', false],
+    ['生成一张海报，先分析构图不要执行', false],
+    ['Generate a product photo prompt, discuss the lighting', false],
+    ['生成一张陶瓷杯商品图，暖色背景', true],
   ])('classifies explicit image intent for %s', (message, expected) => {
     expect(hasExplicitImageIntent(message)).toBe(expected);
   });

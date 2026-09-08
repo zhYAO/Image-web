@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 
 import type { Account } from '../../../../packages/domain/src/auth-contracts';
+import { notifyAuthChange } from './AuthStatusProvider';
 import { authFeedback } from './feedback';
 import { useAuthCaptcha } from './use-auth-captcha';
 
@@ -40,7 +41,9 @@ function RecoveryForm({ authenticate = defaultAuthenticate, onAuthenticated, onC
     const data = new FormData(event.currentTarget);
     setPending(true);
     try {
-      onAuthenticated(await authenticate({ email: String(data.get('email')), password: String(data.get('password')), captchaToken }));
+      const account = await authenticate({ email: String(data.get('email')), password: String(data.get('password')), captchaToken });
+      notifyAuthChange(true);
+      onAuthenticated(account);
     } catch (cause) { setError(cause instanceof LoginFeedbackError ? cause.message : '邮箱或密码不正确，请重试。'); }
     finally { setPending(false); resetCaptcha(); }
   }

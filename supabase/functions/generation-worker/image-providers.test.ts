@@ -123,4 +123,16 @@ describe('image provider adapters', () => {
     expect(JSON.stringify(failure)).not.toContain('private.example');
     expect(JSON.stringify(failure)).not.toContain('provider-secret');
   });
+  it.each([
+    [200, '{}', 'unknown'],
+    [200, 'not-json', 'unknown'],
+    [503, '{"error":{"type":"moderation_blocked"}}', 'unknown'],
+    [400, '{"error":{"type":"invalid_request"}}', 'rejected'],
+    [429, '{"error":{"type":"rate_limit"}}', 'rejected'],
+  ] as const)('classifies HTTP %s with body %s as %s', async (status, body, outcome) => {
+    const fetcher = async () => new Response(body, { status });
+    await expect(generateSeedreamImage(input, 'test-key', fetcher as typeof fetch))
+      .rejects.toMatchObject({ outcome });
+  });
+
 });

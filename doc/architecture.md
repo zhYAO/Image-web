@@ -1,8 +1,10 @@
 # zimage 架构文档
 
-> **版本**：v1.4
-> **状态**：与 `requirements.md`、`tech-selection.md` v1.4 对齐
-> **更新日期**：2026-08-27
+> **版本**：v2.1（纳入电商生图 v0.2）
+> **状态**：历史架构基线保留；电商 v0.2 目标架构实施中，未宣称验证完成
+> **更新日期**：2026-09-08
+
+第 1–11 节保留 Phase 1 架构和验收范围，含匿名身份、旧 Skill、1–4 张直接生图等历史描述，不代表当前运行状态或新增能力已验收。2026-09-06 的 Phase 2 修订覆盖匿名/账号与工作台行为；当前电商结构和授权按第 12 节执行。所有图示是架构说明，完成情况须由主任务的独立验证证据支持。
 
 ## 1. 架构目标
 
@@ -31,11 +33,11 @@ flowchart LR
 | --- | --- | --- |
 | M01 | `UnifiedWorkspace` / `SessionSidebar` | `/` 两栏布局、可折叠会话侧栏、会话选择和匿名恢复提示；按 `sessionId` 隔离加载、时间线、流式回复、临时生图回合和忙碌状态，控制骨架加载、后台任务标记、智能跟随与回到底部入口；旧路径只做重定向。 |
 | M02 | `Timeline` / `GenerationTurn` / `GenerationCard` | 按 `sequence` 展示文本、批次和错误；承载 SSE 临时增量及生成状态；直接生图组合用户提示词与助手结果，历史工具生图不重复提示词；生成图和 Markdown 图进入统一图片预览组，白名单消息标签分段为只读折叠块并保留原始内容。 |
-| M03 | `UnifiedComposer` | 单一草稿和输入框默认发送聊天；“创建图片”工具或图片技能启用后改走现有图片提交链路并展示参考图和生成配置；Enter 发送、Shift+Enter 换行且尊重输入法合成状态，不直接调用 provider。 |
-| M04 | `ImageSettingsPopover` / `SkillPopover` | 输入框上方互斥浮层：图片 provider/model、健康状态和能力驱动参数合并为按需设置面板，技能保留必填字段与实时提示词预览；窄屏抽屉复用同一状态。参考图由输入框单点维护并进入统一图片预览组，技能封面不进入会话预览。 |
+| M03 | `UnifiedComposer` | 单一草稿和输入框默认发送聊天；图片工具开关仅表示能力许可，普通讨论不生图；旧 Skill 发送按第 12 节先形成方案，明确确认后才入队；Enter 发送、Shift+Enter 换行且尊重输入法合成状态，不直接调用 provider。 |
+| M04 | `ImageSettingsPopover` / `SkillPopover` | 输入框上方互斥浮层：图片 provider/model、健康状态和能力驱动参数合并为按需设置面板，Phase 1 技能字段与提示词预览为历史设计，当前使用第 12 节场景向导和逐图方案；窄屏抽屉复用同一状态。参考图由输入框单点维护并进入统一图片预览组，技能封面不进入会话预览。 |
 | M05 | Chat Route + LangGraph | 认证、用户消息持久化、SSE、请求级 workflow/checkpointer、Doubao/MiniMax 与聊天 tool 编排。 |
 | M06 | Application API | 会话、生图、重生成、配额、技能、健康和资产 URL 的 Route Handlers。 |
-| M07 | Skill Registry | 三个内置技能、版本、指令和 provider/model capability。 |
+| M07 | Skill Registry | 三个旧 Skill 的名称/版本与兼容映射；电商六场景和 12 个原创模板由 M20 管理，模型能力独立登记。 |
 | M08 | Provider Adapters / Safety Mapper | Doubao/MiniMax 聊天与 Seedream/Gemini 图片 adapter；Gemini 固定稳定模型 `gemini-3-pro-image`；负责参数映射、超时、安全、错误归一化和费用归因。 |
 | M09 | Session Service | 会话 CRUD、所有权、`deleting` 状态和列表过滤。 |
 | M10 | Timeline / Generation Repository | 原子 sequence、批次/单张状态、配额、安全审计和到期元数据。 |
@@ -229,7 +231,7 @@ sequenceDiagram
 
 M02 只持有 `generationId` 和短期 URL。首次预览或 URL 过期时调用资产接口；M13 验证 session 所有权、generation 成功、`asset_status=active`、未过期以及对象路径前缀，随后签发短期 URL。403 不重试，401 先刷新身份一次，过期状态转 F07。
 
-批量下载先筛选 succeeded 且 active 的最多 4 个 generation，逐个取得新 URL；单项签发/下载失败不阻塞其他成功项，并在汇总中返回脱敏错误与 correlation ID。
+Phase 1 通用批量下载先筛选 succeeded 且 active 的最多 4 个 generation；电商按第 12 节冻结 1–8 个 slot 的选图集合，再逐个取得新 URL；单项签发/下载失败不阻塞其他成功项，并在汇总中返回脱敏错误与 correlation ID。
 
 ### F07：90 天到期
 
@@ -377,12 +379,156 @@ stateDiagram-v2
 - 达到 Seedream/Gemini 各 n≥30 的 2K P95/成功率、恢复率、错误 schema、告警准确率和侧栏性能门禁。
 - 启用每日数据库备份、每日 Storage 外部复制并完成一次联合恢复演练。
 - 完成另立的阿里云 ECS/Docker/TLS/反向代理或其他目标平台方案，再进行生产发布和回滚演练；数据库变更遵循 expand/contract。
-- 所有 `requirements.md` 稳定 ID 状态只能为 `covered`、`deferred` 或 `non-goal`；不得存在未决冲突。
+- Phase 1 历史矩阵沿用 `covered`、`deferred` 或 `non-goal`；Phase 2 保留 `planned`/`withdrawn`，电商项以第 12 节待验收口径统计；状态不能代替证据。
 - CI 必须通过 secret、env schema、生成数据库类型、migration drift、显式 GRANT/RLS 和负向权限门禁。
 
-### Phase 2 依赖
+### Phase 2 依赖（历史范围）
 
-账号绑定/跨设备同步、外部告警通道、自定义技能平台及其他明确非目标必须重新立项，不得以“基础架构已支持”为由混入 Phase 1。
+上述是 Phase 1 当时的延后范围。正式账号跨设备恢复后纳入 Phase 2，匿名绑定被撤销；外部告警与自定义 Skill 平台仍不在本次电商范围。电商目录不等同于自定义 Skill 平台。
 ## Phase 2 架构修订（2026-09-06）
 
-工作区继续使用单一会话时间线与持久图片队列。草稿、参考图、Skill 选择和图片设置按会话隔离；提交使用稳定请求标识并在入队成功后只读取原批次。时间线按游标恢复，SSE 无完成事件时保留已收到内容并报告中断。Skill 任务状态为 awaiting_input、queued、cancelled、replaced，方案在发送前可见可改，服务端只在信息足够时与额度预占、批次和队列同一事务完成。
+工作区继续使用单一会话时间线与持久图片队列。草稿、参考图、Skill 选择和图片设置按会话隔离；提交使用稳定请求标识，时间线按游标恢复，SSE 无完成事件时保留已收到内容并报告中断。正式账号取代自动匿名身份。该日期的 Skill 设计曾用 awaiting_input、queued、cancelled、replaced，且信息足够时发送直接入队；此授权与单任务模型已由电商 v0.2 第 12 节覆盖，不能继续作为当前自动执行规则。历史记录保留，不新增第二套待补充状态机。
+
+
+## 12. 电商 v0.2 目标架构（已批准、实施中）
+
+依据 `requirements.md` 第 11 节、D01–D11 与 `plans/2026-09-08-commerce-implementation.md`。采用下列具体对象、接口和事务边界替代研究快照中的建议名称；本节未断言代码、数据库迁移、浏览器或真实 Provider 验证已通过。
+
+### 12.1 入口、模块与事实源
+
+```mermaid
+flowchart TD
+    C[公开 /create 六场景目录] --> W[唯一 / 工作台：向导、方案、对话]
+    O[白底 / 模特 / 种草旧 Skill] --> W
+    W --> WG[WorkspaceGateway]
+    WG --> CG[可选 commerce: CommerceGateway]
+    CG --> HG[HTTP CommerceGateway]
+    CG --> MG[Mock CommerceGateway：同领域契约]
+    HG --> A[Creative Task API：正式认证与所有权]
+    R[12 个原创模板及确定性编译] --> A
+    A --> RPC[commerce_dispatch：仅 service_role]
+    RPC --> D[(版本、执行组、slots、选图、导出)]
+    RPC --> B[(同事务 count=1 子批次、配额与 Queue)]
+    B --> K[既有 Generation Worker：可靠性修订中]
+    K --> P[现有登记图片 Provider]
+    K --> S[(Private Storage)]
+    K --> D
+    D --> A
+```
+
+| 模块 ID | 责任与实施边界 |
+| --- | --- |
+| M19 | `/create` 和 `features/commerce/`：六场景发现、三步向导、逐图方案、任务聚合、对话目标、选图与下载；原工作区承载执行，目录不保存第二份会话。 |
+| M20 | `packages/domain/src/commerce.ts`、`commerce-templates.ts`：CommercePlan/Task、schema、确定性规划/编译、12 个原创模板、slot 兼容哈希；模型效果状态独立于模板版本。 |
+| M21 | 独立 `CommerceGateway` 挂在 `WorkspaceGateway.commerce?`，HTTP/mock 共享 schema；缺少该可选能力时不可把电商确认降级为旧发送生图。 |
+| M22 | `server/commerce/`、`api/creative-tasks/`、`api/creative-templates/`：正式账号校验、可信编译、恢复、幂等请求、原子执行、选择和导出。 |
+| M23 | commerce 表、私有编译/操作结果记录与受限 `commerce_dispatch`；复用 M10/M12/M13/M15，补足租约、完成恢复、配额账本和补偿清理。 |
+
+目录场景为 `product-main/product-set/detail/social/style-reference/model`；A+ 与模特专项增强另排期。旧 Skill 映射至同一方案。Zustand/React 只保存表单、未提交草案和请求瞬态，服务端持久版本、执行与选图才是已保存事实；刷新通过 list/get 恢复，不能只依赖 SSE 或本地状态。任务聚合展示需保留子批次关联，避免重复顶层卡片。
+
+### 12.2 领域与持久不变量
+
+```mermaid
+erDiagram
+    SESSION ||--o{ COMMERCE_TASK : owns
+    COMMERCE_TASK ||--o{ COMMERCE_REVISION : versions
+    COMMERCE_TASK ||--o{ COMMERCE_RUN : executes
+    COMMERCE_RUN ||--|{ COMMERCE_RUN_ITEM : contains
+    COMMERCE_RUN_ITEM ||--|| GENERATION_BATCH : count_one
+    GENERATION_BATCH ||--|| GENERATION : commerce_child
+    COMMERCE_TASK ||--o{ COMMERCE_SELECTION : chooses
+    COMMERCE_TASK ||--o{ COMMERCE_EXPORT : freezes
+```
+
+上图的 batch/generation 一对一仅指电商 count=1 子批次，通用直接生图仍可一批 1–4 张。
+
+| 对象/持久结构 | 当前选型与不变量 |
+| --- | --- |
+| `CommercePlan` | scene、brief、templateId、slots。brief 保存平台、用途、名称、人工确认事实/卖点和 product/style 引用；不声称已有视觉识别。 |
+| `CommerceTask` / `commerce_tasks` | Plan 加 id/sessionId/revision、timestamps、runs、selections、`slotHashes`、archived；所有权由正式账号和活动会话校验。 |
+| `CommerceSlot` / `commerce_revisions` | 1–8 个稳定 slotId，逐图 role、instruction、exactText、referenceIds、provider/model/aspectRatio/resolution；修改保存新不可变版本，旧执行快照不覆盖。 |
+| 私有编译快照 | 服务端解析可信模板/版本，保存逐 slot 编译内容、版本与兼容哈希；`slotHashes` 是当前 slot 哈希映射，不能用全套哈希误使未修改 slot 失效。 |
+| `CommerceRun` / `commerce_runs`、`commerce_run_items` | 一次确认一个 run，记录 revision/requestId；每项关联 slot、count=1 batch、generation、兼容哈希、选择版本和重做来源；业务组不额外预占额度。 |
+| selections / `commerce_selections` | 保存当前 generation、compatibilityHash、选择版本与最新在途候选关联；新版或手选后迟到结果不得获胜，失败/未知/缺图不覆盖旧选图。 |
+| `commerce_exports` | 固定 revision 与有序 slotId/generationId 清单，后续切图或完成不改写；URL 临时签发，持久记录不保存 signed URL。 |
+| 私有幂等结果 | 按用户、operation、requestId 及请求内容哈希保存操作结果；同键异内容冲突，同键同内容先恢复原结果再考虑当前版本变化。 |
+
+全任务商品图和风格图合计 ≤4 张，每张 ≤10 MB，仅 PNG/JPEG/WebP；引用必须同用户同会话且未过期。销售主图、套图、详情图至少一个有效 product 引用，风格图不得代替。模型 capability 低于公共上限时优先收紧；通用纯文字生图保留。上传 30 天/生成结果 90 天沿用既有保留语义，实际到期由服务端返回。
+
+历史参考文件采用独立的内部资源上限：同一会话最多保留 64 个，继续执行既有上传及每日字节 guard。该上限用于保存旧草案、切换商品和显式样图采用，不改变单方案/模型输入合计 ≤4 张、每张 ≤10 MB 的限制；模型更低上限仍优先。历史文件数量不能直接作为当前方案所选引用数量。
+
+样图转换由新的参考图迁移及对应实施模块承接：用户明确采用后，服务端验证正式账号、同用户同会话、generation 成功与有效期，幂等生成 reference_upload 并记录 `source_generation_id`。采用前的模型结果不自动变成引用；满四张时必须明确替换当前引用，旧草案所需文件继续受历史上限保护。转换同样执行上传/每日字节 guard，在对象复制前持久登记对象意图，失败、提交被拒或删除竞争通过可恢复补偿清理处理；不得直接把 generationId/signed URL 当成 referenceId。本项是实施目标，不代表迁移或复制清理已验证，也不扩大任何公共付费预算。
+
+### 12.3 API 与授权路径
+
+| 接口 | 当前设计责任 |
+| --- | --- |
+| `GET /api/creative-templates` | 公开安全模板元数据、版本/来源/审核与模型验证状态，内部执行内容不公开。 |
+| `GET /api/creative-tasks?sessionId=…`、`POST /api/creative-tasks` | 正式账号下按会话列出任务；以 requestId/sessionId/plan 创建初始版本，不生图。 |
+| `GET /api/creative-tasks/{id}`、`PATCH /api/creative-tasks/{id}` | 恢复 Task；requestId/expectedRevision/plan 保存新版本，冲突拒绝。 |
+| `POST /api/creative-tasks/{id}/submit` | requestId/revision/slotIds/recreate?/source?；返回 202 和带 run/item 关联的 Task；明确重做也经此入口。 |
+| `POST /api/creative-tasks/{id}/select` | requestId/revision/slotId/generationId/expectedSelectionVersion；版本竞争拒绝，允许明确切回旧候选。 |
+| `POST /api/creative-tasks/{id}/export` | requestId/revision/selections；冻结选中映射，返回 export id/revision/createdAt/items。 |
+| `POST /api/creative-tasks/{id}/archive` | requestId/revision；返回 CommerceTask，归档后保留历史/导出，阻止新提交，不自动取消在途或删除资产。 |
+| `POST /api/creative-tasks/{id}/cancel` | requestId/revision/runId；返回 CommerceTask，只取消指定 run 中 pending 且 not_submitted 的子项，额度释放一次，运行中继续。 |
+
+`CommerceGateway` 除 list/get/create/save/submit/select/export/upload 外，包含 `archive(taskId, {requestId, revision})` 与 `cancel(taskId, {requestId, revision, runId})`，二者返回 `Promise<CommerceTask>`。领域/API/网关与对应 SQL 已接入这两项操作；这不代表运行时验收已通过。`/analyze`、独立 `/quote`、独立 `/recreate`、`PATCH /selection` 仍为研究候选；取消使用本表 task 下的 `/cancel`，不采用研究建议的独立 run 路由。额度估算直接显示确认选中 slot 数，没有可信价格则金额未知。
+
+### F10：确认方案与原子执行（实施中）
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant W as 统一工作台
+    participant A as Commerce Service
+    participant D as commerce_dispatch
+    participant K as 既有 Worker
+    U->>W: 向导填写 / 旧 Skill 发送 / 对话修改
+    W->>A: create 或 save 结构化 plan
+    A->>D: 验证、可信编译并保存 revision
+    D-->>W: Task、slotHashes、缺项与选中额度
+    U->>W: 明确确认 revision 与 slotIds
+    W->>A: submit + requestId
+    A->>D: service_role 调用受限 RPC
+    D->>D: 身份/所有权、幂等、锁、版本/引用/模型/额度校验
+    D->>D: 同事务 run/items + count=1 children + quota + queue
+    D-->>W: 202 Task：稳定 run/item 映射
+    K->>D: 完成单图与恢复登记
+    W->>A: get/list 恢复状态、候选与当前选择
+```
+
+`commerce_dispatch` 公共包装及私有入口只允许 `service_role` 执行，撤销 `PUBLIC/anon/authenticated` 执行权，固定 search_path；服务端身份不能由客户端 userId 冒充。可读 commerce 表最小 GRANT + RLS 校验所有权，浏览器不得直接写入执行/版本表或调用事务入口。
+
+新提交锁定任务和选中 slot，校验当前修订、全部引用、模型/Provider 开关、每日与 preview guard、总额度；同一修订的有效结果/活跃执行不能被不同 requestId 隐式重复。内部单图提交在同一数据库事务执行，第 N 项失败时前 N−1 项、队列和预占全部回滚，不能由前端或服务端循环 HTTP 模拟原子性。source 沿用 direct/chat_tool；通用直接生图仍使用原 F03，电商不能绕过 F10。
+
+### F11：选图、交付与恢复（实施中）
+
+单图重做创建新 run/item。成功时同时核对当前 slotHashes、最新重做关联和选择版本，符合才默认采用新图；否则只进入历史候选。用户手选递增选择版本并阻断旧在途结果覆盖。修改第三张时保留其他四张的有效选择，导出可固定完整 5 张清单。选择旧方案不兼容图片须显示待更新/旧版状态，不能静默冒充新版或整套完整。
+
+Worker 需以领取版本/租约续期避免重复调用，未知提交先核对；对象上传成功但落库失败时使用持久结果登记幂等补写，不重新生图。删除与在途写入协调，拒绝落库的对象进入持久补偿清理；清理任务崩溃后可重领。配额账本不随内容级联删除，删会话不得恢复已消耗额度。这些是本次可靠性目标，不是已通过结论。
+
+归档与取消都经正式身份、所有权、revision 和 requestId 幂等校验及 service_role-only `commerce_dispatch`。归档保留历史/导出，阻止新提交，不改变在途执行。取消验证 run 属于 task，在与 Worker 协调的锁内只处理 `status=pending` 且 `provider_submission_state=not_submitted` 的可取消子项；processing/running 即使尚未调用 Provider 也继续处理，其他 run 不受影响。被取消子项落为 `failed`，子项错误 `user_cancelled`，不能当 Provider 故障统计；按既有账本业务键至多写一次 release，归档对应 queue 消息，清除该子项在途选图关联并刷新批次，原已选结果保留。重复同键请求恢复原操作结果，新的取消请求无可取消项时返回冲突，不重复释放。不能在 UI 把仍运行的整组显示为已停止。
+
+### 12.4 验收与排除项
+
+验收追溯：M19/M21 与 F10 覆盖 EC-01–07、10、17；M22/M23 与 F10/F11 覆盖 EC-08/09/11/15/16，M13/M23 另验证历史 64 上限、显式样图转换及来源/对象意图清理；M20 覆盖 EC-05/06/12/14；整图文字与固定集合交付覆盖 EC-13。按 17 个 EC、9 类原 P2-AT 分别记录，六场景/12 模板是目录覆盖数，不能转写为测试通过数。
+
+AI 整图包含文字，exactText 是确认文案而非独立图层；改字需确认重生成。未验证视觉分析、独立文字排版、长图合成、新 Provider、视频和自动平台发布不在本次实现承诺内。mock、数据库/Worker、隔离 HTTP、浏览器与真实模型效果分别验收；未取得证据前不得把图示或迁移文件称为已部署、已通过或生产就绪。
+
+
+### 12.8 实施补充：写入预算与请求恢复
+
+- create/save 使用同一个 `commerce_dispatch` 的 `p_compiled = SQL NULL` 只读预检：先校验当前身份、账号、会话与任务所有权，再返回相同 requestId/hash 的已提交结果；没有历史结果时返回 SQL NULL，不创建草案、不记写入额度。随后服务端按当前发布模板编译，正常写入事务再次核对幂等键，关闭预检与写入间的竞争窗口。
+- 新的 create/save/select/export/archive/cancel 各计一次现有 `session_update` 写入预算，幂等回放不重复扣减；submit 继续仅按子图片计量，方案本身不消费图片额度。取消释放归属原预占的 UTC 计量日。
+- 单个编译提示词最多 8000 个 Unicode 字符，领域函数与服务端均在保存前返回具体图片角色的精简提示，不截断商品事实和确认文案。
+- `ZIMAGE_COMMERCE_SUBMIT_ENABLED=false` 只暂停新的电商提交；读取、选图、历史与导出继续可用。数据库原有 generation/provider 开关仍是最终提交约束。
+- 浏览预览的签名链接仅作内存短缓存（最多 60 秒，且早于服务端 expiresAt 30 秒），同时请求去重；导出始终重新校验并签名，不将预览缓存用作下载授权。
+
+这些为本地实现契约；数据库并发、真实 Storage 和 Provider 的验证状态见项目进度，不因接口存在而视为已上线。
+
+
+### 12.9 实施补充：参考转换的资源准入
+
+生成样图转换先检查同源 pending、历史容量及 Storage 可信大小，再在下载前预留上传资源；核对实际字节后只能向下调整仍在预留中的记录。每次实际下载尝试计入请求准入，失败字节补偿不清除该请求限制。已完成引用的原请求回放不重复收费，新 requestId 的复用仍受写入限制。
+
+转换请求绑定保留 24 小时，每用户最多 256 条；同有效请求不能改绑来源，过期记录按每批 200 条清理，账号/任务删除级联移除绑定。负责迟到对象清理的 `reference_write_intents` 保持独立存活，不随请求绑定删除。

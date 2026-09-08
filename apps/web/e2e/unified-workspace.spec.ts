@@ -23,17 +23,16 @@ test('queues 1-4 images and restores the timeline after refresh', async ({ page 
     name: 'reference.png',
   });
   await expect(page.getByRole('img', { name: '参考图 reference.png' })).toBeVisible();
-  await page.getByRole('textbox', { name: '创作输入' }).fill('极简风格白色夹克商品图');
+  await page.getByRole('textbox', { name: '创作输入' }).fill('生成极简风格白色夹克商品图');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByRole('article', { name: '图片生成结果' })).toBeVisible();
   await expect(page.getByText('已完成')).toBeVisible({ timeout: 10_000 });
   await page.reload();
-  await expect(page.getByText('极简风格白色夹克商品图')).toBeVisible();
+  await expect(page.getByText('生成极简风格白色夹克商品图')).toBeVisible();
   await expect(page.getByRole('button', { name: '批量下载' })).toBeVisible();
 });
 
-test('keeps the image composer usable on a mobile viewport', async ({ page }) => {
-  await page.setViewportSize({ height: 844, width: 390 });
+test('keeps the image composer usable on desktop', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '创建图片' }).click();
 
@@ -41,9 +40,9 @@ test('keeps the image composer usable on a mobile viewport', async ({ page }) =>
   await page.getByLabel('上传参考图').setInputFiles({
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'),
     mimeType: 'image/png',
-    name: 'mobile.png',
+    name: 'desktop.png',
   });
-  await expect(page.getByRole('button', { name: '移除 mobile.png' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '移除 desktop.png' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: '创作输入' })).toBeVisible();
   await expect(page.getByRole('button', { name: '发送创作请求' })).toBeVisible();
   await expect(page.getByRole('button', { name: '资产库' }).locator('svg')).toBeVisible();
@@ -65,12 +64,11 @@ test('matches the desktop empty workspace', async ({ page }, testInfo) => {
   await expect(page).toHaveScreenshot('empty.png', { fullPage: true });
 });
 
-test('opens skill, model and parameter popovers on desktop', async ({ page }, testInfo) => {
+test('opens image parameters without exposing legacy skills', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium-desktop');
   await page.goto('/');
-  await page.getByRole('button', { name: /白底图/ }).click();
-  await expect(page.getByRole('dialog', { name: '技能配置' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '选择技能' })).toHaveCount(0);
+  await page.getByRole('button', { name: '创建图片' }).click();
 
   await page.getByRole('button', { name: /^图片设置/ }).click();
   await expect(page.getByRole('dialog', { name: '图片生成设置' })).toContainText('服务正常');
@@ -97,24 +95,23 @@ test('keeps chat and image provider selections independent on desktop', async ({
 });
 
 
-test('keeps public skill pages scrollable on small screens', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 600 });
+test('keeps the commerce catalogue scrollable after a legacy redirect', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/skills');
   await page.mouse.wheel(0, 1800);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
-  await expect(page.getByRole('link', { name: '了解种草图 →' })).toBeInViewport();
+  await expect(page).toHaveURL('/create');
+  await expect(page.getByRole('link', { name: '开始种草图文 →' })).toBeVisible();
 });
 
-test('editing a Skill plan does not append the user request on every keystroke', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('button', { name: /白底图：/ }).click();
-  await page.keyboard.press('Escape');
-  await page.getByRole('textbox', { name: '创作输入' }).fill('秋季新品');
-  const plan = page.getByRole('textbox', { name: '发送前 Skill 方案' });
-  await plan.fill('白底商品图');
-  await plan.press('End');
-  await plan.pressSequentially(' test');
-  await expect(plan).toHaveValue('白底商品图 test');
+test('editing an ecommerce draft does not append the user request on every keystroke', async ({ page }) => {
+  await page.goto('/?scene=product-main');
+  const name=page.getByRole('textbox', { name: '商品名称' });
+  await name.fill('秋季新品');
+  await name.press('End');
+  await name.pressSequentially(' test');
+  await expect(name).toHaveValue('秋季新品 test');
+  await expect(page.getByRole('article', {name:'图片生成结果'})).toHaveCount(0);
 });
 
 for (const count of [1, 2, 3, 4]) {
@@ -126,7 +123,7 @@ for (const count of [1, 2, 3, 4]) {
     await page.getByRole('button', { name: `生成数量 ${count}`, exact: true }).click();
     await page.getByRole('button', { name: '比例 16:9' }).click();
     await page.keyboard.press('Escape');
-    await page.getByRole('textbox', { name: '创作输入' }).fill(`批量验收 ${count} 张`);
+    await page.getByRole('textbox', { name: '创作输入' }).fill(`生成批量验收 ${count} 张`);
     await page.getByRole('button', { name: '发送创作请求' }).click();
     const result = page.getByRole('article', { name: '图片生成结果' });
     await expect(result.getByText('已完成', { exact: true })).toBeVisible();
@@ -150,6 +147,7 @@ test('creates, renames and deletes only the selected test session', async ({ pag
   await page.getByRole('button', { name: '保存会话名称' }).click();
   await expect(page.getByRole('button', { name: '会话管理验收', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '删除 会话管理验收', exact: true }).click();
+  await page.getByRole('button', { name: '确认删除', exact: true }).click();
   await expect(page.getByRole('button', { name: '会话管理验收', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('button', { name: '会话管理验收', exact: true })).toHaveCount(0);
@@ -161,7 +159,7 @@ test('keeps a failed image retry inside the unified history', async ({ page }, t
   await page.getByRole('combobox', { name: 'Mock 场景' }).click();
   await page.getByText('Mock · 部分成功', { exact: true }).click();
   await page.getByRole('button', { name: '创建图片' }).click();
-  await page.getByRole('textbox', { name: '创作输入' }).fill('部分成功与重试验收');
+  await page.getByRole('textbox', { name: '创作输入' }).fill('生成部分成功与重试验收');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByText('部分成功', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '重试失败项' }).click();
@@ -197,36 +195,50 @@ test('supports newline, empty-input protection and keyboard submit', async ({ pa
   await expect(input).toHaveValue('');
 });
 
-test('shows all official skill details and sends unauthenticated accounts to login', async ({ page }) => {
-  for (const name of ['白底图', '模特图', '种草图']) {
-    await page.goto('/skills');
-    await page.getByRole('link', { name: `了解${name} →` }).click();
-    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+test('redirects retired Skill pages to commerce without starting a task', async ({ page }) => {
+  for (const path of ['/skills', '/skills/white-background', '/skills/model', '/skills/social']) {
+    await page.goto(path);
+    await expect(page).toHaveURL('/create');
+    await expect(page.getByRole('heading', { name: '让商品成为画面主角' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '官方 Skill' })).toHaveCount(0);
   }
+});
+
+test('sends unauthenticated accounts to login with a reachable auth backend', async ({ page }) => {
+  test.skip(process.env.PHASE2_AUTH_E2E !== 'true', 'Requires a configured, reachable Supabase Auth backend; mock mode does not emulate server auth.');
   await page.goto('/account');
   await expect(page).toHaveURL(/\/login\?returnTo=/);
   await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible();
 });
 
-test('launches a skill in a new session from its public detail page', async ({ page }) => {
-  await page.goto('/skills');
-  await page.getByRole('link', { name: '了解白底图 →' }).click();
-  await page.getByRole('link', { name: '立即使用' }).click();
-  await expect(page.getByRole('region', { name: '当前 Skill 方案' })).toContainText('白底图');
-  await expect(page.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page).not.toHaveURL(/skill=/);
+test('starts commerce only from an explicit scene selection', async ({ page }) => {
+  await page.goto('/create');
+  await page.getByRole('link', { name: '开始商品主图 →' }).click();
+  await expect(page.getByRole('region', { name: '商品主图向导' })).toContainText('商品主图');
+  await expect(page).not.toHaveURL(/scene=/);
+});
+
+test('ordinary image creation ignores retired skill links and never opens a commerce wizard', async ({ page }) => {
+  await page.goto('/?skill=white-background&new=1');
+  await page.getByRole('button', { name: '创建图片' }).click();
+  await page.getByRole('textbox', { name: '创作输入' }).fill('生成一张月球风景图');
+  await page.getByRole('button', { name: '发送创作请求' }).click();
+  await expect(page.getByRole('article', { name: '图片生成结果' }).getByText('已完成', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: /向导/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '你好，想创作什么？' })).toHaveCount(0);
 });
 
 test('preserves image settings after the first submission without an existing session', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium-desktop');
   await page.goto('/');
   await page.getByRole('button', { name: '删除 欢迎使用 ZImage', exact: true }).click();
+  await page.getByRole('button', { name: '确认删除', exact: true }).click();
   await expect(page.getByRole('button', { name: '欢迎使用 ZImage', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '创建图片' }).click();
   await page.getByRole('button', { name: /^图片设置/ }).click();
   await page.getByRole('button', { name: '生成数量 1', exact: true }).click();
   await page.keyboard.press('Escape');
-  await page.getByRole('textbox', { name: '创作输入' }).fill('第一张测试商品图');
+  await page.getByRole('textbox', { name: '创作输入' }).fill('生成第一张测试商品图');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByRole('article', { name: '图片生成结果' }).getByText('已完成')).toBeVisible();
   await expect(page.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
@@ -246,7 +258,7 @@ test('downloads a cross-origin image without leaving the workspace', async ({ pa
   await page.getByRole('button', { name: /^图片设置/ }).click();
   await page.getByRole('button', { name: '生成数量 1', exact: true }).click();
   await page.keyboard.press('Escape');
-  await page.getByRole('textbox', { name: '创作输入' }).fill('下载验收');
+  await page.getByRole('textbox', { name: '创作输入' }).fill('生成下载验收图');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByText('已完成', { exact: true })).toBeVisible();
   await page.evaluate(() => {

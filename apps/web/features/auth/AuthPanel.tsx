@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFeedback } from './feedback';
+import { notifyAuthChange } from './AuthStatusProvider';
 import { safeReturnTo } from './return-to';
 import { useAuthCaptcha } from './use-auth-captcha';
 
@@ -40,7 +41,7 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
         return;
       }
       const returnTo = safeReturnTo(new URLSearchParams(window.location.search).get('returnTo'));
-      if (mode === 'login') { router.push(returnTo); return; }
+      if (mode === 'login') { notifyAuthChange(true); router.push(returnTo); return; }
       const query = new URLSearchParams({ email: String(body.email), returnTo });
       setNextStep(`${mode === 'register' ? '/auth/verify' : '/auth/reset'}?${query}`);
       setMessage('如果该邮箱可以接收此类邮件，你将收到验证码。请检查收件箱和垃圾邮件。');

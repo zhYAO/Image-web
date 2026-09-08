@@ -1,8 +1,9 @@
 'use client';
 
 import {
+  CHAT_PROVIDER_MODELS,
+  hasTextOnlyImageIntent,
   MAX_UPLOAD_BYTES,
-  resolveImageToolEnabled,
   sanitizeError,
   type GenerationBatch,
   type ImageRequest,
@@ -12,28 +13,32 @@ import {
   type RecreateScope,
   type SafeError,
   type Session,
-  type Skill,
   type TimelineItem,
   type UploadReference,
   type WorkspaceGateway,
 } from '@zimage/domain';
-import { Alert, Button, Drawer, Input, Select, Space } from 'antd';
+import { Alert, Button, Drawer, Select, Space } from 'antd';
 import PreviewGroup from 'antd/es/image/PreviewGroup';
 import { Archive, ArrowDown, ChevronRight, Menu } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
+import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce/commerce-ui';
 
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
 import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
 
-import { findModelCapability, normalizeGenerationSelection, SkillList } from './GenerationConfig';
+import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { downloadImages } from './download-images';
 import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
 import styles from './workspace.module.css';
+import Link from 'next/link';
+import { WorkspaceLoading } from './WorkspaceLoading';
 
 interface UnifiedWorkspaceProps {
   gateway?: WorkspaceGateway;
@@ -86,18 +91,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     selectedProvider, setSelectedProvider,
     selectedModelId, setSelectedModelId,
     selectedChatModel, setSelectedChatModel,
-    skillPromptOverride, setSkillPromptOverride,
     references, setReferences,
     activePopover,
     configDrawerOpen,
     draft,
     explicitImageToolEnabled,
     scenario,
-    selectedSkillId,
     sidebarCollapsed,
     sessionDrawerOpen,
-    skillValues,
-    selectSkill,
     setActivePopover,
     setConfigDrawerOpen,
     setDraft,
@@ -105,9 +106,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setScenario,
     setSessionDrawerOpen,
     setSidebarCollapsed,
-    setSkillValue,
   } = useWorkspaceStore();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [initializing, setInitializing] = useState(true);
+  const [initializationError, setInitializationError] = useState<string>();
+  const [initializationAttempt, setInitializationAttempt] = useState(0);
+  const [deletingSessionId, setDeletingSessionId] = useState<string>();
+  const deletionLock = useRef(false);
   const sessionsRef = useRef<Session[]>([]);
   const [activeSessionId, setActiveSessionState] = useState<string>();
   const composerDefaults = useRef<Partial<ComposerState>>({});
@@ -119,14 +124,19 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const runtimesRef = useRef<Record<string, SessionRuntime>>({});
   const timelineRequestVersions = useRef(new Map<string, number>());
   const chatControllers = useRef(new Map<string, AbortController>());
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [quota, setQuota] = useState<Quota>();
   const [capabilities, setCapabilities] = useState<ProviderCapability[]>([]);
   const [health, setHealth] = useState<ProviderHealth[]>([]);
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
-  const [focusSkillFieldKey, setFocusSkillFieldKey] = useState<string>();
   const localPreviewUrls = useRef(new Set<string>());
   const downloadingBatches = useRef(new Set<string>());
+  const commerceRef = useRef<CommerceWorkspaceHandle>(null);
+  const [commerceLaunch, setCommerceLaunch] = useState<CommerceLaunch>();
+  const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean }>();
+  const commerceActive = commerceMode?.sessionId === activeSessionId && Boolean(commerceMode?.active);
+  const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean) => {
+    setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active ? current : { sessionId, active });
+  }, []);
 
   const updateSessions = useCallback((next: Session[]) => {
     sessionsRef.current = next;
@@ -180,16 +190,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   useEffect(() => {
     let cancelled = false;
     const initialize = async () => {
-      const [nextSessions, nextSkills, nextQuota, nextCapabilities, nextHealth] = await Promise.all([
+      const [nextSessions, nextQuota, nextCapabilities, nextHealth] = await Promise.all([
         gateway.listSessions(),
-        gateway.getSkills(),
         gateway.getQuota(),
         gateway.getProviderCapabilities(),
         gateway.getProviderHealth(),
       ]);
       if (cancelled) return;
       updateSessions(nextSessions);
-      setSkills(nextSkills);
       setQuota(nextQuota);
       setCapabilities(nextCapabilities);
       setHealth(nextHealth);
@@ -211,20 +219,28 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       setSelectedProvider(initialSelection.provider);
       setSelectedModelId(initialSelection.model);
       const launchUrl = new URL(window.location.href);
-      const launchSkill = nextSkills.find((skill) => skill.id === launchUrl.searchParams.get('skill'));
+      const launchCommerce = resolveCommerceLaunch(launchUrl.search);
+      const launchScene = launchCommerce.scene;
       let initialId = nextSessions[0]?.id;
-      if (launchSkill) {
+      if (launchScene) {
         const session = await gateway.createSession();
         if (cancelled) return;
         updateSessions([session, ...nextSessions]);
         initialId = session.id;
       }
       setActiveSessionId(initialId);
-      if (launchSkill) {
-        selectSkill(launchSkill.id);
-        setExplicitImageToolEnabled(true);
+      if (launchScene && initialId) {
+        setCommerceLaunch({ scene: launchScene, platform: launchCommerce.platform, sessionId: initialId });
+      }
+      // Legacy Skill links must never implicitly open a commerce workflow.
+      if (launchUrl.searchParams.has('skill')) {
         launchUrl.searchParams.delete('skill');
         launchUrl.searchParams.delete('new');
+        window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+      }
+      if (launchScene) {
+        launchUrl.searchParams.delete('scene');
+        launchUrl.searchParams.delete('platform');
         window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
       }
       if (initialId) await refreshTimeline(initialId, true);
@@ -237,13 +253,16 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       if (!cancelled) {
         const safe = sanitizeError(error);
         if (safe.code === 'UNAUTHORIZED') return;
+        setInitializationError(safe.message);
         setFeedback({ error: safe, message: safe.message });
       }
+    }).finally(() => {
+      if (!cancelled) setInitializing(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [gateway, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId, selectSkill, setExplicitImageToolEnabled]);
+  }, [gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
 
   useEffect(
     () => () => {
@@ -282,16 +301,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     return () => window.clearInterval(timer);
   }, [gateway, pendingBatchKey, pendingBatchEntries, updateRuntime]);
 
-  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId);
-  const imageCreationEnabled = resolveImageToolEnabled({
-    explicitEnabled: explicitImageToolEnabled,
-    skillRequiresImage: selectedSkill?.requiresImageTool ?? false,
-  });
+  const imageCreationEnabled = explicitImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
-  const imageSubmissionPrompt = selectedSkill ? `${skillPromptOverride ?? selectedSkill.defaults}\n\n用户要求：${draft}` : draft;
   const activeRuntime = activeSessionId ? runtimes[activeSessionId] : undefined;
   const activeBusy = Boolean(activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
-  const composerDisabled = activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
+  const composerDisabled = initializing || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
   const busySessionIds = useMemo(() => new Set(Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
     runtime.chatBusy
       || runtime.optimisticImages.some((turn) => turn.submitting)
@@ -322,7 +336,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     requestFollow,
     scrollToBottom,
     showScrollToBottom,
-  } = useSmartAutoScroll({ contentVersion: timelineContentVersion, sessionId: activeSessionId });
+  } = useSmartAutoScroll({ contentVersion: timelineContentVersion, sessionId: activeSessionId, enabled: !commerceActive });
 
   const changeScenario = (value: typeof scenario) => {
     setScenario(value);
@@ -441,8 +455,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       resolution,
       scenario,
       sessionId,
-      skillId: selectedSkillId,
-      skillValues: { ...skillValues },
     };
     const turn: OptimisticImageTurn = {
       batch: {
@@ -468,10 +480,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       optimisticImages: [...runtime.optimisticImages, turn],
     }));
     setReferences([]);
-    setSkillPromptOverride(undefined);
     void renameIfDefaultTitle(sessionId, prompt);
     void admitImageTurn(sessionId, turnId, turn);
-  }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, selectedSkillId, skillValues, updateRuntime, setReferences, setSkillPromptOverride]);
+  }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
 
   const runChat = useCallback(async (sessionId: string, prompt: string) => {
     const controller = new AbortController();
@@ -488,8 +499,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         message: prompt,
         scenario,
         sessionId,
-        skillId: selectedSkillId,
-        skillValues,
       }, controller.signal)) {
         if (event.type === 'message.delta') {
           finalText += event.delta;
@@ -531,7 +540,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       void refreshSessions();
       void gateway.getQuota().then(setQuota).catch(() => undefined);
     }
-  }, [gateway, refreshSessions, refreshTimeline, scenario, selectedChatModel, selectedProvider, selectedSkillId, skillValues, updateRuntime]);
+  }, [gateway, refreshSessions, refreshTimeline, scenario, selectedChatModel, selectedProvider, updateRuntime]);
 
   const beginChatTurn = useCallback((sessionId: string, prompt: string) => {
     updateRuntime(sessionId, (runtime) => ({
@@ -556,9 +565,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   }, [renameIfDefaultTitle, runChat, updateRuntime]);
 
   const submit = () => {
-    const prompt = (imageCreationEnabled ? imageSubmissionPrompt : draft).trim();
+    const prompt = draft.trim();
     if (!prompt || activeBusy || composerDisabled) return;
-    const activeProvider = imageCreationEnabled ? selectedProvider : selectedChatModel;
+    if (commerceRef.current?.edit(prompt)) { setDraft(''); return; }
+    // The image switch is explicit generation intent; descriptions need no command prefix.
+    const generate = imageCreationEnabled && !isCommerceDiscussion(prompt) && !hasTextOnlyImageIntent(prompt);
+    const activeProvider = generate ? selectedProvider : selectedChatModel;
     if (health.find((item) => item.provider === activeProvider)?.status === 'unavailable') {
       const error: SafeError = { code: 'PROVIDER_UNAVAILABLE', message: '所选服务暂时不可用，请选择其他 provider。', retryable: true };
       setFeedback({ error, message: error.message });
@@ -568,7 +580,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setDraft('');
     requestFollow('smooth');
     const start = (sessionId: string) => {
-      if (imageCreationEnabled) beginImageTurn(sessionId, prompt);
+      if (generate) beginImageTurn(sessionId, prompt);
       else beginChatTurn(sessionId, prompt);
     };
     if (activeSessionId) start(activeSessionId);
@@ -581,23 +593,32 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const deleteSession = async (sessionId: string) => {
+    if (deletionLock.current) return;
+    deletionLock.current = true;
+    setDeletingSessionId(sessionId);
     try {
       await gateway.deleteSession(sessionId);
+      // A completed deletion stays completed even if refreshing the list fails.
+      const next = await gateway.listSessions().catch(() => sessionsRef.current.filter((session) => session.id !== sessionId));
+      updateSessions(next);
       setFeedback({ message: zhCN.workspace.deleteCompleted });
       chatControllers.current.get(sessionId)?.abort();
       chatControllers.current.delete(sessionId);
       removeRuntime(sessionId);
+      const wasActive = useWorkspaceStore.getState().activeComposerSessionId === sessionId;
       forgetComposer(sessionId);
+      if (wasActive) {
+        const nextId = next[0]?.id;
+        setActiveSessionId(nextId);
+        if (nextId) await refreshTimeline(nextId, true);
+      }
     } catch (error: unknown) {
       const safe = sanitizeError(error);
       if (safe.code === 'UNAUTHORIZED') return;
       setFeedback({ error: safe, message: safe.message, retrySessionId: safe.retryable ? sessionId : undefined });
-    }
-    const next = await refreshSessions();
-    if (activeSessionId === sessionId) {
-      const nextId = next[0]?.id;
-      setActiveSessionId(nextId);
-      if (nextId) await refreshTimeline(nextId, true);
+    } finally {
+      deletionLock.current = false;
+      setDeletingSessionId(undefined);
     }
   };
 
@@ -691,20 +712,14 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     setSelectedModelId(normalized.model);
   };
 
-  const chooseSkill = (skillId: string) => {
-    setFocusSkillFieldKey(undefined);
-    setSkillPromptOverride(undefined);
-    setExplicitImageToolEnabled(true);
-    selectSkill(skillId);
-  };
-
   const sidebar = (
     <SessionSidebar
       activeSessionId={activeSessionId}
       busySessionIds={busySessionIds}
+      deleting={Boolean(deletingSessionId)}
       onCollapse={() => setSidebarCollapsed(true)}
       onCreate={() => void createSession()}
-      onDelete={(sessionId) => void deleteSession(sessionId)}
+      onDelete={deleteSession}
       onRename={(sessionId, title) => void renameSession(sessionId, title)}
       onSelect={selectSession}
       sessions={sessions}
@@ -713,15 +728,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const activeSession = sessions.find((session) => session.id === activeSessionId);
   const mobileConfig = (
     <div className={styles.mobileConfig}>
-      <div>
-        <div className={styles.mobileSkillHeading}>
-          <span className={styles.popoverLabel}>技能</span>
-          {selectedSkill && (
-            <Button aria-label="清除技能" onClick={() => { setFocusSkillFieldKey(undefined); setSkillPromptOverride(undefined); selectSkill(undefined); }} size="small" type="text">清除</Button>
-          )}
-        </div>
-        <SkillList onSelectSkill={chooseSkill} selectedSkillId={selectedSkillId} skills={skills} />
-      </div>
+      {!imageCreationEnabled && <label><span className={styles.popoverLabel}>聊天模型</span><Select aria-label="移动端聊天模型" value={selectedChatModel} onChange={setSelectedChatModel} options={CHAT_PROVIDER_MODELS.map((model) => ({ label: model.label, value: model.id }))} /></label>}
       {imageCreationEnabled && (
         <>
           <label>
@@ -738,12 +745,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
           <div><span className={styles.popoverLabel}>数量</span><div className={styles.mobileOptionGrid}>{Array.from({ length: Math.min(selectedModel?.maxImages ?? 1, 4) }, (_, index) => index + 1).map((item) => <Button key={item} onClick={() => setCount(item)} type={item === count ? 'primary' : 'default'}>{item}</Button>)}</div></div>
         </>
       )}
-      {selectedSkill && <label><span>本次 Skill 方案</span><Input.TextArea aria-label="本次 Skill 方案" value={skillPromptOverride ?? selectedSkill.defaults} onChange={(event) => setSkillPromptOverride(event.target.value)} /></label>}
     </div>
   );
 
   return (
-    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
+    <>
+    {(initializing || initializationError) && <WorkspaceLoading error={initializationError} onRetry={() => { setInitializationError(undefined); setFeedback(undefined); setInitializing(true); setInitializationAttempt((value) => value + 1); }} />}
+    <div style={initializing || initializationError ? { display: 'none' } : undefined} aria-hidden={Boolean(initializing || initializationError) || undefined} className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
       <aside className={styles.sidebar}>
         {sidebarCollapsed ? <Button aria-label="展开会话侧栏" className={styles.expandSidebar} icon={<ChevronRight size={18} />} onClick={() => setSidebarCollapsed(false)} type="text" /> : sidebar}
       </aside>
@@ -751,7 +759,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         <header className={styles.header}>
           <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
-            <a href="/skills">官方 Skill</a><a href="/account">账号</a>
+            <Link href="/create">电商生图</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
               <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
@@ -760,26 +768,49 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             <Button aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} icon={<Archive size={16} />} onClick={() => setFeedback({ message: zhCN.workspace.assetLibraryUnavailable })}>{zhCN.workspace.assetLibrary}</Button>
           </Space>
         </header>
+        {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
         <PreviewGroup>
           <div aria-label="对话时间线" className={styles.timelineScroll} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
-            <WorkspaceTimeline
-              awaitingFirstDelta={activeRuntime?.awaitingFirstDelta}
-              isChatStreaming={activeRuntime?.isChatStreaming}
-              items={activeRuntime?.timeline ?? []}
-              loadError={activeRuntime?.loadError?.message}
-              loading={activeRuntime?.loadStatus === 'loading'}
-              onDownloadBatch={downloadBatch}
-              onRecreate={(batch, scope, generationId) => void recreate(batch, scope, generationId)}
-              onRetryImage={(turnId) => activeSessionId && void admitImageTurn(activeSessionId, turnId)}
-              onRetryLoad={() => activeSessionId && void refreshTimeline(activeSessionId, true)}
-              onSelectSkill={chooseSkill}
-              optimisticImages={activeRuntime?.optimisticImages ?? []}
-              skills={skills}
-              streamingText={activeRuntime?.streamingText ?? ''}
+            <CommerceWorkspace
+              ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange}
+              items={activeRuntime?.timeline ?? []} references={references} capabilities={capabilities}
+              timelineLoading={initializing || activeRuntime?.loadStatus === 'loading'}
+              settings={{ provider: selectedProvider ?? 'gemini', model: selectedModelId ?? 'gemini-3-pro-image', aspectRatio, resolution }}
+              onReferenceAdd={addReferences} onReferenceRemove={removeReference}
+              onReferencesAdopt={(next, sessionId) => {
+                const current = useWorkspaceStore.getState();
+                if (current.activeComposerSessionId !== sessionId) return false;
+                const merged = [...current.references, ...next.filter((reference) => !current.references.some((item) => reference.id ? item.id === reference.id : item === reference))];
+                if (merged.length > MAX_REFERENCES) return false;
+                setReferences(merged);
+                return true;
+              }}
+              onReferenceUploaded={(reference, id, sessionId) => {
+                if (useWorkspaceStore.getState().activeComposerSessionId === sessionId) setReferences((current) => current.map((item) => item === reference ? { ...item, id } : item));
+              }}
+              renderTimeline={(items, tail, hasCommerce, loading) => {
+                if (tail && hasCommerce && !loading && !activeRuntime?.loadError && !activeRuntime?.streamingText && !activeRuntime?.awaitingFirstDelta && !activeRuntime?.optimisticImages.length) return null;
+                return (
+                  <WorkspaceTimeline
+                    awaitingFirstDelta={tail && activeRuntime?.awaitingFirstDelta}
+                    isChatStreaming={tail && activeRuntime?.isChatStreaming}
+                    items={items}
+                    loadError={tail ? activeRuntime?.loadError?.message : undefined}
+                    loading={loading}
+                    onDownloadBatch={downloadBatch}
+                    onRecreate={(batch, scope, generationId) => void recreate(batch, scope, generationId)}
+                    onRetryImage={(turnId) => activeSessionId && void admitImageTurn(activeSessionId, turnId)}
+                    onRetryLoad={() => activeSessionId && void refreshTimeline(activeSessionId, true)}
+                    onInspiration={(prompt) => { setDraft(prompt); setExplicitImageToolEnabled(true); document.getElementById('creation-prompt')?.focus(); }}
+                    optimisticImages={tail ? activeRuntime?.optimisticImages ?? [] : []}
+                    streamingText={tail ? activeRuntime?.streamingText ?? '' : ''}
+                  />
+                );
+              }}
             />
           </div>
-          <div className={styles.composerDock}>
+          {!commerceActive && !(commerceLaunch?.sessionId === activeSessionId && commerceMode?.sessionId !== activeSessionId) && <div className={styles.composerDock}>
             {showScrollToBottom && <Button aria-label="回到底部" className={styles.scrollToBottom} icon={<ArrowDown size={17} />} onClick={() => scrollToBottom('smooth')} shape="circle" />}
             <UnifiedComposer
               activePopover={activePopover}
@@ -789,12 +820,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               count={count}
               disabled={composerDisabled}
               draft={draft}
-              focusSkillFieldKey={focusSkillFieldKey}
               health={health}
               imageCreationEnabled={imageCreationEnabled}
               onAspectRatioChange={setAspectRatio}
               onChatModelSelect={setSelectedChatModel}
-              onClearSkill={() => { setActivePopover(undefined); setSkillPromptOverride(undefined); selectSkill(undefined); }}
               onCountChange={setCount}
               onDraftChange={setDraft}
               onImageCreationChange={(enabled) => { setActivePopover(undefined); setExplicitImageToolEnabled(enabled); }}
@@ -804,9 +833,6 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               onReferenceAdd={addReferences}
               onReferenceRemove={removeReference}
               onResolutionChange={setResolution}
-              onSkillPromptChange={setSkillPromptOverride}
-              onSkillSelect={chooseSkill}
-              onSkillValueChange={(key, value) => { setSkillPromptOverride(undefined); setSkillValue(key, value); }}
               onSubmit={submit}
               quota={quota}
               references={references}
@@ -814,16 +840,13 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
               selectedChatModel={selectedChatModel}
               selectedModel={selectedModel}
               selectedProvider={selectedProvider}
-              selectedSkill={selectedSkill}
-              skillPrompt={selectedSkill ? (skillPromptOverride ?? selectedSkill.defaults) : draft}
-              skills={skills}
-              skillValues={skillValues}
             />
-          </div>
+          </div>}
         </PreviewGroup>
       </main>
       <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar}</Drawer>
       <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</Drawer>
     </div>
+    </>
   );
 }

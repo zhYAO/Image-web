@@ -7,7 +7,7 @@ import {
   type Skill,
 } from '@zimage/domain';
 import { Button, Input, Tag } from 'antd';
-import { Box, Check, ChevronDown, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Box, Check, ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import { zhCN } from '@/i18n';
@@ -69,6 +69,11 @@ interface PopoverShellProps {
 
 function PopoverShell({ ariaLabel, children, className, onOpenChange, open, trigger }: PopoverShellProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus({ preventScroll: true });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,7 +81,10 @@ function PopoverShell({ ariaLabel, children, className, onOpenChange, open, trig
       if (!rootRef.current?.contains(event.target as Node)) onOpenChange(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onOpenChange(false);
+      if (event.key === 'Escape') {
+        onOpenChange(false);
+        rootRef.current?.querySelector('button')?.focus({ preventScroll: true });
+      }
     };
     document.addEventListener('mousedown', closeOnOutside);
     document.addEventListener('keydown', closeOnEscape);
@@ -96,6 +104,10 @@ function PopoverShell({ ariaLabel, children, className, onOpenChange, open, trig
           className={`${styles.popoverSurface} ${className ?? ''}`}
           role="dialog"
         >
+          <button aria-label={`关闭${ariaLabel}`} className={styles.popoverClose} ref={closeRef} type="button" onClick={() => {
+            onOpenChange(false);
+            rootRef.current?.querySelector('button')?.focus({ preventScroll: true });
+          }}><X aria-hidden size={16} /></button>
           {children}
         </section>
       )}
@@ -143,6 +155,8 @@ export function GenerationParameterPopover({
       open={open}
       trigger={(
         <Button
+          aria-expanded={open}
+          aria-haspopup="dialog"
           aria-label={`生成参数 ${aspectRatio} ${resolution} ${count}张`}
           className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<SlidersHorizontal size={15} />}
@@ -240,6 +254,8 @@ export function ModelPopover({
       open={open}
       trigger={(
         <Button
+          aria-expanded={open}
+          aria-haspopup="dialog"
           aria-label={`生成模型 ${selectedProvider ?? ''} ${selectedModel?.label ?? ''}`.trim()}
           className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<Box size={15} />}
@@ -324,6 +340,8 @@ export function ImageSettingsPopover({
       open={open}
       trigger={(
         <Button
+          aria-expanded={open}
+          aria-haspopup="dialog"
           aria-label={`图片设置 ${selectedProvider ?? ''} ${selectedModel?.label ?? ''} ${aspectRatio} ${resolution} ${count}张`.trim()}
           className={`${styles.toolbarButton} ${styles.imageSettingsSummary} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<SlidersHorizontal size={15} />}
@@ -452,6 +470,8 @@ export function ChatModelPopover({
       open={open}
       trigger={(
         <Button
+          aria-expanded={open}
+          aria-haspopup="dialog"
           aria-label={`${zhCN.composer.chatModel} ${selected.label}`}
           className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<Box size={15} />}
@@ -560,6 +580,8 @@ export function SkillPopover({
       open={open}
       trigger={(
         <Button
+          aria-expanded={open}
+          aria-haspopup="dialog"
           aria-label={selectedSkill ? `技能配置 ${selectedSkill.name}` : '选择技能'}
           className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<Sparkles size={15} />}

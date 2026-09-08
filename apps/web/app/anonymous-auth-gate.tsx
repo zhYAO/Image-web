@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { resetAuthRequiredNotification } from '@/gateways/http-workspace-gateway';
 import { safeReturnTo } from '@/features/auth/return-to';
+import { useAuthStatus } from '@/features/auth/AuthStatusProvider';
+import { WorkspaceLoading } from '@/features/workspace/WorkspaceLoading';
 
 interface TurnstileOptions {
   callback(token: string): void;
@@ -128,34 +130,23 @@ function LegacyAnonymousAuthGate({ children }: { children: ReactNode }) {
 
 function FormalAuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [status, setStatus] = useState<'checking' | 'authorized' | 'error' | 'redirecting'>('checking');
+  const { status, refresh } = useAuthStatus();
+  const [redirecting, setRedirecting] = useState(false);
   const redirectingRef = useRef(false);
   const redirectToLogin = useCallback(() => {
     if (redirectingRef.current) return;
     redirectingRef.current = true;
-    setStatus('redirecting');
+    setRedirecting(true);
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (window.location.pathname === '/login' || window.location.pathname.startsWith('/auth')) return;
     router.replace(`/login?returnTo=${encodeURIComponent(safeReturnTo(current))}`);
   }, [router]);
   useEffect(() => {
-    let active = true;
-    void fetch('/api/account', { cache: 'no-store' }).then(async (response) => {
-      if (!active) return;
-      if (!response.ok) {
-        if (response.status === 401) redirectToLogin();
-        else setStatus('error');
-        return;
-      }
-      resetAuthRequiredNotification();
-      setStatus('authorized');
-    }).catch(() => { if (active) setStatus('error'); });
-    const requireAuth = () => redirectToLogin();
-    window.addEventListener('zimage:auth-required', requireAuth);
-    return () => { active = false; window.removeEventListener('zimage:auth-required', requireAuth); };
-  }, [redirectToLogin]);
-  if (status === 'checking') return <GateMessage>正在检查登录状态…</GateMessage>;
-  if (status === 'redirecting') return <GateMessage>登录已失效，正在跳转登录页…</GateMessage>;
-  if (status === 'error') return <GateMessage><p>暂时无法检查登录状态，请重试。</p><button onClick={() => window.location.reload()} type="button">重新检查</button></GateMessage>;
+    if (status === 'guest') redirectToLogin();
+    if (status === 'authorized') resetAuthRequiredNotification();
+  }, [status, redirectToLogin]);
+  if (status === 'checking') return <WorkspaceLoading />;
+  if (redirecting || status === 'guest') return <GateMessage>登录已失效，正在跳转登录页…</GateMessage>;
+  if (status === 'error') return <GateMessage><p>暂时无法检查登录状态，请重试。</p><button onClick={refresh} type="button">重新检查</button></GateMessage>;
   return <>{children}</>;
 }

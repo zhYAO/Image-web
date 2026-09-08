@@ -48,7 +48,6 @@ describe('workspace presentation components', () => {
         imageCreationEnabled={false}
         onAspectRatioChange={vi.fn()}
         onChatModelSelect={vi.fn()}
-        onClearSkill={vi.fn()}
         onCountChange={vi.fn()}
         onDraftChange={onDraftChange}
         onImageCreationChange={vi.fn()}
@@ -58,16 +57,10 @@ describe('workspace presentation components', () => {
         onReferenceAdd={vi.fn()}
         onReferenceRemove={vi.fn()}
         onResolutionChange={vi.fn()}
-        onSkillPromptChange={vi.fn()}
-        onSkillSelect={vi.fn()}
-        onSkillValueChange={vi.fn()}
         onSubmit={onSubmit}
         references={[]}
         resolution="2K"
         selectedChatModel="doubao"
-        skillPrompt="一条消息"
-        skills={[]}
-        skillValues={{}}
       />,
     );
 
@@ -95,7 +88,6 @@ describe('workspace presentation components', () => {
       health: [],
       onAspectRatioChange: vi.fn(),
       onChatModelSelect: vi.fn(),
-      onClearSkill: vi.fn(),
       onCountChange: vi.fn(),
       onDraftChange: vi.fn(),
       onImageCreationChange,
@@ -105,16 +97,10 @@ describe('workspace presentation components', () => {
       onReferenceAdd: vi.fn(),
       onReferenceRemove: vi.fn(),
       onResolutionChange: vi.fn(),
-      onSkillPromptChange: vi.fn(),
-      onSkillSelect: vi.fn(),
-      onSkillValueChange: vi.fn(),
       onSubmit: vi.fn(),
       references: [],
       resolution: '2K' as const,
       selectedChatModel: 'doubao',
-      skillPrompt: '',
-      skills: [],
-      skillValues: {},
     };
     const { rerender } = render(<UnifiedComposer {...sharedProps} imageCreationEnabled={false} />);
 
@@ -232,6 +218,7 @@ describe('workspace presentation components', () => {
       />,
     );
     expect(screen.getByRole('dialog', { name: '生成参数' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭生成参数' })).toHaveFocus();
     expect(screen.getByRole('button', { name: '比例 16:9' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '比例 3:4' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成数量 2' })).toBeInTheDocument();
@@ -242,6 +229,7 @@ describe('workspace presentation components', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    expect(screen.getByRole('button', { name: '生成参数 1:1 2K 2张' })).toHaveFocus();
   });
 
   it('normalizes generation values against the newly selected model capability', () => {
@@ -320,6 +308,8 @@ describe('workspace presentation components', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存会话名称' }));
     expect(onRename).toHaveBeenCalledWith('s1', '新名称');
     fireEvent.click(screen.getByRole('button', { name: '删除 测试会话' }));
+    expect(onDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
     expect(onCreate).toHaveBeenCalled();
     expect(onSelect).toHaveBeenCalledWith('s1');
     expect(onDelete).toHaveBeenCalledWith('s1');
@@ -362,8 +352,6 @@ describe('workspace presentation components', () => {
         items={items}
         onDownloadBatch={onDownloadBatch}
         onRecreate={onRecreate}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText="增量回答"
       />,
     );
@@ -401,8 +389,6 @@ describe('workspace presentation components', () => {
         items={[{ batch: directBatch, createdAt: '2026', id: 'g-direct', sequence: 1, sessionId: 's1', type: 'generation' }]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[]}
         streamingText=""
       />,
     );
@@ -419,28 +405,17 @@ describe('workspace presentation components', () => {
         }]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[]}
         streamingText=""
       />,
     );
     expect(screen.queryByTestId('direct-generation-prompt')).not.toBeInTheDocument();
   });
 
-  it('forwards empty-state skill selection and exercises all store actions', () => {
-    const onSelectSkill = vi.fn();
-    render(
-      <WorkspaceTimeline
-        items={[]}
-        onDownloadBatch={vi.fn()}
-        onRecreate={vi.fn()}
-        onSelectSkill={onSelectSkill}
-        skills={[skill]}
-        streamingText=""
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /白底图/ }));
-    expect(onSelectSkill).toHaveBeenCalledWith('white');
+  it('fills an inspiration prompt without submitting and exercises all store actions', () => {
+    const onInspiration = vi.fn();
+    render(<WorkspaceTimeline items={[]} onDownloadBatch={vi.fn()} onRecreate={vi.fn()} onInspiration={onInspiration} streamingText="" />);
+    fireEvent.click(screen.getByRole('button', { name: /想象一片风景/ }));
+    expect(onInspiration).toHaveBeenCalledWith('生成一张月光下的海岸风景图，静谧蓝调，电影质感');
 
     const store = useWorkspaceStore.getState();
     store.setDraft('draft');
@@ -476,8 +451,6 @@ describe('workspace presentation components', () => {
         ]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -505,8 +478,6 @@ describe('workspace presentation components', () => {
         ]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText="好的，先聊聊"
       />,
     );
@@ -524,8 +495,6 @@ describe('workspace presentation components', () => {
         items={[]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText="已生成的回复文本"
       />,
     );
@@ -557,8 +526,6 @@ describe('workspace presentation components', () => {
         ]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -607,8 +574,6 @@ describe('workspace presentation components', () => {
         items={items}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -651,8 +616,6 @@ describe('workspace presentation components', () => {
         ]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -669,8 +632,6 @@ describe('workspace presentation components', () => {
         items={[]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText={'## 流式标题\n\n- 第一项\n- **未完成'}
       />,
     );
@@ -704,8 +665,6 @@ describe('workspace presentation components', () => {
         ]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -723,8 +682,6 @@ describe('workspace presentation components', () => {
         items={[]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText="<think>正在分析 **构图**"
       />,
     );
@@ -745,8 +702,6 @@ describe('workspace presentation components', () => {
         }]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );
@@ -773,8 +728,6 @@ describe('workspace presentation components', () => {
         }]}
         onDownloadBatch={vi.fn()}
         onRecreate={vi.fn()}
-        onSelectSkill={vi.fn()}
-        skills={[skill]}
         streamingText=""
       />,
     );

@@ -1,7 +1,6 @@
-import type { GenerationBatch, RecreateScope, Skill, TimelineItem } from '@zimage/domain';
+import type { GenerationBatch, RecreateScope, TimelineItem } from '@zimage/domain';
 import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
-import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
-import NextImage from 'next/image';
+import { ArrowRight, ArrowUpRight, Bot, Download, ImageOff, Mountain, RefreshCw, ShoppingBag, Sparkles, Sun, UserRound } from 'lucide-react';
 
 import { zhCN } from '@/i18n';
 
@@ -19,13 +18,12 @@ interface WorkspaceTimelineProps {
   loadError?: string;
   loading?: boolean;
   optimisticImages?: OptimisticImageTurnView[];
-  skills: Skill[];
   streamingText: string;
   onDownloadBatch: (batch: GenerationBatch) => void;
   onRecreate: (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => void;
   onRetryImage?: (turnId: string) => void;
   onRetryLoad?: () => void;
-  onSelectSkill: (skillId: string) => void;
+  onInspiration?: (prompt: string) => void;
 }
 
 export interface OptimisticImageTurnView {
@@ -169,13 +167,12 @@ export function WorkspaceTimeline({
   loadError,
   loading = false,
   optimisticImages = [],
-  skills,
   streamingText,
   onDownloadBatch,
   onRecreate,
   onRetryImage,
   onRetryLoad,
-  onSelectSkill,
+  onInspiration,
 }: WorkspaceTimelineProps) {
   if (loading) {
     return (
@@ -204,24 +201,20 @@ export function WorkspaceTimeline({
   if (items.length === 0 && optimisticImages.length === 0 && !streamingText && !awaitingFirstDelta) {
     return (
       <div className={styles.empty}>
+        <div aria-hidden className={styles.heroEmblem}><Sparkles size={29} strokeWidth={1.35} /></div>
+        <span className={styles.heroEyebrow}>每一个想法，都值得被看见</span>
         <h1 className={styles.heroTitle}>{zhCN.timeline.emptyTitle}</h1>
-        <div className={styles.skillGrid}>
-          {skills.map((skill) => (
-            <button aria-label={`${skill.name}：${skill.description}`} className={`${styles.skillCard} ${!skill.coverImageUrl ? styles.skillCardCompact : ''}`} key={skill.id} onClick={() => onSelectSkill(skill.id)} type="button">
-              <span className={styles.skillCover}>
-                {skill.coverImageUrl ? (
-                  <NextImage alt="" fill sizes="(max-width: 900px) 100vw, 300px" src={skill.coverImageUrl} />
-                ) : (
-                  <span className={styles.skillIcon}>{skill.icon}</span>
-                )}
-                <span className={styles.skillCoverShade} />
-                <span className={styles.skillCoverTitle}>{skill.name}</span>
-                <span className={styles.tryButton}>试一试</span>
-              </span>
-              <span className={styles.skillDescription}>{skill.description}</span>
-            </button>
+        <p className={styles.heroSubtitle}>让脑海里的画面，成为眼前的作品。</p>
+        <div aria-label="创作灵感" className={styles.inspirationBubbles}>
+          {([
+            ['光影与静物', '生成一张晨光下的陶瓷花瓶图片，柔和阴影，留白构图', Sun],
+            ['想象一片风景', '生成一张月光下的海岸风景图，静谧蓝调，电影质感', Mountain],
+            ['试试创意插画', '生成一张云端花园插画，柔和配色，轻盈梦幻', Sparkles],
+          ] as const).map(([label, prompt, Icon]) => (
+            <button className={styles.inspirationBubble} key={label} onClick={() => onInspiration?.(prompt)} type="button"><Icon aria-hidden size={16} />{label}<ArrowUpRight aria-hidden size={13} /></button>
           ))}
         </div>
+        <a className={styles.commerceEntry} href="/create"><span className={styles.commerceEntryIcon}><ShoppingBag aria-hidden size={21} /></span><span><strong>电商生图<span className={styles.miniBadge}>专属工作流</span></strong><small>从商品主图到成套内容，开始专属创作</small></span><ArrowRight aria-hidden size={18} /></a>
       </div>
     );
   }

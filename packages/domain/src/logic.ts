@@ -57,8 +57,20 @@ export function resolveImageToolEnabled(input: {
   return input.skillRequiresImage || input.explicitEnabled;
 }
 
+export function hasTextOnlyImageIntent(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  const firstClause = normalized.split(/[，,。；;\n]/, 1)[0] ?? '';
+  // Requesting a plan/prompt is a text operation even when image tools are available.
+  return /(?:方案|提示词|建议|思路|计划)|\b(?:prompt|plan|ideas?|advice)\b/.test(firstClause)
+    || /(?:先|仅|只)(?:讨论|分析|聊|规划)|(?:不要|暂不|先不)执行/.test(normalized)
+    || /(?:方案|提示词|建议|思路|计划)[。！!？?]*$/.test(normalized)
+    || /(?:generate|create|write|make)\s+(?:(?:me|a|an|the)\s+)*(?:prompt|plan|ideas?|advice)\b/.test(normalized)
+    || /(?:不要|无需|不用|暂不|先不).{0,6}(?:生成|生图|绘制|画图)/.test(normalized);
+}
+
 export function hasExplicitImageIntent(message: string): boolean {
   const normalized = message.trim().toLowerCase();
+  if (hasTextOnlyImageIntent(normalized)) return false;
   const chineseCommand = /^(?:(?:请你?|帮我|给我|现在|直接|立刻|我要|我想要)\s*)*(?:生成|制作|创建|绘制|画|出图)/;
   const englishCommand = /^(?:(?:please|could you|can you|i want(?: you)? to|i need(?: you)? to)\s+)*(?:generate|create|draw|make|produce)\b/;
   return chineseCommand.test(normalized) || englishCommand.test(normalized);

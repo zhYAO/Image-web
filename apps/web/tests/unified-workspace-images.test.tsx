@@ -31,11 +31,11 @@ describe('UnifiedWorkspace', () => {
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '一只在海边奔跑的白猫' },
+      target: { value: '生成一只在海边奔跑的白猫' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
-    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('一只在海边奔跑的白猫');
+    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('生成一只在海边奔跑的白猫');
     expect(screen.getAllByText('等待队列处理')).toHaveLength(2);
     expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('');
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
@@ -50,17 +50,17 @@ describe('UnifiedWorkspace', () => {
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '需要重试的商品图' },
+      target: { value: '生成需要重试的商品图' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
     const retry = await screen.findByRole('button', { name: '重试生成' });
-    expect(screen.getAllByText('需要重试的商品图')).toHaveLength(1);
+    expect(screen.getAllByText('生成需要重试的商品图')).toHaveLength(1);
     fireEvent.click(retry);
 
     await waitFor(() => expect(gateway.attempts).toBe(2));
     await waitFor(() => expect(screen.queryByRole('button', { name: '重试生成' })).not.toBeInTheDocument());
-    expect(screen.getAllByText('需要重试的商品图')).toHaveLength(1);
+    expect(screen.getAllByText('生成需要重试的商品图')).toHaveLength(1);
   });
 
   it('uses the first available image provider for the initial image request', async () => {
@@ -176,7 +176,7 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '分辨率 2K' }));
     fireEvent.click(screen.getByRole('button', { name: '生成数量 4' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '一张秋日产品海报' },
+      target: { value: '生成一张秋日产品海报' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 

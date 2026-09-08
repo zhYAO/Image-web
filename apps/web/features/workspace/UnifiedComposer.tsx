@@ -4,11 +4,10 @@ import type {
   ProviderCapability,
   ProviderHealth,
   Quota,
-  Skill,
   UploadReference,
 } from '@zimage/domain';
 import { Button, Image as AntdImage, Input, Tooltip } from 'antd';
-import { ArrowUp, Image as ImageIcon, ImagePlus, Settings2, X } from 'lucide-react';
+import { ArrowUp, Image as ImageIcon, ImagePlus, MessageCircle, Settings2, X } from 'lucide-react';
 import type { ChangeEvent, KeyboardEvent } from 'react';
 
 import { zhCN } from '@/i18n';
@@ -16,7 +15,6 @@ import { zhCN } from '@/i18n';
 import {
   ChatModelPopover,
   ImageSettingsPopover,
-  SkillPopover,
   type ModelCapability,
 } from './GenerationConfig';
 import styles from './workspace.module.css';
@@ -29,7 +27,6 @@ interface UnifiedComposerProps {
   count: number;
   disabled?: boolean;
   draft: string;
-  focusSkillFieldKey?: string;
   health: ProviderHealth[];
   imageCreationEnabled: boolean;
   quota?: Quota;
@@ -38,12 +35,7 @@ interface UnifiedComposerProps {
   selectedModel?: ModelCapability;
   selectedChatModel: string;
   selectedProvider?: string;
-  selectedSkill?: Skill;
-  skillPrompt: string;
-  skills: Skill[];
-  skillValues: Record<string, string>;
   onAspectRatioChange: (ratio: AspectRatio) => void;
-  onClearSkill: () => void;
   onCountChange: (count: number) => void;
   onDraftChange: (value: string) => void;
   onImageCreationChange: (enabled: boolean) => void;
@@ -51,12 +43,9 @@ interface UnifiedComposerProps {
   onChatModelSelect: (model: string) => void;
   onOpenConfig: () => void;
   onPopoverChange: (popover?: UnifiedComposerProps['activePopover']) => void;
-  onSkillPromptChange: (value: string) => void;
   onReferenceAdd: (files: FileList) => void;
   onReferenceRemove: (index: number) => void;
   onResolutionChange: (resolution: ImageResolution) => void;
-  onSkillSelect: (skillId: string) => void;
-  onSkillValueChange: (key: string, value: string) => void;
   onSubmit: () => void;
 }
 
@@ -68,7 +57,6 @@ export function UnifiedComposer({
   count,
   disabled = false,
   draft,
-  focusSkillFieldKey,
   health,
   imageCreationEnabled,
   quota,
@@ -77,12 +65,7 @@ export function UnifiedComposer({
   selectedModel,
   selectedChatModel,
   selectedProvider,
-  selectedSkill,
-  skillPrompt,
-  skills,
-  skillValues,
   onAspectRatioChange,
-  onClearSkill,
   onCountChange,
   onDraftChange,
   onImageCreationChange,
@@ -90,12 +73,9 @@ export function UnifiedComposer({
   onChatModelSelect,
   onOpenConfig,
   onPopoverChange,
-  onSkillPromptChange,
   onReferenceAdd,
   onReferenceRemove,
   onResolutionChange,
-  onSkillSelect,
-  onSkillValueChange,
   onSubmit,
 }: UnifiedComposerProps) {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -117,13 +97,8 @@ export function UnifiedComposer({
 
   return (
     <div className={styles.composer}>
+      <div className={styles.composerContext}>{imageCreationEnabled ? <ImageIcon aria-hidden size={13} /> : <MessageCircle aria-hidden size={13} />}<span>{imageCreationEnabled ? '图片创作' : '自由对话'}</span><span className={styles.contextHint}>{imageCreationEnabled ? '描述画面，让灵感成真' : '从一个想法开始'}</span></div>
       <div className={styles.composerBody}>
-        {selectedSkill && <section aria-label="当前 Skill 方案" className={styles.promptPreviewBlock}>
-          <strong>{selectedSkill.name} · v{selectedSkill.version}</strong>
-          <Button aria-label="移除当前 Skill" onClick={onClearSkill} size="small" type="text">移除</Button>
-          <Input.TextArea aria-label="发送前 Skill 方案" autoSize={{ minRows: 1, maxRows: 4 }} value={skillPrompt} onChange={(event) => onSkillPromptChange(event.target.value)} />
-          {!references.length && <small>未提供参考图：本次按文字创作，不代表对现有商品的还原。</small>}
-        </section>}
         {imageCreationEnabled && (
           <div aria-label={zhCN.composer.reference} className={styles.inlineReferences}>
             {references.map((reference, index) => (
@@ -179,7 +154,9 @@ export function UnifiedComposer({
           </div>
         )}
         <Input.TextArea
+          aria-describedby="composer-help"
           aria-label="创作输入"
+          id="creation-prompt"
           autoSize={{ maxRows: 5, minRows: 2 }}
           className={styles.composerInput}
           disabled={disabled}
@@ -192,12 +169,12 @@ export function UnifiedComposer({
       </div>
       <div className={styles.composerActions}>
         <div className={styles.composerTools}>
-          <Tooltip title={selectedSkill?.requiresImageTool ? '所选技能需要创建图片' : '在当前会话中创建图片'}>
+          <Tooltip title="开启后，描述你想生成的图片">
             <Button
               aria-label="创建图片"
               aria-pressed={imageCreationEnabled}
               className={`${styles.toolbarButton} ${imageCreationEnabled ? styles.toolbarButtonActive : ''}`}
-              disabled={Boolean(selectedSkill?.requiresImageTool) || disabled}
+              disabled={disabled}
               icon={<ImageIcon size={15} />}
               onClick={() => onImageCreationChange(!imageCreationEnabled)}
             >
@@ -230,20 +207,6 @@ export function UnifiedComposer({
               selectedModel={selectedChatModel}
             />
           )}
-          <SkillPopover
-            editablePrompt={imageCreationEnabled}
-            focusFieldKey={focusSkillFieldKey}
-            onClear={onClearSkill}
-            onOpenChange={(open) => onPopoverChange(open ? 'skill' : undefined)}
-            onPromptChange={onSkillPromptChange}
-            onSelectSkill={onSkillSelect}
-            onSkillValueChange={onSkillValueChange}
-            open={activePopover === 'skill'}
-            prompt={skillPrompt}
-            selectedSkill={selectedSkill}
-            skills={skills}
-            skillValues={skillValues}
-          />
           <Button
             aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}
@@ -265,6 +228,7 @@ export function UnifiedComposer({
           />
         </div>
       </div>
+      <div className={styles.composerHint} id="composer-help"><span>Enter 发送 · Shift + Enter 换行</span><span>{imageCreationEnabled ? '支持参考图 · 最多 4 张' : 'AI 生成内容，请留意核对'}</span></div>
     </div>
   );
 }

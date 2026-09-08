@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { UnifiedWorkspace } from '@/features/workspace/UnifiedWorkspace';
 import { setupWorkspaceTest, CapturingGateway, createTestGateway } from './workspace-test-fixtures';
@@ -6,35 +6,18 @@ import { setupWorkspaceTest, CapturingGateway, createTestGateway } from './works
 describe('UnifiedWorkspace', () => {
   setupWorkspaceTest();
 
-  it('allows a natural-language Skill request without fixed required fields', async () => {
+  it('ignores a legacy skill query instead of opening commerce on ordinary send', async () => {
+    window.history.replaceState({}, '', '/?skill=white-background&new=1');
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
-    fireEvent.click(await screen.findByRole('button', { name: /模特图/ }));
-    fireEvent.keyDown(document, { key: 'Escape' });
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '生成秋季外套展示图' },
-    });
+    await screen.findByText('你好，想创作什么？');
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '生成一张星空图片' } });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-
-    await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('submits the user-edited resolved skill prompt with image creation enabled', async () => {
-    const gateway = createTestGateway(CapturingGateway);
-    render(<UnifiedWorkspace gateway={gateway} />);
-    fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '秋季新品' } });
-    fireEvent.change(screen.getByRole('textbox', { name: '本次 Skill 方案' }), {
-      target: { value: '生成高级感秋季风衣白底图' },
-    });
-    expect(screen.getByRole('button', { name: '发送创作请求' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-    await waitFor(() => expect(
-      gateway.lastImageRequest,
-      screen.queryByRole('alert')?.textContent ?? 'image request was not submitted',
-    ).toBeDefined());
-    expect(gateway.lastImageRequest?.prompt).toBe('生成高级感秋季风衣白底图\n\n用户要求：秋季新品');
+    await screen.findByRole('article', { name: '图片生成结果' });
+    expect(gateway.lastImageRequest?.prompt).toBe('生成一张星空图片');
+    expect(screen.queryByRole('region', { name: /向导/ })).not.toBeInTheDocument();
+    expect(window.location.search).toBe('');
   });
 
   it('removes the fixed desktop config panel, collapses the sidebar and reports the asset-library placeholder', async () => {

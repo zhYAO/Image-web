@@ -2,6 +2,50 @@
 
 本文件是 ZImage **唯一的当前交付进度事实源**。需求定义仍以 [`requirements.md`](./requirements.md) 为准；架构、技术选型和历史交付文档用于解释范围与保留审计证据，不代表当前任务已经完成。
 
+## 2026-09-08 电商体验与女装示例修复（当前）
+
+- 用户确认默认“填写资料后直接生成”，后续明确示例统一改为女装详情相关；同步修订 requirements 11.2。保留旧方案的逐图编辑/保存待确认入口和普通聊天零生图规则。
+- 登录展示共用根级 AuthStatusProvider，登录/退出/认证失效与页面焦点刷新同步；`/create` 不再固定渲染登录链接。工作区初始化在同一加载界面完成，显式电商场景隐藏普通聊天与无关骨架，初始化失败提供错误/重试而不回落聊天。
+- 会话删除采用 Ant Design Popconfirm；确认后列表 busy 并保留原行，服务端成功后更新。删除成功但列表刷新失败时按已确认结果移除该行，不再次删除。电商配置换为 Ant Design Select 与现有玻璃样式，繁复字段折叠，静态文本隐藏浏览器插入光标，编辑控件与真实流式文本保留必要光标。
+- 提示词新增逐角色成品要求，区分白底主图、卖点海报、面料/工艺特写、真实场景、说明模块、模特/种草与参考排版；明确参考图顺序、商品一致性、文字留白和禁止虚构事实，编译版本 `commerce-2`。依据 Senyu 和 awesome-gpt-image-2 的主体/构图/光线/字体方法原创编写，未增加 Provider 或替换用户模型。
+- 已用内置 imagegen 生成并目视检查 8 张同款米杏色衬衫女装示例：主图、详情首屏、卖点、面料、通勤场景、尺码说明、种草封面、模特图。资产位于 `apps/web/public/commerce/examples/womenswear/`；[提示词与来源清单](./research/senyu-zimage/womenswear-examples.json)保留生成记录。尺码明确标为示例数据；新路径避免图片优化缓存继续显示旧陶瓷杯示例。
+- 真实异常排查：只读核对 `klmiycyesxnpinxpeqep` 中用户 2026-09-08 15:23:58 UTC 的五张白色杯子生成，4 张成功；第 5 张 `7d70d960-a539-49ca-8ffb-40d176d6ee0a` 的 `provider_submission_state=unknown`、`error_code=provider_reconciliation_required`，无 provider request id 与结果 checkpoint，执行工作记录停在 unknown。现有记录不足以判定上游是否已计费/出图，不能通过重发声称恢复。前端现已区分正常提交等待与真正未知结果；未知项显示待核对、禁止普通重试，并降低无效轮询频率。该历史图片尚未恢复。
+- 验证：Domain 41/41；全量 Web 318 通过、1 条旧文案断言失败，修正后专项 5/5 通过（包含新入口失败恢复）；删除/入口回归另为 4/4，包括删除成功但列表刷新失败。最终 lint、typecheck 与隔离生产构建通过。浏览器回归发现并修复资料区固定操作栏遮挡点击；复跑的 chromium-desktop 项目 27 通过、1 条真实认证条件跳过。用户随后要求仅测试桌面 Web，已停止尚未完成的移动端执行，不能将原 84 项全量报告记为完成。
+- 后续默认回归仅桌面 Web：Playwright 保留 chromium-desktop 1440×900；两条原本在测试内部切换手机尺寸的用例已改为桌面，并重新运行 2/2 通过。该范围写入 Web AGENTS.md；不再默认回归移动和平板。Chrome 真实页面已检查登录展示、资料页、下拉菜单、删除气泡及女装目录；创建会话限流时的入口错误恢复已修复，没有提升额度或删除真实会话。
+- 用户明确授权以杯子进行 1 张跨品类实测。通过正常界面复用已有上传参考的“白色杯子”待确认方案，保存 revision 2，仅选择详情首屏一张：`task=8114724f-af82-456d-8aa3-17f58638fe09`、`run=89bd680f-2f58-43e8-add0-3a2b2fe33a0b`、`generation=1d9b9ada-3e86-4f88-9e13-4b94a3e9c382`。Seedream 4.5 于 2026-09-08 16:46:35 UTC 成功，提交状态 submitted、error_code=null；该 run 仅 1 项。实际存储的 commerce-2 提示词未混入女装/衬衫内容。目视成图为完整白色陶瓷杯、米白/浅咖啡背景，标题“白色陶瓷杯”、副标题“日常一杯，自在时光”，无服装或模特污染。这仅证明该单例通过，不代表各品类均已验证。
+- 自动化日志归档于本地忽略目录 `.design-qa/2026-09-08/experience-*`；执行 `pnpm lint`、`pnpm typecheck`、`pnpm test:run`、隔离 `NEXT_DIST_DIR=.next-commerce-build pnpm build` 与指向 3110 的 Playwright；最终两项复验使用 `pnpm e2e --workers=1 --grep 'keeps the image composer usable on desktop|keeps the commerce catalogue scrollable'`。
+- 本轮未部署站点/Worker、未直接修改云数据库结构或账号配置、未提交 Git。真实写入仅含正常 UI 保存的测试方案及上述授权的一张生成；前序生产验收缺口仍保留，历史未知项待上游核对。内置 imagegen 示例图与 Seedream 单例结果分别记录，不据此声明全站生产就绪。
+
+## 2026-09-08 电商云端同步（前序）
+
+- 本次同步任务 `done`：用户明确回复“开始同步”，已按[同步清单](./plans/2026-09-08-commerce-cloud-activation.md)更新现有项目 `klmiycyesxnpinxpeqep`（PostgreSQL 17.6）。电商功能的付费生成、完整多连接和清理副作用验收仍为 `in_progress`，不据本次同步声明全站可发布。
+- 迁移按顺序应用：`20260908043010_phase2_generation_reliability`、`20260908043031_commerce_tasks`、`20260908044934_commerce_reference_history`。MCP 初始生成的远端时间编号已精确对齐本地文件编号，避免后续 CLI 重复判定待迁移；原有 15 份迁移未改动。
+- 生成 Worker 从 v11 更新至 v12，清理 Worker 从 v14 更新至 v15，均 ACTIVE；保留既有 `verify_jwt=false` 与函数内 `withSupabase({ auth: ['secret'] })`、`x-worker-secret` 双重入口验证。发布包含各自锁定依赖和相对 `_shared` 文件。
+- 发布前队列为空、没有 processing 生成或清理任务。临时暂停 job 1/2，配套更新后恢复既有每分钟生成/每 15 分钟清理调度，两项均 `active=true`。数据库同步前后现有会话 20、批次 18、生成 20、额度记录 36，数量一致。
+- 权限核对：新增电商/执行/参考图表启用 RLS；电商 RPC 仅 service_role 可执行，anon/authenticated 不可直接执行。两个 Worker 的无凭据 HTTP 请求均返回 401；领取 RPC 在回滚事务中检查通过，生成领取为空，清理领取返回可清理的旧参考图候选但事务已回滚，未执行 Storage 或账号删除。
+- 自动审批拒绝手动 HTTP 触发两个生产 Worker，理由是潜在不可逆的 Storage/账号清理副作用。改用无凭据 HTTP 与回滚事务验证；没有通过其他方式手动触发。原有定时调度已正常恢复，不留维护停用状态。
+- Chrome 真实验收：任务 GET 从 503 恢复为 200；继续用户页面现有“白色杯子”资料，参考图上传 `POST /api/uploads` 为 201，`POST /api/creative-tasks` 为 200，保存为任务 `8114724f-af82-456d-8aa3-17f58638fe09`、版本 1、五张分图方案。刷新后仍显示待确认，底部无聊天框，任务加载错误消失。数据库核对 `runs=0`、生成队列为 0、生成总数 20/额度记录 36 未变，保存方案没有触发付费生成。原有橘猫 Seedream 图片仍可读取，浏览器保留在已保存电商方案。
+- 验证：正确的 Worker/Provider Vitest 命令 31/31 通过，两个生产入口 `deno check` 通过，`git diff --check` 通过。初次误用 Deno 执行 Vitest 文件失败，已改用 Vitest，不为通过测试修改代码或跳过生产类型检查。本轮只同步既有代码及更新文档；上轮 Web 静态检查、构建与 Chrome 56/25 的证据保留，不重复声明为本轮新跑结果。
+- Supabase advisors 未报告新增公开表未启用 RLS：private 表无策略为服务端封装用途。另报告 [public.vector 扩展](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public)、[既有账号校验/注销 definer 入口](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable) 和[泄露密码防护未开启](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)，本轮没有改动这些既有配置。
+- 同步前 Worker 源码快照、部署清单与检查日志保存在本地忽略目录 `.design-qa/2026-09-08/cloud-*` / `zimage-cloud-*`。未部署 Vercel，未提交 Git，未更改账号密码；本次同步没有新增付费图片调用。
+
+## 2026-09-08 电商生图实施（前序本地记录）
+
+- 用户已授权按 v0.2 开始修改；[实施计划](./plans/2026-09-08-commerce-implementation.md)与[验证记录](./plans/2026-09-08-commerce-validation.md)覆盖领域模板、原子执行、统一工作台、底座可靠性与正式文档。此节覆盖下面历史记录中的“未开发/todo”描述，不改变历史验收日期。
+- 当前状态：`in_progress`，本地实现与可用的自动化验证已完成，必需真实数据库/模型证据尚未闭环。Node 24.19.0 / pnpm 11.19.0；按 frozen lockfile 安装成功，没有升级 package/lockfile。
+- 已实现 `/create` 六场景/三平台/十二原创模板、同工作台向导/旧 Skill 方案确认、逐图修改与版本选图、冻结下载、归档、取消未派发项、受保护的样图转参考；同时补齐任务事务、额度保留、Worker 租约与结果恢复、迟到对象清理。正式 requirements/architecture/tech-selection 已同步。
+- 最新已取得证据：Domain 40 项、Worker/Provider 31 项通过；当前三份迁移的 PGlite 顺序回归 293 项与独立旧数据升级 4 项通过。29 项 dblink 并发明确跳过。PGlite 为 PostgreSQL 18.3 + 合成 Auth/Storage/PGMQ，不是目标 Supabase/PostgreSQL 17 验收。
+- 最终 lint、typecheck 与隔离目录生产构建通过。Web 全量先为 305 通过/3 测试准备失败；修正异步完成等待后，整个电商 UI 文件 24/24 复验通过，308 个 Web 用例全部取得通过证据。最终完整浏览器回归单次为 53 通过/25 条件跳过（22 项视口条件、3 项真实认证），覆盖桌面、平板与移动端；此前超时和服务连接失败及其复验过程见验证记录。
+- 数据库环境仍缺失：Docker daemon socket 不存在，未取得可用的隔离 Supabase 项目；已逐题询问选择。真实认证、迁移/pgTAP、多连接竞争、Storage/Auth 联调、模型效果仍待验。没有远端迁移、发布、付费生成或用户内容删除，也未提交 Git。
+
+## 2026-09-07 电商生图方案与项目复审
+
+- 审查交付：`done`。[挑剔者审查](./research/senyu-zimage/critical-review.md)基于 `bc05783d49645976cbfc54882c4ec8f7ae078e28`，记录 6 项现有代码问题和 3 项方案缺口，逐项给出触发、代码依据、后果与验收要求。代码结论来自静态审查，未在生产复现。
+- 用户新增决策：D08 旧三个 Skill 合并为先方案后确认；D09 AI 整图生成、改字重生成；D10 默认采用重做新图、旧图可切回；D11 销售主图/套图/详情图必须上传真实商品图。PRD/技术方案更新 v0.2；首版移除独立文字排版与长图合成，撤回原工期估算，补充选图/导出快照及底座修复前置条件。
+- 代码修复与功能开发：`todo`。本轮仅修改研究文档和本账本，正式需求待实施前同步；没有代码、迁移、依赖、部署或线上数据改动。
+- 测试边界：四个定向 Vitest 文件因本地缺少 Vitest 未能启动，0 个测试执行；没有新的应用/数据库/真实模型通过证据。既有 236 项通过和 E2E 40 通过/20 条件跳过仍仅为上一轮记录。本地 Node/pnpm 与项目声明版本不一致，未更改工具链。
+- 文档验证：6 份研究 Markdown 的 28 个本地链接、31 组表格、代码围栏、敏感内容规则检查通过；`git diff --check` 通过。仅研究文档与本账本发生变化。
+
 ## 2026-09-07 Senyu 与 awesome 电商生图调研
 
 - 文档交付：`done`。[文档包](./research/senyu-zimage/README.md)包含 Senyu 产品/技术分析，以及 ZImage 电商生图 PRD/融合技术方案。实际阅读登录后的图片场景、经用户授权的空资产/作品管理、公开前端资源和指定 GitHub 仓库；核实 541 个案例、22 个模板及来源提交。
@@ -220,3 +264,27 @@
 - 尚未闭环：真实图片下载的 Supabase 域名访问被自动审批拒绝，已发交互卡片等待授权；新账号注册按用户交互卡片确认，本轮记录为“待验收”；缺少已批准法律版本配置的前置条件仍保留，后续具备批准版本后再验收（延续上一条认证记录）；本轮没有真实 Safari、数据库隔离、所有服务商或远端发布验收。资产库入口仍为既有规划占位，不计为已实现功能。
 
 本轮验证日志保存在本地忽略目录 `.design-qa/2026-09-07/`；最终界面截图在 `apps/web/e2e/unified-workspace.spec.ts-snapshots/`。本轮未发布、未修改真实账号资料/密码，也未删除真实验收会话。
+
+
+### 2026-09-08 普通生图路由修复与 Superdesign 浅色玻璃改版
+
+- 用户确认本轮仅完善浅色风格，隐藏官方 Skill，并明确授权向 Superdesign 传输列出的 10 个前端文件/片段。未传输环境文件、密钥、用户数据或电商服务端代码。
+- 修复普通工作区误进入电商流程：初始化不再依赖官方 Skill registry；旧 `?skill=...` 参数和残留 Skill 状态不再影响聊天/图片提交。电商向导只由有效 `?scene=...` 显式入口启动；没有电商任务或草案时，普通编辑文字不会被电商编辑器拦截。保留电商任务的上下文修改和生成前确认。
+- 隐藏工作台、输入区、移动配置中的官方 Skill；旧 `/skills` 与详情页跳转到 `/create` 场景目录，不自动创建任务。保留底层兼容契约与用户会话数据。
+- Superdesign 在既有项目中创建源码支撑的基线，再迭代并导入最终参考稿；活动设计 `9e610844-ad0f-4286-98cb-527ad9bbc05f` v3。参考预览：https://p.superdesign.dev/draft/9e610844-ad0f-4286-98cb-527ad9bbc05f 。本地实现统一蓝白玻璃变量、浮动侧栏、输入区、消息气泡、电商目录和向导；增加可编辑灵感气泡、弹窗入场/按压反馈、关闭按钮与 Escape 焦点恢复，保留减少动态和透明度偏好。
+- 浏览器预览遵循用户选择，使用 Codex 侧边栏；已检查实际工作台、灵感填入、设置弹窗和电商目录/显式场景向导。Mock 服务运行在独立的 3108 端口与 `.next-glass-review` 目录，未改变实际登录门禁或进行付费生图。
+- 自动化证据：最终 `pnpm lint`、`pnpm typecheck`、`NEXT_DIST_DIR=.next-glass-build pnpm build` 均退出 0；首轮完整单测 Domain 40/40、Web 304/309，5 项失败包含 3 项超时、1 项参数关闭实现尚未加载、1 项灵感点击的初始化竞态，另有 worker 通信超时。独立复测 42/43 通过，唯一保留失败定位到初始空态先于会话加载呈现；已改为初始化期间展示加载状态并禁用输入，补充延迟初始化断言后专项 3/3 通过。完整浏览器回归首轮 53 通过、25 按设备/后端条件跳过、3 项超时/加载等待失败；单进程专项随后 11 通过、4 按设备范围跳过，包含全部失败用例及最终桌面截图更新。未放宽业务断言、超时或登录门禁。本轮未重跑完整 309 项单测至单次全绿；所有首轮失败项均已有独立通过记录。真实 HTTP、账号和云端任务全量验收延续既有状态，不据本地 Mock 结果声明全站可发布。
+- 本轮日志与实际桌面/手机截图保存在本地忽略目录 `.design-qa/2026-09-08/`，最终视觉基准在 `apps/web/e2e/unified-workspace.spec.ts-snapshots/`。未部署、未改动真实账号资料或删除真实会话。
+- 最终未更新截图基准的浏览器复验 4/4 通过（普通聊天、旧 Skill 链接下普通生图、桌面空态、参数弹窗），退出 0；生产构建生成的 `next-env.d.ts` 已还原。
+
+### 2026-09-08 Seedream 真实排查与电商表单交互
+
+- 原 3108 是上一轮的 Mock 预览。用户在其中看到的 Seedream 标签不代表真实 Provider 调用；已明确告知并添加仅在 Mock 环境显示的“模拟预览 · 不调用真实模型”标识。按用户指示将 `apps/web/.env(1).local` 改名为忽略的 `.env.local`，3108 改为 HTTP 与真实登录，Mock 回归独立使用 3109。没有记录或传输配置密钥。
+- 修复生图分流：开启创建图片后，普通画面描述直接进入图片队列；明确只讨论、写提示词、规划或否定生图的内容保留聊天路径。新增 Seedream 4.5 参数和电商模式隔离测试先失败后通过（2/2）。
+- 来源错误实证：浏览器 Origin 为 `http://127.0.0.1:3108`，Next.js 的 Request URL Origin 被标准化为 `http://localhost:3108`，导致登录/找回在账号验证前返回 403。本地精确白名单补入 127.0.0.1:3108；同源空请求从来源错误进入参数校验，外部来源仍返回 403。示例配置补充说明，来源校验逻辑未放宽。临时来源诊断日志代码已移除。
+- Chrome 使用用户指定的 `http://localhost:3108/`，已有有效登录态，无需更改密码。真实 Seedream 4.5 / 1:1 / 2K / 1 张生成成功，提示为窗边橘猫摄影；`POST /api/image` 返回 202，额度 30 → 29，刷新后图片仍可查看。批次 `6f9890bd-d5bf-4067-8f99-955d59ef9b87`，生成 `9307917f-ab5f-46db-b96b-5e25ada0906f`，云端只读核对 `status=succeeded`、`asset_status=active`。本轮仅新增这一张真实图，保留验收会话与结果。
+- 根据 Chrome 实际浏览的 Senyu 商品套图交互，电商模式移除底部聊天输入框和“在对话中修改”入口，采用左侧资料/步骤/操作区、右侧分图结构与方案编辑区；取消草案或进入普通新对话恢复输入框。保留逐图修改、保存后确认、只重做所选图片和历史导出。关闭电商表单的聊天自动跟随滚动，首次进入停在顶部，保留普通聊天跟随逻辑；滚动专项 6/6。
+- 真实云端电商仍未就绪：当前项目迁移停在 `20260907111328`，`public.commerce_tasks` 和 `public.commerce_dispatch` 均不存在，`GET /api/creative-tasks` 实际返回 503。界面错误补充电商上下文，不阻断普通生图。尚未应用数据库迁移或发布 Worker；具体待同步范围见 [`2026-09-08-commerce-cloud-activation.md`](./plans/2026-09-08-commerce-cloud-activation.md)。
+- 自动化结果：Domain 40/40；完整 Web 单测 310/312，包含电商 UI 24 项与新增分流测试通过。两项失败分别为依赖初始化空态闪现的旧会话用例、全量进程已加载的旧滚动实现；已修正等待条件并在最终实现上专项复验 7/7（另外 6 项按筛选跳过）。本轮未重跑全部 312 项到单次全绿，不据专项结果改写首轮记录。
+- 最终 `pnpm lint`、`pnpm typecheck`、`NEXT_DIST_DIR=.next-glass-build pnpm build` 和 `git diff --check` 通过；完整 `pnpm e2e` 使用单进程 Google Chrome 覆盖桌面/平板/手机，共 56 通过、25 按设备/后端条件跳过、0 失败。日志沿用项目名 `edge-tablet`，但本轮通过临时配置将所有项目 channel 改为 `chrome`，不计 Edge 验收。最终桌面截图不更新基准复验 2/2 通过。
+- 日志及当次 Chrome 配置归档于本地忽略目录 `.design-qa/2026-09-08/`（`zimage-form-*`、`zimage-modes-*`、`zimage-scroll-*`）。临时测试配置移除，构建生成的 `next-env.d.ts` 还原。真实 HTTP 服务保留在 3108，未部署站点、未修改账号密码、未删除真实验收数据。

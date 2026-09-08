@@ -25,6 +25,7 @@ export class ImageProviderError extends Error {
     readonly code: 'moderation' | 'provider_error' | 'provider_unavailable',
     message: string,
     readonly retryable: boolean,
+    readonly outcome: 'rejected' | 'unknown' = 'unknown',
   ) {
     super(message);
     this.name = 'ImageProviderError';
@@ -151,14 +152,19 @@ async function responseJson(response: Response) {
 }
 
 function providerHttpError(status: number, body: unknown) {
-  const serialized = JSON.stringify(body).toLowerCase();
-  if (serialized.includes('safety') || serialized.includes('moderation') || serialized.includes('sensitive')) {
-    return new ImageProviderError('moderation', 'provider_content_blocked', false);
+  // Transport/server/decoding failures do not prove that generation was rejected.
+  // Only explicit client-rejection HTTP statuses may enter ordinary failed retry.
+  const outcome = [400, 401, 403, 404, 422, 429].includes(status) ? 'rejected' : 'unknown';
+  const error = object(object(body)?.error);
+  const reason = String(error?.code ?? error?.type ?? error?.status ?? '').toLowerCase();
+  if (outcome === 'rejected' && /safety|moderation|sensitive/.test(reason)) {
+    return new ImageProviderError('moderation', 'provider_content_blocked', false, outcome);
   }
   return new ImageProviderError(
     status === 429 || status >= 500 ? 'provider_unavailable' : 'provider_error',
     `provider_http_${status}`,
     status === 429 || status >= 500,
+    outcome,
   );
 }
 

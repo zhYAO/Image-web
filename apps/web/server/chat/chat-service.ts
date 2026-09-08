@@ -76,7 +76,7 @@ export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
     });
     if (started.created) yield { session: started.session, type: 'session.created' };
 
-    if (input.tools.includes('generate_image') && hasExplicitImageIntent(input.message)) {
+    if (!input.skillId && input.tools.includes('generate_image') && hasExplicitImageIntent(input.message)) {
       const submission = await dependencies.submitImage({
         correlationId: input.correlationId ?? crypto.randomUUID(),
         idempotencyKey: crypto.randomUUID(),

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { ApiRouteError } from '@/server/api-error';
 import { createImageService } from '@/server/image/image-service';
 import { SupabaseGenerationStore } from '@/server/image/supabase-generation-store';
 import { createPreviewUsageGuard, withPreviewUsageReservation } from '@/server/preview/preview-usage-guard';
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
     const userClient = await createSupabaseServerClient();
     const userId = await requireVerifiedUserId(userClient);
     const input = imageRequestSchema.parse(await readJson(request));
+    if (input.skillId) throw new ApiRouteError({code: 'conflict',status:409,message:'请先保存 Skill 方案，再确认生成。',retryable:false});
     const idempotencyKey = z.uuid().parse(request.headers.get('idempotency-key'));
     const admin = createSupabaseAdminClient();
     const imageService = createImageService(new SupabaseGenerationStore(admin));

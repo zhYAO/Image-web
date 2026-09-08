@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { UnifiedWorkspace } from '@/features/workspace/UnifiedWorkspace';
 import { setupWorkspaceTest, CapturingGateway, createTestGateway } from './workspace-test-fixtures';
@@ -52,15 +52,23 @@ describe('UnifiedWorkspace', () => {
     expect(screen.getByRole('dialog', { name: '图片生成设置' })).toBeInTheDocument();
   });
 
-  it('auto-enables the image tool for a skill and keeps it enabled after clearing the Skill', async () => {
-    render(<UnifiedWorkspace gateway={createTestGateway()} />);
-    fireEvent.click(await screen.findByRole('button', { name: /白底图/ }));
-
-    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '创建图片' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: '清除技能' }));
+  it('fills inspiration into the composer and lets the user edit before generation', async () => {
+    const gateway = createTestGateway(CapturingGateway);
+    const sessions = await gateway.listSessions();
+    let releaseInitialization!: () => void;
+    vi.spyOn(gateway, 'listSessions').mockImplementationOnce(() => new Promise((resolve) => {
+      releaseInitialization = () => resolve(sessions);
+    }));
+    render(<UnifiedWorkspace gateway={gateway} />);
+    expect(screen.queryByRole('button', { name: /光影与静物/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '创作输入' })).not.toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'ZImage 正在载入' })).toHaveAttribute('aria-busy', 'true');
+    await act(async () => releaseInitialization());
+    fireEvent.click(await screen.findByRole('button', { name: /光影与静物/ }));
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('生成一张晨光下的陶瓷花瓶图片，柔和阴影，留白构图');
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '创建图片' })).toBeEnabled();
+    expect(gateway.lastImageRequest).toBeUndefined();
   });
 
   it('uses the create-image tool as the only explicit request router', async () => {
@@ -80,33 +88,15 @@ describe('UnifiedWorkspace', () => {
     expect(gateway.lastImageRequest).toBeUndefined();
   });
 
-  it('selects a toolbar skill and locks the create-image tool', async () => {
+  it('keeps official skills hidden from toolbar and mobile configuration', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
-
-    fireEvent.click(screen.getByRole('button', { name: '选择技能' }));
-    const dialog = screen.getByRole('dialog', { name: '技能配置' });
-    fireEvent.click(dialog.querySelector('[aria-label="选择技能 白底图"]') as HTMLElement);
-
-    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '创建图片' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '技能配置 白底图' })).toBeInTheDocument();
-  });
-
-  it('selects and clears skills from the mobile configuration drawer', async () => {
-    render(<UnifiedWorkspace gateway={createTestGateway()} />);
-    await screen.findByText('你好，想创作什么？');
-
+    expect(screen.queryByRole('button', { name: '选择技能' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.click(screen.getByRole('button', { name: '打开移动端生成配置' }));
     await screen.findByText('生成配置');
-    const socialSkill = document.body.querySelector('[aria-label="选择技能 种草图"]') as HTMLElement | null;
-    expect(socialSkill).not.toBeNull();
-    fireEvent.click(socialSkill!);
-
-    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getAllByRole('textbox', { name: '本次 Skill 方案' }).length).toBeGreaterThan(0);
-    fireEvent.click(document.body.querySelector('[aria-label="清除技能"]') as HTMLElement);
-    expect(screen.queryByRole('textbox', { name: '本次 Skill 方案' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('移动端生成模型')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /选择技能/ })).not.toBeInTheDocument();
   });
 
   it('clears the chat draft the moment the user submits and shows a typing indicator until the first delta', async () => {

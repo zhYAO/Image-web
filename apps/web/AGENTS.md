@@ -35,6 +35,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Change and verification discipline
 
+- Per the user's 2026-09-08 instruction, browser regression targets desktop Web only. Do not run mobile or tablet projects or switch tests to phone/tablet viewports unless the user explicitly requests that scope again.
 - Preserve unrelated staged, unstaged, and untracked work. Keep patches narrow and do not format or rewrite project documents unless the task explicitly requires it.
 - When a task completes acceptance, update `../../doc/project-progress.md` in the same change with its status, validation date, automated results, and applicable real-environment evidence. A task is `done` only when all evidence required by that ledger is current; downgrade it when evidence expires or the environment drifts.
 - Run `pnpm lint`, `pnpm typecheck`, `pnpm test:run`, `pnpm build`, and `pnpm e2e` before claiming the web workspace is ready.

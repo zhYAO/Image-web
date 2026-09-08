@@ -47,6 +47,13 @@ describe('chat service', () => {
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ content: '你好', sessionId: session.id }));
   });
 
+  it('keeps a plan request with trailing discussion out of image tools', async () => {
+    const submitImage=vi.fn();
+    const runner=createChatTurnRunner({complete:vi.fn().mockResolvedValue(crypto.randomUUID()),recordProviderResult:vi.fn(),start:vi.fn().mockResolvedValue({created:false,session}),streamProvider:async function*(){yield '先讨论构图。';},submitImage});
+    await collect(runner({message:'生成商品主图的方案，先讨论构图',tools:['generate_image'],imageProvider:'seedream',userId:crypto.randomUUID()}));
+    expect(submitImage).not.toHaveBeenCalled();
+  });
+
   it('does not retry or persist a partial assistant after content was emitted', async () => {
     const complete = vi.fn();
     const streamProvider = vi.fn(async function* () {
@@ -92,6 +99,18 @@ describe('chat service', () => {
     expect(JSON.stringify(events)).not.toContain(rawDetail);
     expect(JSON.stringify(events)).not.toContain('private.example');
     expect(JSON.stringify(events)).not.toContain('provider-secret');
+  });
+
+  it('does not let a legacy Skill bypass commerce plan confirmation', async () => {
+    const submitImage = vi.fn();
+    const runner = createChatTurnRunner({
+      complete: vi.fn().mockResolvedValue(crypto.randomUUID()), recordProviderResult: vi.fn(),
+      start: vi.fn().mockResolvedValue({created:false,session}),
+      streamProvider: async function*(){yield '请先查看方案。';}, submitImage,
+    });
+    const events = await collect(runner({message:'生成白底商品图',skillId:'white-background',tools:['generate_image'],userId:crypto.randomUUID()}));
+    expect(submitImage).not.toHaveBeenCalled();
+    expect(events.some(event=>event.type==='tool.queued')).toBe(false);
   });
 
   it('queues explicit image intent through the shared image transaction only when the tool is enabled', async () => {

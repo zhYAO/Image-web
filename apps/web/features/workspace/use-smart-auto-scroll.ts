@@ -6,6 +6,7 @@ type RequestedScrollBehavior = 'auto' | 'smooth';
 
 interface SmartAutoScrollOptions {
   contentVersion: string;
+  enabled?: boolean;
   sessionId?: string;
 }
 
@@ -20,6 +21,7 @@ interface SmartAutoScrollController {
 
 export function useSmartAutoScroll({
   contentVersion,
+  enabled = true,
   sessionId,
 }: SmartAutoScrollOptions): SmartAutoScrollController {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,7 +31,7 @@ export function useSmartAutoScroll({
 
   const scrollElementToBottom = useCallback((behavior: RequestedScrollBehavior) => {
     const container = containerRef.current;
-    if (!container || typeof container.scrollTo !== 'function') return;
+    if (!enabled || !container || typeof container.scrollTo !== 'function') return;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const resolvedBehavior = behavior === 'smooth' && !reduceMotion ? 'smooth' : 'auto';
     if (resolvedBehavior === 'smooth') ignoreScrollEventsUntilRef.current = performance.now() + 750;
@@ -37,7 +39,7 @@ export function useSmartAutoScroll({
       behavior: resolvedBehavior,
       top: container.scrollHeight,
     });
-  }, []);
+  }, [enabled]);
 
   const scrollToBottom = useCallback((behavior: RequestedScrollBehavior = 'auto') => {
     followingRef.current = true;
@@ -46,13 +48,14 @@ export function useSmartAutoScroll({
   }, [scrollElementToBottom]);
 
   const handleScroll = useCallback<UIEventHandler<HTMLDivElement>>((event) => {
+    if (!enabled) return;
     if (performance.now() < ignoreScrollEventsUntilRef.current) return;
     const container = event.currentTarget;
     const distanceFromBottom = container.scrollHeight - container.clientHeight - container.scrollTop;
     const isFollowing = distanceFromBottom <= BOTTOM_THRESHOLD_PX;
     followingRef.current = isFollowing;
     setShowScrollToBottom(!isFollowing);
-  }, []);
+  }, [enabled]);
 
   const handleUserScrollIntent = useCallback(() => {
     ignoreScrollEventsUntilRef.current = 0;
@@ -63,12 +66,13 @@ export function useSmartAutoScroll({
   }, [scrollToBottom]);
 
   useLayoutEffect(() => {
-    followingRef.current = true;
+    followingRef.current = enabled;
     ignoreScrollEventsUntilRef.current = 0;
-    scrollElementToBottom('auto');
+    if (enabled) scrollElementToBottom('auto');
+    else containerRef.current?.scrollTo?.({ behavior: 'auto', top: 0 });
     const frame = window.requestAnimationFrame(() => setShowScrollToBottom(false));
     return () => window.cancelAnimationFrame(frame);
-  }, [scrollElementToBottom, sessionId]);
+  }, [enabled, scrollElementToBottom, sessionId]);
 
   useEffect(() => {
     if (followingRef.current) scrollElementToBottom('auto');

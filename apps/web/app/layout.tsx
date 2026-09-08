@@ -3,6 +3,7 @@ import './globals.css';
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { AuthStatusProvider } from '@/features/auth/AuthStatusProvider';
 
 export const metadata: Metadata = {
   description: '聊天与 AI 生图一体化创作工作区',
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body><AuthStatusProvider>{children}</AuthStatusProvider></body>
     </html>
   );
 }

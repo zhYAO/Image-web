@@ -15,7 +15,7 @@ class TestResizeObserver {
   unobserve() {}
 }
 
-function Harness({ contentVersion = 0, sessionId = 'session-1' }: { contentVersion?: number; sessionId?: string }) {
+function Harness({ contentVersion = 0, sessionId = 'session-1', enabled = true }: { contentVersion?: number; sessionId?: string; enabled?: boolean }) {
   const [sent, setSent] = useState(false);
   const {
     containerRef,
@@ -24,7 +24,7 @@ function Harness({ contentVersion = 0, sessionId = 'session-1' }: { contentVersi
     requestFollow,
     scrollToBottom,
     showScrollToBottom,
-  } = useSmartAutoScroll({ contentVersion: `${contentVersion}-${sent}`, sessionId });
+  } = useSmartAutoScroll({ contentVersion: `${contentVersion}-${sent}`, sessionId, enabled });
 
   return (
     <>
@@ -108,6 +108,24 @@ describe('useSmartAutoScroll', () => {
 
     scrollTo.mockClear();
     rerender(<Harness sessionId="session-2" />);
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'auto', top: 1_000 });
+  });
+
+  it('starts forms at the top and does not pull them down after content or size changes', () => {
+    const { rerender } = render(<Harness />);
+    const container = screen.getByTestId('scroll-container');
+    const scrollTo = vi.fn();
+    Object.defineProperty(container, 'scrollTo', { configurable: true, value: scrollTo });
+    setScrollMetrics(container, { clientHeight: 300, scrollHeight: 1_000, scrollTop: 700 });
+    rerender(<Harness enabled={false} />);
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'auto', top: 0 });
+    scrollTo.mockClear();
+    fireEvent.scroll(container);
+    rerender(<Harness enabled={false} contentVersion={1} />);
+    act(() => resizeCallback?.([], {} as ResizeObserver));
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '回到底部' })).not.toBeInTheDocument();
+    rerender(<Harness enabled />);
     expect(scrollTo).toHaveBeenCalledWith({ behavior: 'auto', top: 1_000 });
   });
 

@@ -20,7 +20,10 @@ describe('UnifiedWorkspace', () => {
     }
 
     render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('你好，想创作什么？');
+    // Restore initialization before selecting a fixture session; populated
+    // histories no longer flash the empty workspace while loading.
+    await screen.findByRole('button', { name: '快会话' });
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '创作输入' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '快会话' }));
     await screen.findByText('快会话内容');
     gateway.holdTimeline(slow.id);
@@ -44,7 +47,7 @@ describe('UnifiedWorkspace', () => {
       void _event;
     }
     render(<UnifiedWorkspace gateway={gateway} />);
-    await screen.findByText('你好，想创作什么？');
+    await screen.findByRole('button', { name: '可重试会话' });
     gateway.failNextTimeline(retrySession.id);
     fireEvent.click(screen.getByRole('button', { name: '可重试会话' }));
 
@@ -88,9 +91,9 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '图片会话 A' }));
     await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: 'A 的图片' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '生成 A 的图片' } });
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('A 的图片');
+    expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('生成 A 的图片');
 
     fireEvent.click(screen.getByRole('button', { name: '聊天会话 B' }));
     await waitFor(() => expect(screen.queryByTestId('timeline-loading')).not.toBeInTheDocument());
@@ -102,7 +105,7 @@ describe('UnifiedWorkspace', () => {
     gateway.releaseImageAdmission();
     fireEvent.click(screen.getByRole('button', { name: '图片会话 A' }));
     await waitFor(() => expect(screen.queryByTestId('optimistic-image-turn')).not.toBeInTheDocument());
-    expect(screen.getByText('A 的图片')).toBeInTheDocument();
+    expect(screen.getByText('生成 A 的图片')).toBeInTheDocument();
   });
 
   it('keeps the assistant bubble stable across the stream-to-completed transition (no flash, cursor gone)', async () => {

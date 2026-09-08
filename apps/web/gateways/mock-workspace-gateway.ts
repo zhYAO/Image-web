@@ -1,3 +1,4 @@
+import { MockCommerceGateway } from './mock-commerce-gateway';
 import {
   CHAT_PROVIDER_MODELS,
   IMAGE_PROVIDER_CAPABILITIES as CAPABILITIES,
@@ -32,9 +33,12 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 interface MockState {
+  // Commerce and host data share one atomic localStorage value.
+  commerce?: string;
   sessions: Session[];
   timelines: Record<string, TimelineItem[]>;
   batches: Record<string, GenerationBatch>;
+  quotaUsage?: Record<string, number>;
   deleteAttempts: Record<string, number>;
 }
 interface StorageEnvelope {
@@ -76,6 +80,12 @@ function clone<T>(value: T): T {
 }
 
 export class MockWorkspaceGateway implements WorkspaceGateway {
+  readonly commerce: MockCommerceGateway;
+  private suppressPersistence = false;
+  private transactionDirty = false;
+  private stagedTransitions: Array<{ batchId: string; scenario: MockScenario }> = [];
+  private mutationTail: Promise<unknown> = Promise.resolve();
+  private readonly internalImageRequests = new WeakSet<ImageRequest>();
   private readonly storage: StorageLike;
   private readonly now: () => Date;
   private readonly delay: (milliseconds: number) => Promise<void>;
@@ -90,6 +100,18 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     this.now = options.now ?? (() => new Date());
     this.delay = options.delay ?? wait;
     this.state = this.load();
+    // Import the old separate key once; all subsequent writes use the host envelope.
+    this.state.commerce ??= this.storage.getItem('zimage:commerce:mock:v1') ?? '';
+    this.commerce = new MockCommerceGateway({
+      getItem: () => this.state.commerce || null,
+      setItem: (_key, value) => { this.state.commerce = value; this.persist(); },
+    }, {
+      runCommerceTransaction: (work) => this.runCommerceTransaction(work),
+      listSessions: () => this.listSessions(),
+      getGenerationBatch: (id) => this.getGenerationBatch(id),
+      submitCommerceImages: (requests) => this.submitCommerceImagesNow(requests),
+      cancelCommerceImages: (ids) => this.cancelCommerceImagesNow(ids),
+    });
   }
 
   getRecoveryNotice() {
@@ -109,6 +131,10 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async createSession(title = '新的创作') {
+    return this.serializeMutation(() => this.createSessionNow(title));
+  }
+
+  private createSessionNow(title: string) {
     const timestamp = this.timestamp();
     const session: Session = {
       createdAt: timestamp,
@@ -124,6 +150,10 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async renameSession(sessionId: string, title: string) {
+    return this.serializeMutation(() => this.renameSessionNow(sessionId, title));
+  }
+
+  private renameSessionNow(sessionId: string, title: string) {
     const session = this.requireSession(sessionId);
     // Centralize title normalization (trim, collapse whitespace, cap length,
     // fall back to the placeholder) inside the gateway so the UI can pass
@@ -135,6 +165,10 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async deleteSession(sessionId: string) {
+    return this.serializeMutation(() => this.deleteSessionNow(sessionId));
+  }
+
+  private deleteSessionNow(sessionId: string) {
     const session = this.requireSession(sessionId, true);
     session.status = 'deleting';
     const attempt = (this.state.deleteAttempts[sessionId] ?? 0) + 1;
@@ -173,14 +207,14 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       yield { session: clone(session), type: 'session.created' };
     }
 
-    this.appendTimeline(session.id, {
+    await this.serializeMutation(() => this.appendTimeline(session.id, {
       content: request.message.trim(),
       createdAt: this.timestamp(),
       id: this.id('message'),
       role: 'user',
       sessionId: session.id,
       type: 'message',
-    });
+    }));
 
     if (request.scenario === 'provider-unavailable') {
       const error = {
@@ -188,20 +222,20 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
         message: '聊天服务暂时不可用，请稍后重试。',
         retryable: true,
       };
-      this.appendTimeline(session.id, {
+      await this.serializeMutation(() => this.appendTimeline(session.id, {
         actionLabel: '重试',
         createdAt: this.timestamp(),
         error,
         id: this.id('error'),
         sessionId: session.id,
         type: 'error',
-      });
+      }));
       yield { error, type: 'stream.failed' };
       return;
     }
 
     const shouldGenerateImage = request.imageToolEnabled &&
-      (Boolean(request.skillId) || hasExplicitImageIntent(request.message));
+      !request.skillId && hasExplicitImageIntent(request.message);
     const answer = shouldGenerateImage
       ? '已理解你的创作目标，我先整理提示词，然后把生图任务加入队列。'
       : '可以。建议突出主体材质、光线、构图和使用场景，让画面目标更明确。';
@@ -219,7 +253,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       yield { delta, messageId, type: 'message.delta' };
     }
 
-    this.appendTimeline(session.id, {
+    await this.serializeMutation(() => this.appendTimeline(session.id, {
       content: answer,
       createdAt: this.timestamp(),
       id: messageId,
@@ -227,7 +261,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       sessionId: session.id,
       streaming: false,
       type: 'message',
-    });
+    }));
     yield { content: answer, messageId, type: 'message.completed' };
 
     if (shouldGenerateImage) {
@@ -241,19 +275,100 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
         skillId: request.skillId,
         skillValues: request.skillValues,
       });
-      const stored = this.state.batches[batch.id];
-      if (stored) stored.source = 'chat_tool';
-      this.persist();
-      yield { batchId: (stored ?? batch).id, type: 'tool.queued' };
+      await this.serializeMutation(() => {
+        const stored = this.state.batches[batch.id];
+        if (stored) stored.source = 'chat_tool';
+        this.persist();
+      });
+      yield { batchId: batch.id, type: 'tool.queued' };
     }
   }
 
-  async submitImage(request: ImageRequest) {
+  async cancelCommerceImages(batchIds: string[]): Promise<void> {
+    return this.serializeMutation(() => this.cancelCommerceImagesNow(batchIds));
+  }
+
+  private async cancelCommerceImagesNow(batchIds: string[]): Promise<void> {
+    for (const id of batchIds) {
+      const batch = this.state.batches[id];
+      if (!batch || batch.status !== 'pending') continue;
+      for (const asset of batch.assets) { asset.status = 'failed'; asset.error = {code:'UNKNOWN',message:'已取消尚未派发的图片',retryable:false}; }
+      batch.status = 'failed';
+      const day = batch.createdAt.slice(0,10);
+      if (this.state.quotaUsage) this.state.quotaUsage[day] = Math.max(0, (this.state.quotaUsage[day] ?? 0) - batch.assets.length);
+      this.syncBatchTimeline(batch);
+    }
+    this.persist();
+  }
+
+  // External writes share commerce's lock; nested children use explicit internal paths.
+  private serializeMutation<T>(work: () => T | Promise<T>): Promise<T> {
+    const result = this.mutationTail.then(work, work);
+    this.mutationTail = result.catch(() => undefined);
+    return result;
+  }
+
+  async runCommerceTransaction<T>(work: () => Promise<T>): Promise<T> {
+    return this.serializeMutation(() => this.commerceTransaction(work));
+  }
+
+  private async commerceTransaction<T>(work: () => Promise<T>): Promise<T> {
+    const before = clone(this.state);
+    this.suppressPersistence = true;
+    this.transactionDirty = false;
+    this.stagedTransitions = [];
+    try {
+      const result = await work();
+      this.suppressPersistence = false;
+      if (this.transactionDirty) this.persist();
+      // A failed commit must never start generation timers.
+      for (const { batchId, scenario } of this.stagedTransitions) void this.transitionBatch(batchId, scenario);
+      return result;
+    } catch (error) {
+      this.state = before;
+      throw error;
+    } finally {
+      this.suppressPersistence = false;
+      this.stagedTransitions = [];
+    }
+  }
+
+  async submitCommerceImages(requests: ImageRequest[]): Promise<GenerationBatch[]> {
+    return this.runCommerceTransaction(() => this.submitCommerceImagesNow(requests));
+  }
+
+  private async submitCommerceImagesNow(requests: ImageRequest[]): Promise<GenerationBatch[]> {
+    for (const request of requests) {
+      const valid = validateImageRequest(request);
+      if (!valid.ok) throw new WorkspaceError(valid.error);
+      if (!request.sessionId) throw new WorkspaceError({ code: 'BAD_REQUEST', message: '缺少会话。', retryable: false });
+      this.requireSession(request.sessionId);
+    }
+    const quota = await this.getQuota();
+    if (quota.used + requests.length > quota.limit) throw new WorkspaceError({code:'QUOTA_EXCEEDED',message:'今日图片额度不足。',retryable:false});
+    const batches: GenerationBatch[] = [];
+    for (const [index, request] of requests.entries()) batches.push(await this.submitImageChild({ ...request, scenario: this.scenario === 'partial' ? (index === requests.length - 1 ? 'provider-unavailable' : 'happy') : this.scenario }));
+    return batches;
+  }
+
+  private async submitImageChild(request: ImageRequest): Promise<GenerationBatch> {
+    // Preserve subclass/fault-injection hooks that forward the same request to super.
+    this.internalImageRequests.add(request);
+    try { return await this.submitImage(request); }
+    finally { this.internalImageRequests.delete(request); }
+  }
+
+  async submitImage(request: ImageRequest): Promise<GenerationBatch> {
+    if (this.internalImageRequests.has(request)) return this.submitImageNow(request);
+    return this.serializeMutation(() => this.submitImageNow(request));
+  }
+
+  private async submitImageNow(request: ImageRequest): Promise<GenerationBatch> {
     const validation = validateImageRequest(request);
     if (!validation.ok) throw new WorkspaceError(validation.error);
     const session = request.sessionId
       ? this.requireSession(request.sessionId)
-      : await this.createSession(this.titleFrom(request.prompt));
+      : this.createSessionNow(this.titleFrom(request.prompt));
     const createdAt = this.timestamp();
     const batchId = this.id('batch');
     const defaultCapability = CAPABILITIES[0];
@@ -280,6 +395,9 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       status: 'pending',
     };
     this.state.batches[batchId] = batch;
+    const day = createdAt.slice(0, 10);
+    this.state.quotaUsage ??= {};
+    this.state.quotaUsage[day] = (this.state.quotaUsage[day] ?? 0) + request.count;
     this.appendTimeline(session.id, {
       batch,
       createdAt,
@@ -288,7 +406,8 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       type: 'generation',
     });
     this.persist();
-    void this.transitionBatch(batchId, request.scenario ?? 'happy');
+    if (this.suppressPersistence) this.stagedTransitions.push({ batchId, scenario: request.scenario ?? 'happy' });
+    else void this.transitionBatch(batchId, request.scenario ?? 'happy');
     return clone(batch);
   }
 
@@ -304,7 +423,11 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     return clone(batch);
   }
 
-  async recreateGeneration(request: RecreateRequest) {
+  async recreateGeneration(request: RecreateRequest): Promise<GenerationBatch> {
+    return this.serializeMutation(() => this.recreateGenerationNow(request));
+  }
+
+  private async recreateGenerationNow(request: RecreateRequest): Promise<GenerationBatch> {
     const original = await this.getGenerationBatch(request.batchId);
     let assets = original.assets;
     if (request.scope === 'failed') assets = assets.filter((asset) => asset.status === 'failed');
@@ -312,7 +435,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     if (assets.length === 0) {
       throw new WorkspaceError({ code: 'BATCH_NOT_FOUND', message: '没有可重生成的图片。', retryable: false });
     }
-    return this.submitImage({
+    return this.submitImageChild({
       aspectRatio: original.config.aspectRatio,
       count: assets.length,
       model: original.model,
@@ -328,7 +451,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async getQuota(): Promise<Quota> {
-    return { limit: 30, resetsAt: '2026-09-01T00:00:00.000Z', used: 28 };
+    return { limit: 30, resetsAt: new Date(new Date().setUTCHours(24,0,0,0)).toISOString(), used: this.state.quotaUsage?.[this.timestamp().slice(0,10)] ?? 0 };
   }
 
   async getProviderCapabilities(): Promise<ProviderCapability[]> {
@@ -342,35 +465,41 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
   private async transitionBatch(batchId: string, scenario: MockScenario) {
     await this.delay(900);
-    const batch = this.state.batches[batchId];
-    if (!batch) return;
-    for (const asset of batch.assets) asset.status = 'processing';
-    batch.status = 'processing';
-    this.syncBatchTimeline(batch);
-    this.persist();
+    const started = await this.serializeMutation(() => {
+      const batch = this.state.batches[batchId];
+      if (!batch || batch.status === 'failed') return false;
+      for (const asset of batch.assets) asset.status = 'processing';
+      batch.status = 'processing';
+      this.syncBatchTimeline(batch);
+      this.persist();
+      return true;
+    });
+    if (!started) return;
 
     await this.delay(700);
-    const current = this.state.batches[batchId];
-    if (!current) return;
-    current.assets.forEach((asset, index) => {
-      const shouldFail = scenario === 'provider-unavailable' || (scenario === 'partial' && index === current.assets.length - 1);
-      if (shouldFail) {
-        asset.status = 'failed';
-        asset.error = {
-          code: scenario === 'provider-unavailable' ? 'PROVIDER_UNAVAILABLE' : 'UNKNOWN',
-          message: scenario === 'provider-unavailable' ? '图片服务暂时不可用。' : '这张图片生成失败，可单独重试。',
-          retryable: true,
-        };
-      } else {
-        asset.status = 'succeeded';
-        asset.url = this.imageDataUrl(index, current.prompt);
-        asset.expired = scenario === 'expired';
-        asset.expiresAt = scenario === 'expired' ? '2026-08-20T00:00:00.000Z' : '2026-11-19T00:00:00.000Z';
-      }
+    await this.serializeMutation(() => {
+      const current = this.state.batches[batchId];
+      if (!current) return;
+      current.assets.forEach((asset, index) => {
+        const shouldFail = scenario === 'provider-unavailable' || (scenario === 'partial' && index === current.assets.length - 1);
+        if (shouldFail) {
+          asset.status = 'failed';
+          asset.error = {
+            code: scenario === 'provider-unavailable' ? 'PROVIDER_UNAVAILABLE' : 'UNKNOWN',
+            message: scenario === 'provider-unavailable' ? '图片服务暂时不可用。' : '这张图片生成失败，可单独重试。',
+            retryable: true,
+          };
+        } else {
+          asset.status = 'succeeded';
+          asset.url = this.imageDataUrl(index, current.prompt);
+          asset.expired = scenario === 'expired';
+          asset.expiresAt = scenario === 'expired' ? '2026-08-20T00:00:00.000Z' : '2026-11-19T00:00:00.000Z';
+        }
+      });
+      current.status = aggregateBatchStatus(current.assets.map((asset) => asset.status));
+      this.syncBatchTimeline(current);
+      this.persist();
     });
-    current.status = aggregateBatchStatus(current.assets.map((asset) => asset.status));
-    this.syncBatchTimeline(current);
-    this.persist();
   }
 
   private appendTimeline(sessionId: string, item: TimelineItemWithoutSequence) {
@@ -426,6 +555,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   private persist() {
+    if (this.suppressPersistence) { this.transactionDirty = true; return; }
     this.storage.setItem(
       MOCK_STORAGE_KEY,
       JSON.stringify({ state: this.state, version: STORAGE_VERSION } satisfies StorageEnvelope),
@@ -452,7 +582,8 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
 
   private id(prefix: string) {
     this.idCounter += 1;
-    return `${prefix}-${this.now().getTime()}-${this.idCounter}`;
+    void prefix;
+    return crypto.randomUUID();
   }
 
   private titleFrom(value: string) {

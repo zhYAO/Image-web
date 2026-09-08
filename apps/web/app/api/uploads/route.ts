@@ -5,10 +5,10 @@ import { z } from 'zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ApiRouteError } from '@/server/api-error';
+import { compensateReferenceWrite, referenceWriteIntent } from '@/server/assets/reference-promotion-service';
 import { validateReferenceUpload } from '@/server/assets/reference-upload-service';
 import {
   createPreviewUsageGuard,
-  PreviewUsageRetentionError,
   withPreviewUsageReservation,
 } from '@/server/preview/preview-usage-guard';
 import { assertTrustedOrigin, executeRoute, requireVerifiedUserId } from '@/server/route-context';
@@ -59,13 +59,13 @@ export async function POST(request: Request) {
       .select('id', { count: 'exact', head: true })
       .eq('session_id', sessionId)
       .eq('user_id', userId)
-      .eq('status', 'active');
+      .or('status.eq.active,write_state.eq.pending');
     if (existing.error) throw temporaryFailure('暂时无法验证参考图数量，请稍后重试。');
-    if ((existing.count ?? 0) >= 4) {
+    if ((existing.count ?? 0) >= 64) {
       throw new ApiRouteError({
         code: 'bad_request',
         details: { field: 'file' },
-        message: '每个会话最多保留 4 张有效参考图。',
+        message: '每个会话最多保留 64 张有效参考图。',
         retryable: false,
         status: 400,
       });
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       const persisted = await admin
         .from('reference_uploads')
         .insert({
+          status: 'expired',
           height: metadata.height,
           id: uploadId,
           mime_type: file.type,
@@ -108,21 +109,23 @@ export async function POST(request: Request) {
         throw temporaryFailure('参考图元数据保存失败，请稍后重试。');
       }
 
-      const uploaded = await admin.storage.from('uploads').upload(storagePath, bytes, {
-        cacheControl: '3600',
-        contentType: file.type,
-        upsert: false,
-      });
-      if (uploaded.error) {
-        const failure = temporaryFailure('参考图上传失败，请稍后重试。');
-        const removedObject = await admin.storage.from('uploads').remove([storagePath]);
-        const removedMetadata = await admin
-          .from('reference_uploads')
-          .delete()
-          .eq('id', uploadId)
-          .eq('user_id', userId);
-        if (removedObject.error || removedMetadata.error) throw new PreviewUsageRetentionError(failure);
-        throw failure;
+      try {
+        await referenceWriteIntent(admin, userId, uploadId, 'register');
+      } catch (error) {
+        // No Storage call has happened. Metadata can safely be removed even if
+        // registration committed but its response was lost; its intent survives.
+        await admin.from('reference_uploads').delete().eq('id', uploadId).eq('user_id', userId);
+        throw error;
+      }
+      try {
+        const uploaded = await admin.storage.from('uploads').upload(storagePath, bytes, {
+          cacheControl: '3600', contentType: file.type, upsert: false,
+        });
+        if (uploaded.error) throw temporaryFailure('参考图上传失败，请稍后重试。');
+        await referenceWriteIntent(admin, userId, uploadId, 'finalize');
+      } catch {
+        await compensateReferenceWrite(admin, userId, uploadId, storagePath,
+          temporaryFailure('参考图保存失败，请稍后重试。'));
       }
 
       return NextResponse.json(referenceUploadResponseSchema.parse({

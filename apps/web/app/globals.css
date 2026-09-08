@@ -1,6 +1,6 @@
 :root {
   --z-bg: #f5f5f7;
-  --z-bg-gradient: radial-gradient(ellipse at 12% 0%, rgba(214, 231, 250, .45), transparent 46%), radial-gradient(ellipse at 92% 85%, rgba(244, 233, 220, .3), transparent 48%), linear-gradient(145deg, #fafafa, #f5f5f7);
+  --z-bg-gradient: radial-gradient(ellipse at 18% 5%, rgba(211, 229, 251, .55), transparent 48%), radial-gradient(ellipse at 88% 65%, rgba(229, 225, 243, .34), transparent 42%), linear-gradient(145deg, #fbfbfd, #f3f5f8);
   --z-panel: rgba(255, 255, 255, .68);
   --z-panel-strong: rgba(255, 255, 255, .86);
   --z-text: #1d1d1f;
@@ -13,9 +13,11 @@
   --z-accent: #c86b12;
   --z-radius-sm: 12px;
   --z-radius-md: 18px;
-  --z-radius-lg: 24px;
+  --z-radius-lg: 28px;
   --z-shadow: 0 12px 40px rgba(31, 40, 54, .07), 0 1px 3px rgba(31, 40, 54, .03);
   --z-shadow-soft: 0 4px 18px rgba(31, 40, 54, .04);
+  --z-ease: cubic-bezier(.22, 1, .36, 1);
+  --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .95);
   --z-glass-blur: 28px;
 }
 
@@ -127,3 +129,42 @@ textarea {
 @media (prefers-reduced-transparency: reduce) {
   :root { --z-panel: #fff; --z-panel-strong: #fff; --z-glass-blur: 0px; }
 }
+
+/* Shared glass controls across authentication, account and workspace overlays. */
+.glass-card { box-shadow: var(--z-glass-highlight), var(--z-shadow); animation: glass-arrive 360ms var(--z-ease) both; }
+.glass-form { border-color: rgba(255,255,255,.9); }
+.glass-form a { text-decoration: none; }
+.glass-form a:hover { text-decoration: underline; }
+.glass-form h2 { font-size: 18px; margin: 6px 0; }
+.glass-form form + form { padding-top: 24px; border-top: 1px solid var(--z-border); }
+.glass-form > button { margin-top: 24px; width: 100%; }
+.glass-form nav { padding: 5px; border-radius: 999px; background: rgba(100,116,139,.055); justify-content: space-between; }
+.glass-form nav button { border-radius: 999px; min-height: 38px; }
+.glass-form nav button:hover { background: white; }
+.glass-form input:focus, .glass-form textarea:focus { border-color: rgba(0,102,204,.4); box-shadow: 0 0 0 4px var(--z-primary-soft); }
+.glass-form input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--z-primary); }
+.glass-form label:has(input[type="checkbox"]) { display: flex; flex-wrap: wrap; align-items: center; font-weight: 400; line-height: 1.6; }
+.glass-form button, .glass-form input, .glass-form textarea { transition: background 160ms ease, box-shadow 160ms ease, transform 160ms var(--z-ease); }
+.glass-form button:active:not(:disabled) { transform: scale(.985); }
+.glass-status, .glass-error { padding: 12px 16px; border-radius: 16px; background: var(--z-primary-soft); margin-top: 16px; animation: glass-arrive 220ms var(--z-ease) both; }
+.glass-error { background: #fff0ee; }
+.workspaceDrawer .ant-drawer-content { background: var(--z-panel-strong); backdrop-filter: blur(var(--z-glass-blur)); }
+.workspaceDrawer .ant-drawer-header { border-color: var(--z-border); }
+.ant-tooltip .ant-tooltip-inner { border-radius: 12px; padding: 8px 12px; font-size: 12px; }
+@keyframes glass-arrive { from { opacity: 0; transform: translateY(10px) scale(.99); } to { opacity: 1; transform: none; } }
+
+/* Static copy should not show a text caret in browser caret-navigation mode. */
+body { caret-color: transparent; }
+input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"] { caret-color: auto; }
+.workspace-loading { display: flex; height: 100dvh; padding: 16px; gap: 16px; background: var(--z-bg); color: var(--z-text); }
+.workspace-loading > aside { display: flex; flex-direction: column; gap: 8px; width: 240px; padding: 28px; border-radius: 24px; background: var(--z-panel); }
+.workspace-loading > aside span { color: var(--z-muted); font-size: 12px; }
+.workspace-loading > section { flex: 1; }
+.workspace-loading header { padding: 20px; border-bottom: 1px solid var(--z-border); }
+.workspace-loading [role="status"] { display: flex; align-items: center; justify-content: center; gap: 12px; height: 65%; color: var(--z-muted); }
+.workspace-loading [role="alert"] { max-width: 540px; margin: 18vh auto 0; padding: 28px; border: 1px solid var(--z-border); border-radius: 20px; background: var(--z-panel); line-height: 1.7; }
+.workspace-loading [role="alert"] button { margin: 12px 16px 0 0; padding: 9px 18px; border: 0; border-radius: 10px; color: white; background: var(--z-primary); cursor: pointer; }
+.workspace-loading [role="alert"] a { color: var(--z-primary); }
+.loading-orbit { width: 18px; height: 18px; border: 2px solid #dae5f3; border-top-color: var(--z-primary); border-radius: 50%; animation: loading-orbit 1s linear infinite; }
+@keyframes loading-orbit { to { transform: rotate(360deg); } }
+@media (max-width: 767px) { .workspace-loading > aside { display: none; } }

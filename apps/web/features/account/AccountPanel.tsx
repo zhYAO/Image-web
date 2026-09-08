@@ -3,6 +3,7 @@
 import type { Account } from '../../../../packages/domain/src/auth-contracts';
 import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { notifyAuthChange } from '@/features/auth/AuthStatusProvider';
 
 export function AccountPanel({ account }: { account: Account }) {
   const router = useRouter();
@@ -62,7 +63,7 @@ export function AccountPanel({ account }: { account: Account }) {
       const response = await fetch('/api/auth/logout', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
       });
-      if (response.ok) router.push('/login');
+      if (response.ok) { notifyAuthChange(false); router.push('/login'); }
       else if (!redirectIfExpired(response)) setMessage('退出失败，请稍后重试。');
     });
   }

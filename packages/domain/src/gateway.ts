@@ -1,3 +1,4 @@
+import type { CommerceGateway } from './commerce';
 import type { SkillTask } from './skill-contracts';
 import type {
   ChatEvent,
@@ -14,6 +15,7 @@ import type {
 } from './types';
 
 export interface WorkspaceGateway {
+  readonly commerce?: CommerceGateway;
   getActiveTasks?(sessionId: string): Promise<SkillTask[]>;
   cancelTask?(task: SkillTask, action?: 'cancel' | 'replace'): Promise<SkillTask>;
 

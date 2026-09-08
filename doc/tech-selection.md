@@ -1,23 +1,27 @@
 # zimage 技术选型文档
 
-> **版本**：v2.0
-> **状态**：Phase 2 技术选型已完成，尚未实施；Phase 1 已实施内容作为历史基线保留
-> **需求基线**：`doc/requirements.md` v2.0（2026-08-31）
-> **更新日期**：2026-09-01
+> **版本**：v2.1（纳入电商生图 v0.2）
+> **状态**：历史选型保留；电商 v0.2 已批准、实施中，尚待独立验证
+> **需求基线**：`doc/requirements.md` v2.1 第 10–11 节
+> **更新日期**：2026-09-08
 > **适用发布口径**：面向中国大陆用户的公开 Beta，非生产就绪
 
 ## 1. 文档边界与追溯规则
 
 ### 1.1 唯一需求来源与状态口径
 
-本文件是 Phase 2 的技术设计与后续开发指导，产品行为只来源于 `doc/requirements.md` v2.0。技术设计可以增加满足需求所必需的接口、表和模块，但不得反向改变产品行为。`doc/project-progress.md` 中 Phase 2 仍为未开始状态，因此本文件中的路径、接口、数据表和伪代码均表示计划实现，不表示代码、测试或真实环境证据已经交付。
+本文件以 `doc/requirements.md` 为唯一产品需求来源。原 Phase 2 设计保留作历史追溯：2026-09-06 修订覆盖原自建认证方案；第 13 节电商 v0.2 覆盖旧 Skill 授权、目录、任务与接口设计，第 2/4 节同步现行行为。未被本次修订的认证伪代码、表与门禁仍须按 2026-09-06 修订核对，不能因保留在正文就恢复已覆盖的方案。
 
-Phase 2 共追溯 83 个稳定 ID：6 个成功指标、47 个用户故事验收条目、8 个非目标、6 个发布依赖、7 个风险和 9 个编号验收场景。其中以下 6 项为 `withdrawn`，只保留撤销原因，不创建实现任务，也不得复用 ID：
+用户已授权按 v0.2 实施；本次仅将批准的实际选型写入正式文档。路径、数据表、图示和伪代码描述实施目标，不代表迁移已部署、测试已通过、真实模型效果可用或公开 Beta 已完成。主任务维护进度与验证证据，本次不引用旧账本“未开始”作为当前状态。
+
+Phase 2 共追溯 83 个稳定 ID（需求第 10.9 节矩阵 74 项 + 第 10.7 节 9 类 P2-AT）：6 个成功指标、47 个用户故事验收条目、8 个非目标、6 个发布依赖、7 个风险和 9 个编号验收场景。其中以下 6 项为 `withdrawn`，只保留撤销原因，不创建实现任务，也不得复用 ID：
 
 - `P2-US5-AC01`、`P2-US5-AC02`、`P2-US5-AC03`：撤销匿名历史归入及其去重、失败、重试行为。
 - `P2-US5-AC05`：撤销匿名进行中任务归入正式账号。
 - `P2-DEP04`：撤销“匿名历史保持可识别和可归入”的依赖。
 - `P2-RISK03`：撤销匿名归入中断或重复触发风险。
+
+电商 v0.2 另有 17 个 EC 验收 ID；合计 100 个去重 P2/EC ID，其中原 6 个 withdrawn 保留。83/100 是需求覆盖数，不是测试数或通过数。
 
 ### 1.2 Phase 1 历史基线与 Phase 2 覆盖
 
@@ -26,9 +30,9 @@ Phase 1 的 Next.js 16、React、TypeScript strict、Zod、Zustand、LangGraphJS
 | Phase 1 决策/行为 | Phase 2 处理 | 对应需求 |
 | --- | --- | --- |
 | `TS-AUTH-01/02`：自动建立匿名身份并恢复同浏览器历史 | 被正式邮箱账号和 `requireFormalSession` 覆盖；关闭匿名注册并永久清理匿名数据 | `P2-US3-AC01`、`P2-US5-AC06`～`AC09`、`P2-NG08` |
-| `TS-FE-04/09`：Skill 固定字段、必填校验和提示词预览 | 被自然语言任务、会话追问和执行前默认值确认覆盖 | `P2-US2-AC02`、`AC11`、`AC12` |
+| `TS-FE-04/09`：Skill 固定字段、必填校验和提示词预览 | 原 Phase 2 改为自然语言/追问；现电商 v0.2 使用结构化向导、对话及逐图方案确认 | `P2-US2-AC02`、`AC11`、`AC12` |
 | `TS-FE-08`：取消 Skill 后恢复旧图片工具偏好 | 被按会话持久化的“创建图片”开关覆盖；任务结束后不自动关闭 | `P2-US2-AC07`、`P2-RISK04` |
-| Phase 1 提交后保留 Skill | Skill 只授权当前单次任务；历史固化名称和版本 | `P2-US2-AC03` |
+| Phase 1 提交后保留 Skill | Skill 只选择当前场景；确认绑定方案版本/选中项，历史固化名称和版本 | `P2-US2-AC03` |
 | `TS-SCOPE-02`：账号绑定与跨设备同步延后到 Phase 2 | 不做匿名绑定；仅正式账号按 `auth.uid()` 跨设备恢复 | `P2-US5-AC04`、`AC06` |
 | `TS-SCOPE-03`：外部告警延后到 Phase 2 | 本期不实施，移至未来阶段 | `P2-NG07` |
 | `TS-I18N-01` 中为 Phase 2 预留 en-US | 本期仍只提供 zh-CN，en-US 移至未来阶段 | `P2-NG05` |
@@ -37,7 +41,7 @@ Phase 1 的 Next.js 16、React、TypeScript strict、Zod、Zustand、LangGraphJS
 
 | 决策 ID | 决策摘要 | 主要页面/能力 |
 | --- | --- | --- |
-| `P2-TS-SCOPE-01` | 仅三个官方 Skill、邮箱密码账号、zh-CN、中国大陆公开 Beta | 全局 |
+| `P2-TS-SCOPE-01` | 原三 Skill 保留；电商扩至六场景/12 原创模板，邮箱账号、zh-CN、中国大陆公开 Beta | 全局 |
 | `P2-TS-SKILL-01` | 版本化只读 registry 作为三个 Skill 的唯一内容源 | `/skills`、`/skills/[skillId]` |
 | `P2-TS-SKILL-02` | 公开安全 DTO；Skill 页面不依赖用户会话 | `GET /api/skills` |
 | `P2-TS-AUTH-01` | 复用 LangGraphPj 的页面流程和职责分层，底层保留 ZImage `@supabase/ssr` + PKCE cookie + Proxy + `getClaims` | 认证页面与保护边界 |
@@ -46,9 +50,9 @@ Phase 1 的 Next.js 16、React、TypeScript strict、Zod、Zustand、LangGraphJS
 | `P2-TS-AUTH-04` | `v1:` + SHA-384 Base64URL 预哈希后交给 Supabase，所有密码入口仅在 ZImage 服务端调用 | 注册、登录、改密、重置 |
 | `P2-TS-AUTH-05` | HMAC 邮箱键记录全局失败；5 次后 Turnstile + 15 分钟等待 | 登录 |
 | `P2-TS-SESSION-01` | `app_sessions` 强制 30 天闲置和 90 天绝对期限 | 所有受保护入口 |
-| `P2-TS-WORKSPACE-01` | 自然语言 Skill 单任务状态机，执行前补充与确认 | 工作区/输入框 |
-| `P2-TS-WORKSPACE-02` | 每个 `skill_task` 最多原子触发一次生成 | 工作区/生成服务 |
-| `P2-TS-WORKSPACE-03` | 图片开关按会话持久化；待补充任务存在时不得单独关闭 | 工作区/会话 |
+| `P2-TS-WORKSPACE-01` | 向导/旧 Skill/对话共用 CommercePlan/Task，先保存方案再确认 | 工作区/输入框 |
+| `P2-TS-WORKSPACE-02` | 每次确认幂等创建一个 run，原子创建选中 count=1 子批次；允许明确重做 | 工作区/生成服务 |
+| `P2-TS-WORKSPACE-03` | 图片开关按会话持久化，仅能力许可；关闭不丢方案、不构成执行授权 | 工作区/会话 |
 | `P2-TS-ACCOUNT-01` | 独立 `profiles` 保存可选显示名称，不参与授权 | `/account` |
 | `P2-TS-ACCOUNT-02` | 主动改密保留当前应用会话；找回重置撤销全部会话 | `/account`、`/reset-password` |
 | `P2-TS-CUTOVER-01` | 正式账号仍以 `auth.uid() = user_id` 恢复，不复制数据 | 跨设备恢复 |
@@ -59,10 +63,10 @@ Phase 1 的 Next.js 16、React、TypeScript strict、Zod、Zustand、LangGraphJS
 
 | 页面/入口 | 访问级别 | 页面责任 | 技术决策 |
 | --- | --- | --- | --- |
-| `/skills`、`/skills/[skillId]` | 公开 | 浏览三个官方 Skill 与统一内容 | `P2-TS-SKILL-01/02` |
+| `/create`、`/skills`、`/skills/[skillId]` | 公开 | 六场景发现；三个旧 Skill 说明与兼容入口 | `P2-TS-SKILL-01/02` |
 | `/login`、`/register`、`/auth/check-email`、`/auth/confirm`、`/forgot-password`、`/reset-password` | 公开；确认/重置携带一次性 action | 注册、验证、登录、找回 | `P2-TS-AUTH-01`～`05` |
 | `/terms`、`/privacy` | 公开 | 展示经审批的正式文本和 Beta 边界 | `P2-TS-SCOPE-01` |
-| `/`、会话/生成/Skill 执行 API | 正式已验证账号 | 工作区、会话、生成、Skill 单次任务 | `P2-TS-SESSION-01`、`P2-TS-WORKSPACE-01`～`03` |
+| `/`、会话/生成/Skill 执行 API | 正式已验证账号 | 工作区、会话、上传、方案保存、确认执行、历史和导出 | `P2-TS-SESSION-01`、`P2-TS-WORKSPACE-01`～`03` |
 | `/account` | 正式已验证账号 | 账号资料、主动改密、退出 | `P2-TS-ACCOUNT-01/02` |
 
 Proxy 只负责刷新 Supabase Auth cookie 和快速重定向；每个受保护 Route Handler、服务方法及 RLS 都必须在数据源附近再次验证正式应用会话。Worker 使用 server-only 凭证执行已提交任务，不要求浏览器会话持续有效，但必须重新验证任务属于正式非匿名账号、任务未取消且未被匿名退场 tombstone 阻断。公开 Skill 页面及其 API 不触发匿名登录，也不读取用户、会话、消息、生成或额度数据。
@@ -73,18 +77,18 @@ Proxy 只负责刷新 Supabase Auth cookie 和快速重定向；每个受保护 
 
 | 需求 ID | 内容摘要 | 技术覆盖 |
 | --- | --- | --- |
-| `P2-US1-AC01`～`AC03` | 列表与详情公开；仅三个官方 Skill；详情包含用途、场景、建议信息、预期产出、限制和立即使用 | 公开路由、版本化 registry、公开 DTO |
+| `P2-US1-AC01`～`AC03` | 列表与详情公开；保留三个旧 Skill，新增六场景目录；详情包含用途、场景、建议信息、预期产出、限制和立即使用 | 公开路由、版本化 registry、公开 DTO |
 | `P2-US1-AC04` | 白底图、模特图、种草图具有明确且不同的产出语义 | registry 中固化 `purpose`、`expectedOutput` 和版本 |
 | `P2-US1-AC05` | 公共导航、工作区导航和输入框指向同一 Skill 内容 | 三处入口仅引用 registry 的 `id` 与详情路由 |
-| `P2-US1-AC06` | 立即使用创建空白会话并预选 Skill；登录前选择需恢复 | 签名/白名单化登录意图 `returnTo` + `skillId` |
-| `P2-US1-AC07`、`P2-NG01`、`P2-NG02` | 无案例、搜索、分类、收藏、安装、市场、编辑、第三方或多 Skill | DTO 不定义相关字段，页面不渲染相关入口 |
-| `P2-SC03` | 已登录用户打开列表、选中并发送不超过 3 个动作 | 工作区内直达入口 + 单击立即使用 + 发送 |
+| `P2-US1-AC06` | 立即使用在唯一工作台预选对应场景；登录前选择需恢复 | 签名/白名单化登录意图 `returnTo` + `skillId` |
+| `P2-US1-AC07`、`P2-NG01`、`P2-NG02` | 六场景/平台筛选/经审核示例允许；收藏、安装、市场、在线 Skill 编辑、第三方或多 Skill 仍不提供 | 公开元数据与私有指令分离；未验证效果不标成通过 |
+| `P2-SC03` | 发现并发送形成草案 ≤3 动作；就绪方案额外 1 次确认 | 资料补充/上传/编辑另计，确认前零入队 |
 | `P2-DEP03` | 三个 Skill 内容经产品审核且各入口口径一致 | registry 作为单一事实源，版本变更须评审 |
 | `P2-AT01`、`P2-AT07` | 验证公开访问、登录回跳、内容一致和非目标缺失 | 公开/登录态 E2E 固定场景 |
 
 ### 2.2 技术方案与关键伪代码
 
-`packages/domain/src/model-registry.ts` 中现有 `PHASE1_SKILLS` 将演进为 `OFFICIAL_SKILLS`。Phase 2 公开定义移除 `fields` 和 `promptTemplate`，保留服务端执行策略的内部定义，但内部提示词绝不通过公开 DTO 返回。
+`packages/domain/src/model-registry.ts` 中现有 `PHASE1_SKILLS` 将演进为 `OFFICIAL_SKILLS`。旧 Skill 的内部 `promptTemplate` 不公开；v0.2 允许面向用户的商品字段和可编辑方案，执行指令仍仅服务端可达。版本、说明、默认方案、来源与限制可作为安全元数据返回。
 
 ```text
 OfficialSkillPublic = {
@@ -122,7 +126,7 @@ afterLogin(intent)
   create new blank session; restore one preselected Skill; redirect
 ```
 
-登录意图不得接受任意外部 URL，避免开放重定向；一次成功消费后从地址栏清除。新会话只预选 Skill，不创建 `skill_tasks`、生成批次或额度预占，直到用户发送自然语言任务。
+登录意图不得接受任意外部 URL，避免开放重定向；一次成功消费后从地址栏清除。新会话只预选映射场景，发送自然语言只创建/修改 CommercePlan，不生图、不预占；明确确认保存版本和选中 slot 才创建执行组。上方旧 skillId 登录伪代码按 scene 映射兼容，受控场景参数不得包含商品资料或图片地址。
 
 ### 2.3 文件与模块范围
 
@@ -136,8 +140,8 @@ afterLogin(intent)
 
 | 方案 | 优点 | 缺点/风险 | 结论 |
 | --- | --- | --- | --- |
-| 版本化 TypeScript registry | 与现有 registry 和构建流程一致；单一事实源；可代码审查、回滚和固化历史版本 | 内容更新需要发布 | 选择；最符合仅三个官方 Skill 的边界 |
-| Supabase 动态内容表/CMS | 运营可即时更新 | 引入编辑、发布、权限和缓存治理，容易演变为 Skill 平台 | 不选；超出 `P2-NG01/02` |
+| 版本化 TypeScript registry | 与现有 registry 和构建流程一致；单一事实源；可代码审查、回滚和固化历史版本 | 内容更新需要发布 | 选择；保留三个旧 Skill 与 12 个原创电商模板的版本化内容 |
+| Supabase 动态内容表/CMS | 运营可即时更新 | 引入编辑、发布、权限和缓存治理，容易演变为 Skill 平台 | 不选；首版静态精选内容无须动态 CMS，仍不建设 Skill 平台 |
 | 第三方 Skill 市场 | 扩展快 | 内容、权限、供应链和可用性不可控 | 禁止；与明确非目标冲突 |
 
 ### 2.5 实施步骤
@@ -332,153 +336,75 @@ requireFormalSession(request)
 6. 将 `requireFormalSession` 接入所有受保护 API、服务和 RLS；验证 30/90 天边界。
 7. 完成 `P2-AT01`～`P2-AT03` 及法律/邮件/Beta 发布审批证据。
 
-## 4. 受保护工作区与输入框 Skill
+## 4. 受保护工作区与统一方案确认（v0.2 覆盖）
 
-### 4.1 需求来源
+### 4.1 需求来源与技术覆盖
 
-| 需求 ID | 内容摘要 | 技术覆盖 |
-| --- | --- | --- |
-| `P2-US2-AC01`～`AC03` | 单选 Skill 标签、自然语言与参考图、只授权一次任务、历史固化名称和版本 | Composer 标签 + `skill_tasks` + 时间线快照 |
-| `P2-US2-AC04`～`AC06` | 最多执行一次；信息不足只追问；待补充可续接；替换前确认取消 | 持久状态机、原子执行约束、替换事务 |
-| `P2-US2-AC07`、`P2-RISK04` | 图片开关按会话保持；任务结束不自动关闭；待补充时不可关闭 | `sessions.image_creation_enabled` |
-| `P2-US2-AC08` | 数量、比例、分辨率、模型发送前可见；不兼容时阻止且不静默修改 | capability 校验先于任务/额度创建 |
-| `P2-US2-AC09` | 有参考图逐项保真；无参考图执行前显示非还原提示 | 执行快照 + 提示/盲评证据 |
-| `P2-US2-AC10` | Skill 不可用时说明、重试、保留编辑，不替代 | 稳定错误码和可恢复 UI |
-| `P2-US2-AC11`、`AC12` | 参考图或商品类别+主要外观为最低条件；默认值必须执行前展示 | 信息检查器 + `awaiting_confirmation` |
-| `P2-SC03`、`P2-SC04` | 3 动作内发送；三类图可用率 ≥80% 且参考图逐项保真 | 可用性脚本和盲评 |
-| `P2-AT08`、`P2-AT09` | 完整交互状态、设置、失败、历史、会话切换和质量验收 | 状态机/E2E/盲评证据 |
+| 需求 | 当前技术决策 |
+| --- | --- |
+| P2-US2-AC01–AC03、EC-01–07 | 旧 Skill 单选映射 scene；向导、自然语言和参考图写入同一个 CommercePlan/Task；历史固化版本，标签不授权。 |
+| P2-US2-AC04–AC06、EC-07–11 | 草案/补充不入队；每次明确确认一个 revision/slotIds，幂等创建 run；版本不覆盖，替换保留草稿，允许后续明确重做。 |
+| P2-US2-AC07、P2-RISK04 | 会话图片开关只表示能力许可，可关闭并保留草案；普通讨论不生图。 |
+| P2-US2-AC08–AC12、EC-04/05/12/13 | 1–8 产物、合计四张参考图、销售真实商品图、能力校验、一次一题与可编辑默认值；文字更改须重新确认生成。 |
+| P2-SC03/04、P2-AT08/09、EC-17 | 发现/草案 ≤3 动作，就绪方案额外 1 次确认；补充/上传/编辑单记。三旧 Skill 质量 ≥80% 与逐项保真仍须真实评测。 |
 
-### 4.2 状态模型与执行快照
+### 4.2 方案、执行和选择分离
 
-```text
-skill_tasks.status:
-  awaiting_input
-    -> awaiting_input        (用户补充后仍不足)
-    -> awaiting_confirmation (最低条件满足，但存在默认值或无参考图提示)
-    -> executing             (无需默认值且所有风险提示已确认)
-    -> cancelled | replaced
+采用 `CommercePlan` 与扩展的 `CommerceTask`，独立记录 revision、slots、runs、selections、slotHashes 和 archived。用户可见“待补充/待确认”由当前方案缺项及提交情况推导；运行状态按 run.items 聚合，不能用旧 run 成功表示新 revision 已执行。
 
-  awaiting_confirmation
-    -> executing             (用户确认实际默认值/非还原提示)
-    -> awaiting_input        (用户修改要求后需重新分析)
-    -> cancelled | replaced
+原 `skill_tasks` 一任务最多一 batch、缺省值才确认、`awaiting_input` 可直接执行及专属 confirm/cancel/replace 状态机为历史方案，全部由第 13 节多版本/多 run 替代，不再创建第二套电商任务事实源。旧 Skill 名称、版本和作品继续可读。
 
-  executing -> completed     (生成成功、部分成功或已终结失败)
+每个未删除 slot 的标识稳定；编译快照和兼容哈希逐图保存。改第三张只使该 slot 待更新，其余选择继续使用。默认选择新成功图须同时核对当前 slotHashes、最新重做和选择版本；手选后旧在途结果只进入候选历史。exactText 表示模型整图生成文案，不是独立文本层。
 
-终态: completed | cancelled | replaced
-```
-
-每个任务保存 `skill_id`、`skill_name_snapshot`、`skill_version_snapshot`、原始用户文本、补充文本、参考图 ID、图片设置快照、已提出默认值、已确认默认值、非还原确认、状态和 `generation_batch_id`。历史读取只使用快照，不回查当前 registry 覆盖旧名称或版本。
-
-数据库必须建立“每个 session 最多一个 `awaiting_input`/`awaiting_confirmation` 活动任务”的部分唯一索引，以及“每个 `skill_task.id` 最多对应一个 generation batch”的唯一约束；生成服务在同一事务中把 `awaiting_confirmation/awaiting_input` 条件更新为 `executing`、写 batch/generations/timeline、预占额度并发送 queue message。条件更新失败返回 `skill_task_conflict`，不得重放生成。Composer 从 timeline 响应取得活动任务，用户直接回复时由 gateway 自动附带其 `pendingSkillTaskId`，用户无需理解或手填任务 ID。
-
-有参考图时，内部 `executionPolicy` 把颜色、外形轮廓、主要结构、可见图案或标识作为不可变约束，并把原始参考图 ID 不经调色、裁剪或降级替换地传给声明支持参考图的 provider/model；不支持所选设置或参考图能力时在生成前阻止。该策略不能仅靠提示词宣称达标，最终仍以 `P2-AT09` 的逐项盲评证据判定；任何属性实质改变都计为失败，不能用整体“看起来相似”覆盖单项失败。
-
-### 4.3 完整分支伪代码
+### 4.3 关键分支伪代码（实现目标）
 
 ```text
-POST /api/chat { sessionId?, message, skillId?, pendingSkillTaskId?, tools?, images? }
-  auth = requireFormalSession()
-  session = requireOwnedActiveSession(auth.userId, sessionId)
-  assert session.imageCreationEnabled when continuing a pending Skill task
+onWizardOrLegacySkillOrTargetedEdit(input)
+  validate schema and owned session/references
+  map legacy skillId to commerce scene
+  create/save structured plan with expectedRevision and requestId
+  compile trusted template on server; persist immutable revision
+  return task, one blocking question or confirmable plan
+  // never enqueue or reserve image quota
 
-  if pendingSkillTaskId exists:
-    task = lock owned active task
-    require task.sessionId == session.id
-    append user supplement; analyze combined input
-  else if skillId exists:
-    skill = registry.requireAvailable(skillId)
-    task = create awaiting_input with skill name/version snapshot
-    set session.imageCreationEnabled = true
-    analyze message + owned reference images
-  else:
-    run existing ordinary chat/image-tool path
+onOrdinaryDiscussion(message)
+  return normal chat text; image switch alone never authorizes generation
 
-  if image settings incompatible with selected provider/model:
-    keep task editable; emit skill.input_required(reason, retryAction)
-    do not create batch; do not reserve quota; do not alter settings
+onExplicitCommerceConfirmation(taskId, revision, slotIds, requestId)
+  require verified formal user and owned active session
+  call submit through CommerceGateway -> protected API -> commerce_dispatch
+  recover same idempotency key/result first; different content -> conflict
+  lock and validate current revision, inputs, model, slot eligibility and quota
+  in one transaction: run/items + count=1 children + quota + queue
+  return HTTP 202 and task with stable run/item mappings
 
-  minimum = hasRecognizableReferenceImage
-            OR (hasExplicitProductCategory AND hasMainAppearance)
-  if not minimum:
-    save task as awaiting_input with missingFields[]
-    append assistant question that names what is missing
-    emit skill.input_required(task snapshot)
-    stop without generation or quota
+onRecreate(slotIds)
+  save edited plan if necessary; show affected slots and new image units
+  wait for explicit confirmation; submit with recreate=true
 
-  proposal = deriveReasonableDefaults(skill, combinedInput)
-  notices = []
-  if no reference image: notices += "结果不代表对现有商品的还原"
-  if proposal not empty or notices not empty:
-    save awaiting_confirmation with exact defaults/settings/notices
-    emit skill.confirmation_required
-    stop without generation or quota
+onManualSelection(slotId, generationId, expectedSelectionVersion)
+  select verified candidate; increase selection version; fence old in-flight result
 
-  executeSkillTaskAtomically(task, confirmedSnapshot)
-
-POST /api/skill-tasks/{id}/confirm
-  auth = requireFormalSession(); lock owned task
-  require status == awaiting_confirmation
-  require confirmation fingerprint matches latest proposal
-  executeSkillTaskAtomically(task, latest confirmed snapshot)
-
-executeSkillTaskAtomically(task, snapshot)
-  transaction:
-    update skill_tasks set status='executing'
-      where id=task.id and status in ('awaiting_input','awaiting_confirmation')
-      and generation_batch_id is null
-    require exactly one row
-    validate owned reference uploads and immutable image settings
-    create generation batch with skill id/name/version/settings/reference snapshot
-    reserve quota and enqueue by existing Phase 1 idempotent path
-    set task.generation_batch_id = batch.id
-  emit skill.execution_started(batchId)
-
-selectDifferentSkill(newSkillId)
-  if active task is awaiting_input or awaiting_confirmation:
-    show destructive confirmation
-    if user cancels: retain old task and old Skill tag
-    if user confirms: atomically mark old replaced and create/select new Skill
-
-setImageCreationEnabled(sessionId, false)
-  if active pending skill task exists -> reject skill_task_conflict
-  else persist false on that session only
-
-onSessionChanged(targetSessionId)
-  load target session.imageCreationEnabled
-  load target active skill task and timeline
-  never copy source session's switch or pending task
+onSceneOrProductReplacement()
+  retain original draft; make replacement/new-task choice explicit
+  never overwrite an already submitted revision
 ```
 
-SSE 增加 `skill.input_required`、`skill.confirmation_required`、`skill.cancelled`、`skill.replaced`、`skill.execution_started`；现有 `tool.queued` 和生成轮询继续负责批次状态。事件全部经 Zod 判别联合验证，未知事件安全忽略并记录诊断。
+通用明确生图仍保留原直接入口；电商及旧 Skill 必须经过方案确认。销售主图、套图、详情图缺真实 product 引用时不能借通用入口、风格图或旧 Skill 标识执行同一销售任务。
 
-登录失效由 `WorkspaceAuthRecoveryBoundary` 捕获 `auth_session_expired`：暂停新请求并覆盖登录界面，但不卸载 Zustand store、当前 Workspace React tree 或本地参考图预览。已提交任务继续由 queue/worker 执行；重新登录后按原目标刷新会话、timeline 和待补充任务，再与仍在内存中的草稿合并。跨页面刷新无法保留纯本地文件对象，因此退出/失效恢复实现必须优先采用同页覆盖层；若浏览器主动刷新，未上传的本地文件不承诺恢复。
+### 4.4 恢复与模块责任
 
-### 4.4 文件与模块范围
+`features/commerce/` 承载三步向导、逐图编辑、运行与选图；`UnifiedWorkspace` 负责场景入口、会话和时间线协调。领域 schema/编译负责确定性与校验；独立可选 `WorkspaceGateway.commerce?: CommerceGateway` 连接 mock/HTTP；第 13 节给出实际 API 与 RPC。未接入网关的宿主不开放不可执行的电商按钮，不能回退到旧发送即生图。
 
-| 根目录 | 计划修改/新增 | 责任 |
-| --- | --- | --- |
-| `apps/web` | 修改 `UnifiedComposer.tsx`、`UnifiedWorkspace.tsx`、`WorkspaceApplication.tsx`、workspace store/gateway/timeline；新增 `SkillTag`、`SkillTaskCard`、`SkillConfirmation`、`WorkspaceAuthRecoveryBoundary`；修改 chat/image/session handlers 与服务 | 单选标签、追问/确认/恢复、按会话开关 |
-| `packages/domain` | 修改 API contracts、types、registry、gateway；新增 skill task 状态机和 reducer 测试 | 状态、事件、错误码、快照契约 |
-| `supabase` | 新增 `skill_tasks`；扩展 `sessions`、`timeline_items`、`generation_batches`；修改原子生成函数、RLS、pgTAP 和 worker 守卫 | 持久任务、最多一次、历史快照、正式会话校验 |
+登录失效停止新受保护请求并保留未发送文字、未保存方案、参考图/设置和原目标。重新登录后 list/get 恢复服务端版本、run、选图，再协调本地草案；未上传文件在浏览器主动刷新后不能伪称已持久化。已提交任务继续按 Worker 安全规则核对，归档不代表取消已提交 Provider。
 
-### 4.5 选型依据与备选方案
+### 4.5 选型理由与验证责任
 
-| 方案 | 优点 | 缺点/风险 | 结论 |
-| --- | --- | --- | --- |
-| 数据库持久状态机 + 原子生成 | 跨刷新/设备可恢复；可证明未扣额与最多一次；适配现有 Postgres 队列 | 模型和事务更复杂 | 选择；直接满足 `P2-US2-AC04/05` |
-| 仅 Zustand/React 状态 | 实现快 | 刷新丢失、跨设备不一致、重复提交难防 | 不选 |
-| LangGraph checkpoint 单独承载 | 对话上下文自然 | UI 查询、RLS、唯一约束和审计不透明 | 不作为事实源；可保存对话推理但任务状态仍结构化落库 |
-| 自动采用默认值直接生成 | 动作少 | 违反执行前展示和确认，可能错误扣额 | 不选 |
+持久版本与受限数据库事务支持刷新恢复、明确授权、不同 slot 的独立目标和全组原子性；仅 React 状态、LangGraph checkpoint 或循环 HTTP 提交都不能替代。使用既有单图 Worker，无需新增整套图 Provider 或长图排版 Worker。模板确定性编译可单元验证，但商品保真与文字效果必须另作真实模型验收。
 
-### 4.6 实施步骤
+### 4.6 实施顺序
 
-1. 先定义状态机、事件和失败测试，再建立 `skill_tasks`、快照字段和唯一约束。
-2. 扩展 session/timeline DTO 和存储层，恢复每个会话自己的图片开关与活动任务。
-3. 把固定 Skill 表单改为单选标签、自然语言和参考图；删除固定字段/模板预览依赖。
-4. 实现最低条件、追问、默认值/非还原确认和原子生成分支。
-5. 实现取消、确认替换、失败重试与登录失效恢复边界。
-6. 用 `P2-AT08` 完成状态/E2E，用 `P2-AT09` 完成三个 Skill 的盲评和窄屏任务。
+按批准实施计划：先可靠性修复与领域契约，再持久化/原子执行和 HTTP/mock，同步六场景与三旧 Skill 入口，最后验证旧发送零生图、明确确认、恢复/重做/导出与权限。主任务运行 lint/typecheck/tests/build/E2E、数据库/Worker 与隔离 HTTP 验证并记账；本次文档修改不执行或认领这些测试。
 
 ## 5. 账号页与会话管理
 
@@ -699,54 +625,15 @@ Stage 5: prove outcome
 
 `/auth/confirm` 是服务端页面/动作入口，消费邮件 action 后完成 Supabase token 验证；它不接受浏览器提供任意 redirect URL。服务条款与隐私政策内容不经 API 动态生成，只有经过审批的版本才能发布至 `/terms`、`/privacy`。
 
-### 7.2 工作区契约调整
+### 7.2 工作区契约调整（v0.2）
 
-```text
-CreateSessionRequest = {
-  title?, preselectedSkillId?  // 仅接受 registry 中受控 ID
-}
+工作区保持 session/timeline、按会话图片开关和历史 Skill 名称/版本快照；电商能力作为独立可选 CommerceGateway 挂载，具体请求 schema 见第 13.3 节。list/get 返回 CommerceTask，页面按服务端事实恢复方案/执行/选择，不能只在类型中增加 activeTasks 而丢弃恢复数据。
 
-UpdateSessionRequest =
-  | { title }
-  | { imageCreationEnabled }
+原 `pendingSkillTaskId`、`activeSkillTask`、`skill.confirmation_required` 及 `/api/skill-tasks/{id}/confirm|cancel|replace` 是被覆盖的旧契约，不能当成当前电商必需接口。任何兼容转换都只读/映射旧记录，不恢复发送自动授权。聊天增量只用于显示；明确目标编辑先保存方案，不因聊天工具已开启而提交图片。
 
-ChatRequest = {
-  sessionId?, message, tools?, chatModel?, imageProvider?,
-  skillId?, pendingSkillTaskId?, images?
-}
+通用直接生图仍保留每批 1–4 张；电商为 1–8 个 count=1 子批次。1K/2K、比例、引用上限均以当前模型 capability 为准，禁止静默替换；业务数量扩展不修改底层单图 Provider 协议。
 
-Session = {
-  id, title, status, imageCreationEnabled, createdAt, updatedAt
-}
-
-TimelineResponse = {
-  items: TimelineItem[],
-  activeSkillTask?: SkillTaskPublic,
-  nextCursor?
-}
-
-MessageTimelineItem += {
-  skill?: { id, name, version }  // 使用时快照，不回查当前 registry
-}
-
-SkillTaskPublic = {
-  id, sessionId, status,
-  skill: { id, name, version },
-  missingInputs[], proposedDefaults?, notices[],
-  imageSettings, referenceImageIds[], generationBatchId?
-}
-
-ChatSseEvent +=
-  | skill.input_required
-  | skill.confirmation_required
-  | skill.cancelled
-  | skill.replaced
-  | skill.execution_started
-```
-
-Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`、`POST /api/skill-tasks/{id}/cancel` 和 `POST /api/skill-tasks/{id}/replace`。确认请求携带最新 proposal fingerprint；取消和替换使用条件更新，终态任务不可再次操作。`PATCH /api/sessions/{id}` 使用判别联合分别修改标题或 `imageCreationEnabled`，不得在同一请求混改。
-
-`skillId` 只接受 registry 中受控 ID；`pendingSkillTaskId` 必须属于当前正式账号和当前 session。两者同时出现时，仅允许显式“确认替换”接口处理，普通 chat 请求返回冲突。现有图片参数 capability、1～4 张、1K/2K、参考图所有权、幂等键、配额预占和 queue 逻辑继续作为 Phase 1 回归边界。
+以下认证错误为旧设计记录，按文末 2026-09-06 修订复核；旧 skill_* 专属状态错误不构成恢复旧任务模型的要求。电商实际错误沿用项目统一 schema/registry，对冲突、资料缺失、所有权、模型和过期返回可行动的脱敏错误。
 
 新增稳定错误码至少包括：
 
@@ -763,7 +650,9 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 
 错误体继续沿用 `{ code, message, retryable, correlationId, details? }`；`details` 必须逐码白名单化，不含邮箱、密码、action secret、Supabase token、内部提示词或 Storage signed URL。
 
-### 7.3 数据模型
+### 7.3 数据模型（原 Phase 2 历史设计）
+
+本表中的自建认证结构按 2026-09-06 修订覆盖；`skill_tasks`、`skill_task_id unique` 与一任务一 batch 为被电商第 13 节替代的历史设计，不再作为新 commerce 迁移要求。表后对应实施规则仅在适用对象上延续最小权限原则。
 
 | Schema/表 | 计划字段与约束 | 暴露与权限 |
 | --- | --- | --- |
@@ -820,14 +709,14 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 
 1. 发布版本化公开 registry 和无认证 `GET /api/skills`。
 2. 实现列表、详情、三处统一入口和受控登录意图。
-3. 验证新空白会话、Skill 预选和三个动作内发送。
+3. 验证旧 Skill 到对应场景的恢复；发现/草案 ≤3 动作，就绪方案额外 1 次确认，资料步骤另记。
 
-### 8.4 第 4 阶段：持久 Skill 任务
+### 8.4 第 4 阶段：统一电商任务（覆盖旧 Skill 任务）
 
-1. 实现 `skill_tasks` 状态机、session 图片开关和 timeline 快照。
-2. 实现最低条件追问、补充、默认值/非还原确认、取消和替换。
-3. 复用 Phase 1 原子 batch/配额/queue 路径，实现每任务最多一次。
-4. 完成设置不兼容、Skill 加载失败、登录失效恢复和会话切换。
+1. 实现 CommercePlan/Task、不可变修订、slots/runs/selections/slotHashes，与按会话开关和时间线关联。
+2. 实现六场景、手工资料/模板、单项追问、明确方案确认和旧 Skill 映射。
+3. 通过 service_role-only commerce_dispatch 在同一事务创建所有 count=1 子批次、额度与 queue，单次请求幂等，允许明确重做。
+4. 验证新旧图切换、迟到结果阻断、固定导出、归档、仅待提交子项取消、设置/权限失败、登录恢复与会话切换。
 
 ### 8.5 第 5 阶段：账号和会话撤销
 
@@ -857,11 +746,11 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 | --- | --- |
 | 单元 | Unicode 代码点计数、SHA-384 固定向量、常见/泄露密码、email HMAC、action 状态、Skill 状态机、dirty-state |
 | 组件 | 认证表单、Beta 标识、Skill 页面/标签、追问/确认卡、登录恢复覆盖层、退出确认 |
-| API 集成 | 防枚举、锁定跨浏览器、action 过期/替代/重放、正式会话期限、Skill 最多一次、无扣额追问 |
+| API 集成 | 防枚举、锁定跨浏览器、action 过期/替代/重放、正式会话期限、确认请求幂等、同键异内容冲突、无扣额追问/草案、原子 1–8 子项 |
 | pgTAP | private 表不可达、显式 `GRANT`、正式活动会话 + 所有权 RLS、跨用户/匿名拒绝、唯一约束、正式夹具零误删 |
-| Worker | 匿名 tombstone、取消后不调用 provider、不写结果/额度、重复 queue 消费幂等 |
+| Worker | 匿名 tombstone 历史清理边界；电商用户取消仅作用于 pending + not_submitted 子项，release 一次、user_cancelled、运行中继续；重复 queue 消费幂等 |
 | E2E | `P2-AT01`～`P2-AT08` 的页面和跨浏览器路径 |
-| 盲评/可用性 | `P2-AT09`：三 Skill 分别 ≥80%，有参考图逐项保真，无参考图提示，桌面/窄屏 ≤3 动作 |
+| 盲评/可用性 | `P2-AT09`：三 Skill 分别 ≥80%，有参考图逐项保真；销售无图拦截，通用纯文字提示；发现/草案 ≤3 动作 + 就绪方案 1 次确认，资料步骤另记 |
 
 ### 9.2 发布阻断条件
 
@@ -879,11 +768,11 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 
 本文件交付时执行以下静态核对：
 
-1. 从 `requirements.md` Phase 2 追溯矩阵提取 83 个唯一 ID，并确认本文件逐项出现且映射到技术决策或撤销说明。
+1. 从 `requirements.md` 第 10.9 节提取 74 个矩阵 ID，加第 10.7 节 9 个 P2-AT 得 83 个；另核对第 11.4 节 EC-01–EC-17，共 100 个去重 ID，其中原 6 个 withdrawn 保留。
 2. 确认 6 个 withdrawn ID 只标记撤销，不出现在实施任务中。
 3. 确认第 2～6 节每个页面功能章节都包含需求来源、技术方案/伪代码、文件模块范围、选型依据和实施步骤。
 4. 确认接口、错误码、表名、状态名和文件范围前后一致。
-5. 确认文档未声称 Phase 2 已实施、已测试或生产就绪，并且本次只修改 `doc/tech-selection.md`。
+5. 确认文档只声明 v0.2 已批准、实施中，未声称测试/迁移/部署/真实效果通过；本次仅同步 requirements、architecture、tech-selection 三份正式文档。
 
 ## 10. Phase 2 全量需求追溯矩阵
 
@@ -891,30 +780,30 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 | --- | --- | --- | --- | --- |
 | `P2-SC01` | 受保护入口拦截和登录回跳 100% | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 3、7、9 | planned |
 | `P2-SC02` | 正式账号跨设备恢复 100% | `P2-TS-CUTOVER-01` | 6 | planned |
-| `P2-SC03` | Skill 选择发送不超过 3 个动作 | `P2-TS-SKILL-01`、`P2-TS-WORKSPACE-01` | 2、4 | planned |
+| `P2-SC03` | 发现/草案 ≤3 动作 + 就绪方案 1 次确认 | `P2-TS-SKILL-01`、`P2-TS-WORKSPACE-01` | 2、4 | planned |
 | `P2-SC04` | 三 Skill 可用率与逐项保真 | `P2-TS-WORKSPACE-01/02` | 4、9 | planned |
 | `P2-SC05` | Phase 2 九类关键任务 100% 通过 | 全部 Phase 2 决策 | 8、9 | planned |
 | `P2-SC06` | 匿名拦截/删除 100%，正式误删 0 | `P2-TS-CUTOVER-02` | 6、9 | planned |
 | `P2-US1-AC01` | Skill 列表/详情公开且不泄露用户数据 | `P2-TS-SKILL-02` | 2 | planned |
-| `P2-US1-AC02` | 只展示三个官方 Skill | `P2-TS-SKILL-01` | 2 | planned |
+| `P2-US1-AC02` | 保留三旧 Skill；六场景另见 EC-02 | `P2-TS-SKILL-01` | 2 | planned |
 | `P2-US1-AC03` | 独立详情含六类说明和立即使用 | `P2-TS-SKILL-01` | 2 | planned |
 | `P2-US1-AC04` | 三 Skill 的产出语义 | `P2-TS-SKILL-01` | 2、4 | planned |
 | `P2-US1-AC05` | 三处入口使用同一内容 | `P2-TS-SKILL-01` | 2 | planned |
-| `P2-US1-AC06` | 立即使用的新会话和登录选择恢复 | `P2-TS-SKILL-01`、`P2-TS-AUTH-01` | 2、3 | planned |
+| `P2-US1-AC06` | 立即使用映射场景和登录选择恢复 | `P2-TS-SKILL-01`、`P2-TS-AUTH-01` | 2、3 | planned |
 | `P2-US1-AC07` | 不提供市场/编辑/安装等入口 | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
 | `P2-US2-AC01` | 输入框单选 Skill 标签 | `P2-TS-WORKSPACE-01` | 4 | planned |
-| `P2-US2-AC02` | 自然语言/参考图和会话追问 | `P2-TS-WORKSPACE-01` | 4 | planned |
-| `P2-US2-AC03` | 单次授权和历史版本快照 | `P2-TS-WORKSPACE-01`、`P2-TS-DATA-01` | 4、7 | planned |
-| `P2-US2-AC04` | 最多生成一次，不满足条件不扣额 | `P2-TS-WORKSPACE-02` | 4 | planned |
+| `P2-US2-AC02` | 结构化向导、自然语言/参考图和逐项追问 | `P2-TS-WORKSPACE-01` | 4 | planned |
+| `P2-US2-AC03` | 确认版本/选中项授权和历史快照 | `P2-TS-WORKSPACE-01`、`P2-TS-DATA-01` | 4、7 | planned |
+| `P2-US2-AC04` | 每次确认幂等；草案/补充不入队 | `P2-TS-WORKSPACE-02` | 4 | planned |
 | `P2-US2-AC05` | 待补充任务可续接且不得重复 | `P2-TS-WORKSPACE-01/02` | 4 | planned |
 | `P2-US2-AC06` | 替换 Skill 前确认取消 | `P2-TS-WORKSPACE-01` | 4 | planned |
 | `P2-US2-AC07` | 图片开关按会话持久化 | `P2-TS-WORKSPACE-03` | 4、7 | planned |
 | `P2-US2-AC08` | 图片设置可见且不静默修改 | `P2-TS-WORKSPACE-01` | 4 | planned |
-| `P2-US2-AC09` | 参考图逐项保真和无图提示 | `P2-TS-WORKSPACE-01` | 4、9 | planned |
+| `P2-US2-AC09` | 参考图逐项保真、销售无图拦截与通用纯文字提示 | `P2-TS-WORKSPACE-01` | 4、9 | planned |
 | `P2-US2-AC10` | Skill 失败可重试且不替代 | `P2-TS-WORKSPACE-01` | 4、7 | planned |
 | `P2-US2-AC11` | 最低执行条件 | `P2-TS-WORKSPACE-01` | 4 | planned |
 | `P2-US2-AC12` | 默认值执行前展示并确认 | `P2-TS-WORKSPACE-01` | 4 | planned |
-| `P2-US3-AC01` | Skill 公开，其余核心能力需登录 | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 1、3 | planned |
+| `P2-US3-AC01` | Skill/电商目录公开，保存/执行等能力需登录 | `P2-TS-AUTH-01`、`P2-TS-SESSION-01` | 1、3 | planned |
 | `P2-US3-AC02` | 仅邮箱密码注册/验证/登录/找回 | `P2-TS-AUTH-01/02`、`P2-TS-SCOPE-01` | 3 | planned |
 | `P2-US3-AC03` | 注册四字段，显示名称非必填 | `P2-TS-AUTH-01` | 3 | planned |
 | `P2-US3-AC04` | 验证 24h、60s 重发、旧链失效 | `P2-TS-AUTH-02` | 3 | planned |
@@ -942,7 +831,7 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 | `P2-US5-AC07` | 切换时永久删除匿名数据/任务/资产 | `P2-TS-CUTOVER-02` | 6 | planned |
 | `P2-US5-AC08` | 无通知、只读、下载、迁移或恢复 | `P2-TS-CUTOVER-02` | 6 | planned |
 | `P2-US5-AC09` | 正式账号数据/任务/额度零改变 | `P2-TS-CUTOVER-02` | 6、9 | planned |
-| `P2-NG01` | 不扩 Skill/搜索/分类/收藏/案例 | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
+| `P2-NG01` | 六场景/平台筛选/审核示例覆盖旧限制；无 Skill 市场 | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
 | `P2-NG02` | 不做 Skill 平台或多 Skill | `P2-TS-SCOPE-01`、`P2-TS-SKILL-01` | 2 | planned |
 | `P2-NG03` | 不新增登录方式 | `P2-TS-SCOPE-01`、`P2-TS-AUTH-01` | 3 | planned |
 | `P2-NG04` | 不做扩展账号管理/删除 | `P2-TS-SCOPE-01`、`P2-TS-ACCOUNT-01` | 5 | planned |
@@ -987,7 +876,7 @@ Skill 任务动作使用受保护接口：`POST /api/skill-tasks/{id}/confirm`�
 | `TS-I18N-01` | 结构化 zh-CN key；Phase 2 仍不开放 en-US |
 | `TS-PERF-01` | 以固定夹具区分生图端到端 P95、SSE、队列等待和侧栏渲染性能 |
 | `TS-FE-01`～`TS-FE-03` | `UnifiedWorkspace`、`UnifiedComposer`、统一 `Timeline/GenerationCard`，聊天和生图共享会话/时间线 |
-| `TS-FE-04`、`TS-FE-09` | 图片设置浮层、参考图上传与批量下载继续保留；固定 Skill 表单和模板预览被 Phase 2 覆盖 |
+| `TS-FE-04`、`TS-FE-09` | 图片设置浮层、参考图上传与批量下载继续保留；固定 Skill 表单和模板预览先被 Phase 2 覆盖，现按电商向导与逐图方案交互 |
 | `TS-FE-05`～`TS-FE-07` | `/chat`、`/image` 重定向统一工作区；SessionSidebar；Zustand 只保存 UI/请求瞬态，服务端是事实源 |
 | `TS-FE-08` | 显式图片工具许可继续保留；Skill 取消恢复旧偏好的部分被按会话开关覆盖 |
 | `TS-FE-10`～`TS-FE-12` | 受控标签安全 Markdown、智能滚动、高级图片设置和生成轮次布局继续回归 |
@@ -1052,4 +941,105 @@ Phase 2 必须继续验证：SSE 分片/断流、图片工具许可、1～4 张�
 Supabase 相关实现开始前还应复核当日 changelog。2026-09-01 复核到的变更中，没有要求改变本文的托管 Auth/SSR 方案；自托管 Auth URL 变更与本项目无关，Data API 默认暴露和 OpenAPI 匿名访问收紧进一步支持显式 `GRANT`、RLS 及应用自维护 OpenAPI 的既有决策。
 ## Phase 2 选型修订（2026-09-06）
 
-本节覆盖旧版 Phase 2 方案中与当前批准行为冲突的内容。认证采用 Supabase 原生邮箱认证与会话撤销；应用不自建邮件令牌、密码预哈希、30/90 天期限或二次确认状态。Skill 公共 registry 只返回名称、版本、说明、默认方案和限制，服务端执行指令不进入公开响应。默认方案在发送前可编辑，信息足够时一次发送即排队；缺少关键信息才创建持久待补充任务。图片开关只表示允许图片能力，普通问题和闲聊不创建生成任务。
+本节覆盖旧版 Phase 2 方案中与当前批准行为冲突的内容。认证采用 Supabase 原生邮箱认证与会话撤销；应用不自建邮件令牌、密码预哈希、30/90 天期限；旧认证二次确认状态不引入。电商方案确认是生成授权，按第 13 节独立实施。Skill 公共 registry 只返回名称、版本、说明、默认方案和限制，服务端执行指令不进入公开响应。该日期的“信息足够时一次发送即排队”已由 D08 撤销：发送只生成/修改方案，缺项追问，所有旧 Skill 都在明确确认当前版本/选中项后才入队。图片开关只表示允许图片能力，普通问题和闲聊不创建生成任务。
+
+
+## 13. 电商 v0.2 实施选型（2026-09-08，尚待验证）
+
+### 13.1 批准范围与决策
+
+本节纳入 D01–D11 和批准的 v0.2 实施计划，替代研究技术方案的建议命名与接口。用户已授权开发，但真实 Provider 调用预算、线上迁移和发布证据不由本次文档同步产生。
+
+| 技术决策 ID | 选型及原因 | 需求 |
+| --- | --- | --- |
+| EC-TS-01 | `/create` 六场景目录，唯一 `/` 工作台三步向导/对话/结果；旧三 Skill 映射同方案，避免第二套会话与发送授权。 | EC-01/02/03/07/17 |
+| EC-TS-02 | `CommercePlan`、`CommerceTask`、slots/runs/selections/slotHashes；独立可选 CommerceGateway 挂载 WorkspaceGateway，mock/HTTP 共用 schema。 | EC-04/05/06/09/10/11 |
+| EC-TS-03 | 12 个原创模板、人工确认事实和确定性服务端编译；公开元数据/私有指令分离；不开放未验证视觉分析。 | EC-05/06/12/14 |
+| EC-TS-04 | service_role-only `commerce_dispatch` 保存不可变版本，原子创建 run 与 count=1 子批次/队列/预占；保留现有 Worker 与日限额/preview guard。 | EC-07/08/09/15/16 |
+| EC-TS-05 | slot 哈希、最新重做和选择版本共同阻断迟到覆盖；默认新成功图、手选旧图、固定导出清单。 | EC-10/11/13/15 |
+| EC-TS-06 | 现有 Provider、整图文字；1–8 slot、单方案/模型合计 4 张 ×10 MB 参考；同会话历史内部上限 64，显式样图采用；销售 product 引用必需；不增加独立排版/长图合成。 | EC-04/06/12/13/17 |
+| EC-TS-07 | 租约/领取版本、持久结果登记、完成补写、在途删除补偿及清理重领；配额账本与内容级联删除分离。 | EC-08/09/15/16 |
+
+### 13.2 领域与网关
+
+当前领域使用 `CommerceBrief`（name/facts/sellingPoints/platform/placement/productReferenceIds/styleReferenceIds）、`CommercePlan`（scene/brief/templateId/slots）和 `CommerceTask`（Plan + id/sessionId/revision/createdAt/updatedAt/runs/selections/slotHashes/archived）。slot 包含稳定 id、role、instruction、exactText、referenceIds 和 provider/model/aspectRatio/resolution。run 包含 id/revision/requestId/createdAt/items，item 关联 slotId/batchId/generationId/status/compatibilityHash/selectionVersion；selection 保存 slotId/generationId/compatibilityHash/version。研究中的 CreativeTask/CreativeRevision 为概念草案，正式 TypeScript 以 Commerce 命名，持久版本用 commerce_revisions。
+
+`WorkspaceGateway.commerce?: CommerceGateway` 是独立可选能力，方法包含 list/get/create/save/submit/select/export/upload，以及 `archive(taskId, {requestId, revision})`、`cancel(taskId, {requestId, revision, runId})`。后二者均返回 `Promise<CommerceTask>`；领域 schema、API、网关和 SQL 已接入。HTTP/mock 共用领域 schema，并从 list/get 恢复保存事实；UI 表单不能成为确认方案或选图的第二份数据库。接入状态不等于运行时/数据库测试通过。
+
+场景固定为主图、套图、详情、种草、参考风格、现有模特六类。12 模板固定为白底主图、柔光棚拍、材质特写、核心卖点、参数版式、日常场景、手持展示、品牌主视觉、种草封面（含小红书用途）、生活方式拼贴、详情首屏、详情模块。首版人工确认事实，商品事实/保真约束优先于文案目标、平台用途、风格和装饰。版本、原创/来源、权利、审核与模型验证状态独立记录，未验证标明待验，禁止全量导入第三方案例或复制其内部执行指令为授权。
+
+### 13.3 实际接口选型
+
+所有路径为实施契约，是否完整接通由主任务验证；失败沿用项目统一错误 schema 和 details 白名单。
+
+| 接口 | 请求/返回要点 |
+| --- | --- |
+| `GET /api/creative-templates` | 公开安全模板元数据；无私有指令或用户数据。 |
+| `GET /api/creative-tasks?sessionId=…` | 正式账号/活动会话所有权；返回 CommerceTask[]。 |
+| `POST /api/creative-tasks` | requestId、sessionId、plan；返回初始 CommerceTask，不入队。 |
+| `GET /api/creative-tasks/{id}` | 返回有权任务、当前方案、slotHashes、runs/selections。 |
+| `PATCH /api/creative-tasks/{id}` | requestId、expectedRevision、plan；新不可变修订，冲突 409。 |
+| `POST /api/creative-tasks/{id}/submit` | requestId、revision、slotIds、recreate?、source?；202 CommerceTask，含稳定 run/item 映射；source 仍为 direct/chat_tool。 |
+| `POST /api/creative-tasks/{id}/select` | requestId、revision、slotId、generationId、expectedSelectionVersion；所有权/候选校验，选择竞争 409。 |
+| `POST /api/creative-tasks/{id}/export` | requestId、revision、selections（slotId/generationId）；返回 id/revision/createdAt/items 的固定清单，短期 URL 按权限签发。 |
+| `POST /api/creative-tasks/{id}/archive` | requestId、revision；返回 CommerceTask。幂等归档，保留历史/导出并阻止新提交；不是删除资产、取消在途或退款。 |
+| `POST /api/creative-tasks/{id}/cancel` | requestId、revision、runId；返回 CommerceTask。只取消目标 run 中 pending 且 not_submitted 子项，释放一次额度，running 继续。 |
+
+研究建议的 `/analyze`、`/quote`、独立 `/recreate`、`PATCH /selection`、研究的 `creative-runs/{id}/cancel` 路径不作为当前公开接口承诺；现行取消使用 `POST /api/creative-tasks/{id}/cancel`。确认卡估算 `slotIds.length` 图片额度；未知价格保持未知，不引入另一套人民币计费。重做用 submit 的 recreate 标志；详情改字先保存新方案再确认受影响 slot。
+
+### 13.4 持久化、授权与原子性
+
+选择 `commerce_tasks`、`commerce_revisions`、`commerce_runs`、`commerce_run_items`、`commerce_selections`、`commerce_exports` 及私有编译快照、操作幂等结果。任务归属正式账号与活动 session；版本不可覆盖，slot 哈希来自可信服务端编译，既有 skill/prompt 客户端输入不能冒充已确认模板。正式服务验证身份/Origin/所有权后调用 `public.commerce_dispatch` 包装和 `private.commerce_dispatch`，二者仅向 service_role 授予 EXECUTE，撤销 PUBLIC/anon/authenticated，固定 search_path。客户端可读表须最小 GRANT + RLS，客户端不可直接写版本、run 或队列。
+
+幂等按 user/operation/requestId 与规范化内容哈希；身份和所有权先验证，同键同内容先返回原结果，即使当前 revision 后来变化也不新执行，同键异内容拒绝。新请求锁定任务/目标 slot，校验当前版本、1–8 去重选中项、全部引用、模型/Provider 启用、每日额度、preview guard 与 emergency stop；活跃或已有有效结果不得被不同 requestId 隐式重复生成，明确重做例外仍受活跃执行保护。
+
+同一数据库事务调用既有内部单图提交逻辑，为每 slot 创建 count=1 batch/generation、run item、配额预占与 queue；第 N 项失败时全部回滚，不能循环 HTTP 获得部分入队。执行组只汇总额度，子任务预占一次。通用直接生图仍为同 prompt 的 1–4 张，不扩大单次模型能力。
+
+### 13.5 选图、结果与清理
+
+`slotHashes` 逐图反映当前商品事实、引用、模板、文案和设置；未修改 slot 的有效选择跨 revision 延续。自动采用新成功图必须匹配当前哈希、最新在途重做和 selectionVersion；手动切图递增版本并清理旧候选获胜资格。迟到、失败、未知或缺图不能替换旧选择。用户可明确选回不兼容旧图，但显示旧版/待更新，不冒充符合新方案。
+
+export 固定有序 slot/generation 映射，后续完成和手选不会改写；单图重做后其余 slot 仍可参与完整集合。查询/签发校验正式所有权、同任务候选、成功与保留期，部分失效明确反馈，不能只下载可用子集却称完整。归档保留读取、历史和导出，阻止保存/新提交，不承诺上游取消。
+
+Worker 以租约版本和续租协调领取，已提交未知先核对不盲重放。Provider 结果或上传成功需持久登记，以便完成写库失败后幂等补写、仅重试存储步骤。删除与在途写入协调，拒绝完成的对象进入持久补偿清理；账号清理崩溃后重领。配额账本保留不可变业务标识，不随会话内容级联删除；删除不恢复消费。这些目标仍须 SQL/Worker 故障证据验证。
+
+归档/取消输入分别使用 `commerceArchiveSchema`（requestId/revision）与 `commerceCancelSchema`（另加 runId），沿用正式账号所有权、当前 revision、请求幂等和 RPC 事务边界。cancel 校验 run 属于任务，仅在锁保护下处理 `status=pending` 且 `provider_submission_state=not_submitted` 的可取消子项；已 processing/running 的子项继续，其他 run 不受影响。取消落为子项 `failed` + `error_code=user_cancelled`，不伪装 Provider 错误或影响其健康统计；release 按既有业务唯一键只写一次，同事务归档对应 queue 消息、清除在途候选关联并刷新批次，旧选图保留。相同幂等请求返回原结果；新请求无可取消子项返回 `commerce_cancel_conflict`，不能重复返额或声称整组停止。
+
+#### 13.5.1 历史参考上限与显式样图采用（新增集成裁定）
+
+单个 CommercePlan 及模型提交仍最多 4 张参考，每张 ≤10 MB，商品/风格/采用样图合计计数；模型更低能力上限优先。既有同会话历史参考文件可保留最多 64 个，属于内部资源上限，继续受现有上传/每日字节 guard 约束；不把历史文件数量当作模型输入数量，也不因旧草案占用四张选中引用而阻止新商品资料或样图转换。
+
+新增参考迁移与对应实现负责 generated sample → reference 的受保护转换。仅明确“采用为参考”触发；校验正式身份、生成所有权、同会话、成功/有效期与目标会话资源保护，再幂等创建引用，保存 `source_generation_id`。不能将 generationId 或 signed URL 直接提交为 referenceId。满四张时先明确替换当前方案的引用，保留旧草案历史；生成首张样图不自动修改后续方案。
+
+转换须在写对象前建立持久对象意图，记录来源与目标关联，以便复制失败、写库失败、重复请求或在途删除后可恢复登记/补偿清理；数据库和 Storage 不被假定为同一事务。复用现有上传安全、字节保护、私有存储及清理机制，不能用样图转换绕过限制。本次 main 持有的是功能实施范围，未获得公共付费调用预算；真实生成/评测费用仍不得从该资源上限或功能授权推导。
+
+### 13.6 验证分层与实施边界
+
+正式验收为 requirements 第 11.4 节 17 个 EC，原 83 个 P2 ID 保留且相关 Skill 语义已修订；第 10 节技术追溯表保留原 ID，对第 4/7 节的映射按本节覆盖。六场景、12 模板和 17 验收条目均不是通过数。发现/草案 ≤3 动作、就绪方案额外 1 次确认；上传/补充/编辑单记，不用缩减确认来达标。
+
+必须分别记录：领域编译和模板、mock/HTTP 契约、权限/RLS/RPC、并发与全组回滚、Worker/清理故障、浏览器/窄屏恢复、真实 Provider 保真/文字、迁移与发布。main 负责运行 lint/typecheck/domain+web tests/build/mock E2E，并据环境记录数据库/Worker 与隔离 HTTP；本次仅正式文档同步，未执行也未声称这些验证通过。研究中的 12 商品素材包/36 评测任务及 ≥90% 保真是评测建议，未转换为消费授权或已达标结论。
+
+首版保持 4 张合计参考（PNG/JPEG/WebP，每张 ≤10 MB）和当前模型支持尺寸；销售主图/套图/详情必须真实 product 引用。纯文字走通用生图入口。AI 整图文字改字需重新确认生成，无独立文字排版或长图合成，无未验证视觉分析按钮；新 GPT-Image-2、视频、A+、模特专项增强、支付与自动发布均另行安排。关闭新 commerce 提交时仍保留历史读取、固定导出和在途核对，不通过清表/清队列或重放未知请求回退。
+
+
+### 13.7 电商验收追溯（全部待验证）
+
+| 需求 ID | 技术落点 | 证据类型 |
+| --- | --- | --- |
+| EC-01 | EC-TS-01/02；架构 M19/M21、F10 | 导航、登录返回、桌面/移动恢复 |
+| EC-02 | EC-TS-01；架构 M19/M20 | 六场景覆盖、输入/产物文案 |
+| EC-03 | EC-TS-01/02；架构 M19/M20 | 平台与用途保存/切换 |
+| EC-04 | EC-TS-02/04/06；架构 M13/M22/M23 | 单方案/模型四图、会话历史内部 64、类型/大小、字节 guard、权限/到期与显式样图采用 |
+| EC-05 | EC-TS-02/03；架构 M19/M20 | 手填闭环、单项追问、事实与分析边界 |
+| EC-06 | EC-TS-02/03/06；架构 M20/M23 | 1–8 稳定 slot、参数与选中项 |
+| EC-07 | EC-TS-01/04；架构 F10 | 草案零入队、明确授权版本 |
+| EC-08 | EC-TS-04/07；架构 M23、F10 | 幂等、并发、冲突与全组回滚 |
+| EC-09 | EC-TS-02/04/07；架构 F11 | 刷新/未知提交、上传后落库失败恢复 |
+| EC-10 | EC-TS-02/05；架构 M19、F11 | 单图目标与整套变更确认 |
+| EC-11 | EC-TS-02/05；架构 F11 | 默认新图、切旧图、迟到阻断与五图完整导出 |
+| EC-12 | EC-TS-03/06；架构 M08/M20 | 模型 capability 与拒绝静默替换 |
+| EC-13 | EC-TS-05/06；架构 M19/M22、F11 | AI 整图文字、改字确认与独立图片交付 |
+| EC-14 | EC-TS-03；架构 M20 | 12 原创模板、版本/审核/模型验证元数据 |
+| EC-15 | EC-TS-04/05/07；架构 M13/M22/M23、F11 | 所有权、固定导出、失效、归档保留历史/导出、目标 run 取消边界、样图 source_generation_id 与持久对象意图清理 |
+| EC-16 | EC-TS-04/07；架构 M10/M23、F10 | 额度仅预占一次、取消只释放一次、日限额/preview guard、删内容不返额 |
+| EC-17 | EC-TS-01/06；架构 M01–M06、F10 | 聊天/直接生图/认证/历史及旧 Skill 新授权回归 |

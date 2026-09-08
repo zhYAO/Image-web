@@ -1,6 +1,6 @@
 # ZImage 电商生图融合技术方案
 
-版本：待评审 v0.1。日期：2026-09-07（洛杉矶）。配套：[产品需求](./zimage-commerce-prd.md)。本文件是可评审设计，不是已实现或已验收报告。
+版本：待评审 v0.2。日期：2026-09-07（洛杉矶）。配套：[产品需求](./zimage-commerce-prd.md)。本文件是可评审设计，不是已实现或已验收报告。
 
 ## 1. 技术结论
 
@@ -10,13 +10,13 @@
 
 ## 2. 当前 ZImage 代码核实
 
-基线提交：`f2e81edf1f856051dfbe8d6ad6ed687fa1a58476`。路径相对于项目根目录。
+研究基线：`f2e81edf1f856051dfbe8d6ad6ed687fa1a58476`；本轮审查：`bc05783d49645976cbfc54882c4ec8f7ae078e28`，其间为文档提交。路径相对于项目根目录。
 
 | 模块 | 已读代码事实 | 对新功能的影响 |
 | --- | --- | --- |
 | Web | `apps/web/package.json`：Next 16.3.0、React 19.2.7、TypeScript 6.0.3、Zustand、Zod、Sharp | 沿用技术栈，不迁入 awesome 的 Vite 应用 |
 | 工作台 | `features/workspace/UnifiedWorkspace.tsx`：单一时间线、图片配置、按会话草稿、Skill 方案编辑 | 新入口负责发现，向导与结果复用该边界 |
-| 官方 Skill | `packages/domain/src/official-skills.ts`：白底、模特、种草，均 v2.0.0 | 作为兼容技能保留；扩展结构化模板内容 |
+| 官方 Skill | `packages/domain/src/official-skills.ts`：白底、模特、种草，均 v2.0.0 | 三个能力统一映射场景方案；D08 改为先方案后确认，历史数据继续可读 |
 | 当前方案编译 | `UnifiedWorkspace.tsx` 将 Skill 默认值或用户覆盖文本与用户输入拼接 | 需要服务端结构化编译，不能只增加更多字符串 |
 | HTTP 图片网关 | `gateways/http-workspace-gateway.ts`：上传参考、缓存提交体、幂等键、请求单一 prompt | 可复用上传与幂等，但不支持每张不同目标的业务套图 |
 | HTTP 聊天网关 | `streamChat` 未序列化 proposal、imageSettings、taskId/taskRevision、requestId 等领域字段 | 仅修改类型不会使流程实际接通 |
@@ -29,7 +29,9 @@
 | 资产 | 上传检查类型/魔数/尺寸，private buckets，signed URL | 不复制上游公开结果 URL 作为永久资产 |
 | 账号 | API 使用 `requireVerifiedUserId` 与来源检查 | 新受保护入口同样使用正式账号守卫 |
 
-现有 `doc/project-progress.md` 最新记录仍有 Phase 2 未完成项，2026-09-07 记录了全量测试和旧 E2E 与正式登录配置的缺口。因此本方案中的“复用”表示利用代码基础，**不表示当前版本已满足发布门禁**。
+进度账本较新的“整站回归与浅色毛玻璃优化”记录已有 Domain 27、Web 209 项通过及 E2E 40 项通过/20 项条件跳过；不能把更早的失败当作当前失败。真实注册、全部 Provider、数据库隔离及远端发布等仍有证据缺口。本轮尝试定向测试因缺少 Vitest 未能启动，未得到新的通过结论。
+
+[本轮审查](./critical-review.md)另外确认：当前 UI 以工具开关直接分流生图；额度账本级联删除、清理与在途写入竞争、队列租约和完成恢复均存在代码缺口。下文“复用”须以这些前置修复为条件，不表示当前底座已经满足新流程可靠性要求。
 
 ## 3. awesome 项目实读结论
 
@@ -92,8 +94,6 @@ flowchart TD
     WORKER --> PROVIDER[现有图片 Provider]
     WORKER --> STORAGE[(private Storage)]
     WORKER --> DB
-    STORAGE --> COMPOSE[受控长图合成任务]
-    COMPOSE --> STORAGE
     DB --> GW
 ```
 
@@ -109,9 +109,10 @@ flowchart TD
 | `CreativeRevision` | taskId、revision、brief、slots、style、templateVersion、compiledPrompts、compilerVersion、hash | 新表，不可变快照；修改创建新版本 |
 | `CreativeRun` | id、taskId、revision、selectedSlotIds、requestId、requestHash、status、quotaEstimate | 新表，一次用户确认对应一个执行组 |
 | `CreativeRunItem` | runId、slotId、batchId、generationId、parentItemId | 新表，连接本次批次与单图；重做通过 parentItemId 关联原结果；唯一 `(runId, slotId)` |
-| `CompositeAsset` | revision、inputGenerationIds、layoutVersion、textSnapshot、state、storagePath、expiresAt | 新表，合成产物和其依赖；只有长图阶段启用 |
+| `CreativeSelection` | taskId、revision、slotId、generationId、selectionVersion、compatibilityHash | 新表或等价持久结构，记录当前交付选择；与候选历史分开 |
+| `CreativeExport` | taskId、revision、orderedSelections、manifestHash、state、expiresAt | 记录单图集合导出快照；首版不创建 CompositeAsset |
 
-`ProductBrief.facts` 每项含 `value`、`origin=user|vision|derived`、`confirmed`；模型置信度不能代替确认。`referenceRoles` 明确 `product|style`，引用现有 `reference_uploads.id`。单次方案合计不超过 4 张；引用图必须归同用户、同会话且未过期。
+`ProductBrief.facts` 每项含 `value`、`origin=user|vision|derived`、`confirmed`；模型置信度不能代替确认。`referenceRoles` 明确 `product|style`，引用现有 `reference_uploads.id`。采用已生成样图时，由受保护服务验证 generation 所有权、同会话、成功与有效期，幂等转换为上传引用并记录 sourceGenerationId；复制流程须有对象登记与失败清理。不得把 generationId 或签名 URL 直接当 referenceId。样图计入合计 4 张上限，满额时先让用户明确替换引用。引用图必须归同用户、同会话且未过期。
 
 每个 slot 至少含：`id/order/role/objective/referenceIds/exactText/aspectRatio/resolution/provider/model/templateId`。首版每 slot 产出 1 张，方案含 1–8 slot；多候选以后另加 `variants`，不复用同一个 count 混淆含义。
 
@@ -147,7 +148,21 @@ sequenceDiagram
 
 首次生成样图和后续生成剩余图分别形成执行组。新请求不得再次包含同一修订下已成功或仍活跃的 slot，除非走明确的“重做”动作；数据库锁定任务及 slot，防止两个不同 requestId 在并发点击时意外重复提交。
 
-修改已生成的第 3 张时，创建新修订并带上明确的原 generationId，只执行该 slot；原图仍保留。前端展示新旧版本关系。任务仍在生成时允许编辑下一版本，但不得覆盖已入队执行快照。
+修改已生成的第 3 张时，创建新修订并带上明确的原 generationId，只执行该 slot；原图仍保留。按 D10 默认采用新成功图，允许切回；前端展示新旧版本关系。任务仍在生成时允许编辑下一版本，但不得覆盖已入队执行快照。
+
+### 6.1 当前结果选择与导出快照
+
+slotId 在未删除该产物角色时保持稳定；新 revision 继承未受影响 slot 的选择，记录来源 revision。以商品事实、引用、模板、文案和设置计算每 slot 的兼容哈希；受变更影响的旧图保留，但标为待更新，不冒充符合新版要求。
+
+同一 slot 重做成功后默认更新 CreativeSelection。更新需校验该 slot 的当前方案哈希、最新重做请求和 selectionVersion；有更晚的重做或用户手动切图时，迟到结果仅加入候选历史。失败/未知结果不覆盖已有选择。新 revision 的“生成剩余项”依据有效选择和活跃执行共同判断，不能只扫描本 revision 的成功 run。
+
+导出冻结 orderedSelections 中每项的 slotId、generationId、来源 revision、实际尺寸及文案快照。所有权、有效期和方案兼容性校验后生成固定清单；待更新项需明确提示并允许用户决定是否导出旧版本，缺图不能静默冒充完整套图。后续结果完成不改写已有导出。
+
+### 6.2 三个旧 Skill 的统一入口
+
+按 D08，将旧 skillId 转换为对应 scene/template。向导、Skill 自然语言和对话修改均先创建/修改同一方案；只有引用明确服务端 revision 与选中 slot 的确认动作能够入队。图片开关只表示能力可用，不能成为执行授权。缺关键商品资料时追问一次，普通讨论只输出文字。D11 要求销售用主图/套图/详情图至少包含一张有效 product 引用；纯文字创作走通用生图入口，不可通过选旧 Skill 绕过该条件。
+
+同步修订正式需求中 P2-US2-AC02/04/05/06/07、P2-SC03 及对应测试；兼容旧 Skill 链接和作品读取，不保留旧自动执行授权。当前 runChat 的字段、网关序列化、服务端规划和 task.updated 消费须贯通，不能只改前端按钮。
 
 ## 7. 模板导入与编译
 
@@ -190,7 +205,8 @@ sequenceDiagram
 | `POST /api/creative-tasks/{id}/submit` | requestId、revision、selectedSlotIds、quoteId | 原子确认，返回 202 + runId；重复请求返回原执行组 |
 | `POST /api/creative-tasks/{id}/recreate` | requestId、revision、目标 slot/generationId | 显式重做，关联原结果；新执行组 |
 | `POST /api/creative-runs/{id}/cancel` | requestId、目标未派发项 | 取消可确认尚未提交的项；不保证上游可取消 |
-| `POST /api/creative-tasks/{id}/export` | revision、结果选择、导出类型 | 单图集合或长图合成；响应持久化导出任务 |
+| `POST /api/creative-tasks/{id}/export` | revision、selectionVersion、结果选择 | 冻结单图集合清单；返回持久化导出记录 |
+| `PATCH /api/creative-tasks/{id}/selection` | requestId、revision、slotId、generationId、expectedSelectionVersion | 选择旧图/新图，所有权与兼容性验证，冲突 409 |
 
 quote 在首版主要表示图片额度估算：`generationUnits = selectedSlotIds.length`。当前额度以图片数量计量，不引入第二套人民币计费。若后续启用收费分析，分开显示 `analysisEstimate`；没有可靠单价时 monetary estimate 为未知，不能返回 0 冒充免费。
 
@@ -226,24 +242,24 @@ quote 在首版主要表示图片额度估算：`generationUnits = selectedSlotI
 | 明确拒绝且未消费 | 记录安全错误，按现有语义释放；修正后由用户确认新请求 |
 | Provider 已接受/结果未知 | 记录 attempt 与 requestId，先核对，不自动重新生图或释放全部额度 |
 | 图片生成成功但上传失败 | 保留能够恢复的产物引用/尝试信息；只重试存储步骤，不默认再次调用模型 |
+| 上传成功但完成落库失败 | 已知 storagePath/Provider request ID 持久保存；幂等补写完成，不能当成普通失败再次调用模型 |
+| 执行租约到期 | 续租、领取版本与有界超时控制；先核对在途执行，不因固定 120 秒过去便直接终态失败 |
 | 部分失败 | 成功项永久关联原 slot；重做只选择失败或用户点选项 |
 | 旧 run 完成时用户已编辑新版 | 更新旧 run 状态；不覆盖当前 revision 或当前显示的待确认方案 |
 
 当前 adapter 返回最终图片，而非统一异步 task ID 协议，首版不为引入 awesome 强行改成 APIMart 调用。若未来引入异步 Provider，应另增 submit/poll/result 接口与持久化尝试状态，在单独设计中处理未知结果和回调鉴权。
 
+取消未派发项需要新增原子状态转换，与 Worker 开始提交 Provider 争用同一执行锁/领取版本：只有能确定尚未提交的项才归档并释放一次预占。已提交或状态未知时保留核对状态；不能通过前端隐藏任务实现取消。
+
 任务状态从数据库聚合；浏览器内存与 SSE 增量仅用于即时显示。事件丢失后按 task/run 查询恢复，不能依赖断线重放成功才能继续。
 
-## 11. 长图与文本合成
+## 11. 首版整图文字与图片集合导出
 
-长图以方案模块为单位，生成视觉后进行确定性排版。建议使用受许可字体、SVG/文本布局与项目已有 Sharp，在 Node 运行时完成合成；不要假设 Supabase Deno Worker 已具备相同原生库运行条件。
+D09 确认首版由 AI 同时生成视觉与文字。exactText 表示用户确认、要求模型尽量准确绘制的内容，不代表独立文本层。修改文案会创建新 revision 并重新生成受影响 slot；不能用 Sharp 叠字宣称旧文字已清除或商品像素未改变。
 
-设计一个持久化合成队列与受认证的 Node 执行入口：任务先落库，执行入口领取租约后在一次有界调用内合成并上传，未完成由调度再次领取。禁止在 HTTP 返回后启动无人监管的异步进程。具体部署触发机制随项目最终托管方式确认。
+只支持登记并验证的模型尺寸和比例。详情场景交付独立图片集合，按 CreativeExport 固定清单下载；不加入 Node 长图合成 Worker、字体布局、CompositeAsset 或 100% 准确文字承诺。集合下载需能报告部分文件失效/失败，不把缺图包标为完整交付。
 
-首版建议处理上限：宽度不超过 2048 px、高度不超过 20000 px，解码/合成总像素不超过 40 MP；同时满足三项，超出时提示分段导出。它们是资源保护建议，不是淘宝/抖音/小红书官方尺寸要求。上线前用目标环境测峰值内存并调整。
-
-合成保存 `layoutVersion + exactText + fontVersion + orderedGenerationIds + outputDimensions`。相同快照重复导出复用结果；改文字/顺序只重合成，改视觉只重生成对应 slot。输出明确标注实际像素与是否经过缩放。
-
-CompositeAsset 存私有对象、独立到期时间及来源依赖；不能仅把长图伪装为某张单图而丢失关系。删除会话/注销账号时，将合成资产和相关临时文件纳入清理。输入过期时旧合成文件可在其自身有效期内下载，但重新合成需要重新验证依赖。
+确定性排版与单张长图作为后续候选，若立项再设计无营销文字底图、包装原有标识保护、独立文字区、排版版本、持久合成队列、像素限制和清理。当前不把该系统算入首版工程量。
 
 ## 12. 资产、账号与数据安全
 
@@ -282,14 +298,14 @@ Storage 继续使用私有 bucket，经鉴权后生成短期下载链接。[Supa
 | 阶段 | 交付范围 | 前置与退出条件 | 粗估开发量 |
 | --- | --- | --- | --- |
 | M0 | 本文档包、决策与设计评审 | 用户审阅并确认具体需求；本次到此为止 | 文档已交付，不计开发 |
-| M1 | 新入口、平台/场景选择、手工商品资料、12 模板草案、方案编辑 | 完整 mock 流程，保留旧工作台；内容许可审查 | 4–6 人日 |
-| M2 | 服务端修订、原子执行组、子批次、恢复、补图、额度 | RLS/幂等/事务与 HTTP E2E 通过；真实模型预算另定 | 6–9 人日 |
-| M3 | 视觉分析、缺项逐题问答、对话目标定位、风格匹配 | 验证聊天模型视觉能力；不可用时手填链路仍完整 | 4–7 人日 |
-| M4 | 详情模块合成、导出、参考风格和各平台样本质量验收 | 部署运行时验证、关键文字/商品保真达标 | 5–8 人日 |
+| M1 | 新入口、三个 Skill 统一接入、手工商品资料、模板草案、方案编辑 | 完整 mock 流程；D08 授权规则与正式需求同步 | 待拆分重估 |
+| M2 | 服务端修订、原子执行组、选图、恢复、补图、对话目标定位、集合导出 | 底座修复闭环；权限/幂等/事务/HTTP 验收；手填可完成全流程 | 待拆分重估 |
+| M3 | 可选视觉分析、风格匹配、参考风格及各场景质量验收 | 先补视觉消息协议与实测；不可用时不开放分析按钮 | 待验证模型与样本成本 |
+| 后续候选 | 单张长图、独立文字排版、模特增强 | 另行确认范围；不属于首版 | 不计入 |
 
-合计建议估算 19–30 人日，属于工程估算，非工期承诺；假设一名熟悉现有项目的全栈工程师、已有环境可用、内容审校可配合。修复当前认证/E2E 门禁、等待素材授权、真实 Provider 调参和生产部署时间另计。
+v0.1 的 19–30 人日估算撤回：D08 增加旧流程迁移，D09 移除排版合成，本轮又发现底层修复前置项，不能只减去原 M4 工时得出新排期。实施前按修复、流程开发、内容与模型验收分别拆分估算。
 
-第一版整体目标包含 M1–M4；中途可内测入口与单图，但不可将仅完成页面称为电商生图功能已交付。
+先完成审查列出的底座修复，再推进首版 M1–M3；其中视觉分析可在未验收时关闭，手填与对话修改闭环必须完整。中途可内测入口与单图，但不可将仅完成页面称为电商生图功能已交付。
 
 ## 15. 测试与验收证据
 
@@ -300,15 +316,15 @@ Storage 继续使用私有 bucket，经鉴权后生成短期下载链接。[Supa
 | 事务 | 第 N 个子任务失败全回滚、额度不双扣、并发不同 requestId 不隐式重复、旧 revision 拒绝 | EC-07/08/11/16 |
 | 权限 | 任务、修订、引用、结果和导出跨账号/跨会话拒绝；注销/过期登录拒绝 | EC-04/15 |
 | UI | 新入口、登录返回、向导恢复、一次一题、只改第三张、移动端 | EC-01/02/03/05/10 |
-| Worker | 重复领取、未知提交、存储失败不重复生成、部分失败、旧 run 完成 | EC-08/09/11 |
-| 合成 | 精确文字、缺失模块、字体、尺寸上限、幂等导出、输入/结果过期 | EC-13/15 |
+| Worker/清理 | 租约续期、未知提交、上传后落库失败恢复、在途删除、账号清理崩溃重领、删会话额度不恢复 | EC-08/09/11/15/16 |
+| 导出与选图 | 单图重做后整套完整、切回旧图、迟到结果不覆盖、固定清单、部分失效、改字重新生图 | EC-10/11/13/15 |
 | 回归 | 原聊天/直接生图/Skill/会话/登录/注销不退化 | EC-17 |
 
-开发完成后按仓库门禁运行 `pnpm lint`、`pnpm typecheck`、`pnpm test:run`、`pnpm build`、`pnpm e2e`，另运行相关 pgTAP、Worker 测试及隔离 HTTP 验收。旧匿名 E2E 应按正式账号需求更新测试设置，不通过放宽登录门禁来获得绿色结果。
+开发完成后按仓库门禁运行 `pnpm lint`、`pnpm typecheck`、`pnpm test:run`、`pnpm build`、`pnpm e2e`，另运行相关 pgTAP、Worker 测试及隔离 HTTP 验收。按实际测试配置区分 mock 与正式账号 HTTP 验收，不用较早的匿名测试失败替代最新状态；新增统一 Skill 授权的正反例。
 
 真实图片评测建议先准备 12 个经授权商品素材包，覆盖六类外观/材质，每类 2 个。首轮按三个重点场景形成至少 36 个评测任务，再明确每任务张数、启用 Provider、预算及停止条件后执行；这只是样本方案，不是本次授权消费。逐项记录商品保真、文字、布局、实际消耗、耗时、失败与人工评分。
 
-数据库、mock、真实 Provider、部署验收分别记录；不能以“模板导入通过”替代“图片可商用交付”。当前测试未在本次重跑，不声称任何新增能力已通过。
+数据库、mock、真实 Provider、部署验收分别记录；不能以“模板导入通过”替代“图片可商用交付”。本轮定向测试因缺少 Vitest 未能启动，不声称任何新增能力已通过。
 
 ## 16. 发布与回退
 
