@@ -199,7 +199,7 @@ test('redirects retired Skill pages to commerce without starting a task', async 
   for (const path of ['/skills', '/skills/white-background', '/skills/model', '/skills/social']) {
     await page.goto(path);
     await expect(page).toHaveURL('/create');
-    await expect(page.getByRole('heading', { name: '让商品成为画面主角' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '选择生图类型' })).toBeVisible();
     await expect(page.getByRole('link', { name: '官方 Skill' })).toHaveCount(0);
   }
 });

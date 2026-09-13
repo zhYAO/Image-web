@@ -1,5 +1,7 @@
 import {
   parseCommerceEdit,
+  COMMERCE_SCENES,
+  COMMERCE_PLATFORMS,
   type CommerceBrief,
   type CommerceGateway,
   type CommerceScene,
@@ -9,7 +11,6 @@ import {
   type TimelineItem,
 } from "@zimage/domain";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -18,6 +19,11 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import { Image as AntdImage } from "antd";
+import Link from "next/link";
+import { ArrowLeft, Layers3, Plus } from "lucide-react";
+import { TemplatePreview } from "./TemplatePreview";
+import { templateName } from "./commerce-ui";
 import {
   CommerceTaskCard,
   type CommerceEditRequest,
@@ -33,6 +39,7 @@ export interface CommerceWorkspaceHandle {
   edit(message: string): boolean;
 }
 export interface CommerceLaunch {
+  initialTemplateId?: string;
   prompt?: string;
   scene: CommerceScene;
   platform?: CommerceBrief["platform"];
@@ -54,6 +61,7 @@ export function CommerceWorkspace({
   renderTimeline,
   onReferencesAdopt,
   onModeChange,
+  onTaskChanged,
   ...wizardProps
 }: {
   ref: Ref<CommerceWorkspaceHandle>;
@@ -61,6 +69,7 @@ export function CommerceWorkspace({
   sessionId?: string;
   launch?: CommerceLaunch;
   onModeChange?: (sessionId: string | undefined, active: boolean) => void;
+  onTaskChanged?: () => void | Promise<unknown>;
   onReferencesAdopt: (
     references: UploadReference[],
     sessionId: string,
@@ -103,7 +112,21 @@ export function CommerceWorkspace({
         sessionId && Object.values(pendingSubmissions).includes(sessionId),
       ),
     );
+  const acceptAndRefresh = useCallback((task: CommerceTask) => {
+    accept(task);
+    void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
+  }, [accept, onTaskChanged]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [selectedBySession, setSelectedBySession] = useState<
+    Record<string, string>
+  >({});
+  const [panels, setPanels] = useState<
+    Record<string, "examples" | "plan" | "results">
+  >({});
+  const chooseTask = (id: string, targetSession = sessionId) => {
+    if (targetSession)
+      setSelectedBySession((current) => ({ ...current, [targetSession]: id }));
+  };
   const [note, setNote] = useState<string>();
   const [autoStartTasks, setAutoStartTasks] = useState<Record<string, boolean>>(
     {},
@@ -120,6 +143,7 @@ export function CommerceWorkspace({
   const [consumedLaunch, setConsumedLaunch] = useState<string>();
   const open = (scene: CommerceScene, prompt?: string) => {
     if (!sessionId) return;
+    chooseTask("draft");
     const existing = drafts.find((draft) => draft.sessionId === sessionId);
     if (existing) {
       if (existing.scene === scene && prompt) {
@@ -150,7 +174,9 @@ export function CommerceWorkspace({
         !drafts.some((draft) => draft.sessionId === sessionId)
       )
         return false;
-      const task = tasks.length === 1 ? tasks[0] : undefined;
+      const task =
+        tasks.find((item) => item.id === selectedBySession[sessionId ?? ""]) ??
+        (tasks.length === 1 ? tasks[0] : undefined);
       if (
         isExplicitImageRequest(message) &&
         /这(?:一)?套|当前(?:方案|任务|套图)|剩余(?:的)?(?:图|图片)|这些图/.test(
@@ -248,9 +274,11 @@ export function CommerceWorkspace({
             seedPlan: planOf(task),
           },
         ]);
-      throw new Error(
-        "商品图与风格图合计最多 4 张，请先明确移除一张，再采用样图；不会自动替换。",
-      );
+      chooseTask("draft");
+      const message =
+        "商品图与风格图合计最多 4 张，请先明确移除一张，再从当前会话任务中选择原任务并采用样图；不会自动替换。";
+      setNote(message);
+      throw new Error(message);
     }
     const key = `${task.id}:${generationId}`;
     let requestId = promotionKeys.current.get(key);
@@ -269,6 +297,7 @@ export function CommerceWorkspace({
       throw new Error(
         "当前会话或素材已变化，请返回原会话并确保合计不超过 4 张后重试。",
       );
+    chooseTask("draft");
     setPromotedStyles((current) => ({
       ...current,
       [sessionId]: [...(current[sessionId] ?? []), reference.id],
@@ -295,10 +324,6 @@ export function CommerceWorkspace({
   const visible = items.filter(
     (item) => item.type !== "generation" || !underlying.has(item.batch.id),
   );
-  const entries = [
-    ...visible.map((item) => ({ date: item.createdAt, id: item.id, item })),
-    ...cachedTasks.map((task) => ({ date: task.createdAt, id: task.id, task })),
-  ].sort((a, b) => a.date.localeCompare(b.date));
   const hasCommerce = Boolean(
     tasks.length ||
     drafts.some((draft) => draft.sessionId === sessionId) ||
@@ -310,11 +335,56 @@ export function CommerceWorkspace({
   const saved = (draft: Draft, task: CommerceTask, generate = false) => {
     if (generate)
       setAutoStartTasks((current) => ({ ...current, [task.id]: true }));
-    accept(task);
+    acceptAndRefresh(task);
+    chooseTask(task.id, task.sessionId);
+    setPanels((current) => ({
+      ...current,
+      [task.id]: generate ? "results" : "plan",
+    }));
     setDrafts((current) => current.filter((item) => item.id !== draft.id));
     setNote(generate ? undefined : "方案已保存，可随时生成。");
   };
   const coordinatedLoading = timelineLoading || loading;
+  const currentDraft = drafts.find((draft) => draft.sessionId === sessionId);
+  const requestedTask = selectedBySession[sessionId ?? ""];
+  const selectedTask =
+    tasks.find((task) => task.id === requestedTask) ?? tasks.at(-1);
+  const showDraft = Boolean(
+    currentDraft &&
+    (!requestedTask ||
+      requestedTask === "draft" ||
+      !tasks.some((task) => task.id === requestedTask)),
+  );
+  const panelKey = showDraft ? currentDraft!.id : (selectedTask?.id ?? "");
+  const panel =
+    panels[panelKey] ??
+    (showDraft ? "examples" : selectedTask?.runs.length ? "results" : "plan");
+  const setPanel = (value: "examples" | "plan" | "results") =>
+    setPanels((current) => ({ ...current, [panelKey]: value }));
+  const panelTabs = (
+    <div
+      className={styles.workbenchTabs}
+      role="group"
+      aria-label="电商工作台视图"
+    >
+      <button
+        aria-pressed={panel === "examples"}
+        onClick={() => setPanel("examples")}
+      >
+        示例
+      </button>
+      <button aria-pressed={panel === "plan"} onClick={() => setPanel("plan")}>
+        方案
+      </button>
+      <button
+        aria-pressed={panel === "results"}
+        disabled={showDraft}
+        onClick={() => setPanel("results")}
+      >
+        结果
+      </button>
+    </div>
+  );
   return (
     <>
       {error && (
@@ -331,60 +401,223 @@ export function CommerceWorkspace({
           {note}
         </p>
       )}
-      {/* Wait for commerce facts before exposing child batches as standalone generations. */}
-      {entries.map((entry) => (
-        <Fragment key={entry.id}>
-          {"task" in entry && gateway ? (
-            <div
-              hidden={entry.task.sessionId !== sessionId || coordinatedLoading}
-            >
-              <CommerceTaskCard
-                key={entry.task.id}
-                task={entry.task}
-                autoStart={autoStartTasks[entry.task.id]}
-                gateway={gateway}
-                capabilities={wizardProps.capabilities}
-                onTask={accept}
-                editRequest={edits[entry.task.id]}
-                confirmationRequest={confirmations[entry.task.id]}
-                onSubmissionPendingChange={markSubmissionPending}
-                onPromote={promote}
-              />
+      {hasCommerce && !coordinatedLoading && (
+        <header className={styles.workbenchHeader}>
+          <Link href="/create">
+            <ArrowLeft size={15} aria-hidden />
+            创作方式
+          </Link>
+          <span>
+            <Layers3 size={17} aria-hidden />
+            {(showDraft ? currentDraft?.scene : selectedTask?.scene) === "xhs-poster" ? "小红书海报工作台" : "电商工作台"}
+          </span>
+          {(tasks.length > 0 || currentDraft) && (
+            <label className={styles.taskHistory}>
+              当前会话
+              <select
+                aria-label="当前会话任务"
+                value={showDraft ? "draft" : (selectedTask?.id ?? "")}
+                onChange={(event) => chooseTask(event.target.value)}
+              >
+                {currentDraft && (
+                  <option value="draft">新方案 · 尚未保存</option>
+                )}
+                {[...tasks].reverse().map((task) => (
+                  <option value={task.id} key={task.id}>
+                    {task.brief.name} · v{task.revision}
+                    {task.archived ? " · 已归档" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </header>
+      )}
+      {/* Each task stays mounted across history switches so pending submissions and edits keep their identity. */}
+      <div
+        className={styles.savedWorkbench}
+        hidden={
+          !hasCommerce || showDraft || !selectedTask || coordinatedLoading
+        }
+      >
+        <aside className={styles.savedBrief} aria-label={selectedTask?.brief.contentMode === "content" ? "已保存内容资料" : "已保存商品资料"}>
+          {selectedTask && (
+            <>
+              <p className={styles.eyebrow}>{selectedTask.brief.contentMode === "content" ? "内容资料" : "商品资料"} · 已保存</p>
+              <h2>{selectedTask.brief.name}</h2>
+              <p className={styles.note}>
+                {
+                  COMMERCE_SCENES.find(
+                    (scene) => scene.id === selectedTask.scene,
+                  )?.name
+                }{" "}
+                · 方案 v{selectedTask.revision}
+              </p>
+              <dl>
+                <div>
+                  <dt>投放平台</dt>
+                  <dd>
+                    {
+                      COMMERCE_PLATFORMS.find(
+                        (platform) =>
+                          platform.id === selectedTask.brief.platform,
+                      )?.name
+                    }
+                  </dd>
+                </div>
+                <div>
+                  <dt>创作用途</dt>
+                  <dd>{selectedTask.brief.placement}</dd>
+                </div>
+                <div>
+                  <dt>{selectedTask.brief.contentMode === "content" ? "内容事实" : "商品事实"}</dt>
+                  <dd>{selectedTask.brief.facts || (selectedTask.brief.contentMode === "content" ? "未补充" : "以真实商品图为准")}</dd>
+                </div>
+                <div>
+                  <dt>{selectedTask.brief.contentMode === "content" ? "内容要点" : "核心卖点"}</dt>
+                  <dd>{selectedTask.brief.sellingPoints || "未补充"}</dd>
+                </div>
+                <div>
+                  <dt>风格方向</dt>
+                  <dd>{templateName(selectedTask.templateId)}</dd>
+                </div>
+                <div>
+                  <dt>素材与数量</dt>
+                  <dd>
+                    {selectedTask.brief.productReferenceIds.length} 张{selectedTask.brief.contentMode === "content" ? "内容参考图" : "商品图"} ·{" "}
+                    {selectedTask.brief.styleReferenceIds.length} 张风格图
+                    <br />
+                    {selectedTask.slots.length} 张方案图片
+                  </dd>
+                </div>
+              </dl>
+              <div className={styles.savedBriefActions}>
+                <p className={styles.note}>
+                  在右侧修改分图方案，或开始同场景的新创作。
+                </p>
+                <button onClick={() => open(selectedTask.scene)}>
+                  <Plus size={15} aria-hidden />
+                  新建{selectedTask.brief.contentMode === "content" ? "内容" : "商品"}方案
+                </button>
+              </div>
+            </>
+          )}
+        </aside>
+        <section className={styles.savedOutput} aria-label="电商方案与结果">
+          {panelTabs}
+          <div className={styles.outputScroll}>
+            <div hidden={panel !== "examples"}>
+              {selectedTask && (
+                <>
+                  <h2>效果示例</h2>
+                  <p className={styles.note}>
+                    当前模板的风格示例；未提供对应样图的角色显示布局说明。
+                  </p>
+                  <AntdImage.PreviewGroup>
+                    <div className={styles.structureGrid}>
+                      {selectedTask.slots.map((slot, index) => (
+                        <div className={styles.structureCard} key={slot.id}>
+                          <span className={styles.structureNumber}>
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <TemplatePreview templateId={selectedTask.templateId} role={slot.role} />
+                          <strong>{slot.role}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </AntdImage.PreviewGroup>
+                </>
+              )}
             </div>
-          ) : "item" in entry && !coordinatedLoading ? (
-            renderTimeline([entry.item], false, hasCommerce, false)
-          ) : null}
-        </Fragment>
-      ))}
-      {!(
-        hasCommerce &&
-        !visible.length &&
-        (drafts.some((draft) => draft.sessionId === sessionId) ||
-          launch?.sessionId === sessionId)
-      ) &&
-        renderTimeline(
-          [],
-          true,
-          hasCommerce || Boolean(visible.length),
-          coordinatedLoading,
-        )}
+            {cachedTasks.map((task) => (
+              <div
+                key={task.id}
+                hidden={
+                  task.sessionId !== sessionId ||
+                  task.id !== selectedTask?.id ||
+                  panel === "examples" ||
+                  coordinatedLoading
+                }
+              >
+                {gateway && (
+                  <AntdImage.PreviewGroup>
+                    <CommerceTaskCard
+                      task={task}
+                      view={panel === "plan" ? "plan" : "results"}
+                      autoStart={autoStartTasks[task.id]}
+                      gateway={gateway}
+                      capabilities={wizardProps.capabilities}
+                      onTask={acceptAndRefresh}
+                      onSubmitted={() =>
+                        setPanels((current) => ({
+                          ...current,
+                          [task.id]: "results",
+                        }))
+                      }
+                      editRequest={edits[task.id]}
+                      confirmationRequest={confirmations[task.id]}
+                      onSubmissionPendingChange={markSubmissionPending}
+                      onPromote={promote}
+                    />
+                  </AntdImage.PreviewGroup>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
       {drafts.map((draft) => (
-        <div key={draft.id} hidden={draft.sessionId !== sessionId}>
-          <CommerceWizard
-            {...wizardProps}
-            {...draft}
-            active={draft.sessionId === sessionId}
-            promotedStyleIds={promotedStyles[draft.sessionId]}
-            gateway={gateway}
-            onSaved={(task, generate) => saved(draft, task, generate)}
-            onClose={() =>
-              setDrafts((current) =>
-                current.filter((item) => item.id !== draft.id),
-              )
-            }
-          />
+        <div
+          key={draft.id}
+          hidden={
+            draft.sessionId !== sessionId || !showDraft || coordinatedLoading
+          }
+        >
+          <AntdImage.PreviewGroup>
+            <CommerceWizard
+              {...wizardProps}
+              {...draft}
+              embedded
+              active={draft.sessionId === sessionId}
+              promotedStyleIds={promotedStyles[draft.sessionId]}
+              gateway={gateway}
+              rightHeader={panelTabs}
+              previewPanel={panel === "examples" ? "examples" : "plan"}
+              onPreview={() =>
+                setPanels((current) => ({ ...current, [draft.id]: "plan" }))
+              }
+              onSaved={(task, generate) => saved(draft, task, generate)}
+              onClose={() => {
+                setDrafts((current) =>
+                  current.filter((item) => item.id !== draft.id),
+                );
+                if (selectedTask) chooseTask(selectedTask.id);
+              }}
+            />
+          </AntdImage.PreviewGroup>
         </div>
       ))}
+      {hasCommerce && visible.length > 0 && !coordinatedLoading && (
+        <details className={styles.relatedConversation}>
+          <summary>查看此会话的聊天与其他图片（{visible.length}）</summary>
+          {visible.map((item) => (
+            <div key={item.id}>
+              {renderTimeline([item], false, hasCommerce, false)}
+            </div>
+          ))}
+        </details>
+      )}
+      {!hasCommerce &&
+        !coordinatedLoading &&
+        visible.map((item) => (
+          <div key={item.id}>{renderTimeline([item], false, false, false)}</div>
+        ))}
+      {renderTimeline(
+        [],
+        true,
+        hasCommerce || Boolean(visible.length),
+        coordinatedLoading,
+      )}
     </>
   );
 }

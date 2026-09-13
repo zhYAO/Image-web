@@ -8,3 +8,5 @@ export * from './official-skills';
 export * from './skill-contracts';
 export * from './commerce';
 export * from './commerce-templates';
+export * from './creative-text-contracts';
+export * from './commerce-visuals';

@@ -1,5 +1,7 @@
 'use client';
 
+import { WebPageShell } from '@/features/shell/WebPageShell';
+
 import type { Account } from '../../../../packages/domain/src/auth-contracts';
 import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -83,7 +85,7 @@ export function AccountPanel({ account }: { account: Account }) {
     });
   }
 
-  return <main className="glass-page"><section aria-busy={pending} className="glass-card glass-form">
+  return <WebPageShell><section aria-busy={pending} className="glass-card glass-form">
     <a href="/">返回工作区</a>
     <p className="glass-kicker">ZIMAGE · 账号中心</p><h1>账号</h1>
     <p className="glass-muted">邮箱：{account.email}</p>
@@ -92,5 +94,5 @@ export function AccountPanel({ account }: { account: Account }) {
     {message && <p className="glass-status" role="status">{message}</p>}
     <button className="glass-primary" disabled={pending} onClick={logout} type="button">退出登录</button>
     <form onSubmit={remove}><h2>注销账号</h2><p className="glass-muted">注销受理后，账号会立即停止访问；后台清理完成前状态为“删除中”。</p><label>重新输入密码<input autoComplete="current-password" name="password" required type="password" /></label><button className="glass-danger" disabled={pending} type="submit">永久注销账号</button></form>
-  </section></main>;
+  </section></WebPageShell>;
 }

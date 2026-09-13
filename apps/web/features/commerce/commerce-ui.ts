@@ -23,7 +23,7 @@ export function resolveCommerceLaunch(search: string) {
 }
 
 export function defaultTemplate(scene: CommerceScene) {
-  return scene === "product-main"
+  return scene === "xhs-poster" ? "xhs-fresh" : scene === "product-main"
     ? "white-main"
     : scene === "social"
       ? "social-cover"

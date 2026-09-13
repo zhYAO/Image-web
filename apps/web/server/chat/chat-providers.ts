@@ -10,6 +10,7 @@ export class ChatProviderFailure extends Error {
 
 interface OpenAiCompatibleChatInput {
   apiKey: string;
+  correlationId?: string;
   endpoint: string;
   fetcher?: typeof fetch;
   message: string;
@@ -63,13 +64,13 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
       method: 'POST',
       signal: input.signal,
     });
-  } catch (error: unknown) {
+  } catch {
     // Distinguish a browser-side cancellation (which is never retryable) from
     // an upstream network or timeout failure (which we treat as a transient
     // provider_unavailable).
     console.error('[chat-providers] fetch failed', {
-      endpoint: input.endpoint,
-      error: error instanceof Error ? { name: error.name, message: error.message } : error,
+      correlationId: input.correlationId,
+      aborted: Boolean(input.signal?.aborted),
     });
     if (input.signal?.aborted) {
       throw new ChatProviderFailure('stream_interrupted', false);
@@ -79,8 +80,7 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
 
   if (!response.ok || !response.body) {
     console.error('[chat-providers] non-ok response', {
-      endpoint: input.endpoint,
-      model: input.model,
+      correlationId: input.correlationId,
       status: response.status,
     });
     if (response.status === 400 || response.status === 422) {
@@ -97,12 +97,14 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
   const stallTimeoutMs = resolveStallTimeoutMs(input);
   let buffer = '';
   let terminal = false;
+  let finishReason: string | undefined;
   try {
     while (true) {
       const { done, value } = await readWithStallTimeout(reader, stallTimeoutMs, input.signal);
       buffer = (buffer + decoder.decode(value, { stream: !done })).replaceAll('\r\n', '\n');
       const frames = buffer.split('\n\n');
       buffer = frames.pop() ?? '';
+      if (done && buffer.trim()) { frames.push(buffer); buffer = ''; }
       for (const frame of frames) {
         const payload = frame
           .split('\n')
@@ -110,20 +112,37 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
           .map((line) => line.slice(5).trimStart())
           .join('\n');
         if (!payload) continue;
-        if (payload === '[DONE]') { terminal = true; continue; }
+        if (payload === '[DONE]') { terminal = true; break; }
         let parsed: unknown;
         try {
           parsed = JSON.parse(payload) as unknown;
         } catch {
           throw new ChatProviderFailure('stream_interrupted', false);
         }
+        const envelope = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
+        const baseResponse = envelope?.base_resp as { status_code?: unknown } | undefined;
+        if (envelope?.error || (typeof baseResponse?.status_code === 'number' && baseResponse.status_code !== 0)) {
+          throw new ChatProviderFailure('provider_error', false);
+        }
+        const choice = Array.isArray(envelope?.choices) ? envelope.choices[0] as { finish_reason?: unknown } | undefined : undefined;
+        finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined;
+        if (finishReason === 'content_filter') throw new ChatProviderFailure('moderation', false);
         const delta = contentDelta(parsed);
         if (delta) yield delta;
+        // MiniMax can finish with stop + usage + EOF, without a [DONE] sentinel.
+        // Text alone (or EOF alone) is never proof of a completed reply.
+        if (finishReason === 'stop') { terminal = true; break; }
+        if (finishReason) throw new ChatProviderFailure(finishReason === 'length' ? 'stream_interrupted' : 'provider_error', false);
       }
       if (terminal) break;
       if (done) throw new ChatProviderFailure('stream_interrupted', false);
     }
+    console.info('[chat-providers] stream completed', { correlationId: input.correlationId, finishReason: finishReason ?? 'done' });
   } catch (error: unknown) {
+    console.warn('[chat-providers] stream failed', {
+      correlationId: input.correlationId,
+      code: error instanceof ChatProviderFailure ? error.code : 'stream_interrupted',
+    });
     if (error instanceof ChatProviderFailure) throw error;
     if (input.signal?.aborted) {
       throw new ChatProviderFailure('stream_interrupted', false);

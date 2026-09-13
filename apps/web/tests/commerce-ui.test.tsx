@@ -117,14 +117,15 @@ describe("commerce UI", () => {
     window.sessionStorage.clear();
   });
 
-  it("offers six public scenes and carries only platform/scene launch parameters", () => {
+  it("offers seven public scenes and carries only platform/scene launch parameters", () => {
     render(<CommerceCatalogue />);
-    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(6);
+    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(7);
     fireEvent.click(screen.getByRole("button", { name: "小红书" }));
     expect(
       screen.getByRole("link", { name: "开始商品套图 →" }),
     ).toHaveAttribute("href", "/?scene=product-set&platform=xiaohongshu");
     expect(screen.queryByRole("button", { name: /分析/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "使用清新种草模板", hidden: true })).toHaveAttribute("href", "/?scene=xhs-poster&platform=xiaohongshu&template=xhs-fresh");
     expect(resolveCommerceLaunch("?scene=product-set&platform=douyin")).toEqual(
       { scene: "product-set", platform: "douyin" },
     );
@@ -153,7 +154,7 @@ describe("commerce UI", () => {
     await screen.findByText("已确认，正在逐图生成。");
   });
 
-  it("uploads a product and starts generation with one explicit click", async () => {
+  it("previews a product before one explicit generation confirmation", async () => {
     window.history.replaceState({}, "", "/?scene=product-set");
     const gateway = createTestGateway();
     const submit = vi.spyOn(gateway.commerce, "submit");
@@ -166,7 +167,9 @@ describe("commerce UI", () => {
       within(wizard).getByRole("textbox", { name: "商品名称" }),
       { target: { value: "白色陶瓷杯" } },
     );
-    const start = within(wizard).getByRole("button", { name: "开始生成 5 张" });
+    fireEvent.click(within(wizard).getByRole("button", { name: "预览分图方案" }));
+    const start = await within(wizard).findByRole("button", { name: "确认生成 5 张" });
+    expect(submit).not.toHaveBeenCalled();
     fireEvent.click(start);
     fireEvent.click(start);
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
@@ -187,7 +190,7 @@ describe("commerce UI", () => {
     const submit = vi.spyOn(gateway.commerce, "submit");
     render(<UnifiedWorkspace gateway={gateway} />);
     const wizard = await screen.findByRole("region", { name: "商品主图向导" });
-    fireEvent.click(within(wizard).getByRole("button", { name: "逐图设置" }));
+    fireEvent.click(within(wizard).getByRole("button", { name: "预览分图方案" }));
     expect(await within(wizard).findByRole("alert")).toHaveTextContent(
       "请上传至少一张清晰的真实商品图",
     );
@@ -243,8 +246,8 @@ describe("commerce UI", () => {
       within(wizard).getByLabelText("方案图片数量"),
       "3",
     );
-    fireEvent.click(within(wizard).getByRole("button", { name: "逐图设置" }));
-    await within(wizard).findByRole("button", { name: "保存方案，待确认" });
+    fireEvent.click(within(wizard).getByRole("button", { name: "预览分图方案" }));
+    await within(wizard).findByRole("button", { name: "保存方案，稍后生成" });
     expect(upload).toHaveBeenCalledTimes(2);
     expect(upload.mock.calls[0]?.[1]).not.toHaveProperty("previewUrl");
     expect(
@@ -253,7 +256,7 @@ describe("commerce UI", () => {
         .references.every((reference) => reference.id),
     ).toBe(true);
     fireEvent.click(
-      await within(wizard).findByRole("button", { name: "保存方案，待确认" }),
+      await within(wizard).findByRole("button", { name: "保存方案，稍后生成" }),
     );
     const task = await screen.findByTestId("commerce-task");
     expect(create.mock.calls[0]?.[0].plan.brief).toMatchObject({
@@ -510,9 +513,9 @@ describe("commerce UI", () => {
       status: "ready",
     });
     expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(within(wizard).getByRole("button", { name: "逐图设置" }));
+    fireEvent.click(within(wizard).getByRole("button", { name: "预览分图方案" }));
     fireEvent.click(
-      await within(wizard).findByRole("button", { name: "保存方案，待确认" }),
+      await within(wizard).findByRole("button", { name: "保存方案，稍后生成" }),
     );
     await waitFor(() =>
       expect(screen.getAllByTestId("commerce-task")).toHaveLength(2),
@@ -565,6 +568,9 @@ describe("commerce UI", () => {
     fireEvent.click(
       within(wizard).getByRole("button", { name: "移除参考图 4" }),
     );
+    fireEvent.change(screen.getByRole("combobox", { name: "当前会话任务" }), {
+      target: { value: full.id },
+    });
     fireEvent.click(
       screen.getByRole("button", { name: "采用第 1 张为风格参考" }),
     );
@@ -714,9 +720,10 @@ describe("commerce UI", () => {
       await screen.findByRole("button", { name: "测试商品套图" }),
     );
     await screen.findByTestId("commerce-task");
-    expect(
+    // Task loading notifies the parent composer mode through an effect.
+    await waitFor(() => expect(
       screen.queryByRole("textbox", { name: "创作输入" }),
-    ).not.toBeInTheDocument();
+    ).not.toBeInTheDocument());
     expect(
       screen.queryByRole("button", { name: "在对话中修改此任务" }),
     ).not.toBeInTheDocument();
@@ -903,19 +910,19 @@ describe("commerce UI", () => {
     fireEvent.change(screen.getByLabelText("商品名称"), {
       target: { value: "杯子" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "逐图设置" }));
-    await screen.findByRole("button", { name: "保存方案，待确认" });
+    fireEvent.click(screen.getByRole("button", { name: "预览分图方案" }));
+    await screen.findByRole("button", { name: "保存方案，稍后生成" });
     fireEvent.click(screen.getByRole("button", { name: "替换商品" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "共享参考图或用途已变化",
     );
     expect(
-      screen.queryByRole("button", { name: "保存方案，待确认" }),
+      screen.queryByRole("button", { name: "保存方案，稍后生成" }),
     ).toBeNull();
     expect(create).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "逐图设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "预览分图方案" }));
     fireEvent.click(
-      await screen.findByRole("button", { name: "保存方案，待确认" }),
+      await screen.findByRole("button", { name: "保存方案，稍后生成" }),
     );
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     const a = await upload.mock.results[0]!.value;
@@ -968,26 +975,28 @@ describe("commerce UI", () => {
     fireEvent.change(screen.getByLabelText("整套创作要求"), {
       target: { value: "冷色背景" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "逐图设置" }));
-    await screen.findByRole("button", { name: "保存方案，待确认" });
+    fireEvent.click(screen.getByRole("button", { name: "预览分图方案" }));
+    await screen.findByRole("button", { name: "保存方案，稍后生成" });
+    fireEvent.click(screen.getByRole("button", { name: /^编辑第 3 张：/ }));
     fireEvent.change(screen.getByLabelText("第 3 张要求"), {
       target: { value: "第三张单独使用绿色" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+
     fireEvent.change(screen.getByLabelText("整套创作要求"), {
       target: { value: "暖色背景" },
     });
     await chooseCommerceOption(screen.getByLabelText("方案图片数量"), "4");
-    fireEvent.click(screen.getByRole("button", { name: "逐图设置" }));
-    await screen.findByRole("button", { name: "保存方案，待确认" });
-    for (const index of [1, 2, 4])
-      expect(screen.getByLabelText(`第 ${index} 张要求`)).toHaveValue(
-        "暖色背景",
-      );
+    fireEvent.click(screen.getByRole("button", { name: "预览分图方案" }));
+    await screen.findByRole("button", { name: "保存方案，稍后生成" });
+    for (const index of [1, 2, 4]) {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^编辑第 ${index} 张：`) }));
+      expect(screen.getByLabelText(`第 ${index} 张要求`)).toHaveValue("暖色背景");
+    }
+    fireEvent.click(screen.getByRole("button", { name: /^编辑第 3 张：/ }));
     expect(screen.getByLabelText("第 3 张要求")).toHaveValue(
       "第三张单独使用绿色",
     );
-    fireEvent.click(screen.getByRole("button", { name: "保存方案，待确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存方案，稍后生成" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(
       create.mock.calls[0]?.[0].plan.slots.map((slot) => slot.instruction),

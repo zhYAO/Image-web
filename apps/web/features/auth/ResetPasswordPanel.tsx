@@ -1,5 +1,7 @@
 'use client';
 
+import { WebPageShell } from '@/features/shell/WebPageShell';
+
 import { useState, type FormEvent } from 'react';
 import { authFeedback } from './feedback';
 
@@ -24,7 +26,7 @@ export function ResetPasswordPanel() {
     } catch { setFailed(true); setMessage('网络连接失败，请检查网络后重试。'); }
     finally { setPending(false); }
   }
-  return <main className="glass-page"><section className="glass-card glass-form">
+  return <WebPageShell><section className="glass-card glass-form">
     <p className="glass-kicker">账号恢复</p><h1>重置密码</h1>
     <p className="glass-muted">打开此页面不会验证账号。请输入邮件中的 6 位验证码继续。</p>
     <form onSubmit={submit}>
@@ -35,5 +37,5 @@ export function ResetPasswordPanel() {
     </form>
     {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
     <a href="/login">返回登录</a>
-  </section></main>;
+  </section></WebPageShell>;
 }

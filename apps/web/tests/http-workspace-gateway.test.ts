@@ -26,6 +26,24 @@ function sse(frames: string[]): Response {
 }
 
 describe('HttpWorkspaceGateway', () => {
+  it('stops at completion even if the same transport chunk contains a late failure', async () => {
+    const completed: ChatEvent = { type: 'message.completed', messageId: crypto.randomUUID(), content: '完整回复' };
+    const failure: ChatEvent = { type: 'stream.failed', error: { code: 'NETWORK', message: 'late failure', retryable: true } };
+    const response = new Response(`data: ${JSON.stringify(completed)}\n\ndata: ${JSON.stringify(failure)}\n\n`);
+    const gateway = new HttpWorkspaceGateway({ fetcher: vi.fn().mockResolvedValue(response) });
+    const events = [];
+    for await (const event of gateway.streamChat({ message: '你好', sessionId, imageToolEnabled: false })) events.push(event);
+    expect(events).toEqual([completed]);
+  });
+
+  it('parses a completion in the final unterminated frame', async () => {
+    const completed: ChatEvent = { type: 'message.completed', messageId: crypto.randomUUID(), content: '完整回复' };
+    const gateway = new HttpWorkspaceGateway({ fetcher: vi.fn().mockResolvedValue(new Response(`data: ${JSON.stringify(completed)}`)) });
+    const events = [];
+    for await (const event of gateway.streamChat({ message: '你好', sessionId, imageToolEnabled: false })) events.push(event);
+    expect(events).toEqual([completed]);
+  });
+
   it('emits one auth-required event for concurrent unauthorized responses', async () => {
     resetAuthRequiredNotification();
     const onAuthRequired = vi.fn();

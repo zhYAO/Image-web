@@ -107,7 +107,11 @@ export function CommerceTaskCard({
   confirmationRequest,
   onSubmissionPendingChange,
   autoStart = false,
+  view = "results",
+  onSubmitted,
 }: {
+  view?: "plan" | "results";
+  onSubmitted?: () => void;
   autoStart?: boolean;
   task: CommerceTask;
   gateway: CommerceGateway;
@@ -270,6 +274,7 @@ export function CommerceTaskCard({
         submitRequest.current = undefined;
         persistPending(storageKey);
         setMessage("已确认，正在逐图生成。");
+        onSubmitted?.();
       } catch (cause) {
         recordSubmissionFailure(cause, request);
         throw cause;
@@ -402,6 +407,7 @@ export function CommerceTaskCard({
       className={styles.taskCard}
       data-testid="commerce-task"
       data-task-id={task.id}
+      data-view={view}
       id={`commerce-task-${task.id}`}
     >
       <header className={styles.heading}>
@@ -424,7 +430,7 @@ export function CommerceTaskCard({
         </strong>
       </header>
       <p className={styles.note}>
-        新成功图默认采用，可手动切回旧图。请核对商品外观与文字；改字需要重新生成。
+        新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>
       <div className={styles.resultGrid}>
         {task.slots.map((slot, index) => {
@@ -448,7 +454,11 @@ export function CommerceTaskCard({
               <h3>
                 第 {index + 1} 张 · {slot.role}
               </h3>
-              {image?.url && !image.expired ? (
+              {view === "plan" ? (
+                <span className={styles.planNumber}>
+                  方案 {String(index + 1).padStart(2, "0")}
+                </span>
+              ) : image?.url && !image.expired ? (
                 <AntdImage
                   src={image.url}
                   alt={`${task.brief.name} 第 ${index + 1} 张当前选图`}
@@ -498,7 +508,7 @@ export function CommerceTaskCard({
                   <p>重做中，保留原选图</p>
                 )}
               <p>
-                {slot.instruction || "按商品事实与模板规划"}
+                {slot.instruction || (task.brief.contentMode === "content" ? "按原文内容与模板排版" : "按商品事实与模板规划")}
                 {slot.exactText && (
                   <>
                     <br />

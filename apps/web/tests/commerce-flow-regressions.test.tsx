@@ -31,7 +31,7 @@ describe("commerce entry and session deletion", () => {
     const gateway = createTestGateway();
     const original = gateway.listSessions.bind(gateway);
     let release!: () => void;
-    vi.spyOn(gateway, "listSessions").mockImplementation(async () => {
+    vi.spyOn(gateway, "listSessions").mockImplementationOnce(async () => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });

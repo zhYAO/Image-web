@@ -77,6 +77,22 @@ describe('chat provider SSE adapter', () => {
       .rejects.toMatchObject({ code: 'stream_interrupted' });
   });
 
+  it.each([
+    'data: [DONE]',
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+  ])('accepts an explicit completion including a final frame without a blank line: %s', async (ending) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(`data: {"choices":[{"delta":{"content":"完整回复"}}]}\r\n\r\n${ending}`));
+    await expect(collect(streamOpenAiCompatibleChat({ apiKey: 'test', endpoint: 'https://provider.example', fetcher, message: 'hi', model: 'test' })))
+      .resolves.toEqual(['完整回复']);
+  });
+
+  it.each(['length', 'content_filter', 'tool_calls'])('does not treat %s as a successful ordinary text completion', async (reason) => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(`data: {"choices":[{"delta":{"content":"部分回复"},"finish_reason":"${reason}"}]}\n\ndata: [DONE]\n\n`));
+    await expect(collect(streamOpenAiCompatibleChat({ apiKey: 'test', endpoint: 'https://provider.example', fetcher, message: 'hi', model: 'test' })))
+      .rejects.toBeInstanceOf(ChatProviderFailure);
+  });
+
   it('normalizes transient HTTP failures without exposing provider bodies', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response('provider-secret-detail', { status: 503 }));
     await expect(collect(streamOpenAiCompatibleChat({

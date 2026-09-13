@@ -24,6 +24,7 @@ export function buildOpenApiDocument() {
     },
     openapi: '3.1.0',
     paths: {
+      '/api/creative-text/optimize': { post: { operationId: 'optimizeCreativeText', responses: responses() } },
       '/api/chat': { post: { operationId: 'streamChat', responses: responses('200', sse) } },
       '/api/generations/{id}/asset-url': {
         get: { operationId: 'signGenerationAsset', parameters: [{ in: 'path', name: 'id', required: true, schema: { format: 'uuid', type: 'string' } }], responses: responses() },

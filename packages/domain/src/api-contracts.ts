@@ -32,6 +32,7 @@ export const apiErrorSchema = z.strictObject({
 });
 
 export const sessionSchema = z.strictObject({
+  activityTypes: z.array(z.enum(['chat', 'image', 'commerce', 'poster'])).optional(),
   createdAt: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   status: z.enum(['active', 'deleting']),

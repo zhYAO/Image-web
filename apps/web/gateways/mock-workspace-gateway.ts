@@ -20,6 +20,8 @@ import {
   type Quota,
   type RecreateRequest,
   type Session,
+  type SessionActivityType,
+  type CommerceTask,
   type Skill,
   type TimelineItem,
   type WorkspaceGateway,
@@ -123,9 +125,22 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   async listSessions() {
+    const commerce = this.state.commerce ? JSON.parse(this.state.commerce) as { tasks?: Record<string, CommerceTask> } : {};
+    const tasks = Object.values(commerce.tasks ?? {});
+    const childIds = new Set(tasks.flatMap(task => task.runs.flatMap(run => run.items.map(item => item.batchId))));
+    const activity = new Map<string, Set<SessionActivityType>>();
+    const add = (id: string, type: SessionActivityType) => {
+      if (!activity.has(id)) activity.set(id, new Set());
+      activity.get(id)!.add(type);
+    };
+    for (const batch of Object.values(this.state.batches)) {
+      if (!childIds.has(batch.id)) add(batch.sessionId, 'image');
+    }
+    for (const task of tasks) add(task.sessionId, String(task.scene) === 'xhs-poster' ? 'poster' : 'commerce');
     return clone(
       this.state.sessions
         .filter((session) => session.status === 'active')
+        .map(session => ({ ...session, activityTypes: activity.has(session.id) ? [...activity.get(session.id)!].sort() : ['chat'] as SessionActivityType[] }))
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     );
   }
@@ -262,8 +277,6 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       streaming: false,
       type: 'message',
     }));
-    yield { content: answer, messageId, type: 'message.completed' };
-
     if (shouldGenerateImage) {
       const batch = await this.submitImage({
         aspectRatio: '1:1',
@@ -282,6 +295,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       });
       yield { batchId: batch.id, type: 'tool.queued' };
     }
+    yield { content: answer, messageId, type: 'message.completed' };
   }
 
   async cancelCommerceImages(batchIds: string[]): Promise<void> {

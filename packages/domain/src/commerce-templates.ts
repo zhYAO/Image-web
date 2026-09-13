@@ -1,3 +1,4 @@
+import { VISUAL_DIRECTIONS } from "./commerce-visuals";
 export const COMMERCE_SCENES = [
   {
     id: "product-main",
@@ -23,7 +24,7 @@ export const COMMERCE_SCENES = [
   {
     id: "social",
     name: "种草图文",
-    description: "小红书、抖音图文的封面、场景与细节图片。",
+    description: "以照片为主的种草套图，展示穿搭、生活场景与商品细节。",
     count: 3,
     roles: ["种草封面", "生活场景", "细节说明"],
   },
@@ -41,6 +42,7 @@ export const COMMERCE_SCENES = [
     count: 1,
     roles: ["模特展示"],
   },
+  { id: "xhs-poster", name: "小红书海报", description: "以标题与正文排版为主的海报，支持商品种草与通用内容分享。", count: 1, roles: ["海报封面", "内容卡片"] },
 ] as const;
 export const COMMERCE_PLATFORMS = [
   { id: "taobao", name: "淘宝" },
@@ -78,12 +80,19 @@ export const COMMERCE_TEMPLATES = (
     ],
     ["detail-hero", "详情首屏", "商品主视觉与简短标题结合，突出已确认核心信息"],
     ["detail-module", "详情模块", "模块化信息层级，主体和文案各有空间"],
+    ["xhs-fresh", "清新种草", "清新自然光与轻盈杂志标题"],
+    ["xhs-collage", "杂志拼贴", "有秩序的生活摄影拼贴"],
+    ["xhs-minimal", "极简大字", "大字与留白构成视觉中心"],
+    ["xhs-sketch", "手绘知识卡", "柔和手绘图解与清晰知识模块"],
+    ["xhs-checklist", "攻略清单", "编号清单与精简线描插图"],
+    ["xhs-retro", "复古海报", "复古印刷肌理与强烈标题"],
   ] as const
 ).map(([id, name, guidance]) => ({
   id,
   name,
-  guidance,
-  version: "1.0.0",
+  guidance: `${guidance}。${VISUAL_DIRECTIONS[id]!.guidance}`,
+  visual: VISUAL_DIRECTIONS[id]!,
+  version: "2.0.0",
   source,
   validation: "待真实模型评测",
   published: true,
@@ -96,4 +105,8 @@ export function sceneForSkill(skillId?: string) {
       : skillId === "social"
         ? "social"
         : undefined;
+}
+
+export function templatesForScene(scene: string) {
+  return COMMERCE_TEMPLATES.filter(t => t.published && t.visual.scenes.includes(scene));
 }

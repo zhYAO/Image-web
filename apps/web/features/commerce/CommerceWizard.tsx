@@ -4,6 +4,7 @@ import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
   COMMERCE_TEMPLATES,
+  templatesForScene,
   nextCommerceQuestion,
   validateCommercePlan,
   type CommerceBrief,
@@ -17,15 +18,21 @@ import {
 } from "@zimage/domain";
 import { Image as AntdImage } from "antd";
 import { Layers3 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import { defaultTemplate } from "./commerce-ui";
 import styles from "./commerce.module.css";
-import { commerceExampleForRole } from "./commerce-examples";
+import { TemplatePreview } from "./TemplatePreview";
+import { CreativeTextField } from "./CreativeTextField";
 
 export interface CommerceWizardProps {
   active?: boolean;
+  embedded?: boolean;
+  rightHeader?: ReactNode;
+  previewPanel?: "examples" | "plan";
+  onPreview?: () => void;
   seedPlan?: CommercePlan;
+  initialTemplateId?: string;
   promotedStyleIds?: string[];
   scene: CommerceScene;
   platform?: CommerceBrief["platform"];
@@ -51,8 +58,13 @@ export interface CommerceWizardProps {
 
 export function CommerceWizard({
   active = true,
+  embedded = false,
+  rightHeader,
+  previewPanel,
+  onPreview,
   scene,
   seedPlan,
+  initialTemplateId,
   promotedStyleIds = [],
   platform = "taobao",
   prompt = "",
@@ -68,24 +80,27 @@ export function CommerceWizard({
   onClose,
 }: CommerceWizardProps) {
   const definition = COMMERCE_SCENES.find((item) => item.id === scene)!;
+  const isPoster = scene === "xhs-poster";
   const [step, setStep] = useState(1);
   const [brief, setBrief] = useState<CommerceBrief>(
     seedPlan?.brief ?? {
       name: "",
       facts: "",
       sellingPoints: "",
-      platform,
-      placement: scene === "social" ? "图文内容" : "商品展示",
+      platform: isPoster ? "xiaohongshu" : platform,
+      contentMode: isPoster ? "content" : "product",
+      placement: (isPoster || scene === "social") ? "图文内容" : "商品展示",
       productReferenceIds: [],
       styleReferenceIds: [],
     },
   );
+  const contentOnly = isPoster && brief.contentMode === "content";
   const [roles, setRoles] = useState<Record<string, "product" | "style">>({});
   const [count, setCount] = useState<number>(
     seedPlan?.slots.length ?? definition.count,
   );
   const [templateId, setTemplateId] = useState(
-    seedPlan?.templateId ?? defaultTemplate(scene),
+    seedPlan?.templateId ?? (templatesForScene(scene).some(item => item.id === initialTemplateId) ? initialTemplateId! : defaultTemplate(scene)),
   );
   const [instruction, setInstruction] = useState(
     prompt || seedPlan?.slots[0]?.instruction || "",
@@ -105,10 +120,12 @@ export function CommerceWizard({
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState(seedPlan?.slots[0]?.id);
+  const showPlan = step === 3 && plan && previewPanel !== "examples";
   if (seenPrompt !== prompt) {
     setSeenPrompt(prompt);
     setInstruction((current) => [current, prompt].filter(Boolean).join("\n"));
-    if (step === 3) setStep(2);
+    if (step === 3) setStep(1);
   }
 
   const uploadIds = useRef(new Map<UploadReference, string>());
@@ -119,7 +136,7 @@ export function CommerceWizard({
   const referenceKey = (reference: UploadReference) =>
     reference.previewUrl ?? reference.id ?? reference.name;
   const roleOf = (reference: UploadReference) =>
-    roles[referenceKey(reference)] ??
+    contentOnly ? "style" : roles[referenceKey(reference)] ??
     (reference.id &&
     [
       ...promotedStyleIds,
@@ -146,8 +163,16 @@ export function CommerceWizard({
         "共享参考图或用途已变化，请重新确认商品资料，再生成分图方案。",
       );
   };
-  const patch = (value: Partial<CommerceBrief>) =>
+  const invalidatePreview = () => {
+    if (step === 3) {
+      setStep(1);
+      setError("方案资料已修改，请重新预览分图方案后再确认。");
+    }
+  };
+  const patch = (value: Partial<CommerceBrief>) => {
+    invalidatePreview();
     setBrief((current) => ({ ...current, ...value }));
+  };
   const act = async (action: () => Promise<void>) => {
     if (locked.current) return;
     locked.current = true;
@@ -164,13 +189,13 @@ export function CommerceWizard({
       setBusy(false);
     }
   };
-  const prepare = (generate = false) =>
+  const prepare = () =>
     act(async () => {
       if (!gateway) throw new Error("电商服务暂未连接，请稍后重试。");
       // Ask exactly one blocking question before spending an upload request.
-      if (!references.some((reference) => roleOf(reference) === "product"))
+      if (!contentOnly && !references.some((reference) => roleOf(reference) === "product"))
         throw new Error("请上传至少一张清晰的真实商品图。");
-      if (!brief.name.trim()) throw new Error("这个商品的名称是什么？");
+      if (!brief.name.trim()) throw new Error(contentOnly ? "请填写海报标题。" : "这个商品的名称是什么？");
       if (
         scene === "style-reference" &&
         !references.some((reference) => roleOf(reference) === "style")
@@ -200,42 +225,44 @@ export function CommerceWizard({
       setBrief(complete);
       setPreparedSignature(referenceSignature);
       const nextPlan = makePlan(complete);
-      if (generate) await savePlan(nextPlan, true);
-      else setStep(3);
+      setSelectedSlotId((current) =>
+        nextPlan.slots.some((slot) => slot.id === current)
+          ? current
+          : nextPlan.slots[0]?.id,
+      );
+      setStep(3);
+      onPreview?.();
     });
   const makePlan = (preparedBrief: CommerceBrief) => {
-    const slots = buildCommerceSlots(preparedBrief, scene, count, settings).map(
-      (slot, index) => ({
-        ...slot,
-        ...plan?.slots[index],
-        exactText:
-          plan?.slots[index]?.exactText ??
-          ([
-            "商品主图",
-            "使用场景",
-            "生活场景",
-            "模特展示",
-            "风格创作",
-          ].includes(slot.role)
-            ? ""
-            : [
-                preparedBrief.name,
-                preparedBrief.sellingPoints.length <= 800
-                  ? preparedBrief.sellingPoints
-                  : "",
-              ]
-                .filter(Boolean)
-                .join("\n")),
-        instruction:
-          plan?.slots[index] &&
-          plan.slots[index].instruction !== lastBuiltInstruction
-            ? plan.slots[index].instruction
-            : instruction,
-        referenceIds: [
-          ...preparedBrief.productReferenceIds,
-          ...preparedBrief.styleReferenceIds,
-        ],
-      }),
+    const generatedExactText = (source: CommerceBrief, role: string) => {
+      if (["商品主图", "使用场景", "生活场景", "模特展示", "风格创作"].includes(role)) return "";
+      const points = source.sellingPoints.split(/\n|[；;]/).map(s => s.trim()).filter(Boolean);
+      const detail = ["材质细节", "商品说明", "细节说明"].includes(role) ? source.facts : role === "核心卖点" ? points.slice(0, 3).join("\n") : points[0];
+      return [source.name, detail].filter(Boolean).join("\n");
+    };
+    const slots = buildCommerceSlots(preparedBrief, scene, count, isPoster ? { ...settings, aspectRatio: "3:4", resolution: "2K" } : settings).map(
+      (slot, index) => {
+        const previous = plan?.slots[index];
+        const previousGeneratedText = previous
+          ? (isPoster ? buildCommerceSlots(plan!.brief, scene, plan!.slots.length, settings)[index]?.exactText : generatedExactText(plan!.brief, previous.role))
+          : undefined;
+        return {
+          ...slot,
+          ...previous,
+          exactText:
+            previous && previous.exactText !== previousGeneratedText
+              ? previous.exactText
+              : isPoster ? slot.exactText : generatedExactText(preparedBrief, previous?.role ?? slot.role),
+          instruction:
+            previous && previous.instruction !== lastBuiltInstruction
+              ? previous.instruction
+              : instruction,
+          referenceIds: [
+            ...preparedBrief.productReferenceIds,
+            ...preparedBrief.styleReferenceIds,
+          ],
+        };
+      },
     );
     const nextPlan = { scene, brief: preparedBrief, templateId, slots };
     validateCommercePlan(preparedBrief, scene, slots, templateId);
@@ -270,7 +297,7 @@ export function CommerceWizard({
   return (
     <section
       aria-label={`${definition.name}向导`}
-      className={`${styles.wizard} ${styles.wizardWorkbench}`}
+      className={`${styles.wizard} ${styles.wizardWorkbench} ${embedded ? styles.wizardEmbedded : ""}`}
     >
       <div className={styles.heading}>
         <h2>{definition.name}</h2>
@@ -281,12 +308,13 @@ export function CommerceWizard({
       {!collapsed && (
         <div className={styles.wizardColumns}>
           <div className={styles.wizardSettings}>
-            <div className={styles.wizardFormScroll}><fieldset disabled={busy} className={styles.formBody}>
-              {step !== 3 && (
+            <div className={styles.wizardFormScroll}>
+              <fieldset disabled={busy} className={styles.formBody}>
                 <>
-                  <p>上传商品图，填写名称，即可开始。卖点和风格可按需补充。</p>
+                  {isPoster && <label>内容类型<CommerceSelect aria-label="海报内容类型" value={brief.contentMode ?? "product"} onChange={(value) => patch({ contentMode: value as "product" | "content" })}><option value="content">通用内容</option><option value="product">商品种草</option></CommerceSelect></label>}
+                  <p>{contentOnly ? "填写标题与正文，选择风格制作海报。多张内容请按段落分行。" : "上传商品图，填写名称，即可开始。卖点和风格可按需补充。"}</p>
                   <label>
-                    商品与风格图片
+                    {contentOnly ? "风格参考图（选填）" : "商品与风格图片"}
                     <input
                       aria-label="上传电商参考图"
                       type="file"
@@ -319,20 +347,21 @@ export function CommerceWizard({
                           <CommerceSelect
                             aria-label={`参考图 ${index + 1} 用途`}
                             disabled={
-                              busy ||
+                              contentOnly || busy ||
                               Boolean(
                                 reference.id &&
                                 promotedStyleIds.includes(reference.id),
                               )
                             }
                             value={roleOf(reference)}
-                            onChange={(value) =>
+                            onChange={(value) => {
+                              invalidatePreview();
                               setRoles({
                                 ...roles,
                                 [referenceKey(reference)]: value as
                                   "product" | "style",
-                              })
-                            }
+                              });
+                            }}
                           >
                             <option value="product">真实商品图</option>
                             <option value="style">风格参考图</option>
@@ -344,20 +373,12 @@ export function CommerceWizard({
                       </div>
                     ))}
                   </div>
-                  <label>
-                    商品名称
-                    <input
-                      aria-label="商品名称"
-                      maxLength={160}
-                      value={brief.name}
-                      onChange={(event) => patch({ name: event.target.value })}
-                    />
-                  </label>
+                  <CreativeTextField field={contentOnly ? "title" : "name"} label={contentOnly ? "海报标题" : "商品名称"} maxLength={160} value={brief.name} onChange={(name) => patch({ name })} />
                   <div className={styles.twoColumns}>
                     <label>
                       平台
                       <CommerceSelect
-                        disabled={busy}
+                        disabled={busy || isPoster}
                         aria-label="创作平台"
                         value={brief.platform}
                         onChange={(value) =>
@@ -387,35 +408,14 @@ export function CommerceWizard({
                       </CommerceSelect>
                     </label>
                   </div>
+                  {contentOnly ? <CreativeTextField field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" /> : <>
                   <details className={styles.advancedOptions}>
                     <summary>商品事实（选填）</summary>
-                    <label>
-                      已确认的商品事实
-                      <textarea
-                        aria-label="商品事实"
-                        maxLength={4000}
-                        value={brief.facts}
-                        placeholder="例如：米杏色、翻领、双胸袋；仅填写确认信息"
-                        onChange={(event) =>
-                          patch({ facts: event.target.value })
-                        }
-                      />
-                    </label>
+                    <CreativeTextField field="facts" label="商品事实" maxLength={4000} multiline value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="仅填写已确认的外观、材质与规格" />
                   </details>
-                  <label>
-                    核心卖点
-                    <textarea
-                      aria-label="商品卖点"
-                      maxLength={2000}
-                      value={brief.sellingPoints}
-                      onChange={(event) =>
-                        patch({ sellingPoints: event.target.value })
-                      }
-                    />
-                  </label>
+                  <CreativeTextField field="sellingPoints" label="商品卖点" maxLength={2000} multiline value={brief.sellingPoints} onChange={(sellingPoints) => patch({ sellingPoints })} context={`${brief.name}\n${brief.facts}`} />
+                  </>}
                 </>
-              )}
-              {step !== 3 && (
                 <>
                   <label>
                     风格方向
@@ -423,9 +423,13 @@ export function CommerceWizard({
                       disabled={busy}
                       aria-label="风格模板"
                       value={templateId}
-                      onChange={(value) => setTemplateId(value)}
+                      onChange={(value) => {
+                        invalidatePreview();
+                        setTemplateId(value);
+                      }}
                     >
-                      {COMMERCE_TEMPLATES.filter((item) => item.published).map(
+                      {!templatesForScene(scene).some(item => item.id === templateId) && <option value={templateId}>历史模板 · {COMMERCE_TEMPLATES.find(item => item.id === templateId)?.name ?? templateId}</option>}
+                      {templatesForScene(scene).map(
                         (item) => (
                           <option key={item.id} value={item.id}>
                             {item.name}
@@ -446,7 +450,10 @@ export function CommerceWizard({
                       disabled={busy}
                       aria-label="方案图片数量"
                       value={count}
-                      onChange={(value) => setCount(Number(value))}
+                      onChange={(value) => {
+                        invalidatePreview();
+                        setCount(Number(value));
+                      }}
                     >
                       {Array.from({ length: 8 }, (_, index) => (
                         <option key={index + 1}>{index + 1}</option>
@@ -455,56 +462,28 @@ export function CommerceWizard({
                   </label>
                   <details className={styles.advancedOptions}>
                     <summary>高级设置 · 配色、场景与约束</summary>
-                    <label>
-                      统一配色、场景和不可改变项
-                      <textarea
-                        aria-label="整套创作要求"
-                        maxLength={2000}
-                        value={instruction}
-                        onChange={(event) => setInstruction(event.target.value)}
-                      />
-                    </label>
+                    <CreativeTextField field="instruction" label="整套创作要求" multiline maxLength={2000} value={instruction} context={`${brief.name}\n${brief.facts}`} onChange={(value) => { invalidatePreview(); setInstruction(value); }} />
                   </details>
                   <p>
                     建议角色：{definition.roles.join("、")}
                     ；也可展开逐图设置调整。
                   </p>
                 </>
-              )}
-              {step === 3 && plan && (
-                <div className={styles.planSummary}>
-                  <h3>{plan.brief.name}</h3>
-                  <p>{plan.brief.facts || "请在分图方案中核对商品资料。"}</p>
-                  <p>
-                    {plan.slots.length} 张图片 · {definition.name}
-                  </p>
-                  <p>核对下方内容后可直接生成，也可只保存方案。</p>
-                </div>
-              )}
-            </fieldset></div>
+              </fieldset>
+            </div>
             {error && <p role="alert">{error}</p>}
             <div className={`${styles.actions} ${styles.wizardControls}`}>
               <p className={styles.note}>
                 本次生成 {step === 3 ? plan?.slots.length : count}{" "}
                 张，消耗同等图片额度
               </p>
-              {step > 1 && (
-                <button disabled={busy} onClick={() => setStep(1)}>
-                  上一步
-                </button>
-              )}
               {step !== 3 && (
                 <button
                   className={styles.primary}
                   disabled={busy}
-                  onClick={() => void prepare(true)}
+                  onClick={() => void prepare()}
                 >
-                  {busy ? "正在准备…" : `开始生成 ${count} 张`}
-                </button>
-              )}
-              {step !== 3 && (
-                <button disabled={busy} onClick={() => void prepare()}>
-                  逐图设置
+                  {busy ? "正在准备…" : "预览分图方案"}
                 </button>
               )}
               {step === 3 && (
@@ -515,16 +494,15 @@ export function CommerceWizard({
                 >
                   {busy
                     ? "正在准备…"
-                    : `开始生成 ${plan?.slots.length ?? count} 张`}
+                    : `确认生成 ${plan?.slots.length ?? count} 张`}
                 </button>
               )}
               {step === 3 && (
                 <button
-                  className={styles.primary}
                   disabled={busy}
                   onClick={() => void save()}
                 >
-                  {busy ? "正在保存…" : "保存方案，待确认"}
+                  {busy ? "正在保存…" : "保存方案，稍后生成"}
                 </button>
               )}
               <button disabled={busy} onClick={onClose}>
@@ -533,22 +511,38 @@ export function CommerceWizard({
             </div>
           </div>
           <aside aria-label="电商方案预览" className={styles.wizardPreview}>
+            {rightHeader && (
+              <div className={styles.wizardRightHeader}>{rightHeader}</div>
+            )}
             <div className={styles.previewHeading}>
               <span>
                 <Layers3 aria-hidden size={16} />
-                {step === 3 ? "编辑分图方案" : "效果示例"}
+                {showPlan
+                  ? "编辑分图方案"
+                  : previewPanel === "plan"
+                    ? "分图方案"
+                    : "效果示例"}
               </span>
               <span>{count} 张图片</span>
             </div>
-            {step === 3 && plan ? (
+            {showPlan ? (
               <fieldset disabled={busy} className={styles.formBody}>
                 <CommercePlanFields
                   disabled={busy}
                   plan={plan}
                   capabilities={capabilities}
                   onChange={setPlan}
+                  selectedSlotId={selectedSlotId}
+                  onSelectSlot={setSelectedSlotId}
                 />
               </fieldset>
+            ) : previewPanel === "plan" ? (
+              <>
+                <h3>预览你的分图方案</h3>
+                <p className={styles.note}>
+                  填写或更新左侧商品资料后，点击“预览分图方案”。这里会展示每张图片的角色、准确文案与构图要求，确认前不会开始生成。
+                </p>
+              </>
             ) : (
               <>
                 <h3>{brief.name || definition.name}</h3>
@@ -561,21 +555,16 @@ export function CommerceWizard({
                       <span className={styles.structureNumber}>
                         {String(index + 1).padStart(2, "0")}
                       </span>
-                      <AntdImage
-                        src={commerceExampleForRole(
-                          definition.roles[index % definition.roles.length],
-                        )}
-                        alt={`${definition.roles[index % definition.roles.length]} · AI 女装详情示例`}
-                      />
+                      <TemplatePreview templateId={templateId} role={isPoster ? (index === 0 ? "海报封面" : "内容卡片") : definition.roles[index % definition.roles.length]} />
                       <strong>
-                        {definition.roles[index % definition.roles.length]}
+                        {isPoster ? (index === 0 ? "海报封面" : "内容卡片") : definition.roles[index % definition.roles.length]}
                       </strong>
                       <small>示例 · 以实际生成为准</small>
                     </div>
                   ))}
                 </div>
                 <p className={styles.note}>
-                  以下为 AI 生成的女装详情示例，不是你的商品生成结果。
+                  预览对应所选模板的视觉方向，不是你的生成结果；其他分图按各自角色布局呈现。
                 </p>
               </>
             )}

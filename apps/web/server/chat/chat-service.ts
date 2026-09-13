@@ -60,7 +60,9 @@ function streamError(error: unknown): ChatEvent {
       code,
       message: code === 'MODERATION'
         ? '内容未通过安全检查，请调整后重试。'
-        : '聊天服务暂时不可用，请稍后重试。',
+        : code === 'STREAM_INTERRUPTED'
+          ? '回复中断，已保留收到的内容。'
+          : '聊天服务暂时不可用，请稍后重试。',
       retryable: failure?.retryable ?? true,
     },
     type: 'stream.failed',
@@ -106,6 +108,13 @@ export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
     }
 
     const provider = input.chatModel === 'minimax' ? 'minimax' : 'doubao';
+    const recordResult = async (isError: boolean) => {
+      try {
+        await dependencies.recordProviderResult(provider, isError);
+      } catch {
+        console.warn('[chat] provider health recording failed', { correlationId: input.correlationId, provider });
+      }
+    };
     const messageId = crypto.randomUUID();
     let content = '';
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -117,19 +126,35 @@ export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
           yield { delta, messageId, type: 'message.delta' };
         }
         if (!content) throw new ChatProviderFailure('stream_interrupted', false);
-        await dependencies.recordProviderResult(provider, false);
-        const persistedMessageId = await dependencies.complete({
-          content, sessionId: started.session.id, userId: input.userId,
-        });
-        yield { content, messageId: persistedMessageId, type: 'message.completed' };
-        return;
       } catch (error: unknown) {
         const retryable = error instanceof ChatProviderFailure && error.retryable;
         if (attempt === 0 && !emittedThisAttempt && retryable) continue;
-        await dependencies.recordProviderResult(provider, true);
+        console.warn('[chat] provider failed', { correlationId: input.correlationId, provider, code: error instanceof ChatProviderFailure ? error.code : 'unexpected_error' });
+        await recordResult(true);
         yield streamError(error);
         return;
       }
+      // Health reporting must not decide whether an otherwise valid answer is saved.
+      const healthResult = recordResult(false);
+      let persistedMessageId: string;
+      try {
+        persistedMessageId = await dependencies.complete({
+          content, sessionId: started.session.id, userId: input.userId,
+        });
+      } catch {
+        console.warn('[chat] reply persistence failed', { correlationId: input.correlationId, provider });
+        yield {
+          type: 'stream.failed',
+          // Re-running a completed model request cannot safely retry an ambiguous save.
+          error: { code: 'NETWORK', message: '聊天记录保存失败，已保留收到的回复。', retryable: false },
+        };
+        await healthResult;
+        return;
+      }
+      console.info('[chat] reply persisted', { correlationId: input.correlationId, provider });
+      yield { content, messageId: persistedMessageId, type: 'message.completed' };
+      await healthResult;
+      return;
     }
   };
 }

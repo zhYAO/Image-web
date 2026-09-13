@@ -47,7 +47,10 @@ export interface SafeError {
   retryable: boolean;
 }
 
+export type SessionActivityType = 'chat' | 'image' | 'commerce' | 'poster';
+
 export interface Session {
+  activityTypes?: SessionActivityType[];
   id: string;
   title: string;
   createdAt: string;

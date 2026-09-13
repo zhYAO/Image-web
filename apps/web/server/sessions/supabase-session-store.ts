@@ -7,6 +7,7 @@ import { ApiRouteError } from '@/server/api-error';
 import type { SessionDeletionResult, SessionStore } from './session-service';
 
 const sessionRowSchema = z.object({
+  activity_types: sessionSchema.shape.activityTypes,
   created_at: z.iso.datetime({ offset: true }),
   id: z.uuid(),
   status: z.enum(['active', 'deleting']),
@@ -19,6 +20,7 @@ const sessionColumns = 'id,title,status,created_at,updated_at';
 function toSession(input: unknown): Session {
   const row = sessionRowSchema.parse(input);
   return sessionSchema.parse({
+    activityTypes: row.activity_types,
     createdAt: row.created_at,
     id: row.id,
     status: row.status,
@@ -43,12 +45,19 @@ export class SupabaseSessionStore implements SessionStore {
   ) {}
 
   async list(userId: string) {
-    const { data, error } = await this.userClient
-      .from('sessions')
-      .select(sessionColumns)
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('updated_at', { ascending: false });
+    const { data, error } = await this.userClient.rpc('list_sessions_with_activity', { p_user_id: userId });
+    // Migration rollout is independent from the web deployment. Only an absent
+    // summary function may use the previous projection; all other errors surface.
+    if (error?.code === 'PGRST202' || (error?.code === '42883' && error.message.includes('list_sessions_with_activity'))) {
+      const legacy = await this.userClient
+        .from('sessions')
+        .select(sessionColumns)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .order('updated_at', { ascending: false });
+      if (legacy.error) throw databaseFailure('会话列表暂时不可用，请稍后重试。');
+      return (legacy.data ?? []).map(toSession);
+    }
     if (error) throw databaseFailure('会话列表暂时不可用，请稍后重试。');
     return (data ?? []).map(toSession);
   }

@@ -1,10 +1,20 @@
-import type { Session } from '@zimage/domain';
+import type { Session, SessionActivityType } from '@zimage/domain';
 import { Button, Input, Popconfirm, Spin, Tooltip } from 'antd';
 import Link from 'next/link';
-import { Check, ChevronsLeft, MessageSquarePlus, Pencil, ShoppingBag, ArrowUpRight, Trash2, X } from 'lucide-react';
+import { Check, ChevronsLeft, MessageSquarePlus, Pencil, ShoppingBag, ArrowUpRight, Trash2, X, MessageCircle, Image as ImageIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import styles from './workspace.module.css';
+import filters from './session-sidebar.module.css';
+
+type DisplayActivity = Exclude<SessionActivityType, 'poster'>;
+const activityLabels = { chat: '聊天', image: '普通生图', commerce: '电商生图' } as const;
+const activityIcons = { chat: MessageCircle, image: ImageIcon, commerce: ShoppingBag };
+const sessionActivities = (session: Session): DisplayActivity[] =>
+  [...new Set((session.activityTypes?.length ? session.activityTypes : ['chat'] as const)
+    .map(activity => activity === 'poster' ? 'commerce' as const : activity))];
+
+const categories = [['all', '全部'], ['chat', '聊天'], ['image', '普通生图'], ['commerce', '电商生图']] as const;
 
 interface SessionSidebarProps {
   activeSessionId?: string;
@@ -31,6 +41,8 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const [editingId, setEditingId] = useState<string>();
   const [title, setTitle] = useState('');
+  const [category, setCategory] = useState<'all' | DisplayActivity>('all');
+  const visibleSessions = sessions.filter(session => category === 'all' || sessionActivities(session).includes(category));
 
   const beginRename = (session: Session) => {
     setEditingId(session.id);
@@ -61,10 +73,14 @@ export function SessionSidebar({
         新对话
       </Button>
       <Link className={styles.commerceNav} href="/create"><ShoppingBag aria-hidden size={17} /><span>电商生图</span><ArrowUpRight aria-hidden size={15} /></Link>
-      <div className={styles.sectionLabel}>最近会话<span>{sessions.length}</span></div>
+      <div className={filters.categories} role="group" aria-label="会话分类">
+        {categories.map(([value, label]) => <button key={value} type="button" aria-pressed={category === value} className={filters.category} onClick={() => { setCategory(value); setEditingId(undefined); }}>{label}</button>)}
+      </div>
+      <div className={styles.sectionLabel}>最近会话<span>{visibleSessions.length}</span></div>
       <div className={styles.sessionList} role="region" aria-label="会话列表" aria-busy={deleting}>
         {deleting && <div className={styles.sessionDeleting} role="status"><Spin size="small" /><span>正在删除会话…</span></div>}
-        {sessions.map((session) => (
+        {!visibleSessions.length && <p className={filters.empty}>暂无此类会话</p>}
+        {visibleSessions.map((session) => (
           <div
             className={`${styles.sessionItem} ${
               activeSessionId === session.id ? styles.sessionActive : ''
@@ -81,7 +97,9 @@ export function SessionSidebar({
                 value={title}
               />
             ) : (
+              <div className={filters.sessionContent}>
               <div className={styles.sessionTitleRow}>
+                {(() => { const Icon = activityIcons[sessionActivities(session)[0]!]; return <Icon className={filters.activityIcon} size={14} aria-hidden />; })()}
                 <button
                   className={styles.sessionTitle}
                   disabled={deleting}
@@ -94,6 +112,10 @@ export function SessionSidebar({
                 {busySessionIds?.has(session.id) && (
                   <Spin aria-label={`${session.title} 正在处理`} className={styles.sessionBusy} size="small" />
                 )}
+              </div>
+              <div className={filters.badges} aria-label="会话类型">
+                {sessionActivities(session).map(activity => <span className={filters.badge} key={activity}>{activityLabels[activity]}</span>)}
+              </div>
               </div>
             )}
             <div className={styles.sessionActions}>

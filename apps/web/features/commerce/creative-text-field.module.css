@@ -1,0 +1,12 @@
+.field { display: grid; gap: 6px; min-width: 0; width: 100%; }
+.editor { position: relative; display: flex; }
+.editor input, .editor textarea { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--z-border); border-radius: 10px; padding: 10px 40px 10px 12px; background: var(--z-panel-strong); color: inherit; font: inherit; line-height: 1.5; }
+.editor textarea { resize: vertical; }
+.sparkle { position: absolute; right: 5px; top: 5px; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; color: var(--z-primary); background: transparent; cursor: pointer; }
+.sparkle:hover:not(:disabled) { background: var(--z-primary-soft); }
+.sparkle:disabled { opacity: .38; cursor: default; }
+.feedback { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--z-muted); font-size: 12px; }
+.feedback button, .suggestion button { border: 0; padding: 3px 6px; background: transparent; color: var(--z-primary); cursor: pointer; font: inherit; }
+.suggestion { padding: 10px; border: 1px solid var(--z-border); border-radius: 8px; font-size: 13px; }
+.suggestion p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.field button:focus-visible, .editor input:focus-visible, .editor textarea:focus-visible { outline: 3px solid var(--z-focus); outline-offset: 2px; }

@@ -1,5 +1,9 @@
 'use client';
 
+import Image from 'next/image';
+import { commerceExampleForScene } from '@/features/commerce/commerce-examples';
+import { WebPageShell } from '@/features/shell/WebPageShell';
+
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { authFeedback } from './feedback';
@@ -51,7 +55,17 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
   }
   function changeMode(value: Mode) { setMode(value); setMessage(''); setFailed(false); setNextStep(null); resetCaptcha(); }
 
-  return <main className="glass-page"><section className="glass-card glass-form"><p className="glass-kicker">ZIMAGE · 中国大陆公开 BETA</p><h1>{mode === 'login' ? '登录' : mode === 'register' ? '创建账号' : '找回密码'}</h1>
+  return <WebPageShell className="auth-page"><div className="auth-layout">
+    <section className="auth-story" aria-label="创作灵感">
+      <p className="glass-kicker">从一张商品图开始</p>
+      <h2>好商品，<br />值得被看见。</h2>
+      <p className="glass-muted">让灵感变成主图、套图与详情内容。<br />在同一个空间里，完成你的下一次创作。</p>
+      <div className="auth-examples">
+        <figure><Image src={commerceExampleForScene('product-main')} width={400} height={500} sizes="240px" alt="米杏色衬衫商品主图示例" /><figcaption>商品主图</figcaption></figure>
+        <figure><Image src={commerceExampleForScene('detail')} width={400} height={500} sizes="240px" alt="女装详情图示例" /><figcaption>详情内容</figcaption></figure>
+      </div>
+      <p className="auth-example-note">AI 女装示例 · 以实际生成效果为准</p>
+    </section><section className="glass-card glass-form"><p className="glass-kicker">ZIMAGE · 中国大陆公开 BETA</p><h1>{mode === 'login' ? '登录' : mode === 'register' ? '创建账号' : '找回密码'}</h1>
     <p className="glass-muted">{mode === 'login' ? '登录后继续你的图片创作。' : mode === 'register' ? '创建账号，跨设备保留会话与生成记录。' : '输入邮箱，我们会发送找回密码指引。'}</p>
     <form onSubmit={submit}><label>邮箱<input autoComplete="email" name="email" required type="email" /></label>
       {mode !== 'recovery' && <label>密码<input autoComplete={mode === 'login' ? 'current-password' : 'new-password'} name="password" required type="password" /></label>}
@@ -61,6 +75,6 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
       {captcha}
       {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
       {nextStep && <a href={nextStep}>输入邮箱验证码</a>}<button disabled={pending || captchaPending || (mode === 'register' && !legalVersion)} type="submit">{mode === 'login' ? '登录' : mode === 'register' ? '注册' : '发送重置邮件'}</button></form>
-    <nav><button disabled={pending} onClick={() => changeMode('login')} type="button">登录</button><button disabled={pending} onClick={() => changeMode('register')} type="button">注册</button><button disabled={pending} onClick={() => changeMode('recovery')} type="button">忘记密码</button></nav>
-  </section></main>;
+    <nav aria-label="账号操作"><button aria-pressed={mode === 'login'} disabled={pending} onClick={() => changeMode('login')} type="button">登录</button><button aria-pressed={mode === 'register'} disabled={pending} onClick={() => changeMode('register')} type="button">注册</button><button aria-pressed={mode === 'recovery'} disabled={pending} onClick={() => changeMode('recovery')} type="button">忘记密码</button></nav>
+  </section></div></WebPageShell>;
 }

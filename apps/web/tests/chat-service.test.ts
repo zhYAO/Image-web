@@ -19,6 +19,34 @@ async function collect(events: AsyncIterable<ChatEvent>) {
 }
 
 describe('chat service', () => {
+  it('persists and completes a reply even if provider health recording fails', async () => {
+    const complete = vi.fn().mockResolvedValue(crypto.randomUUID());
+    const recordProviderResult = vi.fn().mockRejectedValue(new Error('stats unavailable'));
+    const streamProvider = vi.fn(async function* () { yield '完整回复'; });
+    const runner = createChatTurnRunner({ complete, recordProviderResult, start: vi.fn().mockResolvedValue({ created: false, session }), streamProvider, submitImage: vi.fn() });
+    const events = await collect(runner({ chatModel: 'minimax', message: '你好', tools: [], userId: crypto.randomUUID() }));
+    expect(events.map((event) => event.type)).toEqual(['message.delta', 'message.completed']);
+    expect(complete).toHaveBeenCalledOnce();
+    expect(streamProvider).toHaveBeenCalledOnce();
+    expect(recordProviderResult).toHaveBeenCalledExactlyOnceWith('minimax', false);
+  });
+
+  it('reports persistence failure separately without retrying or marking the provider unhealthy', async () => {
+    const recordProviderResult = vi.fn();
+    const streamProvider = vi.fn(async function* () { yield '完整回复'; });
+    const runner = createChatTurnRunner({ complete: vi.fn().mockRejectedValue(new Error('save unavailable')), recordProviderResult, start: vi.fn().mockResolvedValue({ created: false, session }), streamProvider, submitImage: vi.fn() });
+    const events = await collect(runner({ chatModel: 'minimax', message: '你好', tools: [], userId: crypto.randomUUID() }));
+    expect(events.at(-1)).toMatchObject({ type: 'stream.failed', error: { code: 'NETWORK', message: '聊天记录保存失败，已保留收到的回复。', retryable: false } });
+    expect(streamProvider).toHaveBeenCalledOnce();
+    expect(recordProviderResult).not.toHaveBeenCalledWith('minimax', true);
+  });
+
+  it('preserves the original interruption when error statistics also fail', async () => {
+    const runner = createChatTurnRunner({ complete: vi.fn(), recordProviderResult: vi.fn().mockRejectedValue(new Error('stats unavailable')), start: vi.fn().mockResolvedValue({ created: false, session }), streamProvider: async function* () { yield '部分'; throw new ChatProviderFailure('stream_interrupted', false); }, submitImage: vi.fn() });
+    const events = await collect(runner({ message: '你好', tools: [], userId: crypto.randomUUID() }));
+    expect(events.at(-1)).toMatchObject({ type: 'stream.failed', error: { code: 'STREAM_INTERRUPTED' } });
+  });
+
   it('persists the user first, retries one transient pre-content failure, then persists the full assistant', async () => {
     let attempt = 0;
     const complete = vi.fn().mockResolvedValue('20000000-0000-4000-8000-000000000002');

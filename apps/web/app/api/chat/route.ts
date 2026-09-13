@@ -71,6 +71,7 @@ export async function POST(request: Request) {
           const provider = resolveChatProvider(chatInput.chatModel);
           return streamOpenAiCompatibleChat({
             apiKey: provider.apiKey,
+            correlationId,
             endpoint: provider.endpoint,
             message: chatInput.message,
             messages: chatInput.history,
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
         // once the runtime forwards it) into the controller so the upstream
         // fetch aborts and the runner stops instead of leaking tokens.
         let aborted = false;
+        let terminal = false;
         const onClientAbort = () => {
           aborted = true;
           safeError(controller, new Error('client_disconnected'));
@@ -114,23 +116,21 @@ export async function POST(request: Request) {
           },
           prepared.runner,
           async (event) => {
-            if (aborted) return;
+            if (aborted || terminal) return;
             safeEnqueue(controller, encodeEvent(event));
+            terminal = event.type === 'message.completed' || event.type === 'stream.failed';
+            if (terminal) console.info('[api/chat] terminal event sent', { correlationId, type: event.type });
           },
         ).catch((error: unknown) => {
-          // Always log so the route never fails silently. Without this the only
-          // signal a developer has is the generic "聊天服务暂时不可用" toast
-          // even when the real failure is a checkpointer 42P01, a 4xx from
-          // the upstream, or a quota exhaustion.
+          // Keep the phase/correlation visible without logging user content,
+          // provider responses, credentials or arbitrary exception messages.
           console.error('[api/chat] executeChatGraph failed', {
             correlationId,
-            error: error instanceof Error
-              ? { name: error.name, message: error.message, stack: error.stack }
-              : error,
-            sessionId: input.sessionId,
-            userId,
+            stage: terminal ? 'after_terminal' : 'before_terminal',
+            code: error instanceof Error ? 'graph_execution_failed' : 'unknown_failure',
           });
-          if (aborted) return;
+          if (aborted || terminal) return;
+          terminal = true;
           safeEnqueue(controller, encodeEvent({
             error: {
               code: 'NETWORK',

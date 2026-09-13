@@ -22,6 +22,9 @@ interface WorkspaceTimelineProps {
   onDownloadBatch: (batch: GenerationBatch) => void;
   onRecreate: (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => void;
   onRetryImage?: (turnId: string) => void;
+  chatRecoveryActions?: Record<string, { label: string }>;
+  chatRecoveryDisabled?: boolean;
+  onRecoverChat?: (errorId: string) => void;
   onRetryLoad?: () => void;
   onInspiration?: (prompt: string) => void;
 }
@@ -173,6 +176,9 @@ export function WorkspaceTimeline({
   onRetryImage,
   onRetryLoad,
   onInspiration,
+  chatRecoveryActions = {},
+  chatRecoveryDisabled = false,
+  onRecoverChat,
 }: WorkspaceTimelineProps) {
   if (loading) {
     return (
@@ -235,7 +241,8 @@ export function WorkspaceTimeline({
         if (item.type === 'generation') {
           return <GenerationTurn batch={item.batch} key={item.id} onDownloadBatch={onDownloadBatch} onRecreate={onRecreate} />;
         }
-        return <Alert action={item.actionLabel ? <Button size="small">{item.actionLabel}</Button> : undefined} description={item.error.message} key={item.id} showIcon type="error" />;
+        const recovery = chatRecoveryActions[item.id];
+        return <Alert action={recovery && onRecoverChat ? <Button disabled={chatRecoveryDisabled} onClick={() => onRecoverChat(item.id)} size="small">{recovery.label}</Button> : undefined} description={item.error.message} key={item.id} showIcon type="error" />;
       })}
       {optimisticImages.map((turn) => (
         <GenerationTurn

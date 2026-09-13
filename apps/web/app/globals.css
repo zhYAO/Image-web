@@ -1,24 +1,55 @@
 :root {
   --z-bg: #f5f5f7;
-  --z-bg-gradient: radial-gradient(ellipse at 18% 5%, rgba(211, 229, 251, .55), transparent 48%), radial-gradient(ellipse at 88% 65%, rgba(229, 225, 243, .34), transparent 42%), linear-gradient(145deg, #fbfbfd, #f3f5f8);
-  --z-panel: rgba(255, 255, 255, .68);
-  --z-panel-strong: rgba(255, 255, 255, .86);
+  --z-bg-gradient: radial-gradient(ellipse at 8% 12%, rgba(171, 209, 253, .58), transparent 42%), radial-gradient(ellipse at 92% 66%, rgba(208, 191, 244, .46), transparent 44%), radial-gradient(ellipse at 52% 105%, rgba(203, 231, 240, .6), transparent 46%), linear-gradient(145deg, #f7faff, #f1f3f9);
+  --z-panel: rgba(255, 255, 255, .60);
+  --z-panel-strong: rgba(255, 255, 255, .96);
   --z-text: #1d1d1f;
   --z-muted: #65656c;
+  --z-placeholder: #65656c;
+  --z-focus: #0066cc;
+  --z-control-bg: #fff;
+  --z-disabled: #8b8b92;
+  --z-disabled-bg: #ececef;
+  --z-success: #237449;
+  --z-warning: #995400;
+  --z-error: #b42318;
   --z-border: rgba(60, 60, 67, .12);
   --z-border-subtle: rgba(60, 60, 67, .16);
   --z-primary: #0066cc;
   --z-primary-hover: #005bb5;
+  --z-primary-active: #004f9e;
   --z-primary-soft: rgba(0, 122, 255, .07);
   --z-accent: #c86b12;
-  --z-radius-sm: 12px;
-  --z-radius-md: 18px;
-  --z-radius-lg: 28px;
+  --z-radius-control: 12px;
+  --z-radius-content: 18px;
+  --z-radius-shell: 28px;
+  --z-radius-sm: var(--z-radius-control);
+  --z-radius-md: var(--z-radius-content);
+  --z-radius-lg: var(--z-radius-shell);
   --z-shadow: 0 12px 40px rgba(31, 40, 54, .07), 0 1px 3px rgba(31, 40, 54, .03);
   --z-shadow-soft: 0 4px 18px rgba(31, 40, 54, .04);
   --z-ease: cubic-bezier(.22, 1, .36, 1);
-  --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .95);
+  --z-glass-highlight: inset 0 1px 1px #fff, inset 1px 0 1px rgba(255,255,255,.85), inset 0 -1px 1px rgba(120,145,186,.18);
+  --z-glass-nav: rgba(255,255,255,.48);
+  --z-glass-control: rgba(255,255,255,.72);
+  --z-glass-rim: linear-gradient(135deg, rgba(255,255,255,.68), rgba(255,255,255,.06) 45%, rgba(226,235,255,.22));
+  --z-glass-shadow: var(--z-glass-highlight), 0 8px 28px rgba(49,73,110,.09), 0 0 0 1px rgba(94,120,163,.08);
   --z-glass-blur: 28px;
+  --z-duration-fast: 160ms;
+  --z-duration-overlay: 220ms;
+  --z-space-4: 4px;
+  --z-space-8: 8px;
+  --z-space-12: 12px;
+  --z-space-16: 16px;
+  --z-space-24: 24px;
+  --z-space-32: 32px;
+  --z-font-body: 14px;
+  --z-font-description: 12px;
+  --z-layer-sidebar: 8;
+  --z-layer-dock: 10;
+  --z-layer-affordance: 12;
+  --z-layer-popover: 30;
+  --z-layer-feedback: 40;
 }
 
 * {
@@ -41,32 +72,53 @@ body {
 
 a { color: var(--z-primary); }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid rgba(0, 122, 255, .35);
-  outline-offset: 2px;
+/* Native and AntD controls share a visible keyboard-only focus ring. */
+body :is(button, a, input, textarea, select, [role="button"]):focus-visible:not(:disabled):not([aria-disabled="true"]),
+body :is(.ant-select, .ant-input-affix-wrapper, .ant-input-number, .ant-checkbox, .ant-radio):not(.ant-select-disabled):not(.ant-input-affix-wrapper-disabled):not(.ant-input-number-disabled):not(.ant-checkbox-disabled):not(.ant-radio-disabled):has(input:focus-visible:not(:disabled)) {
+  outline: 3px solid var(--z-focus);
+  outline-offset: 3px;
+}
+
+/* Composite inputs draw the ring on their visible wrapper, not their inner input. */
+body :is(.ant-select, .ant-input-affix-wrapper, .ant-input-number, .ant-checkbox, .ant-radio) input:focus-visible:not(:disabled):not([aria-disabled="true"]) {
+  outline: none;
+}
+
+body :is(button, a, input, textarea, select, [role="button"]):is(:disabled, [aria-disabled="true"]):focus-visible {
+  outline: none;
+}
+
+input:not(:disabled)::placeholder,
+textarea:not(:disabled)::placeholder {
+  color: var(--z-placeholder);
+  opacity: 1;
+}
+
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: var(--z-disabled);
+  opacity: 1;
 }
 
 .glass-page {
   min-height: 100dvh;
   overflow: auto;
-  padding: clamp(24px, 5vw, 72px) 20px;
+  padding: 24px clamp(20px, 4vw, 64px) 64px;
   background: var(--z-bg-gradient);
 }
 
 .glass-card {
   border: 1px solid var(--z-border);
   border-radius: var(--z-radius-lg);
-  background: var(--z-panel);
-  box-shadow: var(--z-shadow);
+  background: var(--z-glass-rim), var(--z-panel);
+  box-shadow: var(--z-glass-shadow);
+  animation: glass-arrive var(--z-duration-overlay) var(--z-ease) both;
   -webkit-backdrop-filter: blur(var(--z-glass-blur)) saturate(150%);
   backdrop-filter: blur(var(--z-glass-blur)) saturate(150%);
 }
 
 .glass-form {
-  width: min(100%, 460px);
+  width: min(100%, 480px);
   margin: 0 auto;
   padding: clamp(28px, 5vw, 48px);
 }
@@ -82,7 +134,7 @@ textarea:focus-visible {
   border: 1px solid var(--z-border-subtle);
   border-radius: var(--z-radius-sm);
   padding: 12px 14px;
-  background: rgba(255, 255, 255, .7);
+  background: var(--z-control-bg);
   color: var(--z-text);
 }
 .glass-form button,
@@ -97,11 +149,12 @@ textarea:focus-visible {
   font-weight: 700;
   box-shadow: 0 3px 10px rgba(0, 102, 204, .16);
 }
-.glass-form button:hover, .glass-primary:hover { background: var(--z-primary-hover); }
+.glass-form button:hover:not(:disabled):not([aria-disabled="true"]), .glass-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--z-primary-hover); }
+.glass-form button:active:not(:disabled):not([aria-disabled="true"]), .glass-primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--z-primary-active); }
 .glass-form nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
 .glass-form nav button { min-height: auto; padding: 7px 10px; background: transparent; color: var(--z-primary); box-shadow: none; }
 .glass-status { margin: 0; color: var(--z-primary); line-height: 1.6; }
-.glass-error { margin: 0; color: #b42318; line-height: 1.6; }
+.glass-error { margin: 0; color: var(--z-error); line-height: 1.6; }
 .glass-prose { width: min(100%, 760px); margin: 0 auto; padding: clamp(28px, 6vw, 64px); }
 .glass-prose h1 { margin-top: 0; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.04em; }
 .glass-prose p { color: var(--z-muted); line-height: 1.9; }
@@ -122,16 +175,19 @@ textarea {
   }
 }
 
-.glass-form button:disabled { cursor: wait; opacity: .55; }
-.glass-form .glass-danger { background: #fff2f1; color: #b42318; box-shadow: none; }
-.glass-form .glass-danger:hover { background: #ffe4e1; }
-
-@media (prefers-reduced-transparency: reduce) {
-  :root { --z-panel: #fff; --z-panel-strong: #fff; --z-glass-blur: 0px; }
+/* Disabled controls remain legible without hover or pressed feedback. */
+.glass-form :is(button, input, textarea, select):disabled,
+.glass-primary:is(:disabled, [aria-disabled="true"]) {
+  background: var(--z-disabled-bg);
+  color: var(--z-disabled);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 1;
 }
+.glass-form .glass-danger:not(:disabled) { background: #fff2f1; color: var(--z-error); box-shadow: none; }
+.glass-form .glass-danger:is(:hover, :active):not(:disabled):not([aria-disabled="true"]) { background: #ffe4e1; }
 
 /* Shared glass controls across authentication, account and workspace overlays. */
-.glass-card { box-shadow: var(--z-glass-highlight), var(--z-shadow); animation: glass-arrive 360ms var(--z-ease) both; }
 .glass-form { border-color: rgba(255,255,255,.9); }
 .glass-form a { text-decoration: none; }
 .glass-form a:hover { text-decoration: underline; }
@@ -140,13 +196,13 @@ textarea {
 .glass-form > button { margin-top: 24px; width: 100%; }
 .glass-form nav { padding: 5px; border-radius: 999px; background: rgba(100,116,139,.055); justify-content: space-between; }
 .glass-form nav button { border-radius: 999px; min-height: 38px; }
-.glass-form nav button:hover { background: white; }
-.glass-form input:focus, .glass-form textarea:focus { border-color: rgba(0,102,204,.4); box-shadow: 0 0 0 4px var(--z-primary-soft); }
+.glass-form nav button:is(:hover, :active):not(:disabled):not([aria-disabled="true"]) { background: var(--z-control-bg); }
+.glass-form input:focus:not(:disabled), .glass-form textarea:focus:not(:disabled) { border-color: var(--z-focus); box-shadow: 0 0 0 4px var(--z-primary-soft); }
 .glass-form input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--z-primary); }
 .glass-form label:has(input[type="checkbox"]) { display: flex; flex-wrap: wrap; align-items: center; font-weight: 400; line-height: 1.6; }
-.glass-form button, .glass-form input, .glass-form textarea { transition: background 160ms ease, box-shadow 160ms ease, transform 160ms var(--z-ease); }
-.glass-form button:active:not(:disabled) { transform: scale(.985); }
-.glass-status, .glass-error { padding: 12px 16px; border-radius: 16px; background: var(--z-primary-soft); margin-top: 16px; animation: glass-arrive 220ms var(--z-ease) both; }
+.glass-form button, .glass-form input, .glass-form textarea { transition: background var(--z-duration-fast) ease, box-shadow var(--z-duration-fast) ease, transform var(--z-duration-fast) var(--z-ease); }
+.glass-form button:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(.985); }
+.glass-status, .glass-error { padding: 12px 16px; border-radius: 16px; background: var(--z-primary-soft); margin-top: 16px; animation: glass-arrive var(--z-duration-overlay) var(--z-ease) both; }
 .glass-error { background: #fff0ee; }
 .workspaceDrawer .ant-drawer-content { background: var(--z-panel-strong); backdrop-filter: blur(var(--z-glass-blur)); }
 .workspaceDrawer .ant-drawer-header { border-color: var(--z-border); }
@@ -168,3 +224,56 @@ input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"] { 
 .loading-orbit { width: 18px; height: 18px; border: 2px solid #dae5f3; border-top-color: var(--z-primary); border-radius: 50%; animation: loading-orbit 1s linear infinite; }
 @keyframes loading-orbit { to { transform: rotate(360deg); } }
 @media (max-width: 767px) { .workspace-loading > aside { display: none; } }
+
+/* Liquid Glass: navigational, control and content materials share one palette. */
+.glass-site-nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  max-width: 1440px; min-height: 62px; margin: 0 auto 44px; padding: 8px 14px 8px 22px;
+  border: 1px solid rgba(255,255,255,.86); border-radius: 999px;
+  background: var(--z-glass-rim), var(--z-glass-nav); box-shadow: var(--z-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--z-glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--z-glass-blur)) saturate(180%);
+}
+.glass-site-nav a { display: inline-flex; align-items: center; gap: 9px; padding: 10px 14px; border-radius: 999px; color: var(--z-text); text-decoration: none; font-size: 13px; }
+.glass-site-nav a:hover { background: var(--z-glass-control); }
+.glass-site-nav .glass-brand { font-size: 20px; font-weight: 650; letter-spacing: -.04em; padding-left: 0; }
+.glass-brand svg { color: var(--z-primary); }
+.glass-brand span { border-left: 1px solid var(--z-border); padding-left: 14px; margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--z-muted); letter-spacing: 0; }
+.glass-form button:not(:disabled):not(.glass-danger):not([aria-pressed]), .glass-primary:not(:disabled) {
+  background-image: linear-gradient(160deg, rgba(255,255,255,.24), transparent 60%);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.65), 0 5px 14px rgba(0,82,165,.16);
+}
+.glass-form nav { gap: 4px; border: 1px solid rgba(255,255,255,.8); background: rgba(218,228,243,.42); box-shadow: inset 0 1px 3px rgba(78,108,150,.08); }
+.glass-form nav button:not(:disabled) { flex: 1; box-shadow: none; background-image: none; font-size: 13px; color: var(--z-muted); }
+.glass-form nav button[aria-pressed="true"]:not(:disabled) { background: var(--z-glass-rim), var(--z-glass-control); box-shadow: var(--z-glass-shadow); color: var(--z-primary); }
+.glass-form input, .glass-form textarea { background: var(--z-panel-strong); box-shadow: inset 0 1px 2px rgba(56,79,112,.035); }
+.glass-form form + a { display: inline-block; margin-top: 24px; }
+.auth-layout { display: grid; grid-template-columns: minmax(0,1fr) 460px; gap: clamp(40px,7vw,110px); align-items: center; max-width: 1080px; margin: 64px auto 0; }
+.auth-layout .glass-form { width: 100%; padding: 38px; }
+.auth-story h2 { font-size: clamp(38px,4.5vw,64px); line-height: 1.2; font-weight: 600; letter-spacing: -.065em; margin: 18px 0; }
+.auth-story .glass-muted { font-size: 15px; }
+.auth-examples { display: flex; align-items: center; gap: 16px; margin-top: 30px; padding: 10px 12px 18px 0; }
+.auth-examples figure { position: relative; width: 46%; margin: 0; padding: 7px; border: 1px solid white; border-radius: 26px; background: var(--z-panel); box-shadow: var(--z-glass-shadow); transform: rotate(-5deg); }
+.auth-examples figure + figure { transform: translateY(16px) rotate(5deg); }
+.auth-examples img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 20px; }
+.auth-examples figcaption { position: absolute; left: 18px; bottom: 18px; padding: 7px 12px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--z-text); font-size: 12px; }
+.auth-example-note { color: var(--z-muted); font-size: 11px; margin-top: 18px; }
+.ant-select-dropdown, .ant-popover .ant-popover-container, .ant-popover .ant-popover-inner, .ant-modal .ant-modal-container {
+  background: var(--z-glass-rim), var(--z-panel-strong); border: 1px solid rgba(255,255,255,.9); box-shadow: var(--z-glass-shadow); border-radius: 18px;
+  -webkit-backdrop-filter: blur(var(--z-glass-blur)) saturate(170%); backdrop-filter: blur(var(--z-glass-blur)) saturate(170%);
+}
+.ant-image-preview .ant-image-preview-operations { background: var(--z-glass-nav); color: var(--z-text); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--z-glass-shadow); -webkit-backdrop-filter: blur(var(--z-glass-blur)); backdrop-filter: blur(var(--z-glass-blur)); }
+@media (max-width: 1000px) { .auth-layout { grid-template-columns: minmax(0,1fr); max-width: 480px; margin-top: 24px; } .auth-story { display: none; } .glass-site-nav { margin-bottom: 28px; } }
+@media (max-width: 600px) { .glass-brand span { display: none; } .glass-site-nav { padding-inline: 14px; gap: 4px; } .glass-site-nav a { font-size: 12px; padding-inline: 8px; } .auth-layout .glass-form { padding: 24px; } }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --z-panel: #fff; --z-panel-strong: #fff; --z-glass-nav: #fff; --z-glass-control: #fff; --z-glass-rim: linear-gradient(#fff,#fff); --z-glass-blur: 0px; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --z-panel: #fff; --z-panel-strong: #fff; --z-glass-nav: #fff; --z-glass-control: #fff; --z-glass-rim: linear-gradient(#fff,#fff); --z-glass-blur: 0px; }
+  .glass-card, .glass-site-nav, .workspaceDrawer .ant-drawer-content, .ant-select-dropdown, .ant-popover .ant-popover-container, .ant-popover .ant-popover-inner, .ant-modal .ant-modal-container, .ant-image-preview .ant-image-preview-operations {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

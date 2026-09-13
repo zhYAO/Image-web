@@ -1,3 +1,4 @@
+import { CreativeTextField } from "./CreativeTextField";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   COMMERCE_TEMPLATES,
@@ -13,10 +14,14 @@ export function CommercePlanFields({
   onChange,
   numbers,
   disabled = false,
+  selectedSlotId,
+  onSelectSlot,
 }: {
   plan: CommercePlan;
   numbers?: number[];
   disabled?: boolean;
+  selectedSlotId?: string;
+  onSelectSlot?: (slotId: string) => void;
   capabilities: ProviderCapability[];
   onChange: (plan: CommercePlan) => void;
 }) {
@@ -30,56 +35,73 @@ export function CommercePlanFields({
   return (
     <div className={styles.planGrid}>
       <p className={styles.note}>
-        商品：{plan.brief.name} · {plan.brief.facts || "仅使用真实商品可见外观"}
-        。商品事实优先，保持颜色、轮廓、结构和可见标识。模板 v
+        {plan.brief.contentMode === "content" ? `内容：${plan.brief.name}。按原文分配到每张卡片，不添加未提供的事实。` : `商品：${plan.brief.name} · ${plan.brief.facts || "仅使用真实商品可见外观"}。商品事实优先，保持颜色、轮廓、结构和可见标识。无已知规格或价格时不添加。`}模板 v
         {COMMERCE_TEMPLATES.find((item) => item.id === plan.templateId)
           ?.version ?? "历史版本"}
-        。无已知规格或价格时不添加。
+        。
       </p>
+      {onSelectSlot && (
+        <div className={styles.slotSelector} aria-label="分图选择">
+          {plan.slots.map((slot, index) => (
+            <button
+              aria-pressed={(selectedSlotId ?? plan.slots[0]?.id) === slot.id}
+              className={styles.slotSelectorItem}
+              disabled={disabled}
+              key={slot.id}
+              onClick={() => onSelectSlot(slot.id)}
+              type="button"
+            >
+              编辑第 {numbers?.[index] ?? index + 1} 张：{slot.role}
+            </button>
+          ))}
+        </div>
+      )}
       {plan.slots.map((slot, index) => {
         const number = numbers?.[index] ?? index + 1;
+        if (selectedSlotId && slot.id !== selectedSlotId) return null;
         const model = capabilities
           .find((item) => item.provider === slot.provider)
           ?.models.find((item) => item.id === slot.model);
         return (
-          <fieldset className={styles.slot} key={slot.id} disabled={disabled}>
+          <fieldset
+            className={styles.slot}
+            data-slot-id={slot.id}
+            key={slot.id}
+            disabled={disabled}
+          >
             <legend>
               第 {number} 张 · {slot.role}
             </legend>
-            <label>
-              图片角色
-              <input
-                aria-label={`第 ${number} 张角色`}
-                value={slot.role}
-                maxLength={80}
-                onChange={(event) =>
-                  update(slot.id, { role: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              场景、布局与调整要求
-              <textarea
-                aria-label={`第 ${number} 张要求`}
-                value={slot.instruction}
-                maxLength={2000}
-                onChange={(event) =>
-                  update(slot.id, { instruction: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              准确文案
-              <textarea
-                aria-label={`第 ${number} 张文案`}
-                value={slot.exactText}
-                maxLength={1000}
-                placeholder="留空则不添加营销文字"
-                onChange={(event) =>
-                  update(slot.id, { exactText: event.target.value })
-                }
-              />
-            </label>
+            <CreativeTextField
+              label="图片角色"
+              aria-label={`第 ${number} 张角色`}
+              field="role"
+              value={slot.role}
+              maxLength={80}
+              disabled={disabled}
+              onChange={(role) => update(slot.id, { role })}
+            />
+            <CreativeTextField
+              label="场景、布局与调整要求"
+              aria-label={`第 ${number} 张要求`}
+              field="instruction"
+              multiline
+              value={slot.instruction}
+              maxLength={2000}
+              disabled={disabled}
+              onChange={(instruction) => update(slot.id, { instruction })}
+            />
+            <CreativeTextField
+              label="准确文案"
+              aria-label={`第 ${number} 张文案`}
+              field="exactText"
+              multiline
+              value={slot.exactText}
+              maxLength={1000}
+              placeholder="留空则不添加营销文字"
+              disabled={disabled}
+              onChange={(exactText) => update(slot.id, { exactText })}
+            />
             <label>
               生成模型
               <CommerceSelect

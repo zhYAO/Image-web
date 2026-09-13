@@ -154,10 +154,12 @@ describe('MockWorkspaceGateway', () => {
 
     const toolPromise = collect(gateway.streamChat({ imageToolEnabled: true, message: '生成商品图' }));
     await vi.runAllTimersAsync();
-    expect((await toolPromise).at(-1)).toMatchObject({
+    const toolEvents = await toolPromise;
+    expect(toolEvents.at(-2)).toMatchObject({
       batchId: expect.any(String),
       type: 'tool.queued',
     });
+    expect(toolEvents.at(-1)).toMatchObject({ type: 'message.completed' });
   });
 
   it('does not queue an enabled image tool for ordinary image discussion', async () => {

@@ -1,6 +1,8 @@
 /** Original role briefs informed by Senyu listing layouts and awesome-gpt-image-2's
  * separation of subject, composition, lighting, materials and typography. */
 const directions: Record<string, string> = {
+  海报封面: "单张完整竖版海报，标题与主视觉层级鲜明，主视觉与信息密度按照所选模板执行，安全边距至少8%。只绘制准确文案，不添加平台UI、点赞数字或示例标签。",
+  内容卡片: "系列内容卡，沿用封面的配色、字体与纹理，按本张确认文字安排清晰模块与辅助插图。信息少时扩大留白，不重复封面、不编造补充内容。",
   商品主图:
     "白底商品摄影成品图。纯白无缝背景，主体占画面约 70–85%，完整轮廓不裁切，三分之四角度；保留接触阴影，边缘干净，真实材质与准确比例。不得加场景道具、拼贴、标题或装饰边框。",
   核心卖点:

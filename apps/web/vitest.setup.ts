@@ -4,6 +4,17 @@ import { afterEach } from 'vitest';
 
 afterEach(() => cleanup());
 
+// Node 26 exposes an unavailable experimental localStorage as `undefined` when
+// no --localstorage-file is supplied. Vitest then keeps that Node global instead
+// of copying jsdom's browser storage into the test window.
+const jsdomWindow = (globalThis as typeof globalThis & { jsdom?: { window: Window } }).jsdom?.window;
+if (typeof window.localStorage === 'undefined' && jsdomWindow) {
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: jsdomWindow.localStorage,
+  });
+}
+
 globalThis.ResizeObserver = class {
   disconnect() {}
   observe() {}

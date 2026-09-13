@@ -1,11 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthPanel } from '../features/auth/AuthPanel';
 import { VerifyPanel } from '../features/auth/VerifyPanel';
 import { AuthRecovery } from '../features/auth/AuthRecovery';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
-vi.mock('next/script', () => ({ default: ({ onReady }: { onReady: () => void }) => <button type="button" onClick={onReady}>加载安全验证</button> }));
+vi.mock('next/script', () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) => <><button type="button" onClick={onReady}>加载安全验证</button><button type="button" onClick={onError}>模拟脚本失败</button></> }));
 const renderChallenge = vi.fn();
 const removeChallenge = vi.fn();
 beforeEach(() => {
@@ -23,6 +23,37 @@ async function solve() {
 }
 
 describe('formal email authentication CAPTCHA', () => {
+  it.each(['login', 'register', 'recovery'] as const)('%s displays light flexible verification and accurate success/expiry/retry states', async (mode) => {
+    render(<AuthPanel legalVersion="approved-test" />);
+    if (mode !== 'login') fireEvent.click(screen.getByRole('button', { name: mode === 'register' ? '注册' : '忘记密码' }));
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载安全验证');
+    fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'audit@example.com' } });
+    const options = await solve();
+    expect(options).toMatchObject({ theme: 'light', size: 'flexible' });
+    expect(screen.getByRole('status')).toHaveTextContent('安全验证已通过');
+    expect(screen.queryByText('请完成安全验证后提交。')).not.toBeInTheDocument();
+    act(() => options['expired-callback']());
+    expect(screen.getByRole('alert')).toHaveTextContent('安全验证已过期');
+    fireEvent.click(screen.getByRole('button', { name: '重新验证' }));
+    expect(removeChallenge).toHaveBeenCalledWith('widget');
+    expect(screen.getByLabelText('邮箱')).toHaveValue('audit@example.com');
+    act(() => options.callback('stale-token'));
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载安全验证');
+    await solve();
+    expect(screen.getByRole('status')).toHaveTextContent('安全验证已通过');
+  });
+
+  it('reports widget and script failures and keeps submission blocked', async () => {
+    render(<AuthPanel />);
+    const options = await solve();
+    act(() => options['error-callback']());
+    expect(screen.getByRole('alert')).toHaveTextContent('安全验证未完成');
+    expect(within(screen.getByLabelText('邮箱').closest('form')!).getByRole('button', { name: '登录' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '模拟脚本失败' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('安全验证加载失败');
+    expect(screen.getByRole('button', { name: '刷新页面' })).toBeInTheDocument();
+  });
+
   it.each(['login', 'register', 'recovery'] as const)('%s waits for a challenge and requires a new one after a failed attempt', async (mode) => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ message: '暂时失败' }, { status: 503 }));
     vi.stubGlobal('fetch', fetcher);

@@ -22,8 +22,8 @@ async function planSet(page: Page, count = 3) {
     .locator(".ant-select-item-option-content")
     .filter({ hasText: new RegExp(`^${count}$`) })
     .click();
-  await wizard.getByRole("button", { name: "逐图设置" }).click();
-  await wizard.getByRole("button", { name: "保存方案，待确认" }).click();
+  await wizard.getByRole("button", { name: "预览分图方案" }).click();
+  await wizard.getByRole("button", { name: "保存方案，稍后生成" }).click();
   return page.getByTestId("commerce-task");
 }
 
@@ -38,7 +38,7 @@ test.beforeEach(async ({ page }) => {
 test("public catalogue filters platform and launches the shared workspace", async ({
   page,
 }) => {
-  await expect(page.getByRole("link", { name: /^开始/ })).toHaveCount(6);
+  await expect(page.getByRole("link", { name: /^开始/ })).toHaveCount(7);
   await page.getByRole("button", { name: "抖音", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "开始商品套图 →" }),
@@ -53,7 +53,7 @@ test("public catalogue filters platform and launches the shared workspace", asyn
   await expect(
     wizard.getByRole("heading", { name: "商品套图", exact: true, level: 2 }),
   ).toBeInViewport();
-  await wizard.getByRole("button", { name: "开始生成 5 张" }).click();
+  await wizard.getByRole("button", { name: "预览分图方案" }).click();
   await expect(wizard.getByRole("alert")).toHaveText(
     "请上传至少一张清晰的真实商品图。",
   );
@@ -173,7 +173,7 @@ test("commerce form waits for confirmation and dirty edits cannot submit the old
   await expect(page.getByTestId("direct-generation-prompt")).toHaveCount(0);
 });
 
-test("product details generate directly and examples load", async ({
+test("product details preview before generation and examples load", async ({
   page,
 }) => {
   await page.goto("/?scene=product-set");
@@ -181,18 +181,20 @@ test("product details generate directly and examples load", async ({
   await wizard.getByLabel("上传电商参考图").setInputFiles(product);
   await wizard.getByLabel("商品名称", { exact: true }).fill("米杏色双袋衬衫");
   await expect(
-    wizard.getByRole("img", { name: /AI 女装详情示例/ }),
-  ).toHaveCount(5);
+    wizard.getByRole("img", { name: /AI 风格示例/ }),
+  ).toHaveCount(1);
   await expect
     .poll(() =>
       wizard
-        .getByRole("img", { name: /AI 女装详情示例/ })
+        .getByRole("img", { name: /AI 风格示例/ })
         .evaluateAll((images) =>
           images.every((image) => (image as HTMLImageElement).naturalWidth > 0),
         ),
     )
     .toBe(true);
-  await wizard.getByRole("button", { name: "开始生成 5 张" }).click();
+  await wizard.getByRole("button", { name: "预览分图方案" }).click();
+  await expect(page.getByTestId("commerce-task")).toHaveCount(0);
+  await wizard.getByRole("button", { name: "确认生成 5 张" }).click();
   const task = page.getByTestId("commerce-task");
   await expect(
     task.getByRole("button", { name: "下载当前选图（5 张）" }),

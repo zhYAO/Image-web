@@ -2,9 +2,12 @@
 
 import {
   CHAT_PROVIDER_MODELS,
+  templatesForScene,
   hasTextOnlyImageIntent,
   MAX_UPLOAD_BYTES,
   sanitizeError,
+  type ChatRequest,
+  type MessageTimelineItem,
   type GenerationBatch,
   type ImageRequest,
   type ProviderCapability,
@@ -33,6 +36,7 @@ import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
 import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
 import { downloadImages } from './download-images';
+import { chatRecoveryActions, reconcileChatTimeline, type FailedChatAttempt } from './chat-recovery';
 import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
@@ -59,6 +63,7 @@ interface SessionRuntime {
   streamingText: string;
   timeline: TimelineItem[];
   retainedItems: TimelineItem[];
+  chatFailures: FailedChatAttempt[];
 }
 
 const MAX_REFERENCES = 4;
@@ -74,6 +79,7 @@ const createRuntime = (loadStatus: SessionRuntime['loadStatus'] = 'idle'): Sessi
   streamingText: '',
   timeline: [],
   retainedItems: [],
+  chatFailures: [],
 });
 
 const nextSequence = (items: TimelineItem[]) => (
@@ -125,6 +131,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const timelineRequestVersions = useRef(new Map<string, number>());
   const chatControllers = useRef(new Map<string, AbortController>());
   const [quota, setQuota] = useState<Quota>();
+  const quotaRequestVersion = useRef(0);
+  const refreshQuota = useCallback(async () => {
+    const version = ++quotaRequestVersion.current;
+    const next = await gateway.getQuota();
+    if (version === quotaRequestVersion.current) setQuota(next);
+  }, [gateway]);
   const [capabilities, setCapabilities] = useState<ProviderCapability[]>([]);
   const [health, setHealth] = useState<ProviderHealth[]>([]);
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
@@ -175,7 +187,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     try {
       const timeline = await gateway.getTimeline(sessionId);
       if (timelineRequestVersions.current.get(sessionId) !== version) return;
-      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: undefined, loadStatus: 'ready', timeline: [...timeline, ...runtime.retainedItems.filter((item) => !timeline.some((saved) => saved.id === item.id))] }));
+      updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: undefined, loadStatus: 'ready', ...reconcileChatTimeline(timeline, runtime.retainedItems, runtime.chatFailures) }));
     } catch (error: unknown) {
       if (timelineRequestVersions.current.get(sessionId) !== version) return;
       const safe = sanitizeError(error);
@@ -230,7 +242,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       }
       setActiveSessionId(initialId);
       if (launchScene && initialId) {
-        setCommerceLaunch({ scene: launchScene, platform: launchCommerce.platform, sessionId: initialId });
+        setCommerceLaunch({ scene: launchScene, platform: launchCommerce.platform, initialTemplateId: templatesForScene(launchScene).find(template => template.id === launchUrl.searchParams.get('template'))?.id, sessionId: initialId });
       }
       // Legacy Skill links must never implicitly open a commerce workflow.
       if (launchUrl.searchParams.has('skill')) {
@@ -241,6 +253,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       if (launchScene) {
         launchUrl.searchParams.delete('scene');
         launchUrl.searchParams.delete('platform');
+        launchUrl.searchParams.delete('template');
         window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
       }
       if (initialId) await refreshTimeline(initialId, true);
@@ -288,6 +301,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     const poll = () => {
       for (const { batchId, sessionId } of pendingBatchEntries) {
         void gateway.getGenerationBatch(batchId).then((batch) => {
+          if (batch.status !== 'pending' && batch.status !== 'processing') {
+            void refreshQuota().catch(() => undefined);
+          }
           updateRuntime(sessionId, (runtime) => ({
             ...runtime,
             timeline: runtime.timeline.map((item) => (
@@ -299,7 +315,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     };
     const timer = window.setInterval(poll, gateway instanceof MockWorkspaceGateway ? 300 : 1500);
     return () => window.clearInterval(timer);
-  }, [gateway, pendingBatchKey, pendingBatchEntries, updateRuntime]);
+  }, [gateway, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
 
   const imageCreationEnabled = explicitImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
@@ -415,7 +431,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       }));
       cleanupPreviewUrls(turn.previewUrls);
       void refreshSessions();
-      void gateway.getQuota().then(setQuota).catch(() => undefined);
+      void refreshQuota().catch(() => undefined);
     } catch (error: unknown) {
       const safe = sanitizeError(error);
       updateRuntime(sessionId, (runtime) => ({
@@ -431,7 +447,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         } : item),
       }));
     }
-  }, [cleanupPreviewUrls, gateway, refreshSessions, updateRuntime]);
+  }, [cleanupPreviewUrls, gateway, refreshQuota, refreshSessions, updateRuntime]);
 
   const beginImageTurn = useCallback((sessionId: string, prompt: string) => {
     const createdAt = new Date().toISOString();
@@ -484,34 +500,32 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     void admitImageTurn(sessionId, turnId, turn);
   }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
 
-  const runChat = useCallback(async (sessionId: string, prompt: string) => {
+  const runChat = useCallback(async (sessionId: string, request: ChatRequest, user: MessageTimelineItem, knownItemIds: string[]) => {
     const controller = new AbortController();
     chatControllers.current.set(sessionId, controller);
     const timeout = window.setTimeout(() => controller.abort('chat_stream_timeout'), CHAT_STREAM_TIMEOUT_MS);
     let finalText = '';
+    let assistantMessageId: string | undefined;
     let completed = false;
     let streamFailure: SafeError | undefined;
     try {
-      for await (const event of gateway.streamChat({
-        chatModel: selectedChatModel,
-        imageProvider: selectedProvider,
-        imageToolEnabled: false,
-        message: prompt,
-        scenario,
-        sessionId,
-      }, controller.signal)) {
+      for await (const event of gateway.streamChat(request, controller.signal)) {
         if (event.type === 'message.delta') {
+          assistantMessageId = event.messageId;
           finalText += event.delta;
           updateRuntime(sessionId, (runtime) => ({ ...runtime, awaitingFirstDelta: false, streamingText: finalText }));
         } else if (event.type === 'message.completed') {
+          assistantMessageId = event.messageId;
           completed = true;
           finalText = event.content;
+          break;
         } else if (event.type === 'stream.failed') {
           streamFailure = event.error;
+          break;
         }
       }
     } catch (error: unknown) {
-      streamFailure = sanitizeError(error);
+      if (!completed && !streamFailure) streamFailure = sanitizeError(error);
     } finally {
       window.clearTimeout(timeout);
       if (chatControllers.current.get(sessionId) === controller) chatControllers.current.delete(sessionId);
@@ -522,47 +536,71 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         const additions: TimelineItem[] = [];
         if (finalText.trim()) additions.push({
           content: finalText, createdAt: new Date().toISOString(),
-          id: `local-assistant-${crypto.randomUUID()}`, role: 'assistant',
+          id: assistantMessageId ?? `local-assistant-${crypto.randomUUID()}`, role: 'assistant',
           sequence: nextSequence(runtime.timeline), sessionId, type: 'message',
         });
-        if (streamFailure) additions.push({
-          createdAt: new Date().toISOString(), error: streamFailure,
-          id: `chat-error-${crypto.randomUUID()}`, sequence: nextSequence(runtime.timeline) + additions.length,
-          sessionId, type: 'error',
-        });
+        const failure: FailedChatAttempt | undefined = streamFailure ? {
+          request, user, knownItemIds, assistantId: additions[0]?.id,
+          error: {
+            createdAt: new Date().toISOString(), error: streamFailure,
+            id: `chat-error-${crypto.randomUUID()}`, sequence: nextSequence(runtime.timeline) + additions.length,
+            sessionId, type: 'error',
+          },
+        } : undefined;
+        if (failure) additions.push(failure.error);
         return {
           ...runtime, awaitingFirstDelta: false, chatBusy: false, isChatStreaming: false, streamingText: '',
           timeline: [...runtime.timeline, ...additions],
-          retainedItems: streamFailure ? [...runtime.retainedItems, ...additions] : runtime.retainedItems,
+          retainedItems: failure ? [...runtime.retainedItems, user, ...additions] : runtime.retainedItems,
+          chatFailures: failure ? [...runtime.chatFailures, failure] : runtime.chatFailures,
         };
       });
       void refreshTimeline(sessionId);
       void refreshSessions();
-      void gateway.getQuota().then(setQuota).catch(() => undefined);
+      void refreshQuota().catch(() => undefined);
     }
-  }, [gateway, refreshSessions, refreshTimeline, scenario, selectedChatModel, selectedProvider, updateRuntime]);
+  }, [gateway, refreshQuota, refreshSessions, refreshTimeline, updateRuntime]);
 
-  const beginChatTurn = useCallback((sessionId: string, prompt: string) => {
+  const beginChatTurn = useCallback((sessionId: string, prompt: string, originalRequest?: ChatRequest) => {
+    if (chatControllers.current.has(sessionId)) return;
+    const knownItemIds = (runtimesRef.current[sessionId]?.timeline ?? []).map((item) => item.id);
+    const user: MessageTimelineItem = {
+      content: prompt, createdAt: new Date().toISOString(),
+      id: `optimistic-user-${crypto.randomUUID()}`, role: 'user',
+      sequence: nextSequence(runtimesRef.current[sessionId]?.timeline ?? []), sessionId, type: 'message',
+    };
+    const request: ChatRequest = originalRequest
+      ? { ...originalRequest, scenario }
+      : { chatModel: selectedChatModel, imageProvider: selectedProvider, imageToolEnabled: false, message: prompt, scenario, sessionId };
     updateRuntime(sessionId, (runtime) => ({
-      ...runtime,
-      awaitingFirstDelta: true,
-      chatBusy: true,
-      isChatStreaming: true,
+      ...runtime, awaitingFirstDelta: true, chatBusy: true, isChatStreaming: true,
       loadStatus: runtime.loadStatus === 'idle' ? 'ready' : runtime.loadStatus,
-      streamingText: '',
-      timeline: [...runtime.timeline, {
-        content: prompt,
-        createdAt: new Date().toISOString(),
-        id: `optimistic-user-${crypto.randomUUID()}`,
-        role: 'user',
-        sequence: nextSequence(runtime.timeline),
-        sessionId,
-        type: 'message',
-      }],
+      streamingText: '', timeline: [...runtime.timeline, user],
     }));
     void renameIfDefaultTitle(sessionId, prompt);
-    void runChat(sessionId, prompt);
-  }, [renameIfDefaultTitle, runChat, updateRuntime]);
+    void runChat(sessionId, request, user, knownItemIds);
+  }, [renameIfDefaultTitle, runChat, scenario, selectedChatModel, selectedProvider, updateRuntime]);
+
+  const recoveryActions = chatRecoveryActions(activeRuntime?.timeline ?? [], activeRuntime?.chatFailures ?? []);
+  const recoverChat = (errorId: string) => {
+    if (!activeSessionId || activeBusy || composerDisabled || chatControllers.current.has(activeSessionId)) return;
+    const action = recoveryActions[errorId];
+    if (!action) return;
+    if (!action.attempt) {
+      if (draft.trim() && draft !== action.prompt) {
+        setFeedback({ message: '输入区已有未发送内容，请先处理后再重新编辑。' });
+        return;
+      }
+      setDraft(action.prompt);
+      setExplicitImageToolEnabled(false);
+      document.getElementById('creation-prompt')?.focus();
+      return;
+    }
+    updateRuntime(activeSessionId, (runtime) => ({
+      ...runtime, chatFailures: runtime.chatFailures.map((failure) => failure.error.id === action.attempt?.error.id ? { ...failure, retried: true } : failure),
+    }));
+    beginChatTurn(activeSessionId, action.prompt, action.attempt.request);
+  };
 
   const submit = () => {
     const prompt = draft.trim();
@@ -652,6 +690,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
           type: 'generation',
         }],
       }));
+      void refreshQuota().catch(() => {
+        setFeedback({ message: '图片任务已提交，额度暂未刷新；请稍后查看。' });
+      });
     } catch (error: unknown) {
       const safe = sanitizeError(error);
       if (safe.code === 'UNAUTHORIZED') return;
@@ -773,7 +814,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         <PreviewGroup>
           <div aria-label="对话时间线" className={styles.timelineScroll} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
             <CommerceWorkspace
-              ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange}
+              ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
               items={activeRuntime?.timeline ?? []} references={references} capabilities={capabilities}
               timelineLoading={initializing || activeRuntime?.loadStatus === 'loading'}
               settings={{ provider: selectedProvider ?? 'gemini', model: selectedModelId ?? 'gemini-3-pro-image', aspectRatio, resolution }}
@@ -800,6 +841,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
                     loading={loading}
                     onDownloadBatch={downloadBatch}
                     onRecreate={(batch, scope, generationId) => void recreate(batch, scope, generationId)}
+                    chatRecoveryActions={recoveryActions}
+                    chatRecoveryDisabled={activeBusy || composerDisabled}
+                    onRecoverChat={recoverChat}
                     onRetryImage={(turnId) => activeSessionId && void admitImageTurn(activeSessionId, turnId)}
                     onRetryLoad={() => activeSessionId && void refreshTimeline(activeSessionId, true)}
                     onInspiration={(prompt) => { setDraft(prompt); setExplicitImageToolEnabled(true); document.getElementById('creation-prompt')?.focus(); }}

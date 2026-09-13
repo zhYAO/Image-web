@@ -156,6 +156,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
         buffer = buffer.replaceAll('\r\n', '\n');
         const frames = buffer.split('\n\n');
         buffer = frames.pop() ?? '';
+        if (done && buffer.trim()) { frames.push(buffer); buffer = ''; }
         for (const frame of frames) {
           const data = frame.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
           if (!data) continue;
@@ -163,6 +164,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
           if (event.success) {
             terminal ||= event.data.type === 'message.completed' || event.data.type === 'stream.failed';
             yield event.data as ChatEvent;
+            if (terminal) return;
           }
         }
         if (done) break;

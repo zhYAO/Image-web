@@ -16,7 +16,8 @@ interface TurnstileOptions {
   'error-callback'(): void;
   'expired-callback'(): void;
   sitekey: string;
-  theme: 'auto';
+  theme: 'auto' | 'light' | 'dark';
+  size?: 'normal' | 'flexible' | 'compact';
 }
 
 interface TurnstileApi {
