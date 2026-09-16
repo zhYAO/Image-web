@@ -1,10 +1,15 @@
 export class ChatProviderFailure extends Error {
   constructor(
-    readonly code: 'moderation' | 'provider_error' | 'provider_unavailable' | 'stream_interrupted',
+    readonly code:
+      | "moderation"
+      | "provider_error"
+      | "provider_unavailable"
+      | "stream_interrupted",
     readonly retryable: boolean,
+    readonly outcome: "unknown" | "rejected" = "unknown",
   ) {
     super(code);
-    this.name = 'ChatProviderFailure';
+    this.name = "ChatProviderFailure";
   }
 }
 
@@ -16,6 +21,8 @@ interface OpenAiCompatibleChatInput {
   message: string;
   messages?: Array<{ content: string; role: 'assistant' | 'user' }>;
   model: string;
+  /** MiniMax structured-output callers need reasoning outside delta.content. */
+  reasoningSplit?: boolean;
   /**
    * Optional stall budget (ms) for each chunk read. Defaults to
    * `ZIMAGE_CHAT_PROVIDER_STALL_TIMEOUT_MS` (20000 ms). A stalled upstream
@@ -47,7 +54,9 @@ function contentDelta(value: unknown) {
   return typeof content === 'string' && content.length > 0 ? content : undefined;
 }
 
-export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInput) {
+export async function* streamOpenAiCompatibleChat(
+  input: OpenAiCompatibleChatInput,
+) {
   let response: Response;
   try {
     response = await (input.fetcher ?? fetch)(input.endpoint, {
@@ -56,12 +65,13 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
         model: input.model,
         stream: true,
         stream_options: { include_usage: true },
+        ...(input.reasoningSplit ? { reasoning_split: true } : {}),
       }),
       headers: {
         authorization: `Bearer ${input.apiKey}`,
-        'content-type': 'application/json',
+        "content-type": "application/json",
       },
-      method: 'POST',
+      method: "POST",
       signal: input.signal,
     });
   } catch {
@@ -84,27 +94,38 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
       status: response.status,
     });
     if (response.status === 400 || response.status === 422) {
-      throw new ChatProviderFailure('provider_error', false);
+      throw new ChatProviderFailure("provider_error", false, "rejected");
     }
     throw new ChatProviderFailure(
       response.status === 429 || response.status >= 500 ? 'provider_unavailable' : 'provider_error',
       response.status === 429 || response.status >= 500,
+      response.status >= 400 && response.status < 500 ? "rejected" : "unknown",
     );
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   const stallTimeoutMs = resolveStallTimeoutMs(input);
-  let buffer = '';
+  let buffer = "";
   let terminal = false;
   let finishReason: string | undefined;
   try {
     while (true) {
-      const { done, value } = await readWithStallTimeout(reader, stallTimeoutMs, input.signal);
-      buffer = (buffer + decoder.decode(value, { stream: !done })).replaceAll('\r\n', '\n');
-      const frames = buffer.split('\n\n');
-      buffer = frames.pop() ?? '';
-      if (done && buffer.trim()) { frames.push(buffer); buffer = ''; }
+      const { done, value } = await readWithStallTimeout(
+        reader,
+        stallTimeoutMs,
+        input.signal,
+      );
+      buffer = (buffer + decoder.decode(value, { stream: !done })).replaceAll(
+        "\r\n",
+        "\n",
+      );
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      if (done && buffer.trim()) {
+        frames.push(buffer);
+        buffer = "";
+      }
       for (const frame of frames) {
         const payload = frame
           .split('\n')
@@ -112,32 +133,50 @@ export async function* streamOpenAiCompatibleChat(input: OpenAiCompatibleChatInp
           .map((line) => line.slice(5).trimStart())
           .join('\n');
         if (!payload) continue;
-        if (payload === '[DONE]') { terminal = true; break; }
+        if (payload === "[DONE]") {
+          terminal = true;
+          break;
+        }
         let parsed: unknown;
         try {
           parsed = JSON.parse(payload) as unknown;
         } catch {
           throw new ChatProviderFailure('stream_interrupted', false);
         }
-        const envelope = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : undefined;
+        const envelope =
+          parsed && typeof parsed === "object"
+            ? (parsed as Record<string, unknown>)
+            : undefined;
         const baseResponse = envelope?.base_resp as { status_code?: unknown } | undefined;
         if (envelope?.error || (typeof baseResponse?.status_code === 'number' && baseResponse.status_code !== 0)) {
           throw new ChatProviderFailure('provider_error', false);
         }
-        const choice = Array.isArray(envelope?.choices) ? envelope.choices[0] as { finish_reason?: unknown } | undefined : undefined;
+        const choice = Array.isArray(envelope?.choices)
+          ? (envelope.choices[0] as { finish_reason?: unknown } | undefined)
+          : undefined;
         finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined;
         if (finishReason === 'content_filter') throw new ChatProviderFailure('moderation', false);
         const delta = contentDelta(parsed);
         if (delta) yield delta;
         // MiniMax can finish with stop + usage + EOF, without a [DONE] sentinel.
         // Text alone (or EOF alone) is never proof of a completed reply.
-        if (finishReason === 'stop') { terminal = true; break; }
-        if (finishReason) throw new ChatProviderFailure(finishReason === 'length' ? 'stream_interrupted' : 'provider_error', false);
+        if (finishReason === "stop") {
+          terminal = true;
+          break;
+        }
+        if (finishReason)
+          throw new ChatProviderFailure(
+            finishReason === "length" ? "stream_interrupted" : "provider_error",
+            false,
+          );
       }
       if (terminal) break;
-      if (done) throw new ChatProviderFailure('stream_interrupted', false);
+      if (done) throw new ChatProviderFailure("stream_interrupted", false);
     }
-    console.info('[chat-providers] stream completed', { correlationId: input.correlationId, finishReason: finishReason ?? 'done' });
+    console.info("[chat-providers] stream completed", {
+      correlationId: input.correlationId,
+      finishReason: finishReason ?? "done",
+    });
   } catch (error: unknown) {
     console.warn('[chat-providers] stream failed', {
       correlationId: input.correlationId,
@@ -205,7 +244,7 @@ function requiredEnvironment(name: string) {
   return value;
 }
 
-export type ChatProviderId = 'doubao' | 'minimax';
+export type ChatProviderId = "doubao" | "minimax";
 
 export function resolveChatProvider(chatModel?: string) {
   const provider: ChatProviderId = chatModel === 'minimax' ? 'minimax' : 'doubao';

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useWorkspaceStore } from '@/store/workspace-store';
 
 type AuthStatus = "checking" | "authorized" | "guest" | "error";
 const AuthStatusContext = createContext<{
@@ -50,10 +51,12 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
     refresh();
     const expired = () => {
       epoch.current++;
+      useWorkspaceStore.getState().reset();
       setStatus("guest");
     };
     const changed = (event: Event) => {
       epoch.current++;
+      useWorkspaceStore.getState().reset();
       setStatus(
         (event as CustomEvent<boolean>).detail ? "authorized" : "guest",
       );

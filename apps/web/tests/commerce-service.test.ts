@@ -25,6 +25,16 @@ const plan = {
   slots: buildCommerceSlots(brief, "product-set", 2, settings),
 };
 describe("trusted commerce service", () => {
+  it("retains the content poster input and reports an unavailable database capability before any write", async () => {
+    const posterBrief = { ...brief, name: '穿搭笔记', facts: '白色连衣裙搭配建议', contentMode: 'content' as const, platform: 'xiaohongshu' as const };
+    const poster = { ...plan, scene: 'xhs-poster' as const, brief: posterBrief, templateId: 'xhs-editorial', slots: buildCommerceSlots(posterBrief, 'xhs-poster', 1, settings) };
+    const input = { requestId: crypto.randomUUID(), sessionId, plan: poster };
+    const before = structuredClone(input);
+    const rpc = vi.fn().mockResolvedValue({data:null,error:{code:'PGRST202'}});
+    await expect(createCommerceService({rpc}).dispatch(userId,'create',undefined,input,crypto.randomUUID())).rejects.toMatchObject({code:'service_not_ready',status:503,message:expect.stringContaining('创作服务尚未完成更新')});
+    expect(rpc).toHaveBeenCalledExactlyOnceWith('get_commerce_capabilities', {});
+    expect(input).toEqual(before);
+  });
   it("compiles persisted drafts on server without submitting images", async () => {
     const rpc = vi
       .fn()
@@ -61,6 +71,8 @@ describe("trusted commerce service", () => {
     ["task_archived", 409],
     ["commerce_generation_unavailable", 410],
     ["commerce_brief_incomplete", 400],
+    ["invalid_commerce_plan", 503],
+    ["commerce_not_ready", 503],
     ["quota_exceeded", 429],
   ])(
     "maps authoritative %s to a definite user-facing rejection",

@@ -1,3 +1,6 @@
+import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
+import { imageCreditItem } from "@zimage/domain";
+import { notifyCreditsChanged } from "@/gateways/mock-credit-ledger";
 import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
@@ -7,6 +10,7 @@ import {
   type CommerceGateway,
   type CommercePlan,
   type CommerceTask,
+  type CreditConfirmation,
   type ProviderCapability,
 } from "@zimage/domain";
 import { Image as AntdImage } from "antd";
@@ -127,6 +131,7 @@ export function CommerceTaskCard({
     sessionId: string,
   ) => void;
 }) {
+  const credits = useCredits();
   const latestFor = (slotId: string) =>
     task.runs
       .flatMap((run) => run.items)
@@ -238,10 +243,17 @@ export function CommerceTaskCard({
       setBusy(false);
     }
   };
-  const confirm = () =>
+  const confirm = (confirmedPrice?:CreditConfirmation) =>
     perform(async () => {
       if (edit) throw new Error("请先保存或取消当前修改，再确认生成。");
       const payload = {
+        billing:
+          confirmedPrice ??
+          credits.confirm(
+            task.slots
+          .filter((slot) => selected.includes(slot.id))
+          .map((slot) => imageCreditItem({ ...slot, count: 1 })),
+          ),
         revision: task.revision,
         slotIds: task.slots
           .filter((slot) => selected.includes(slot.id))
@@ -268,6 +280,7 @@ export function CommerceTaskCard({
           ...payload,
           requestId: request.requestId,
         });
+        notifyCreditsChanged();
         onTask(updated);
         setSelected([]);
         setPendingRequest(undefined);
@@ -285,7 +298,7 @@ export function CommerceTaskCard({
     // pending submission keeps its original recovery path and idempotency key.
     if (!autoStart || autoStarted.current) return;
     autoStarted.current = true;
-    if (!task.runs.length && !pendingRequest) void confirm();
+    if (!task.runs.length && !pendingRequest) void confirm(credits.recalled(task.id));
   });
   const recover = () =>
     perform(async () => {
@@ -307,6 +320,7 @@ export function CommerceTaskCard({
           ...payload,
           requestId: request.requestId,
         });
+        notifyCreditsChanged();
         onTask(updated);
         setPendingRequest(undefined);
         setSelected([]);
@@ -694,6 +708,11 @@ export function CommerceTaskCard({
         </button>
       </div>
       {edit && <p role="status">请先保存或取消当前修改，再确认生成。</p>}
+      <CreditFee
+        items={task.slots
+          .filter((slot) => selected.includes(slot.id))
+          .map((slot) => imageCreditItem({ ...slot, count: 1 }))}
+      />
       <div className={styles.confirm}>
         <span>
           本次选中 {selected.length} 张，将消耗 {selected.length} 张图片额度

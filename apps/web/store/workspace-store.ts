@@ -1,5 +1,10 @@
 import type { AspectRatio, ImageResolution, MockScenario, UploadReference } from '@zimage/domain';
 import { create } from 'zustand';
+import { clearComposer, loadComposer, saveComposer } from './composer-storage';
+import { clearAttachments, loadAttachments, saveAttachments } from './composer-attachments';
+
+let attachmentEpoch = 0;
+const forgottenAttachments = new Set<string>();
 
 interface WorkspaceSlice {
   activePopover?: 'image-settings' | 'model' | 'skill';
@@ -28,6 +33,7 @@ export interface ComposerState {
 }
 
 interface ComposerSlice extends ComposerState {
+  restoringAttachments: Record<string, boolean>;
   activeComposerSessionId?: string;
   composers: Record<string, ComposerState>;
   activateComposer: (sessionId?: string, defaults?: Partial<ComposerState>, inheritCurrent?: boolean) => void;
@@ -80,16 +86,20 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   ...initialState,
   ...emptyComposer(),
   composers: {},
-  reset: () => set({ ...initialState, ...emptyComposer(), composers: {}, activeComposerSessionId: undefined }),
+  restoringAttachments: {},
+  reset: () => { attachmentEpoch++; clearComposer(); void clearAttachments(); set({ ...initialState, ...emptyComposer(), composers: {}, restoringAttachments: {}, activeComposerSessionId: undefined }); },
   activateComposer: (sessionId, defaults, inheritCurrent = false) => set((state) => {
     if (sessionId === state.activeComposerSessionId) return {};
     const composers = { ...state.composers };
     if (state.activeComposerSessionId) composers[state.activeComposerSessionId] = snapshot(state);
     else if (inheritCurrent && sessionId) composers[sessionId] = snapshot(state);
-    return { ...emptyComposer(), ...defaults, ...composers[sessionId ?? ''], composers,
+    return { ...emptyComposer(), ...defaults, ...(sessionId ? loadComposer(sessionId) : undefined), ...composers[sessionId ?? ''], composers,
       activeComposerSessionId: sessionId, activePopover: undefined, configDrawerOpen: false };
   }),
   forgetComposer: (sessionId) => set((state) => {
+    forgottenAttachments.add(sessionId);
+    void clearAttachments(sessionId);
+    clearComposer(sessionId);
     const composers = { ...state.composers };
     delete composers[sessionId];
     return { composers, ...(state.activeComposerSessionId === sessionId
@@ -119,3 +129,37 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   setSkillValue: (key, value) =>
     set((state) => ({ skillValues: { ...state.skillValues, [key]: value } })),
 }));
+
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeComposerSessionId) saveComposer(state.activeComposerSessionId, snapshot(state));
+  const sessionId = state.activeComposerSessionId;
+  if (!sessionId) return;
+  if (sessionId === previous.activeComposerSessionId) {
+    if (state.references !== previous.references) void saveAttachments(sessionId, state.references);
+    return;
+  }
+  if (state.references.length) { void saveAttachments(sessionId, state.references); return; }
+  if (state.composers[sessionId] || forgottenAttachments.has(sessionId)) return;
+  const initialReferences = state.references;
+  const epoch = attachmentEpoch;
+  useWorkspaceStore.setState({ restoringAttachments: { ...state.restoringAttachments, [sessionId]: true } });
+  void loadAttachments(sessionId).then((references) => {
+    if (!references?.length) return;
+    const current = useWorkspaceStore.getState();
+    const active = current.activeComposerSessionId === sessionId;
+    const composer = active ? current : current.composers[sessionId];
+    // A delayed read must never restore attachments after removal, submission,
+    // deletion, logout, or a newer edit. Session switches may finish in cache.
+    if (epoch !== attachmentEpoch || forgottenAttachments.has(sessionId)
+      || composer?.references !== initialReferences) {
+      for (const ref of references) if (ref.previewUrl) URL.revokeObjectURL(ref.previewUrl);
+      return;
+    }
+    useWorkspaceStore.setState(active ? { references } : {
+      composers: { ...current.composers, [sessionId]: { ...composer, references } },
+    });
+  }).finally(() => {
+    if (epoch !== attachmentEpoch) return;
+    useWorkspaceStore.setState((current) => ({ restoringAttachments: { ...current.restoringAttachments, [sessionId]: false } }));
+  });
+});

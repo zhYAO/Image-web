@@ -1,3 +1,5 @@
+import { CreditAccount } from '@/features/credits/CreditsProvider';
+import { WebPageShell } from '@/features/shell/WebPageShell';
 import { redirect } from 'next/navigation';
 import { AccountPanel } from '../../features/account/AccountPanel';
 import { createSupabaseServerClient } from '../../lib/supabase/server';
@@ -5,6 +7,7 @@ import { readAccount } from '../../server/auth/account-service';
 import { ApiRouteError } from '../../server/api-error';
 
 export default async function AccountPage() {
+  if(process.env.NEXT_PUBLIC_DATA_MODE==='mock')return <WebPageShell><section className="glass-card glass-form"><h1>账号</h1><p>模拟预览 · 以下积分仅用于本地演示</p><CreditAccount/></section></WebPageShell>;
   let account: Awaited<ReturnType<typeof readAccount>>;
   try {
     account = await readAccount(await createSupabaseServerClient());

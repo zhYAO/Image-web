@@ -1,3 +1,5 @@
+import { CreditFee } from "@/features/credits/CreditsProvider";
+import { imageCreditItem } from "@zimage/domain";
 import type {
   AspectRatio,
   ImageResolution,
@@ -6,18 +8,25 @@ import type {
   Quota,
   UploadReference,
 } from '@zimage/domain';
-import { Button, Image as AntdImage, Input, Tooltip } from 'antd';
-import { ArrowUp, Image as ImageIcon, ImagePlus, MessageCircle, Settings2, X } from 'lucide-react';
-import type { ChangeEvent, KeyboardEvent } from 'react';
+import { Button, Image as AntdImage, Input, Tooltip } from "antd";
+import {
+  ArrowUp,
+  Image as ImageIcon,
+  ImagePlus,
+  MessageCircle,
+  Settings2,
+  X,
+} from "lucide-react";
+import type { ChangeEvent, KeyboardEvent } from "react";
 
-import { zhCN } from '@/i18n';
+import { zhCN } from "@/i18n";
 
 import {
   ChatModelPopover,
   ImageSettingsPopover,
   type ModelCapability,
 } from './GenerationConfig';
-import styles from './workspace.module.css';
+import styles from "./workspace.module.css";
 
 interface UnifiedComposerProps {
   activePopover?: 'image-settings' | 'model' | 'skill';
@@ -97,12 +106,48 @@ export function UnifiedComposer({
 
   return (
     <div className={styles.composer}>
-      <div className={styles.composerContext}>{imageCreationEnabled ? <ImageIcon aria-hidden size={13} /> : <MessageCircle aria-hidden size={13} />}<span>{imageCreationEnabled ? '图片创作' : '自由对话'}</span><span className={styles.contextHint}>{imageCreationEnabled ? '描述画面，让灵感成真' : '从一个想法开始'}</span></div>
+      <CreditFee
+        items={
+          imageCreationEnabled
+            ? [
+                imageCreditItem({
+                  provider: selectedProvider,
+                  model: selectedModel?.id,
+                  resolution,
+                  count,
+                }),
+              ]
+            : [
+                {
+                  operation: "chat",
+                  provider: selectedChatModel,
+                  model: selectedChatModel,
+                  resolution: "",
+                  count: 1,
+                },
+              ]
+        }
+      />
+      <div className={styles.composerContext}>
+        {imageCreationEnabled ? (
+          <ImageIcon aria-hidden size={13} />
+        ) : (
+          <MessageCircle aria-hidden size={13} />
+        )}
+        <span>{imageCreationEnabled ? "图片创作" : "自由对话"}</span>
+        <span className={styles.contextHint}>{imageCreationEnabled ? '描述画面，让灵感成真' : '从一个想法开始'}</span>
+      </div>
       <div className={styles.composerBody}>
         {imageCreationEnabled && (
-          <div aria-label={zhCN.composer.reference} className={styles.inlineReferences}>
+          <div
+            aria-label={zhCN.composer.reference}
+            className={styles.inlineReferences}
+          >
             {references.map((reference, index) => (
-              <div className={styles.referenceCard} key={`${reference.name}-${index}`}>
+              <div
+                className={styles.referenceCard}
+                key={`${reference.name}-${index}`}
+              >
                 <div className={styles.referencePreview}>
                   {reference.previewUrl ? (
                     <AntdImage
@@ -215,7 +260,9 @@ export function UnifiedComposer({
           />
         </div>
         <div className={styles.submitGroup}>
-          {quota && <span className={styles.quotaText}>✦ {Math.max(0, quota.limit - quota.used)} 张</span>}
+          {quota && (
+            <span className={styles.quotaText}>✦ {Math.max(0, quota.limit - quota.used)} 张</span>
+          )}
           <Button
             aria-label={zhCN.composer.submit}
             className={styles.submitButton}

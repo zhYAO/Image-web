@@ -44,6 +44,7 @@ describe('stateless field optimization route', () => {
     const response = await POST(request({ field: 'title', text: '旧标题', chatModel: 'minimax' }));
     expect(response.status).toBe(200);
     expect(operations[0]?.input).toEqual({ p_provider: 'minimax' });
+    expect(JSON.parse((vi.mocked(fetch).mock.calls[0]?.[1]?.body as string) ?? '{}').reasoning_split).toBe(true);
     expect(fetch).toHaveBeenCalledWith('https://api.minimaxi.com/v1/chat/completions', expect.objectContaining({ body: expect.stringContaining('minimax-test') }));
   });
   it('releases reservation when already canceled before provider submission', async () => {

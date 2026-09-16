@@ -1,3 +1,4 @@
+import type { CreditConfirmation } from './credits';
 import type { SkillTask } from './skill-contracts';
 export type ComposerMode = 'chat' | 'image';
 
@@ -170,6 +171,7 @@ export interface UploadReference {
 }
 
 export interface ChatRequest {
+  billing?: CreditConfirmation;
   requestId?: string;
   taskId?: string;
   taskRevision?: number;
@@ -197,6 +199,7 @@ export type ChatEvent =
   | { type: 'stream.failed'; error: SafeError };
 
 export interface ImageRequest {
+  billing?: CreditConfirmation;
   requestId?: string;
   sessionId?: string;
   prompt: string;
@@ -212,6 +215,7 @@ export interface ImageRequest {
 }
 
 export interface RecreateRequest {
+  billing?: CreditConfirmation;
   requestId?: string;
   batchId: string;
   scope: RecreateScope;

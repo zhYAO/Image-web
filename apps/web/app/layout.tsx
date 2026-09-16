@@ -1,19 +1,26 @@
-import 'antd/dist/reset.css';
-import './globals.css';
+import "antd/dist/reset.css";
+import "./globals.css";
 
-import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
-import { AuthStatusProvider } from '@/features/auth/AuthStatusProvider';
+import { CreditsProvider } from "@/features/credits/CreditsProvider";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { AuthStatusProvider } from "@/features/auth/AuthStatusProvider";
 
 export const metadata: Metadata = {
   description: '聊天与 AI 生图一体化创作工作区',
   title: 'ZImage · 一句话开始创作',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body><AuthStatusProvider>{children}</AuthStatusProvider></body>
+      <body>
+        <AuthStatusProvider>
+          <CreditsProvider>{children}</CreditsProvider>
+        </AuthStatusProvider>
+      </body>
     </html>
   );
 }

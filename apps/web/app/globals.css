@@ -277,3 +277,12 @@ input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"] { 
     backdrop-filter: none;
   }
 }
+
+/* Shared credit controls use the existing light glass surfaces. */
+.credit-balance { display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(95,110,140,.18); background:rgba(255,255,255,.78); color:#344566; border-radius:20px; padding:7px 12px; cursor:pointer; white-space:nowrap; }
+.credit-fee { display:block; font-size:12px; color:#5a6680; line-height:1.65; margin-top:4px; }
+.credit-fee button { background:transparent; border:0; color:#4058bd; cursor:pointer; }
+.credit-account { border-block:1px solid rgba(95,110,140,.16); padding-block:18px; margin-block:20px; }
+.credit-overview { display:flex; flex-wrap:wrap; gap:24px; }
+.credit-overview span { font-size:12px; color:#5a6680; }.credit-overview strong { display:block; font-size:26px; color:#27364e; font-variant-numeric:tabular-nums; }
+.credit-table { width:100%; border-collapse:collapse; margin:12px 0; font-size:13px; }.credit-table th,.credit-table td { text-align:left; padding:10px 6px; border-bottom:1px solid rgba(95,110,140,.13); }.credit-table small { display:block; color:#5a6680; }.credit-table td:last-child { font-variant-numeric:tabular-nums; white-space:nowrap; }

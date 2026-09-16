@@ -1,3 +1,5 @@
+import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
+import { imageCreditItem } from "@zimage/domain";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   buildCommerceSlots,
@@ -81,6 +83,7 @@ export function CommerceWizard({
 }: CommerceWizardProps) {
   const definition = COMMERCE_SCENES.find((item) => item.id === scene)!;
   const isPoster = scene === "xhs-poster";
+  const credits = useCredits();
   const [step, setStep] = useState(1);
   const [brief, setBrief] = useState<CommerceBrief>(
     seedPlan?.brief ?? {
@@ -89,7 +92,7 @@ export function CommerceWizard({
       sellingPoints: "",
       platform: isPoster ? "xiaohongshu" : platform,
       contentMode: isPoster ? "content" : "product",
-      placement: (isPoster || scene === "social") ? "图文内容" : "商品展示",
+      placement: isPoster || scene === "social" ? "图文内容" : "商品展示",
       productReferenceIds: [],
       styleReferenceIds: [],
     },
@@ -100,7 +103,10 @@ export function CommerceWizard({
     seedPlan?.slots.length ?? definition.count,
   );
   const [templateId, setTemplateId] = useState(
-    seedPlan?.templateId ?? (templatesForScene(scene).some(item => item.id === initialTemplateId) ? initialTemplateId! : defaultTemplate(scene)),
+    seedPlan?.templateId ??
+      (templatesForScene(scene).some((item) => item.id === initialTemplateId)
+        ? initialTemplateId!
+        : defaultTemplate(scene)),
   );
   const [instruction, setInstruction] = useState(
     prompt || seedPlan?.slots[0]?.instruction || "",
@@ -136,14 +142,16 @@ export function CommerceWizard({
   const referenceKey = (reference: UploadReference) =>
     reference.previewUrl ?? reference.id ?? reference.name;
   const roleOf = (reference: UploadReference) =>
-    contentOnly ? "style" : roles[referenceKey(reference)] ??
+    contentOnly
+      ? "style"
+      : (roles[referenceKey(reference)] ??
     (reference.id &&
     [
       ...promotedStyleIds,
       ...(seedPlan?.brief.styleReferenceIds ?? []),
     ].includes(reference.id)
       ? "style"
-      : "product");
+      : "product"));
   const referenceSignature = JSON.stringify(
     references.map((reference) => [referenceKey(reference), roleOf(reference)]),
   );
@@ -195,7 +203,10 @@ export function CommerceWizard({
       // Ask exactly one blocking question before spending an upload request.
       if (!contentOnly && !references.some((reference) => roleOf(reference) === "product"))
         throw new Error("请上传至少一张清晰的真实商品图。");
-      if (!brief.name.trim()) throw new Error(contentOnly ? "请填写海报标题。" : "这个商品的名称是什么？");
+      if (!brief.name.trim())
+        throw new Error(
+          contentOnly ? "请填写海报标题。" : "这个商品的名称是什么？",
+        );
       if (
         scene === "style-reference" &&
         !references.some((reference) => roleOf(reference) === "style")
@@ -235,18 +246,39 @@ export function CommerceWizard({
     });
   const makePlan = (preparedBrief: CommerceBrief) => {
     const generatedExactText = (source: CommerceBrief, role: string) => {
-      if (["商品主图", "使用场景", "生活场景", "模特展示", "风格创作"].includes(role)) return "";
-      const points = source.sellingPoints.split(/\n|[；;]/).map(s => s.trim()).filter(Boolean);
+      if (
+        ["商品主图", "使用场景", "生活场景", "模特展示", "风格创作"].includes(
+          role,
+        )
+      )
+        return "";
+      const points = source.sellingPoints
+        .split(/\n|[；;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
       const detail = ["材质细节", "商品说明", "细节说明"].includes(role) ? source.facts : role === "核心卖点" ? points.slice(0, 3).join("\n") : points[0];
       return [source.name, detail].filter(Boolean).join("\n");
     };
-    const slots = buildCommerceSlots(preparedBrief, scene, count, isPoster ? { ...settings, aspectRatio: "3:4", resolution: "2K" } : settings).map(
-      (slot, index) => {
-        const previous = plan?.slots[index];
-        const previousGeneratedText = previous
-          ? (isPoster ? buildCommerceSlots(plan!.brief, scene, plan!.slots.length, settings)[index]?.exactText : generatedExactText(plan!.brief, previous.role))
-          : undefined;
-        return {
+    const slots = buildCommerceSlots(
+      preparedBrief,
+      scene,
+      count,
+      isPoster
+        ? { ...settings, aspectRatio: "3:4", resolution: "2K" }
+        : settings,
+    ).map((slot, index) => {
+      const previous = plan?.slots[index];
+      const previousGeneratedText = previous
+        ? isPoster
+          ? buildCommerceSlots(
+              plan!.brief,
+              scene,
+              plan!.slots.length,
+              settings,
+            )[index]?.exactText
+          : generatedExactText(plan!.brief, previous.role)
+        : undefined;
+      return {
           ...slot,
           ...previous,
           exactText:
@@ -262,8 +294,7 @@ export function CommerceWizard({
             ...preparedBrief.styleReferenceIds,
           ],
         };
-      },
-    );
+    });
     const nextPlan = { scene, brief: preparedBrief, templateId, slots };
     validateCommercePlan(preparedBrief, scene, slots, templateId);
     setPlan(nextPlan);
@@ -278,6 +309,11 @@ export function CommerceWizard({
       nextPlan.slots,
       nextPlan.templateId,
     );
+    const billing = generate
+      ? credits.confirm(
+          nextPlan.slots.map((slot) => imageCreditItem({ ...slot, count: 1 })),
+        )
+      : undefined;
     const key = JSON.stringify(nextPlan);
     if (createRequest.current?.key !== key)
       createRequest.current = { key, requestId: crypto.randomUUID() };
@@ -286,6 +322,7 @@ export function CommerceWizard({
       plan: nextPlan,
       requestId: createRequest.current.requestId,
     });
+    credits.remember(task.id, billing);
     onSaved(task, generate);
   };
   const save = (generate = false) =>
@@ -311,7 +348,9 @@ export function CommerceWizard({
             <div className={styles.wizardFormScroll}>
               <fieldset disabled={busy} className={styles.formBody}>
                 <>
-                  {isPoster && <label>内容类型<CommerceSelect aria-label="海报内容类型" value={brief.contentMode ?? "product"} onChange={(value) => patch({ contentMode: value as "product" | "content" })}><option value="content">通用内容</option><option value="product">商品种草</option></CommerceSelect></label>}
+                  {isPoster && (
+                    <label>内容类型<CommerceSelect aria-label="海报内容类型" value={brief.contentMode ?? "product"} onChange={(value) => patch({ contentMode: value as "product" | "content" })}><option value="content">通用内容</option><option value="product">商品种草</option></CommerceSelect></label>
+                  )}
                   <p>{contentOnly ? "填写标题与正文，选择风格制作海报。多张内容请按段落分行。" : "上传商品图，填写名称，即可开始。卖点和风格可按需补充。"}</p>
                   <label>
                     {contentOnly ? "风格参考图（选填）" : "商品与风格图片"}
@@ -408,13 +447,19 @@ export function CommerceWizard({
                       </CommerceSelect>
                     </label>
                   </div>
-                  {contentOnly ? <CreativeTextField field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" /> : <>
-                  <details className={styles.advancedOptions}>
+                  {contentOnly ? (
+                    <CreativeTextField field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" />
+                  ) : (
+                    <>
+                      <details className={styles.advancedOptions}>
                     <summary>商品事实（选填）</summary>
                     <CreativeTextField field="facts" label="商品事实" maxLength={4000} multiline value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="仅填写已确认的外观、材质与规格" />
                   </details>
-                  <CreativeTextField field="sellingPoints" label="商品卖点" maxLength={2000} multiline value={brief.sellingPoints} onChange={(sellingPoints) => patch({ sellingPoints })} context={`${brief.name}\n${brief.facts}`} />
-                  </>}
+                      <CreativeTextField
+                        field="sellingPoints" label="商品卖点" maxLength={2000} multiline value={brief.sellingPoints} onChange={(sellingPoints) => patch({ sellingPoints })} context={`${brief.name}\n${brief.facts}`}
+                      />
+                    </>
+                  )}
                 </>
                 <>
                   <label>
@@ -428,14 +473,21 @@ export function CommerceWizard({
                         setTemplateId(value);
                       }}
                     >
-                      {!templatesForScene(scene).some(item => item.id === templateId) && <option value={templateId}>历史模板 · {COMMERCE_TEMPLATES.find(item => item.id === templateId)?.name ?? templateId}</option>}
-                      {templatesForScene(scene).map(
-                        (item) => (
+                      {!templatesForScene(scene).some(
+                        (item) => item.id === templateId,
+                      ) && (
+                        <option value={templateId}>
+                          历史模板 ·{" "}
+                          {COMMERCE_TEMPLATES.find(
+                            (item) => item.id === templateId,
+                          )?.name ?? templateId}
+                        </option>
+                      )}
+                      {templatesForScene(scene).map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.name}
                           </option>
-                        ),
-                      )}
+                        ))}
                     </CommerceSelect>
                   </label>
                   <p>
@@ -462,7 +514,18 @@ export function CommerceWizard({
                   </label>
                   <details className={styles.advancedOptions}>
                     <summary>高级设置 · 配色、场景与约束</summary>
-                    <CreativeTextField field="instruction" label="整套创作要求" multiline maxLength={2000} value={instruction} context={`${brief.name}\n${brief.facts}`} onChange={(value) => { invalidatePreview(); setInstruction(value); }} />
+                    <CreativeTextField
+                      field="instruction"
+                      label="整套创作要求"
+                      multiline
+                      maxLength={2000}
+                      value={instruction}
+                      context={`${brief.name}\n${brief.facts}`}
+                      onChange={(value) => {
+                        invalidatePreview();
+                        setInstruction(value);
+                      }}
+                    />
                   </details>
                   <p>
                     建议角色：{definition.roles.join("、")}
@@ -485,6 +548,13 @@ export function CommerceWizard({
                 >
                   {busy ? "正在准备…" : "预览分图方案"}
                 </button>
+              )}
+              {step === 3 && plan && (
+                <CreditFee
+                  items={plan.slots.map((slot) =>
+                    imageCreditItem({ ...slot, count: 1 }),
+                  )}
+                />
               )}
               {step === 3 && (
                 <button
@@ -555,9 +625,22 @@ export function CommerceWizard({
                       <span className={styles.structureNumber}>
                         {String(index + 1).padStart(2, "0")}
                       </span>
-                      <TemplatePreview templateId={templateId} role={isPoster ? (index === 0 ? "海报封面" : "内容卡片") : definition.roles[index % definition.roles.length]} />
+                      <TemplatePreview
+                        templateId={templateId}
+                        role={
+                          isPoster
+                            ? index === 0
+                              ? "海报封面"
+                              : "内容卡片"
+                            : definition.roles[index % definition.roles.length]
+                        }
+                      />
                       <strong>
-                        {isPoster ? (index === 0 ? "海报封面" : "内容卡片") : definition.roles[index % definition.roles.length]}
+                        {isPoster
+                          ? index === 0
+                            ? "海报封面"
+                            : "内容卡片"
+                          : definition.roles[index % definition.roles.length]}
                       </strong>
                       <small>示例 · 以实际生成为准</small>
                     </div>

@@ -94,7 +94,11 @@ export function chatRecoveryActions(items: TimelineItem[], failures: FailedChatA
   for (const item of items) {
     if (item.type === 'generation') prompt = undefined;
     if (item.type === 'message' && item.role === 'user') prompt = item.content;
-    if (item.type !== 'error' || !item.error.retryable) continue;
+    if (item.type !== 'error') continue;
+    if (!item.error.retryable) {
+      if (prompt && ['PROVIDER_UNAVAILABLE', 'PROVIDER_ERROR'].includes(item.error.code)) actions[item.id] = { label: '重新编辑', prompt };
+      continue;
+    }
     const attempt = failures.find((failure) => failure.error.id === item.id || failure.persistedErrorId === item.id);
     if (attempt) {
       if (!attempt.retried) actions[item.id] = { label: '重试', attempt, prompt: attempt.request.message };

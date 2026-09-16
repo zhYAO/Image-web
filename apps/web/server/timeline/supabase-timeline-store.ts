@@ -15,6 +15,7 @@ const assetRowSchema = z.object({
   asset_status: z.enum(['active', 'expired', 'deleted']).nullable(),
   error_code: z.string().nullable(),
   id: z.uuid(),
+  params: z.object({ index: z.number().int().positive().optional() }).optional(),
   status: z.enum(['pending', 'processing', 'succeeded', 'failed']),
 });
 
@@ -51,6 +52,7 @@ const timelineRowSchema = z.object({
 
 function safeGenerationError(errorCode: string | null): SafeError | undefined {
   if (!errorCode) return undefined;
+  if(['provider_result_unknown','provider_reconciliation_required','result_storage_failed','storage_error','storage_pending','result_pending_storage'].includes(errorCode))return {code:'CONFLICT',message:'生成结果待核对，冻结积分暂时保留，请勿重复生成。',retryable:false};
   return {
     code: 'PROVIDER_UNAVAILABLE',
     message: '图片生成失败，可按原参数重新生成。',
@@ -61,7 +63,10 @@ function safeGenerationError(errorCode: string | null): SafeError | undefined {
 export function mapGenerationBatchRow(input: unknown): GenerationBatch {
   const batch = batchRowSchema.parse(input);
   return generationBatchSchema.parse({
-    assets: batch.assets.map((asset) => ({
+    assets: [...batch.assets].sort((a, b) =>
+      (a.params?.index ?? Number.MAX_SAFE_INTEGER) - (b.params?.index ?? Number.MAX_SAFE_INTEGER)
+      || a.id.localeCompare(b.id),
+    ).map((asset) => ({
       error: safeGenerationError(asset.error_code),
       expired: asset.asset_status === 'expired',
       expiresAt: asset.asset_expires_at ?? undefined,
@@ -125,7 +130,7 @@ export function mapTimelineRows(input: unknown[]) {
 
 export const generationBatchColumns = `
   id,session_id,source,status,prompt,provider,model,config,created_at,
-  assets:generations(id,status,asset_status,asset_expires_at,error_code)
+  assets:generations(id,status,asset_status,asset_expires_at,error_code,params)
 `;
 
 const timelineColumns = `

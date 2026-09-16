@@ -1,3 +1,4 @@
+import { creditsEnabled, creditCall } from "@/server/credits/credit-service";
 import {
   COMMERCE_TEMPLATES,
   MODEL_REGISTRY_VERSION,
@@ -39,6 +40,27 @@ interface CommerceRpc {
   }>;
 }
 function failure(message: string) {
+  if (/invalid_commerce_plan|PGRST202|commerce_not_ready/.test(message))
+    return new ApiRouteError({
+      code: "service_not_ready",
+      status: 503,
+      message: "创作服务尚未完成更新，请稍后重试；当前方案已保留。",
+      retryable: true,
+    });
+  if (/invalid_model/.test(message))
+    return new ApiRouteError({
+      code: "bad_request",
+      status: 400,
+      message: "所选模型不支持当前比例或分辨率，请检查逐图设置。",
+      retryable: false,
+    });
+  if (/commerce_brief_incomplete/.test(message))
+    return new ApiRouteError({
+      code: "bad_request",
+      status: 400,
+      message: "请检查标题与正文；商品模式还需要真实商品图。",
+      retryable: false,
+    });
   const map: Array<
     [
       RegExp,
@@ -213,6 +235,27 @@ export function createCommerceService(client: CommerceRpc) {
         }),
         p_correlation_id: correlationId,
       };
+      if (operation === "submit" && creditsEnabled())
+        return commerceTaskSchema.parse(
+          await creditCall(client, userId, "commerce", {
+            ...input,
+            taskId,
+            requestHash: args.p_request_hash,
+            correlationId,
+          }),
+        );
+      if (
+        "plan" in input &&
+        commercePlanSchema.parse(input.plan).scene === "xhs-poster"
+      ) {
+        const capability = await client.rpc("get_commerce_capabilities", {});
+        if (
+          capability.error ||
+          !(capability.data as { contentPosters?: boolean } | null)
+            ?.contentPosters
+        )
+          throw failure("commerce_not_ready");
+      }
       if ("plan" in input) {
         // Authorized replay lookup must precede the current compiler registry.
         // The write transaction checks again after compilation to close races.

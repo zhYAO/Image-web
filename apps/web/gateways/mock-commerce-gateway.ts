@@ -1,3 +1,9 @@
+import { checkMockQuote } from "./mock-credit-ledger";
+import {
+  imageCreditItem,
+  quoteCredits,
+  TRIAL_CREDIT_CATALOG,
+} from "@zimage/domain";
 import {
   commerceTaskSchema,
   commerceArchiveSchema,
@@ -313,10 +319,20 @@ export class MockCommerceGateway implements CommerceGateway {
         )
           throw conflict("已有成功图片，请使用重做。");
       }
+      if (input.billing)
+        checkMockQuote(
+          slots.map((slot) => imageCreditItem({ ...slot, count: 1 })),
+          input.billing,
+        );
       const runId = crypto.randomUUID();
       const batches = await this.host.submitCommerceImages(
         slots.map((slot) => ({
           ...slot,
+          billing: input.billing
+            ? {version:input.billing.version,totalMinor:quoteCredits(TRIAL_CREDIT_CATALOG, [
+                imageCreditItem({ ...slot, count: 1 }),
+              ]).totalMinor}
+            : undefined,
           count: 1,
           prompt: compileCommerceSlot(task!.brief, slot, task!.templateId),
           sessionId: task!.sessionId,

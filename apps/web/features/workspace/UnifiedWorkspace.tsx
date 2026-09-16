@@ -2,6 +2,9 @@
 
 import {
   CHAT_PROVIDER_MODELS,
+  imageCreditItem,
+  formatCredits,
+  type CreditConfirmation,
   templatesForScene,
   hasTextOnlyImageIntent,
   MAX_UPLOAD_BYTES,
@@ -28,10 +31,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
 import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce/commerce-ui';
 
+import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
 import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
+import { lastComposerSession } from '@/store/composer-storage';
 
 import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { SessionSidebar } from './SessionSidebar';
@@ -87,6 +92,7 @@ const nextSequence = (items: TimelineItem[]) => (
 );
 
 export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceProps) {
+  const credits = useCredits();
   const gateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
   const {
     activateComposer,
@@ -97,7 +103,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     selectedProvider, setSelectedProvider,
     selectedModelId, setSelectedModelId,
     selectedChatModel, setSelectedChatModel,
-    references, setReferences,
+    references, setReferences, restoringAttachments,
     activePopover,
     configDrawerOpen,
     draft,
@@ -225,15 +231,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         resolution: initialSelection.resolution, selectedProvider: initialSelection.provider,
         selectedModelId: initialSelection.model,
       };
-      setAspectRatio(initialSelection.aspectRatio);
-      setCount(initialSelection.count);
-      setResolution(initialSelection.resolution);
-      setSelectedProvider(initialSelection.provider);
-      setSelectedModelId(initialSelection.model);
       const launchUrl = new URL(window.location.href);
       const launchCommerce = resolveCommerceLaunch(launchUrl.search);
       const launchScene = launchCommerce.scene;
-      let initialId = nextSessions[0]?.id;
+      let initialId = lastComposerSession(nextSessions.map(session => session.id)) ?? nextSessions[0]?.id;
       if (launchScene) {
         const session = await gateway.createSession();
         if (cancelled) return;
@@ -276,6 +277,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       cancelled = true;
     };
   }, [gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
+
+  useEffect(() => {
+    for (const reference of references) {
+      if (reference.previewUrl?.startsWith('blob:')) localPreviewUrls.current.add(reference.previewUrl);
+    }
+  }, [references]);
 
   useEffect(
     () => () => {
@@ -321,7 +328,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
   const activeRuntime = activeSessionId ? runtimes[activeSessionId] : undefined;
   const activeBusy = Boolean(activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
-  const composerDisabled = initializing || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
+  const composerDisabled = initializing || Boolean(activeSessionId && restoringAttachments[activeSessionId])
+    || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
   const busySessionIds = useMemo(() => new Set(Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
     runtime.chatBusy
       || runtime.optimisticImages.some((turn) => turn.submitting)
@@ -434,6 +442,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       void refreshQuota().catch(() => undefined);
     } catch (error: unknown) {
       const safe = sanitizeError(error);
+      const composer = useWorkspaceStore.getState();
+      if (['QUOTA_EXCEEDED','CONFLICT'].includes(safe.code) && composer.activeComposerSessionId === sessionId && !composer.draft.trim()) {
+        composer.setDraft(turn.request.prompt);
+        if (!composer.references.length && turn.request.references?.length) composer.setReferences(turn.request.references.map((reference,index) => ({...reference,previewUrl:turn.previewUrls[index]})));
+      }
       updateRuntime(sessionId, (runtime) => ({
         ...runtime,
         optimisticImages: runtime.optimisticImages.map((item) => item.id === turnId ? {
@@ -449,11 +462,12 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     }
   }, [cleanupPreviewUrls, gateway, refreshQuota, refreshSessions, updateRuntime]);
 
-  const beginImageTurn = useCallback((sessionId: string, prompt: string) => {
+  const beginImageTurn = useCallback((sessionId: string, prompt: string, billing?: CreditConfirmation) => {
     const createdAt = new Date().toISOString();
     const turnId = `optimistic-image-${crypto.randomUUID()}`;
     const previewUrls = references.flatMap((reference) => reference.previewUrl ? [reference.previewUrl] : []);
     const request: ImageRequest = {
+      billing,
       requestId: crypto.randomUUID(),
       aspectRatio,
       count,
@@ -532,6 +546,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       if (!completed && !streamFailure) streamFailure = {
         code: 'STREAM_INTERRUPTED', message: '回复未完成，已保留收到的内容。请重试。', retryable: true,
       };
+      if (streamFailure && ['QUOTA_EXCEEDED','CONFLICT'].includes(streamFailure.code)) {
+        const composer = useWorkspaceStore.getState();
+        if (composer.activeComposerSessionId === sessionId && !composer.draft.trim()) composer.setDraft(request.message);
+      }
       updateRuntime(sessionId, (runtime) => {
         const additions: TimelineItem[] = [];
         if (finalText.trim()) additions.push({
@@ -561,7 +579,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     }
   }, [gateway, refreshQuota, refreshSessions, refreshTimeline, updateRuntime]);
 
-  const beginChatTurn = useCallback((sessionId: string, prompt: string, originalRequest?: ChatRequest) => {
+  const beginChatTurn = useCallback((sessionId: string, prompt: string, originalRequest?: ChatRequest, billing?: CreditConfirmation) => {
     if (chatControllers.current.has(sessionId)) return;
     const knownItemIds = (runtimesRef.current[sessionId]?.timeline ?? []).map((item) => item.id);
     const user: MessageTimelineItem = {
@@ -571,7 +589,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
     };
     const request: ChatRequest = originalRequest
       ? { ...originalRequest, scenario }
-      : { chatModel: selectedChatModel, imageProvider: selectedProvider, imageToolEnabled: false, message: prompt, scenario, sessionId };
+      : { requestId: crypto.randomUUID(), billing, chatModel: selectedChatModel, imageProvider: selectedProvider, imageToolEnabled: false, message: prompt, scenario, sessionId };
     updateRuntime(sessionId, (runtime) => ({
       ...runtime, awaitingFirstDelta: true, chatBusy: true, isChatStreaming: true,
       loadStatus: runtime.loadStatus === 'idle' ? 'ready' : runtime.loadStatus,
@@ -614,12 +632,19 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       setFeedback({ error, message: error.message });
       return;
     }
+    let billing: CreditConfirmation | undefined;
+    try {
+      billing = credits.confirm(generate ? [imageCreditItem({provider:selectedProvider,model:selectedModelId,resolution,count})] : [{operation:'chat',provider:selectedChatModel,model:selectedChatModel,resolution:'',count:1}]);
+    } catch(error) {
+      setFeedback({message:error instanceof Error?error.message:'积分报价暂不可用。'});
+      return;
+    }
     setFeedback(undefined);
     setDraft('');
     requestFollow('smooth');
     const start = (sessionId: string) => {
-      if (generate) beginImageTurn(sessionId, prompt);
-      else beginChatTurn(sessionId, prompt);
+      if (generate) beginImageTurn(sessionId, prompt, billing);
+      else beginChatTurn(sessionId, prompt, undefined, billing);
     };
     if (activeSessionId) start(activeSessionId);
     else void ensureSession(prompt).then(start).catch((error: unknown) => {
@@ -678,7 +703,10 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
 
   const recreate = async (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => {
     try {
-      const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope });
+      const quantity = scope === 'single' ? 1 : batch.assets.filter(asset => scope === 'all' || (asset.status === 'failed' && asset.error?.code !== 'CONFLICT')).length;
+      const billing = credits.confirm([imageCreditItem({provider:batch.provider,model:batch.model,resolution:batch.config.resolution,count:quantity})]);
+      if (billing && !window.confirm(`重做 ${quantity} 张图片，本次 ${formatCredits(billing.totalMinor)} 积分。确认生成？`)) return;
+      const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope, requestId:crypto.randomUUID(), billing });
       updateRuntime(batch.sessionId, (runtime) => ({
         ...runtime,
         timeline: [...runtime.timeline, {
@@ -800,7 +828,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         <header className={styles.header}>
           <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
-            <Link href="/create">电商生图</Link><Link href="/account">账号</Link>
+            <CreditBalance /><Link href="/create">电商生图</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
               <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
@@ -811,7 +839,8 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         </header>
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
-        <PreviewGroup>
+        {/* Release the preview overlay even when the CSS transition-end event is lost. */}
+        <PreviewGroup preview={{ motionName: '' }}>
           <div aria-label="对话时间线" className={styles.timelineScroll} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
             <CommerceWorkspace
               ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}

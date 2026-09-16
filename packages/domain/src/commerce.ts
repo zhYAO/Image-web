@@ -1,3 +1,4 @@
+import { creditConfirmationSchema } from "./credits";
 import { commerceArtDirection } from "./commerce-art-direction";
 import { z } from "zod";
 import { COMMERCE_SCENES, COMMERCE_TEMPLATES } from "./commerce-templates";
@@ -95,6 +96,7 @@ export const commerceSaveSchema = z.object({
   plan: commercePlanSchema,
 });
 export const commerceSubmitSchema = z.object({
+  billing: creditConfirmationSchema.optional(),
   requestId: z.uuid(),
   revision: z.number().int().positive(),
   slotIds: z.array(z.uuid()).min(1).max(8),
@@ -212,23 +214,39 @@ export function buildCommerceSlots(
 ): CommerceSlot[] {
   z.number().int().min(1).max(8).parse(count);
   const definition = COMMERCE_SCENES.find((x) => x.id === scene)!;
-  const paragraphs = (brief.contentMode === "content" ? brief.facts : brief.sellingPoints || brief.facts).split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const paragraphs = (brief.contentMode === "content" ? brief.facts : brief.sellingPoints || brief.facts).split(/\n+/).map((s) => s.trim())
+    .filter(Boolean);
   if (scene === "xhs-poster" && count > 1 && paragraphs.length < count - 1)
-    throw new Error(`内容不足以分配 ${count} 张图片，请补充至少 ${count - 1} 段内容或减少图片数量。`);
+    throw new Error(
+      `内容不足以分配 ${count} 张图片，请补充至少 ${count - 1} 段内容或减少图片数量。`,
+    );
   return Array.from({ length: count }, (_, index) => {
-    const exactText = scene !== "xhs-poster" ? "" : count === 1
-      ? [brief.name, ...paragraphs].join("\n")
-      : index === 0 ? brief.name
-      : paragraphs.slice(
-          Math.floor((index - 1) * paragraphs.length / (count - 1)),
-          Math.floor(index * paragraphs.length / (count - 1)),
-        ).join("\n");
+    const exactText =
+      scene !== "xhs-poster"
+        ? ""
+        : count === 1
+          ? [brief.name, ...paragraphs].join("\n")
+          : index === 0
+            ? brief.name
+            : paragraphs
+                .slice(
+                  Math.floor(((index - 1) * paragraphs.length) / (count - 1)),
+                  Math.floor((index * paragraphs.length) / (count - 1)),
+                )
+                .join("\n");
     if (exactText.length > 1000)
-      throw new Error(`第 ${index + 1} 张内容过长：每张文案最多 1000 字符。请精简内容，或按段落拆分并增加图片数量。`);
+      throw new Error(
+        `第 ${index + 1} 张内容过长：每张文案最多 1000 字符。请精简内容，或按段落拆分并增加图片数量。`,
+      );
     return commerceSlotSchema.parse({
       ...settings,
       id: crypto.randomUUID(),
-      role: scene === "xhs-poster" ? (index === 0 ? "海报封面" : "内容卡片") : definition.roles[index % definition.roles.length],
+      role:
+        scene === "xhs-poster"
+          ? index === 0
+            ? "海报封面"
+            : "内容卡片"
+          : definition.roles[index % definition.roles.length],
       instruction: "",
       exactText,
       referenceIds: [...brief.productReferenceIds, ...brief.styleReferenceIds],

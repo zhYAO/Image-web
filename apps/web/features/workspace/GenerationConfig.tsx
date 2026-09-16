@@ -1,3 +1,4 @@
+import { ModelCreditPrice } from '@/features/credits/CreditsProvider';
 import {
   CHAT_PROVIDER_MODELS,
   type AspectRatio,
@@ -289,7 +290,7 @@ export function ModelPopover({
               type="button"
             >
               <span className={styles.modelIcon}><Sparkles size={16} /></span>
-              <span><strong>{model.label}</strong><small>{capability.provider}</small></span>
+              <span><strong>{model.label}</strong><small>{capability.provider}</small><ModelCreditPrice operation="image" provider={capability.provider} model={model.id}/></span>
               {selected && <Check size={16} />}
             </button>
           );
@@ -382,7 +383,7 @@ export function ImageSettingsPopover({
                   type="button"
                 >
                   <span className={styles.modelIcon}><Sparkles size={16} /></span>
-                  <span><strong>{model.label}</strong><small>{capability.provider}</small></span>
+                  <span><strong>{model.label}</strong><small>{capability.provider}</small><ModelCreditPrice operation="image" provider={capability.provider} model={model.id}/></span>
                   {selected && <Check size={16} />}
                 </button>
               );
@@ -503,7 +504,7 @@ export function ChatModelPopover({
             type="button"
           >
             <span className={styles.modelIcon}><Sparkles size={16} /></span>
-            <span><strong>{model.label}</strong><small>{model.provider}</small></span>
+            <span><strong>{model.label}</strong><small>{model.provider}</small><ModelCreditPrice operation="chat" provider={model.id} model={model.id}/></span>
             {model.id === selected.id && <Check size={16} />}
           </button>
         ))}

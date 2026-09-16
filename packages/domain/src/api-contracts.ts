@@ -1,21 +1,26 @@
+import { creditConfirmationSchema } from "./credits";
 import { skillTaskSchema, visibleImageSettingsSchema } from './skill-contracts';
-import { z } from 'zod';
+import { z } from "zod";
 
 const titleSchema = z.string().trim().min(1).max(100);
 const providerIdentifierSchema = z.string().trim().min(1).max(200);
 const promptSchema = z.string().trim().min(1).max(8000);
 
 export const apiErrorCodeSchema = z.enum([
-  'bad_request',
-  'unauthorized',
-  'quota_exceeded',
-  'provider_error',
-  'network',
-  'moderation',
-  'asset_expired',
-  'session_deleting',
-  'conflict',
-  'not_found',
+  "bad_request",
+  "unauthorized",
+  "quota_exceeded",
+  "insufficient_credits",
+  "price_changed",
+  "service_not_ready",
+  "billing_pending",
+  "provider_error",
+  "network",
+  "moderation",
+  "asset_expired",
+  "session_deleting",
+  "conflict",
+  "not_found",
 ]);
 
 export const apiErrorSchema = z.strictObject({
@@ -171,13 +176,17 @@ export const quotaSchema = z.strictObject({
 });
 
 export const providerCapabilitySchema = z.strictObject({
-  models: z.array(z.strictObject({
+  models: z
+    .array(
+      z.strictObject({
     aspectRatios: z.array(z.enum(['1:1', '3:4', '4:3', '9:16', '16:9'])),
     id: providerIdentifierSchema,
     label: z.string().min(1).max(200),
     maxImages: z.number().int().min(1).max(4),
     resolutions: z.array(z.enum(['1K', '2K'])),
-  })).min(1),
+  }),
+    )
+    .min(1),
   provider: providerIdentifierSchema,
 });
 
@@ -225,6 +234,7 @@ export const imageParamsSchema = z.strictObject({
 });
 
 export const imageRequestSchema = z.strictObject({
+  billing: creditConfirmationSchema.optional(),
   model: providerIdentifierSchema.optional(),
   params: imageParamsSchema,
   prompt: promptSchema,
@@ -239,39 +249,68 @@ export const imageSubmissionResponseSchema = z.strictObject({
   status: z.literal('pending'),
 });
 
-export const recreateImageRequestSchema = z.strictObject({
-  batchId: z.uuid(),
-  generationId: z.uuid().optional(),
-  mode: z.enum(['single', 'failed', 'all']),
-}).superRefine((request, context) => {
-  if (request.mode === 'single' && !request.generationId) {
-    context.addIssue({ code: 'custom', message: 'generationId is required for single recreation', path: ['generationId'] });
-  }
-  if (request.mode !== 'single' && request.generationId) {
-    context.addIssue({ code: 'custom', message: 'generationId is only allowed for single recreation', path: ['generationId'] });
-  }
-});
+export const recreateImageRequestSchema = z
+  .strictObject({
+    billing: creditConfirmationSchema.optional(),
+    batchId: z.uuid(),
+    generationId: z.uuid().optional(),
+    mode: z.enum(["single", "failed", "all"]),
+  })
+  .superRefine((request, context) => {
+    if (request.mode === "single" && !request.generationId) {
+      context.addIssue({
+        code: "custom",
+        message: "generationId is required for single recreation",
+        path: ["generationId"],
+      });
+    }
+    if (request.mode !== "single" && request.generationId) {
+      context.addIssue({
+        code: "custom",
+        message: "generationId is only allowed for single recreation",
+        path: ["generationId"],
+      });
+    }
+  });
 
 export const chatRequestSchema = z.strictObject({
-  requestId: z.uuid().optional(), taskId: z.uuid().optional(),
-  taskRevision: z.number().int().positive().optional(), targetGenerationId: z.uuid().optional(),
-  proposal: z.string().max(2000).optional(), imageSettings: visibleImageSettingsSchema.optional(),
+  billing: creditConfirmationSchema.optional(),
+  requestId: z.uuid().optional(),
+  taskId: z.uuid().optional(),
+  taskRevision: z.number().int().positive().optional(),
+  targetGenerationId: z.uuid().optional(),
+  proposal: z.string().max(2000).optional(),
+  imageSettings: visibleImageSettingsSchema.optional(),
   chatModel: providerIdentifierSchema.optional(),
   imageProvider: providerIdentifierSchema.optional(),
   images: z.array(z.uuid()).max(4).optional(),
   message: z.string().trim().min(1).max(16000),
   sessionId: z.uuid().optional(),
   skillId: providerIdentifierSchema.optional(),
-  tools: z.array(z.literal('generate_image')).max(1).optional(),
+  tools: z.array(z.literal("generate_image")).max(1).optional(),
 });
 
-export const chatEventSchema = z.discriminatedUnion('type', [
-  z.strictObject({ task: skillTaskSchema, type: z.literal('task.updated') }),
-  z.strictObject({ session: sessionSchema, type: z.literal('session.created') }),
-  z.strictObject({ delta: z.string().min(1), messageId: z.uuid(), type: z.literal('message.delta') }),
-  z.strictObject({ content: z.string().min(1), messageId: z.uuid(), type: z.literal('message.completed') }),
-  z.strictObject({ batchId: z.uuid(), type: z.literal('tool.queued') }),
-  z.strictObject({ error: safeWorkspaceErrorSchema, type: z.literal('stream.failed') }),
+export const chatEventSchema = z.discriminatedUnion("type", [
+  z.strictObject({ task: skillTaskSchema, type: z.literal("task.updated") }),
+  z.strictObject({
+    session: sessionSchema,
+    type: z.literal("session.created"),
+  }),
+  z.strictObject({
+    delta: z.string().min(1),
+    messageId: z.uuid(),
+    type: z.literal("message.delta"),
+  }),
+  z.strictObject({
+    content: z.string().min(1),
+    messageId: z.uuid(),
+    type: z.literal("message.completed"),
+  }),
+  z.strictObject({ batchId: z.uuid(), type: z.literal("tool.queued") }),
+  z.strictObject({
+    error: safeWorkspaceErrorSchema,
+    type: z.literal("stream.failed"),
+  }),
 ]);
 
 export type ApiError = z.infer<typeof apiErrorSchema>;

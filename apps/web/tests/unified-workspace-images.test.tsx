@@ -137,6 +137,8 @@ describe('UnifiedWorkspace', () => {
 
     await waitFor(() => expect(gateway.lastRecreateRequest).toBeDefined());
     expect(gateway.lastRecreateRequest).toEqual({
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      billing: undefined,
       batchId: failed.id,
       generationId,
       scope: 'single',

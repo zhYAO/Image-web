@@ -12,6 +12,8 @@
     "test:coverage": "vitest run --coverage --testTimeout=60000",
     "e2e": "playwright test",
     "e2e:http": "playwright test --config=playwright.http.config.ts",
+    "e2e:real": "playwright test --config=playwright.real.config.ts",
+    "test:acceptance-budget": "node --test scripts/real-acceptance-budget.test.mjs",
     "setup:langgraph": "node scripts/setup-langgraph.mjs"
   },
   "dependencies": {

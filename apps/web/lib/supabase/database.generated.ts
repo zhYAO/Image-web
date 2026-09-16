@@ -314,6 +314,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credit_dispatch: { Args: { p_user_id: string; p_action: string; p_input?: Json }; Returns: Json };
+      credit_admin: { Args: { p_input: Json }; Returns: Json };
+      get_commerce_capabilities: { Args: Record<PropertyKey, never>; Returns: Json };
+
       archive_image_message: {
         Args: { p_message_id: number }
         Returns: boolean

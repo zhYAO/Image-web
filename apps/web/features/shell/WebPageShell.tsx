@@ -1,3 +1,4 @@
+import { CreditBalance } from "@/features/credits/CreditsProvider";
 import Link from "next/link";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
@@ -20,6 +21,7 @@ export function WebPageShell({
         <Link href="/create">
           探索电商创作 <ArrowUpRight size={15} aria-hidden />
         </Link>
+        <CreditBalance />
       </nav>
       {children}
     </main>

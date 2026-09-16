@@ -162,6 +162,7 @@ test('keeps a failed image retry inside the unified history', async ({ page }, t
   await page.getByRole('textbox', { name: '创作输入' }).fill('生成部分成功与重试验收');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByText('部分成功', { exact: true })).toBeVisible();
+  page.once('dialog', dialog => { expect(dialog.message()).toContain('积分');void dialog.accept(); });
   await page.getByRole('button', { name: '重试失败项' }).click();
   await expect(page.getByRole('article', { name: '图片生成结果' })).toHaveCount(2);
 });

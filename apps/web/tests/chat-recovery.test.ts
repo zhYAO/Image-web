@@ -55,9 +55,12 @@ describe('chat error reconciliation', () => {
   });
 
   it('does not offer retries for non-retryable errors or consumed attempts', () => {
-    expect(chatRecoveryActions([user, { ...error, error: { ...error.error, retryable: false } }], [attempt])).toEqual({});
+    expect(chatRecoveryActions([user, { ...error, error: { ...error.error, code: 'CONFLICT', retryable: false } }], [attempt])).toEqual({});
     expect(chatRecoveryActions([user, error], [{ ...attempt, retried: true }])).toEqual({});
     expect(chatRecoveryActions([error], [])).toEqual({});
+  });
+  it('offers explicit editing after a billed provider rejection without replaying the refunded request', () => {
+    expect(chatRecoveryActions([user, { ...error, error: { ...error.error, retryable: false } }], [attempt])['local-error']).toEqual({ label: '重新编辑', prompt: user.content });
   });
   it('does not guess which same-text local attempt owns a persisted failure', () => {
     const retry: FailedChatAttempt = {

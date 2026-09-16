@@ -15,6 +15,7 @@
     "test:coverage": "pnpm -r --if-present test:coverage",
     "e2e": "pnpm --filter @zimage/web e2e",
     "e2e:http": "pnpm --filter @zimage/web e2e:http",
+    "e2e:real": "pnpm --filter @zimage/web e2e:real",
     "setup:langgraph": "pnpm --filter @zimage/web setup:langgraph"
   },
   "devDependencies": {

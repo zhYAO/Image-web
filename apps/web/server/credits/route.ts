@@ -1,0 +1,56 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { creditItemSchema } from "@zimage/domain";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  assertTrustedOrigin,
+  executeRoute,
+  readJson,
+  requireVerifiedUserId,
+} from "@/server/route-context";
+import {
+  readCredits,
+  readLedger,
+  readPrices,
+  readQuote,
+} from "./credit-service";
+const quoteRequest = z.union([
+  z.object({ items: z.array(creditItemSchema).min(1).max(8) }).strict(),
+  z
+    .object({
+      action: z.enum(["image", "recreate", "commerce"]),
+      input: z.record(z.string(), z.unknown()),
+    })
+    .strict(),
+]);
+export function creditRoute(
+  request: Request,
+  action: "wallet" | "ledger" | "catalog" | "quote",
+) {
+  return executeRoute(async () => {
+    if (request.method === "POST") assertTrustedOrigin(request);
+    const user = await requireVerifiedUserId(
+      await createSupabaseServerClient(),
+    );
+    const admin: SupabaseClient = createSupabaseAdminClient();
+    const cursor = new URL(request.url).searchParams.get("cursor") ?? undefined;
+    if (cursor)
+      z.string()
+        .regex(/^\d{1,18}$/)
+        .parse(cursor);
+    const result =
+      action === "wallet"
+        ? await readCredits(admin, user)
+        : action === "ledger"
+          ? await readLedger(admin, user, cursor)
+          : action === "catalog"
+            ? await readPrices(admin, user)
+            : await readQuote(
+                admin,
+                user,
+                quoteRequest.parse(await readJson(request)),
+              );
+    return Response.json(result, { headers: { "cache-control": "no-store" } });
+  });
+}

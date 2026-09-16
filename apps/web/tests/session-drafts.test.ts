@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { lastComposerSession, loadComposer } from '@/store/composer-storage';
 
 describe('session composer ownership', () => {
   beforeEach(() => useWorkspaceStore.getState().reset());
@@ -39,5 +40,37 @@ describe('session composer ownership', () => {
     store().activateComposer('A');
     expect(store().references).toEqual([]);
     expect(store().selectedSkillId).toBeUndefined();
+  });
+  it('restores a server-selected session after a page reload without restoring file handles', () => {
+    const store = useWorkspaceStore.getState;
+    store().activateComposer('reload');
+    store().setDraft('unsent product prompt');
+    store().setSelectedChatModel('minimax');
+    store().setCount(3);
+    store().setReferences([{ name: 'local.png', size: 2, mimeType: 'image/png', previewUrl: 'blob:old-document' }]);
+    expect(lastComposerSession(['reload'])).toBe('reload');
+    expect(lastComposerSession(['other-user-session'])).toBeUndefined();
+    useWorkspaceStore.setState({ activeComposerSessionId: undefined, composers: {}, draft: '', references: [] });
+    store().activateComposer('different-account-session');
+    expect(store().draft).toBe('');
+    store().activateComposer('reload');
+    expect(store()).toMatchObject({ draft: 'unsent product prompt', selectedChatModel: 'minimax', count: 3, references: [] });
+  });
+  it('clears saved drafts when an account resets or a session is forgotten', () => {
+    const store = useWorkspaceStore.getState;
+    store().activateComposer('deleted');
+    store().setDraft('private');
+    store().forgetComposer('deleted');
+    expect(loadComposer('deleted')).toBeUndefined();
+    store().activateComposer('logout');
+    store().setDraft('private');
+    store().reset();
+    expect(loadComposer('logout')).toBeUndefined();
+  });
+  it('ignores corrupt and expired saved state', () => {
+    sessionStorage.setItem('zimage:composer:v1:corrupt', '{');
+    sessionStorage.setItem('zimage:composer:v1:expired', JSON.stringify({ savedAt: 0, draft: { draft: 'old' } }));
+    expect(loadComposer('corrupt')).toBeUndefined();
+    expect(loadComposer('expired')).toBeUndefined();
   });
 });

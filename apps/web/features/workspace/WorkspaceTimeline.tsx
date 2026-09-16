@@ -49,16 +49,17 @@ function GenerationCard({
   onRetryImage?: () => void;
 }) {
   const completed = batch.assets.filter((asset) => asset.status === 'succeeded' && !asset.expired);
-  const failed = batch.assets.filter((asset) => asset.status === 'failed');
+  const failed = batch.assets.filter((asset) => asset.status === 'failed' && asset.error?.code !== 'CONFLICT');
   const working = batch.status === 'pending' || batch.status === 'processing';
+  const needsReview = batch.assets.some(asset => asset.error?.code === 'CONFLICT');
   return (
     <div className={styles.generationCard} data-status={batch.status}>
       <header className={styles.generationHeader}>
         <span className={styles.generationStatusTitle}>
-          {working ? '正在创作' : batch.status === 'failed' ? '生成失败' : '图片结果'}
+          {needsReview ? '待核对' : working ? '正在创作' : batch.status === 'failed' ? '生成失败' : '图片结果'}
         </span>
         <Tag color={batch.status === 'failed' ? 'red' : batch.status === 'partial' ? 'orange' : 'purple'}>
-          {statusLabels[batch.status]}
+          {needsReview ? '待核对' : statusLabels[batch.status]}
         </Tag>
       </header>
       <div className={styles.generationMeta}>
@@ -83,7 +84,8 @@ function GenerationCard({
             {asset.status === 'pending' && (
               <div className={`${styles.assetState} ${styles.assetSkeleton}`}><span>{zhCN.timeline.state.pending}</span></div>
             )}
-            {asset.status === 'processing' && (
+            {asset.error?.code === 'CONFLICT' && asset.status !== 'failed' && <div className={styles.assetState}><ImageOff size={23}/><span>{asset.error.message}</span></div>}
+            {asset.status === 'processing' && asset.error?.code !== 'CONFLICT' && (
               <div className={`${styles.assetState} ${styles.assetSkeleton}`}><Spin size="small" /><span>{zhCN.timeline.state.processing}</span></div>
             )}
             {asset.status === 'failed' && (
@@ -94,7 +96,7 @@ function GenerationCard({
                 <span>{zhCN.timeline.expired}</span>
               </div>
             )}
-            {!optimistic && (asset.status === 'succeeded' || asset.status === 'failed') && (
+            {!optimistic && asset.error?.code !== 'CONFLICT' && (asset.status === 'succeeded' || asset.status === 'failed') && (
               <Button
                 aria-label={`重新生成第 ${index + 1} 张`}
                 className={styles.assetRecreate}
@@ -112,13 +114,13 @@ function GenerationCard({
           {completed.length > 0 && (
             <Button icon={<Download size={14} />} onClick={() => onDownloadBatch(batch)} size="small">{zhCN.timeline.batchDownload}</Button>
           )}
-          {optimistic && batch.status === 'failed' && onRetryImage && (
+          {optimistic && batch.status === 'failed' && batch.assets.some(asset=>asset.error?.retryable) && onRetryImage && (
             <Button icon={<RefreshCw size={14} />} onClick={onRetryImage}>重试生成</Button>
           )}
           {!optimistic && failed.length > 0 && (
             <Button icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'failed')} size="small">{zhCN.timeline.recreateFailed}</Button>
           )}
-          {batch.assets.some((asset) => asset.expired) && (
+          {batch.assets.some((asset) => asset.expired) && !batch.assets.some(asset=>asset.error?.code==='CONFLICT') && (
             <Button icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'all')} size="small" type="primary">{zhCN.timeline.recreateAll}</Button>
           )}
         </div>
@@ -141,6 +143,7 @@ function GenerationTurn({
   onRetryImage?: () => void;
 }) {
   const working = batch.status === 'pending' || batch.status === 'processing';
+  const needsReview = batch.assets.some(asset => asset.error?.code === 'CONFLICT');
   return (
     <div className={styles.generationTurn} data-testid={optimistic ? 'optimistic-image-turn' : undefined}>
       {batch.source === 'direct' && (
@@ -149,7 +152,7 @@ function GenerationTurn({
           <div className={styles.bubble}>{batch.prompt}</div>
         </article>
       )}
-      <article aria-busy={working} aria-label="图片生成结果" className={`${styles.message} ${styles.generationResponse}`}>
+      <article aria-busy={working && !needsReview} aria-label="图片生成结果" className={`${styles.message} ${styles.generationResponse}`}>
         <div className={styles.avatar}><Bot size={16} /></div>
         <GenerationCard
           batch={batch}

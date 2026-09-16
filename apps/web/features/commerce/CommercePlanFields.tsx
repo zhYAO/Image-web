@@ -1,3 +1,4 @@
+import { ModelCreditPrice } from "@/features/credits/CreditsProvider";
 import { CreativeTextField } from "./CreativeTextField";
 import { CommerceSelect } from "./CommerceSelect";
 import {
@@ -35,7 +36,10 @@ export function CommercePlanFields({
   return (
     <div className={styles.planGrid}>
       <p className={styles.note}>
-        {plan.brief.contentMode === "content" ? `内容：${plan.brief.name}。按原文分配到每张卡片，不添加未提供的事实。` : `商品：${plan.brief.name} · ${plan.brief.facts || "仅使用真实商品可见外观"}。商品事实优先，保持颜色、轮廓、结构和可见标识。无已知规格或价格时不添加。`}模板 v
+        {plan.brief.contentMode === "content"
+          ? `内容：${plan.brief.name}。按原文分配到每张卡片，不添加未提供的事实。`
+          : `商品：${plan.brief.name} · ${plan.brief.facts || "仅使用真实商品可见外观"}。商品事实优先，保持颜色、轮廓、结构和可见标识。无已知规格或价格时不添加。`}
+        模板 v
         {COMMERCE_TEMPLATES.find((item) => item.id === plan.templateId)
           ?.version ?? "历史版本"}
         。
@@ -124,6 +128,12 @@ export function CommercePlanFields({
                   )),
                 )}
               </CommerceSelect>
+              <ModelCreditPrice
+                operation="image"
+                provider={slot.provider}
+                model={slot.model}
+                resolution={slot.resolution}
+              />
             </label>
             <div className={styles.twoColumns}>
               <label>

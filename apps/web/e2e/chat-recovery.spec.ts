@@ -25,20 +25,20 @@ test('keeps two intentional identical chat turns distinct without duplicating ei
   await expect(timeline.getByText(/服务暂时不可用|回复中断/)).toHaveCount(0);
 });
 
-test('recovers one chat failure without overwriting a draft and restores editing after reload', async ({ page }, testInfo) => {
+test('re-edits a refunded chat failure without overwriting a draft or reusing its billed request', async ({ page }, testInfo) => {
   await page.getByRole('combobox').click();
   await page.getByText('Mock · 服务不可用', { exact: true }).click();
   const composer = page.getByRole('textbox', { name: '创作输入' });
   await composer.fill('解释陶瓷杯的构图');
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByText('聊天服务暂时不可用，请稍后重试。', { exact: true })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: /^重\s*试$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '重新编辑', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '查看积分与模型价格' })).toContainText('10.00');
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('single-failure.png') });
   await page.getByRole('combobox').click();
   await page.getByText('Mock · 正常', { exact: true }).click();
   await composer.fill('新的未发送内容');
-  await page.getByRole('button', { name: /^重\s*试$/ }).click();
-  await expect(page.getByText(/建议突出主体材质/)).toBeVisible();
+  await page.getByRole('button', { name: '重新编辑', exact: true }).click();
   await expect(composer).toHaveValue('新的未发送内容');
   await expect(page.getByRole('button', { name: '发送创作请求' })).toBeEnabled();
   await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('retry-preserves-draft.png') });
@@ -50,6 +50,10 @@ test('recovers one chat failure without overwriting a draft and restores editing
   await page.getByRole('button', { name: '重新编辑', exact: true }).click();
   await expect(composer).toHaveValue('解释陶瓷杯的构图');
   await expect(composer).toBeFocused();
+  await page.getByRole('button', { name: '发送创作请求' }).click();
+  await expect(page.getByText(/建议突出主体材质/)).toBeVisible();
+  await expect(page.getByTestId('chat-stream-cursor')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '查看积分与模型价格' })).toContainText('9.98');
 });
 
 test('updates displayed quota after recreating an image without reloading', async ({ page }, testInfo) => {
@@ -61,6 +65,7 @@ test('updates displayed quota after recreating an image without reloading', asyn
   await page.getByRole('button', { name: '发送创作请求' }).click();
   await expect(page.getByRole('article', { name: '图片生成结果' }).getByText('已完成', { exact: true })).toBeVisible();
   await expect(page.getByText('✦ 29 张', { exact: true })).toBeVisible();
+  page.once('dialog', dialog => { expect(dialog.message()).toContain('积分');void dialog.accept(); });
   await page.getByRole('button', { name: '重新生成第 1 张' }).click();
   await expect(page.getByRole('article', { name: '图片生成结果' })).toHaveCount(2);
   await expect(page.getByText('✦ 28 张', { exact: true })).toBeVisible();

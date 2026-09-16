@@ -1,9 +1,11 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import { creditsEnabled, creditCall } from "@/server/credits/credit-service";
+import type { CreditConfirmation } from "@zimage/domain";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 
-import { ApiRouteError } from '@/server/api-error';
+import { ApiRouteError } from "@/server/api-error";
 
-import type { GenerationSubmissionStore } from './image-service';
+import type { GenerationSubmissionStore } from "./image-service";
 
 const submissionResultSchema = z.object({
   batchId: z.uuid(),
@@ -13,7 +15,7 @@ const submissionResultSchema = z.object({
 });
 
 function submissionFailure(error: { code?: string; message?: string } | null) {
-  const diagnostic = `${error?.code ?? ''} ${error?.message ?? ''}`;
+  const diagnostic = `${error?.code ?? ""} ${error?.message ?? ""}`;
   if (diagnostic.includes('quota_exceeded')) {
     return new ApiRouteError({
       code: 'quota_exceeded',
@@ -85,8 +87,17 @@ function submissionFailure(error: { code?: string; message?: string } | null) {
 export class SupabaseGenerationStore implements GenerationSubmissionStore {
   constructor(private readonly adminClient: SupabaseClient) {}
 
-  async submit(input: Parameters<GenerationSubmissionStore['submit']>[0]) {
-    const { data, error } = await this.adminClient.rpc('submit_image_generation', {
+  async submit(input: Parameters<GenerationSubmissionStore["submit"]>[0]) {
+    if (creditsEnabled())
+      return submissionResultSchema.parse(
+        await creditCall(this.adminClient, input.userId, "image", {
+          ...input,
+          requestId: input.idempotencyKey,
+        }),
+      );
+    const { data, error } = await this.adminClient.rpc(
+      "submit_image_generation",
+      {
       p_config: input.config,
       p_correlation_id: input.correlationId,
       p_idempotency_key: input.idempotencyKey,
@@ -100,21 +111,32 @@ export class SupabaseGenerationStore implements GenerationSubmissionStore {
       p_skill_version: input.skillVersion ?? null,
       p_source: input.source,
       p_user_id: input.userId,
-    });
+    },
+    );
     if (error || !data) throw submissionFailure(error);
     return submissionResultSchema.parse(data);
   }
 
   async recreate(input: {
+    billing?: CreditConfirmation;
     batchId: string;
     correlationId: string;
     generationId?: string;
     idempotencyKey: string;
-    mode: 'single' | 'failed' | 'all';
+    mode: "single" | "failed" | "all";
     requestHash: string;
     userId: string;
   }) {
-    const { data, error } = await this.adminClient.rpc('recreate_image_generation', {
+    if (creditsEnabled())
+      return submissionResultSchema.parse(
+        await creditCall(this.adminClient, input.userId, "recreate", {
+          ...input,
+          requestId: input.idempotencyKey,
+        }),
+      );
+    const { data, error } = await this.adminClient.rpc(
+      "recreate_image_generation",
+      {
       p_batch_id: input.batchId,
       p_correlation_id: input.correlationId,
       p_generation_id: input.generationId ?? null,
@@ -122,7 +144,8 @@ export class SupabaseGenerationStore implements GenerationSubmissionStore {
       p_mode: input.mode,
       p_request_hash: input.requestHash,
       p_user_id: input.userId,
-    });
+    },
+    );
     if (error || !data) throw submissionFailure(error);
     return submissionResultSchema.parse(data);
   }
