@@ -58,7 +58,7 @@ function GenerationCard({
         <span className={styles.generationStatusTitle}>
           {needsReview ? '待核对' : working ? '正在创作' : batch.status === 'failed' ? '生成失败' : '图片结果'}
         </span>
-        <Tag color={batch.status === 'failed' ? 'red' : batch.status === 'partial' ? 'orange' : 'purple'}>
+        <Tag color={needsReview || batch.status === 'partial' ? 'warning' : batch.status === 'failed' ? 'error' : batch.status === 'succeeded' ? 'success' : 'processing'}>
           {needsReview ? '待核对' : statusLabels[batch.status]}
         </Tag>
       </header>

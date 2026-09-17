@@ -5,14 +5,15 @@ doc/OpenChatCut/
 node_modules
 .pnpm-store
 .next
-.next-playwright
-.next-build-qa
 coverage
 playwright-report
+playwright-report-*
 test-results
 *.tsbuildinfo
+.DS_Store
 
 .design-qa/
+.env
 .env.local
 
 .superdesign/tmp/

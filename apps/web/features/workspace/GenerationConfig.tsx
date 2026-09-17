@@ -271,7 +271,7 @@ export function ModelPopover({
           <div className={styles.popoverTitle}>图片模型</div>
           <div className={styles.popoverHint}>选择用于本次创作的服务与模型</div>
         </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'green' : 'orange'}>
+        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
           {selectedHealth?.status === 'healthy' ? '服务正常' : '服务降级'}
         </Tag>
       </div>
@@ -364,7 +364,7 @@ export function ImageSettingsPopover({
           <div className={styles.popoverTitle}>图片生成设置</div>
           <div className={styles.popoverHint}>模型与高级参数仅在需要时调整</div>
         </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'green' : 'orange'}>
+        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
           {selectedHealth?.status === 'healthy' ? '服务正常' : '服务降级'}
         </Tag>
       </div>
@@ -487,7 +487,7 @@ export function ChatModelPopover({
           <div className={styles.popoverTitle}>{zhCN.composer.chatModel}</div>
           <div className={styles.popoverHint}>{zhCN.composer.chatModelHint}</div>
         </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'green' : 'orange'}>
+        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
           {selectedHealth?.status === 'healthy' ? zhCN.composer.serviceHealthy : zhCN.composer.serviceDegraded}
         </Tag>
       </div>

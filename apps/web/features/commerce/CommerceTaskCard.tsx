@@ -491,12 +491,12 @@ export function CommerceTaskCard({
                 </div>
               )}
               {stale && (
-                <p role="status">
+                <p className={styles.reviewNotice} role="status">
                   当前选图来自旧方案；可保留下载，或确认重做以应用修改。
                 </p>
               )}
               {commerceItemNeedsReview(running) && (
-                <p role="status">
+                <p className={styles.reviewNotice} role="status">
                   服务商连接中断，尚未收到这张图片。为避免重复扣费，已暂停自动重试。请联系支持核对任务{" "}
                   {running?.generationId.slice(0, 8)}。
                 </p>
@@ -504,13 +504,13 @@ export function CommerceTaskCard({
               {running?.status === "failed" &&
                 !commerceItemNeedsReview(running) &&
                 unsettledCommerceItem(running) && (
-                  <p role="status">
+                  <p className={styles.reviewNotice} role="status">
                     结果待恢复，暂不能重新提交；正在核对生成结果或完成图片存储。
                   </p>
                 )}
               {running?.status === "failed" &&
                 !unsettledCommerceItem(running) && (
-                  <p role="status">
+                  <p className={styles.failureNotice} role="status">
                     生成失败：{running.error || "请调整方案后重试"}
                     {image ? "。已保留原选图。" : ""}
                   </p>

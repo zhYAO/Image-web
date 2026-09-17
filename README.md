@@ -19,7 +19,7 @@ pnpm dev
 
 数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Sentry、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
 
-真实环境的显式入口为 `pnpm setup:langgraph` 与 `pnpm e2e:http`。后者必须提供 `PHASE1B_HTTP_BASE_URL`；Storage 写入和真实 Provider SSE 还需分别显式设置验收开关，避免本地回归误触云资源或费用。
+LangGraph 初始化入口为 `pnpm setup:langgraph`。真实环境验收需单独安排，涉及 Storage 写入或付费模型时必须遵守现有授权范围与预算限制。
 
 ## 质量门禁
 
@@ -28,5 +28,13 @@ pnpm lint
 pnpm typecheck
 pnpm test:coverage
 pnpm build
-pnpm e2e
+pnpm --filter @zimage/web test:acceptance-budget
 ```
+
+已移除 Playwright / E2E 工具链和截图基线；保留单元测试、Worker 测试及数据库测试，当前不再提供浏览器自动回归覆盖。历史 E2E 结论仅作为当时的验收记录。
+
+## 构建产物管理
+
+日常开发使用默认 `.next`。确需与开发服务隔离时，统一使用 `NEXT_DIST_DIR=.next-build-qa pnpm build`，验证完成后清理该目录，不再按任务新建 `.next-*`。删除缓存前确认没有进程正在使用；缓存会在下次开发或构建时重新生成。`.gitignore` 只防止提交，不会自动清理磁盘。
+
+真实验收目录 `.design-qa/2026-09-16-real-acceptance/` 包含费用预算、未知任务核对记录和验收证据，禁止作为普通测试缓存批量清理。

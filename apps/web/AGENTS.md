@@ -35,7 +35,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Change and verification discipline
 
-- Per the user's 2026-09-08 instruction, browser regression targets desktop Web only. Do not run mobile or tablet projects or switch tests to phone/tablet viewports unless the user explicitly requests that scope again.
+- Per the user's 2026-09-17 instruction, Playwright / E2E sources, screenshot baselines, commands, and the browser CI job have been removed. Keep unit, Worker, database, and acceptance-budget tests. Do not recreate browser automation unless requested; any separately authorized browser checks remain desktop Web only.
 - Preserve unrelated staged, unstaged, and untracked work. Keep patches narrow and do not format or rewrite project documents unless the task explicitly requires it.
 - When a task completes acceptance, update `../../doc/project-progress.md` in the same change with its status, validation date, automated results, and applicable real-environment evidence. A task is `done` only when all evidence required by that ledger is current; downgrade it when evidence expires or the environment drifts.
-- Run `pnpm lint`, `pnpm typecheck`, `pnpm test:run`, `pnpm build`, and `pnpm e2e` before claiming the web workspace is ready.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test:run`, `pnpm --filter @zimage/web test:acceptance-budget`, and `pnpm build` for local validation. CI also retains coverage and database checks. Passing these checks does not establish browser or real-environment readiness.
+- Use `.next` for normal development. If an isolated build is needed, reuse `NEXT_DIST_DIR=.next-build-qa` and remove its artifacts after validation; do not create a new `.next-*` directory per task. Check process ownership before deleting caches, and skip active or uncertain directories.
+- Preserve `.design-qa/2026-09-16-real-acceptance/` in full: it contains the paid-generation budget, unresolved-result reconciliation records, and real acceptance evidence, not disposable caches.

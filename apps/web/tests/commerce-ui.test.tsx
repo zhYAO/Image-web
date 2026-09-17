@@ -272,13 +272,10 @@ describe("commerce UI", () => {
     );
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
     expect(submit.mock.calls[0]?.[1].slotIds).toHaveLength(1);
-    await waitFor(
-      () =>
-        expect(
-          within(task).getByRole("button", { name: "下载当前选图（1 张）" }),
-        ).toBeEnabled(),
-      { timeout: 5000 },
-    );
+    // Wait cheaply for the terminal label before the accessibility-tree lookup.
+    // Repeated getByRole scans across AntD controls can starve the mock timers in jsdom.
+    await within(task).findByText("下载当前选图（1 张）", {}, { timeout: 5000 });
+    expect(within(task).getByRole("button", { name: "下载当前选图（1 张）" })).toBeEnabled();
     view.unmount();
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByTestId("commerce-task");

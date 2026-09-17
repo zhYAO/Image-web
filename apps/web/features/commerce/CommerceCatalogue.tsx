@@ -91,9 +91,9 @@ export function CommerceCatalogue() {
                   alt={`${scene.name} · AI 风格示例`}
                   width={512}
                   height={512}
-                  sizes="(min-width: 1500px) 23vw, 30vw"
+                  sizes="(min-width: 1700px) 310px, (min-width: 1400px) 23vw, 30vw"
                 />
-                <span>AI 风格示例</span>
+                <span>女装 · AI 风格示例</span>
               </div>
               <div className={styles.sceneDescription}>
                 <div className={styles.sceneTitle}>

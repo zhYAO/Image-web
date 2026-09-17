@@ -107,8 +107,8 @@ export function AccountPanel({ account }: { account: Account }) {
   }
 
   return (
-    <WebPageShell>
-      <section aria-busy={pending} className="glass-card glass-form">
+    <WebPageShell className="account-page">
+      <section aria-busy={pending} className="glass-card glass-form account-panel">
         <a href="/">返回工作区</a>
         <p className="glass-kicker">ZIMAGE · 账号中心</p>
         <h1>账号</h1>
