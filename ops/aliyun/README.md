@@ -51,3 +51,7 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 手动重发：Actions → ZImage CI and Deploy → Run workflow → 分支 `main`、action=`deploy`。同一 SHA 重发复用已验证的不可变产物。手动回滚：同一入口 action=`rollback`、release=`previous` 或已保留版本目录名。回滚不撤销代码历史或数据库。回滚后恢复最新版可再次运行 deploy。
 
 更新 helper 时必须由管理员安装 root:root 0755 并运行 `python3 -m unittest discover -s ops/aliyun -p 'test_*.py'`；工作流不能自行更新其 sudo 入口。部署及真实回滚的结果见本轮验收记录，不以配置完成代替发布成功。
+
+### CI 构建内存
+
+正式 HTTP Webpack 构建设置 `NODE_OPTIONS=--max-old-space-size=4096`。首次 Linux runner 运行已证明默认约 2GB V8 堆不足；此设置仅作用于构建 job，不改变生产服务运行内存或在服务器执行构建。

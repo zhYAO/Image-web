@@ -85,6 +85,7 @@ jobs:
       - name: Build production HTTP application
         run: pnpm --filter @zimage/web exec next build --webpack
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           NEXT_PUBLIC_DATA_MODE: http
           NEXT_PUBLIC_PHASE2_AUTH: 'true'
           ZIMAGE_DEPLOYMENT_ENV: production
