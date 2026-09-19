@@ -53,8 +53,8 @@ export const zimageTheme: ThemeConfig = {
     lineHeight: 1.6,
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
-    motionDurationFast: "0.16s",
-    motionDurationMid: "0.16s",
+    motionDurationFast: "0.10s",
+    motionDurationMid: "0.18s",
     motionDurationSlow: "0.22s",
     boxShadow: "0 8px 24px rgba(37,35,42,.10)",
     boxShadowSecondary: "0 2px 8px rgba(37,35,42,.06)",

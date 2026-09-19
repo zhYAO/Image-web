@@ -13,7 +13,8 @@
   font-size: 12px;
   border-radius: 999px;
   padding: 8px;
-  background: var(--z-panel);
+  transition: background var(--z-duration-fast) ease, transform var(--z-duration-press) var(--z-ease), box-shadow var(--z-duration-fast) ease;
+  background: rgba(255, 255, 255, .52);
 }
 .category:hover {
   background: var(--z-panel-strong);
@@ -58,4 +59,8 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
+}
+
+@media (forced-colors: active), (prefers-reduced-transparency: reduce) {
+  .category { background: var(--z-panel); }
 }

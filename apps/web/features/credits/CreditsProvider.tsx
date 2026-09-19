@@ -43,13 +43,22 @@ const Context = createContext<CreditState>({
 });
 export const useCredits = () => useContext(Context);
 export function CreditsProvider({ children }: { children: ReactNode }) {
+  const { status, ownerId } = useAuthStatus();
+  return <OwnerCreditsProvider key={status === 'authorized' ? ownerId ?? 'local' : 'guest'}>{children}</OwnerCreditsProvider>;
+}
+function OwnerCreditsProvider({ children }: { children: ReactNode }) {
   const { status } = useAuthStatus();
   const [catalog, setCatalog] = useState<CreditCatalog>();
   const [wallet, setWallet] = useState<CreditWallet>();
   const [error, setError] = useState<string>();
   const saved = useRef(new Map<string, CreditConfirmation>());
   const epoch = useRef(0);
+  const inFlight = useRef(false);
+  const invalidated = useRef(false);
+  const lastChecked = useRef(0);
+  const refreshRef = useRef<() => void>(() => {});
   const refresh = useCallback(() => {
+    if (inFlight.current || document.visibilityState === 'hidden') return;
     const current = ++epoch.current;
     if (status !== "authorized") {
       setWallet(undefined);
@@ -58,6 +67,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     }
     const gateway = getWorkspaceGateway();
     if (!gateway.getCreditCatalog || !gateway.getCreditWallet) return;
+    inFlight.current = true;
     void Promise.allSettled([
       gateway.getCreditCatalog(),
       gateway.getCreditWallet(),
@@ -70,21 +80,39 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           ? "积分服务暂不可用，请稍后刷新。"
           : undefined,
       );
+    }).finally(() => {
+      if (epoch.current !== current) return;
+      inFlight.current = false;
+      lastChecked.current = Date.now();
+      if (invalidated.current) { invalidated.current = false; refreshRef.current(); }
     });
   }, [status]);
+  useEffect(() => { refreshRef.current = refresh; }, [refresh]);
   useEffect(() => {
     let active = true;
+    const requestEpoch = epoch;
     void Promise.resolve().then(() => {
       if (active) refresh();
     });
-    window.addEventListener("zimage:credits-changed", refresh);
-    window.addEventListener("focus", refresh);
-    const timer = window.setInterval(refresh, 15000);
+    const changed = () => {
+      if (inFlight.current) invalidated.current = true;
+      else refresh();
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastChecked.current > 1000) refresh();
+    };
+    window.addEventListener("zimage:credits-changed", changed);
+    window.addEventListener("focus", visible);
+    document.addEventListener('visibilitychange', visible);
+    const timer = window.setInterval(visible, 15000);
     return () => {
       active = false;
       window.clearInterval(timer);
-      window.removeEventListener("zimage:credits-changed", refresh);
-      window.removeEventListener("focus", refresh);
+      requestEpoch.current++;
+      inFlight.current = false;
+      window.removeEventListener("zimage:credits-changed", changed);
+      window.removeEventListener("focus", visible);
+      document.removeEventListener('visibilitychange', visible);
     };
   }, [refresh]);
   const confirm = useCallback(

@@ -4,12 +4,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AuthStatusProvider,
   notifyAuthChange,
+  useAuthStatus,
 } from "@/features/auth/AuthStatusProvider";
 import { CommerceCatalogue } from "@/features/commerce/CommerceCatalogue";
 import { AnonymousAuthGate } from "@/app/anonymous-auth-gate";
 
 const replace = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
+
+function Identity() {
+  const { status, ownerId } = useAuthStatus();
+  return <span>{status}:{ownerId ?? 'none'}</span>;
+}
 
 describe("shared authentication presentation", () => {
   afterEach(() => {
@@ -21,7 +27,7 @@ describe("shared authentication presentation", () => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");
     const fetcher = vi
       .fn()
-      .mockResolvedValue(new Response("{}", { status: 200 }));
+      .mockResolvedValue(new Response(JSON.stringify({ id: '10000000-0000-4000-8000-000000000001' }), { status: 200 }));
     vi.stubGlobal("fetch", fetcher);
     const view = render(
       <StrictMode>
@@ -43,7 +49,27 @@ describe("shared authentication presentation", () => {
     );
     expect(screen.getByText("创作已准备")).toBeVisible();
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[0]).toBe('/api/auth/session');
     expect(replace).not.toHaveBeenCalled();
+  });
+  it('never authorizes a malformed successful identity response', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
+    render(<AuthStatusProvider><Identity /></AuthStatusProvider>);
+    await screen.findByText('error:none');
+  });
+  it('coalesces focus and visibility refresh and ignores superseded login requests', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
+    const pending: Array<(value: Response) => void> = [];
+    const fetcher = vi.fn(() => new Promise<Response>(resolve => pending.push(resolve)));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthStatusProvider><Identity /></AuthStatusProvider>);
+    act(() => notifyAuthChange(true));
+    await act(async () => pending[0]!(new Response(JSON.stringify({ id: '10000000-0000-4000-8000-000000000001' }))));
+    act(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () => pending[1]!(new Response(JSON.stringify({ id: '20000000-0000-4000-8000-000000000002' }))));
+    expect(screen.getByText('authorized:20000000-0000-4000-8000-000000000002')).toBeVisible();
   });
   it("does not let an old in-flight account response undo a successful logout", async () => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");

@@ -37,3 +37,17 @@
 证书到期时间为 `2026-12-16 14:41:11 UTC`，当前 manual DNS 模式**不能自动续期**。`certbot.timer` 的存在不代表可以成功续期。备案完成后配置 webroot 自动验证，并通过 `certbot renew --dry-run` 后才可宣布续期自动化完成。`/etc/letsencrypt/renewal-hooks/deploy/zimage-nginx` 仅负责成功续期后的 Nginx reload。
 
 已确认公网 HTTP 被阿里云备案拦截，HTTPS 握手被中断；服务器回环 TLS 和应用健康检查通过。注册门禁保持关闭；真实登录、验证码、流式聊天、上传和模型生成未在该生产域名验收。
+
+## 2026-09-19 起：GitHub main 自动发布
+
+`.github/workflows/ci.yml` 在 PR 执行质量与本地数据库检查；`main` 更新且两项检查全部成功后，在 Ubuntu 24.04、Node 24.19.0、pnpm 11.19.0 上构建 HTTP standalone，连同 Linux 原生依赖、public、static 打包。生产服务器不构建，不自动迁移数据库或发布 Worker。上文 2026-09-17 为历史记录。
+
+GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_TURNSTILE_SITE_KEY`、可选 Sentry DSN/采样率；连接变量 `DEPLOY_HOST`、`DEPLOY_PORT`；Secrets 为独立的 `DEPLOY_SSH_KEY` 和已核验指纹的 `DEPLOY_KNOWN_HOSTS`。模型与数据库私密配置继续由 `/etc/zimage/environment` 提供，所有 `.env*` 排除在产物之外。
+
+`zimage-deploy` 仅能上传 incoming，并通过 sudo 调用 root 拥有的 `/usr/local/sbin/zimage-release`（源码 `ops/aliyun/release.py`）；不能修改 helper。helper 校验 SHA-256、拒绝路径穿越/外部链接/凭据文件，将版本放入 `/opt/zimage/releases/<commit SHA>`，原子切换 current 后重启。GitHub 部署串行，发布前核对 main SHA，服务端工作流序号拒绝过期任务。Next 缓存独立放在 `/opt/zimage/cache`。
+
+健康检查包含 `/api/health/ready` 的构建版本、登录页、静态资源与未登录 `/api/account` 的 401，分别检查回环和公网 HTTPS。失败自动切回原版本并再次检查。`/opt/zimage/previous` 记录上次正常版本。单实例发布和回滚均有短暂重启。
+
+手动重发：Actions → ZImage CI and Deploy → Run workflow → 分支 `main`、action=`deploy`。同一 SHA 重发复用已验证的不可变产物。手动回滚：同一入口 action=`rollback`、release=`previous` 或已保留版本目录名。回滚不撤销代码历史或数据库。回滚后恢复最新版可再次运行 deploy。
+
+更新 helper 时必须由管理员安装 root:root 0755 并运行 `python3 -m unittest discover -s ops/aliyun -p 'test_*.py'`；工作流不能自行更新其 sudo 入口。部署及真实回滚的结果见本轮验收记录，不以配置完成代替发布成功。

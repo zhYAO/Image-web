@@ -19,6 +19,9 @@ interface SessionSidebarProps {
   busySessionIds?: ReadonlySet<string>;
   sessions: Session[];
   deleting?: boolean;
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   onCreate: () => void;
   onCollapse?: () => void;
   onDelete: (sessionId: string) => void | Promise<void>;
@@ -32,6 +35,9 @@ export function SessionSidebar({
   commerceDraftIds,
   sessions,
   deleting = false,
+  loading = false,
+  error,
+  onRetry,
   onCreate,
   onCollapse,
   onDelete,
@@ -77,9 +83,11 @@ export function SessionSidebar({
         {categories.map(([value, label]) => <button key={value} type="button" aria-pressed={category === value} className={filters.category} onClick={() => { setCategory(value); setEditingId(undefined); }}>{label}</button>)}
       </div>
       <div className={styles.sectionLabel}>最近会话<span>{visibleSessions.length}</span></div>
-      <div className={styles.sessionList} role="region" aria-label="会话列表" aria-busy={deleting}>
+      <div className={styles.sessionList} role="region" aria-label="会话列表" aria-busy={deleting || loading}>
         {deleting && <div className={styles.sessionDeleting} role="status"><Spin size="small" /><span>正在删除会话…</span></div>}
-        {!visibleSessions.length && <p className={filters.empty}>暂无此类会话</p>}
+        {loading && <p role="status">正在加载会话…</p>}
+        {error && <p role="alert">会话加载失败 <button type="button" onClick={onRetry}>重试会话</button></p>}
+        {!loading && !error && !visibleSessions.length && <p className={filters.empty}>暂无此类会话</p>}
         {visibleSessions.map((session) => (
           <div
             className={`${styles.sessionItem} ${

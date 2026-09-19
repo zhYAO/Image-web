@@ -123,6 +123,11 @@ export function CommerceWizard({
         ? initialTemplateId!
         : defaultTemplate(scene)),
   );
+  const productContext = {
+    name: brief.name, facts: brief.facts, description: brief.description,
+    sellingPoints: brief.sellingPoints, platform: brief.platform, scene,
+    designStyle: COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.guidance,
+  };
   const [instruction, setInstruction] = useState(
     restored?.instruction ?? (prompt || seedPlan?.slots[0]?.instruction || ""),
   );
@@ -453,7 +458,7 @@ export function CommerceWizard({
                       </div>
                     ))}
                   </div>
-                  {!contentOnly && <CreativeTextField field="description" label="商品描述" multiline rows={4} maxLength={4000}
+                  {!contentOnly && <CreativeTextField productContext={productContext} field="description" label="商品描述" multiline rows={4} maxLength={4000}
                     placeholder="例如：米白色女士衬衫，棉质面料，宽松版型，适合日常通勤。可补充已确认的规格和卖点。"
                     value={brief.description ?? [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n')}
                     onChange={description => patch({ description })} />}
@@ -463,7 +468,7 @@ export function CommerceWizard({
                     value={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} onChange={setSelectedChatModel}>
                     <option value="doubao">豆包</option><option value="minimax">MiniMax</option>
                   </CommerceSelect></label>
-                  <CreativeTextField field={contentOnly ? "title" : "name"} label={contentOnly ? "海报标题" : "商品名称"} maxLength={160} value={brief.name} onChange={(name) => patch({ name })} />
+                  <CreativeTextField productContext={productContext} field={contentOnly ? "title" : "name"} label={contentOnly ? "海报标题" : "商品名称"} maxLength={160} value={brief.name} onChange={(name) => patch({ name })} />
                   <div className={styles.twoColumns}>
                     <label>
                       平台
@@ -499,14 +504,14 @@ export function CommerceWizard({
                     </label>
                   </div>
                   {contentOnly ? (
-                    <CreativeTextField field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" />
+                    <CreativeTextField productContext={productContext} field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" />
                   ) : (
                     <>
                       <details className={styles.advancedOptions}>
                     <summary>商品事实（选填）</summary>
-                    <CreativeTextField field="facts" label="商品事实" maxLength={4000} multiline value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="仅填写已确认的外观、材质与规格" />
+                    <CreativeTextField productContext={productContext} field="facts" label="商品事实" maxLength={4000} multiline value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="仅填写已确认的外观、材质与规格" />
                   </details>
-                      <CreativeTextField
+                      <CreativeTextField productContext={productContext}
                         field="sellingPoints" label="商品卖点" maxLength={2000} multiline value={brief.sellingPoints} onChange={(sellingPoints) => patch({ sellingPoints })} context={`${brief.name}\n${brief.facts}`}
                       />
                     </>
@@ -563,7 +568,7 @@ export function CommerceWizard({
                   </label>
                   <details className={styles.advancedOptions}>
                     <summary>高级设置 · 配色、场景与约束</summary>
-                    <CreativeTextField
+                    <CreativeTextField productContext={productContext}
                       field="instruction"
                       label="整套创作要求"
                       multiline

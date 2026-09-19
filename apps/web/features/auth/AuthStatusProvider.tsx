@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { clearCommerceDraft } from '@/features/commerce/commerce-draft-storage';
+import { z } from 'zod';
 
 type AuthStatus = "checking" | "authorized" | "guest" | "error";
 const AuthStatusContext = createContext<{
@@ -28,16 +29,19 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
   const [ownerId, setOwnerId] = useState<string | undefined>(enabled ? undefined : 'local');
   const verifiedOwner = useRef<string | undefined>(undefined);
   const epoch = useRef(0);
-  const inFlight = useRef(false);
+  const inFlight = useRef<AbortController | null>(null);
+  const lastChecked = useRef(0);
   const refresh = useCallback(() => {
-    if (!enabled || inFlight.current) return;
-    inFlight.current = true;
+    if (!enabled || inFlight.current || document.visibilityState === 'hidden') return;
+    const controller = new AbortController();
+    inFlight.current = controller;
     const version = ++epoch.current;
-    void fetch("/api/account", { cache: "no-store" })
+    void fetch("/api/auth/session", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
       .then(async (response) => {
         const account = response.ok ? await response.json().catch(() => ({})) : {};
         if (epoch.current === version) {
-          const nextOwner = typeof account.id === 'string' ? account.id : undefined;
+          const identity = z.uuid().safeParse(account.id);
+          const nextOwner = identity.success ? identity.data : undefined;
           if (verifiedOwner.current && verifiedOwner.current !== nextOwner && (response.ok || response.status === 401)) {
             useWorkspaceStore.getState().reset();
             clearCommerceDraft();
@@ -45,7 +49,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
           verifiedOwner.current = nextOwner;
           setOwnerId(nextOwner);
           setStatus(
-            response.ok
+            response.ok && nextOwner
               ? "authorized"
               : response.status === 401
                 ? "guest"
@@ -57,13 +61,18 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
         if (epoch.current === version) setStatus("error");
       })
       .finally(() => {
-        inFlight.current = false;
+        if (inFlight.current === controller) {
+          inFlight.current = null;
+          lastChecked.current = Date.now();
+        }
       });
   }, [enabled]);
   useEffect(() => {
     refresh();
     const expired = () => {
       epoch.current++;
+      inFlight.current?.abort();
+      inFlight.current = null;
       useWorkspaceStore.getState().reset();
       clearCommerceDraft();
       verifiedOwner.current = undefined;
@@ -72,6 +81,8 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
     };
     const changed = (event: Event) => {
       epoch.current++;
+      inFlight.current?.abort();
+      inFlight.current = null;
       useWorkspaceStore.getState().reset();
       clearCommerceDraft();
       verifiedOwner.current = undefined;
@@ -79,19 +90,19 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
       setStatus(
         (event as CustomEvent<boolean>).detail ? "checking" : "guest",
       );
-      if ((event as CustomEvent<boolean>).detail) { inFlight.current = false; refresh(); }
+      if ((event as CustomEvent<boolean>).detail) refresh();
     };
     const visible = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState === "visible" && Date.now() - lastChecked.current > 1000) refresh();
     };
     window.addEventListener("zimage:auth-required", expired);
     window.addEventListener("zimage:auth-changed", changed);
-    window.addEventListener("focus", refresh);
+    window.addEventListener("focus", visible);
     document.addEventListener("visibilitychange", visible);
     return () => {
       window.removeEventListener("zimage:auth-required", expired);
       window.removeEventListener("zimage:auth-changed", changed);
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", visible);
       document.removeEventListener("visibilitychange", visible);
     };
   }, [refresh]);

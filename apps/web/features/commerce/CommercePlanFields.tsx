@@ -76,7 +76,12 @@ export function CommercePlanFields({
             <legend>
               第 {number} 张 · {slot.role}
             </legend>
-            <CreativeTextField
+            <CreativeTextField productContext={{
+                name: plan.brief.name, facts: plan.brief.facts, description: plan.brief.description,
+                sellingPoints: plan.brief.sellingPoints, platform: plan.brief.platform,
+                scene: plan.scene, imageRole: slot.role,
+                designStyle: COMMERCE_TEMPLATES.find(item => item.id === plan.templateId)?.visual.guidance,
+              }}
               label="图片角色"
               aria-label={`第 ${number} 张角色`}
               field="role"
@@ -85,7 +90,12 @@ export function CommercePlanFields({
               disabled={disabled}
               onChange={(role) => update(slot.id, { role })}
             />
-            <CreativeTextField
+            <CreativeTextField productContext={{
+                name: plan.brief.name, facts: plan.brief.facts, description: plan.brief.description,
+                sellingPoints: plan.brief.sellingPoints, platform: plan.brief.platform,
+                scene: plan.scene, imageRole: slot.role,
+                designStyle: COMMERCE_TEMPLATES.find(item => item.id === plan.templateId)?.visual.guidance,
+              }}
               label="场景、布局与调整要求"
               aria-label={`第 ${number} 张要求`}
               field="instruction"
@@ -98,7 +108,12 @@ export function CommercePlanFields({
             <label>文字方式<CommerceSelect aria-label={`第 ${number} 张文字方式`} disabled={disabled} value={slot.textMode ?? (slot.exactText ? 'exact' : 'none')} onChange={value => update(slot.id, { textMode: value as CommerceSlot['textMode'] })}>
               <option value="auto">从商品描述提炼</option><option value="exact">指定准确文案</option><option value="none">不加文字</option>
             </CommerceSelect></label>
-            <CreativeTextField
+            <CreativeTextField productContext={{
+                name: plan.brief.name, facts: plan.brief.facts, description: plan.brief.description,
+                sellingPoints: plan.brief.sellingPoints, platform: plan.brief.platform,
+                scene: plan.scene, imageRole: slot.role,
+                designStyle: COMMERCE_TEMPLATES.find(item => item.id === plan.templateId)?.visual.guidance,
+              }}
               label="准确文案"
               aria-label={`第 ${number} 张文案`}
               field="exactText"

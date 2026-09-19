@@ -11,6 +11,8 @@ import {
   type TimelineItem,
 } from "@zimage/domain";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -29,7 +31,8 @@ import {
   type CommerceEditRequest,
   type CommerceConfirmationRequest,
 } from "./CommerceTaskCard";
-import { CommerceWizard, type CommerceWizardProps } from "./CommerceWizard";
+import type { CommerceWizardProps } from "./CommerceWizard";
+const CommerceWizard = lazy(() => import("./CommerceWizard").then(module => ({ default: module.CommerceWizard })));
 import { planOf, isExplicitImageRequest } from "./commerce-ui";
 import { useCommerceTasks } from "./use-commerce-tasks";
 import { isLocalCommerceDraft, type CommerceView } from "@/features/workspace/workspace-route";
@@ -606,6 +609,7 @@ export function CommerceWorkspace({
           }
         >
           <AntdImage.PreviewGroup>
+            <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}
               {...draft}
@@ -630,6 +634,7 @@ export function CommerceWorkspace({
                 else if (isLocalCommerceDraft(draft.sessionId)) onExitDraft?.();
               }}
             />
+            </Suspense>
           </AntdImage.PreviewGroup>
         </div>
       ))}

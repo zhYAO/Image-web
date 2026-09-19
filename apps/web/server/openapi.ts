@@ -48,6 +48,12 @@ export function buildOpenApiDocument() {
     },
     openapi: "3.1.0",
     paths: {
+      "/api/auth/session": {
+        get: { operationId: "getVerifiedSession", description: "No-store verified owner ID only; no profile or email.", responses: responses() },
+      },
+      "/api/health/ready": {
+        get: { operationId: "getReleaseHealth", description: "Public liveness and build version only.", responses: responses() },
+      },
       "/api/credits": {
         get: {
           operationId: "getCreditWallet",

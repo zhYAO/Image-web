@@ -35,6 +35,7 @@ interface UnifiedComposerProps {
   capabilities: ProviderCapability[];
   count: number;
   disabled?: boolean;
+  submitDisabled?: boolean;
   draft: string;
   health: ProviderHealth[];
   imageCreationEnabled: boolean;
@@ -65,6 +66,7 @@ export function UnifiedComposer({
   capabilities,
   count,
   disabled = false,
+  submitDisabled = false,
   draft,
   health,
   imageCreationEnabled,
@@ -95,7 +97,7 @@ export function UnifiedComposer({
       && event.keyCode !== 229
     ) {
       event.preventDefault();
-      if (!disabled && !busy && draft.trim()) onSubmit();
+      if (!disabled && !submitDisabled && !busy && draft.trim()) onSubmit();
     }
   };
 
@@ -266,7 +268,7 @@ export function UnifiedComposer({
           <Button
             aria-label={zhCN.composer.submit}
             className={styles.submitButton}
-            disabled={disabled || !draft.trim()}
+            disabled={disabled || submitDisabled || !draft.trim()}
             icon={<ArrowUp size={18} strokeWidth={2.5} />}
             loading={busy}
             onClick={onSubmit}

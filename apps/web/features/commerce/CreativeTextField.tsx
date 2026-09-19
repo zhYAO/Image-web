@@ -17,6 +17,7 @@ export interface CreativeTextFieldProps {
   onChange: (value: string) => void;
   field: CreativeTextFieldName;
   context?: string;
+  productContext?: CreativeTextOptimizeRequest['productContext'];
   chatModel?: 'doubao' | 'minimax';
   maxLength?: number;
   multiline?: boolean;
@@ -40,6 +41,7 @@ function CreativeTextFieldEditor({
   onChange,
   field,
   context,
+  productContext,
   chatModel,
   maxLength = 6000,
   multiline,
@@ -52,7 +54,7 @@ function CreativeTextFieldEditor({
   "aria-label": ariaLabel,
 }: CreativeTextFieldProps) {
   const credits = useCredits();
-  const formatOnly = ["name", "facts", "role"].includes(field);
+  const formatOnly = ["name", "facts"].includes(field);
   const actionLabel = formatOnly ? "AI 整理格式" : "AI 优化当前内容";
   const lastRequest = useRef<
     { key: string; input: CreativeTextOptimizeRequest } | undefined
@@ -108,6 +110,7 @@ function CreativeTextFieldEditor({
         field,
         text: submitted,
         context,
+        productContext,
         chatModel: optimizationModel,
         maxLength,
       });
@@ -118,6 +121,7 @@ function CreativeTextFieldEditor({
             field,
             text: submitted,
             context,
+            productContext,
             chatModel: optimizationModel,
             maxLength,
             requestId: crypto.randomUUID(),
@@ -140,7 +144,7 @@ function CreativeTextFieldEditor({
       if (active.current !== controller || controller.signal.aborted) return;
       const change = creativeTextChange(submitted, result.text);
       if (change === 'unchanged') {
-        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}未产生修改，当前内容已保留。`);
+        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}${formatOnly ? '格式已清晰，无需调整；商品事实已保留。' : '本次未发现合适的改写，原文已保留。可补充商品特点或设计要求后再试。'}`);
         return;
       }
       if (
@@ -153,7 +157,7 @@ function CreativeTextFieldEditor({
         );
       } else {
         apply(result.text);
-        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}${change === 'formatted' ? '仅调整格式。' : '已优化表达。'}`);
+        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}${change === 'formatted' ? '仅调整格式。' : '已润色，请核对商品事实。'}`);
       }
     } catch (error) {
       if(error instanceof Error && "newRequest" in error && error.newRequest)lastRequest.current=undefined;

@@ -49,7 +49,6 @@ import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
 import styles from './workspace.module.css';
 import Link from 'next/link';
-import { WorkspaceLoading } from './WorkspaceLoading';
 
 interface UnifiedWorkspaceProps {
   gateway?: WorkspaceGateway;
@@ -133,6 +132,11 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [initializing, setInitializing] = useState(true);
   const [initializationError, setInitializationError] = useState<string>();
   const [initializationAttempt, setInitializationAttempt] = useState(0);
+  const [quotaError, setQuotaError] = useState<string>();
+  const [modelsError, setModelsError] = useState<string>();
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [quotaAttempt, setQuotaAttempt] = useState(0);
+  const [modelsAttempt, setModelsAttempt] = useState(0);
   const [deletingSessionId, setDeletingSessionId] = useState<string>();
   const deletionLock = useRef(false);
   const sessionsRef = useRef<Session[]>([]);
@@ -166,7 +170,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active ? current : { sessionId, active });
   }, []);
 
+  const sessionListVersion = useRef(0);
   const updateSessions = useCallback((next: Session[]) => {
+    sessionListVersion.current += 1;
     const merged = mergeSessionActivity(next, sessionsRef.current);
     sessionsRef.current = merged;
     setSessions(merged);
@@ -190,7 +196,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   }, []);
 
   const refreshSessions = useCallback(async () => {
+    const version = ++sessionListVersion.current;
     const next = await gateway.listSessions();
+    if (version !== sessionListVersion.current) return sessionsRef.current;
     updateSessions(next);
     return next;
   }, [gateway, updateSessions]);
@@ -219,29 +227,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   useEffect(() => {
     let cancelled = false;
     const initialize = async () => {
-      const [nextSessions, nextQuota, nextCapabilities, nextHealth] = await Promise.all([
-        gateway.listSessions(),
-        gateway.getQuota(),
-        gateway.getProviderCapabilities(),
-        gateway.getProviderHealth(),
-      ]);
-      if (cancelled) return;
+      const version = ++sessionListVersion.current;
+      const nextSessions = await gateway.listSessions();
+      if (cancelled || version !== sessionListVersion.current) return;
       updateSessions(nextSessions);
-      setQuota(nextQuota);
-      setCapabilities(nextCapabilities);
-      setHealth(nextHealth);
-      const availableCapabilities = nextCapabilities.filter(
-        (capability) => nextHealth.find((item) => item.provider === capability.provider)?.status !== 'unavailable',
-      );
-      const initialSelection = normalizeGenerationSelection(
-        availableCapabilities.length > 0 ? availableCapabilities : nextCapabilities,
-        { aspectRatio: '1:1', count: 2, resolution: '2K' },
-      );
-      composerDefaults.current = {
-        aspectRatio: initialSelection.aspectRatio, count: initialSelection.count,
-        resolution: initialSelection.resolution, selectedProvider: initialSelection.provider,
-        selectedModelId: initialSelection.model,
-      };
       const launchUrl = new URL(window.location.href);
       const launchCommerce = resolveCommerceLaunch(launchUrl.search);
       const launchScene = launchCommerce.scene;
@@ -290,11 +279,48 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     };
   }, [gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const version = ++quotaRequestVersion.current;
+    void gateway.getQuota().then(next => {
+      if (!cancelled && version === quotaRequestVersion.current) { setQuota(next); setQuotaError(undefined); }
+    }).catch(error => { if (!cancelled) setQuotaError(sanitizeError(error).message); });
+    return () => { cancelled = true; };
+  }, [gateway, quotaAttempt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([gateway.getProviderCapabilities(), gateway.getProviderHealth()]).then(([nextCapabilities, nextHealth]) => {
+      if (cancelled) return;
+      setCapabilities(nextCapabilities);
+      setHealth(nextHealth);
+      setModelsError(undefined);
+      const available = nextCapabilities.filter(capability => nextHealth.find(item => item.provider === capability.provider)?.status !== 'unavailable');
+      const defaults = normalizeGenerationSelection(available.length ? available : nextCapabilities, { aspectRatio: '1:1', count: 2, resolution: '2K' });
+      composerDefaults.current = { aspectRatio: defaults.aspectRatio, count: defaults.count, resolution: defaults.resolution,
+        selectedProvider: defaults.provider, selectedModelId: defaults.model };
+      // Only fill missing defaults. A late response must not overwrite a restored draft or user choice.
+      const current = useWorkspaceStore.getState();
+      if (!current.selectedProvider || !current.selectedModelId) {
+        const initial = normalizeGenerationSelection(available.length ? available : nextCapabilities, {
+          aspectRatio: current.aspectRatio, count: current.count, resolution: current.resolution,
+        });
+        setSelectedProvider(initial.provider);
+        setSelectedModelId(initial.model);
+        setAspectRatio(initial.aspectRatio);
+        setCount(initial.count);
+        setResolution(initial.resolution);
+      }
+    }).catch(error => { if (!cancelled) setModelsError(sanitizeError(error).message); })
+      .finally(() => { if (!cancelled) setModelsLoading(false); });
+    return () => { cancelled = true; };
+  }, [gateway, modelsAttempt, setSelectedProvider, setSelectedModelId, setAspectRatio, setCount, setResolution]);
+
   const appliedRoute = useRef<string | undefined>(undefined);
   const routeScope = route?.kind === 'session' ? `session:${route.sessionId}` : route?.kind === 'commerce' ? `commerce:${ownerKey}:${route.scene}` : route?.kind;
   useEffect(() => {
     if (route?.kind === 'outside') { appliedRoute.current = undefined; return; }
-    if (initializing || !route || appliedRoute.current === routeScope) return;
+    if (!route || (initializing && route.kind === 'session') || appliedRoute.current === routeScope) return;
     let cancelled = false;
     void Promise.resolve().then(() => {
     if (cancelled) return;
@@ -396,7 +422,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
   const activeRuntime = activeSessionId ? runtimes[activeSessionId] : undefined;
   const activeBusy = Boolean(activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
-  const composerDisabled = initializing || Boolean(activeSessionId && restoringAttachments[activeSessionId])
+  const composerDisabled = (initializing && (!route || route.kind === 'session')) || Boolean(activeSessionId && restoringAttachments[activeSessionId])
     || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
   const busySessionIds = useMemo(() => new Set(Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
     runtime.chatBusy
@@ -868,6 +894,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       onRename={(sessionId, title) => void renameSession(sessionId, title)}
       onSelect={selectSession}
       sessions={sessions}
+      loading={initializing}
+      error={initializationError}
+      onRetry={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }}
     />
   );
   const activeSession = sessions.find((session) => session.id === activeSessionId);
@@ -895,8 +924,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   return (
     <>
-    {(initializing || initializationError) && <WorkspaceLoading error={initializationError} onRetry={() => { setInitializationError(undefined); setFeedback(undefined); setInitializing(true); setInitializationAttempt((value) => value + 1); }} />}
-    <div style={initializing || initializationError ? { display: 'none' } : undefined} aria-hidden={Boolean(initializing || initializationError) || undefined} className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
+    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
       <aside className={styles.sidebar}>
         {sidebarCollapsed ? <Button aria-label="展开会话侧栏" className={styles.expandSidebar} icon={<ChevronRight size={18} />} onClick={() => setSidebarCollapsed(false)} type="text" /> : sidebar}
       </aside>
@@ -915,6 +943,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         </header>
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
+        {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">
+          {quotaError ? <span>额度暂不可用 <button type="button" onClick={() => setQuotaAttempt(value => value + 1)}>重试额度</button></span> : !quota ? <span>正在加载额度…</span> : null}
+          {modelsError ? <span>模型状态暂不可用 <button type="button" onClick={() => { setModelsLoading(true); setModelsAttempt(value => value + 1); }}>重试模型</button></span> : modelsLoading ? <span>正在加载模型配置…</span> : null}
+        </div>}
         {routeError && <div className={styles.statusFeedback} role="alert">{routeError} <Link href="/create">返回创作目录</Link></div>}
         <div className={styles.workspaceBody} hidden={Boolean(routeError)}>
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
@@ -932,7 +964,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               onViewChange={(id, task, view) => { if (onNavigate && !isLocalCommerceDraft(id)) onNavigate(sessionHref(id, task, view)); }}
               ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
               items={activeRuntime?.timeline ?? []} references={references} capabilities={capabilities}
-              timelineLoading={initializing || activeRuntime?.loadStatus === 'loading'}
+              timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'}
               settings={{ provider: selectedProvider ?? 'gemini', model: selectedModelId ?? 'gemini-3-pro-image', aspectRatio, resolution }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference}
               onReferencesAdopt={(next, sessionId) => {
@@ -979,6 +1011,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               capabilities={capabilities}
               count={count}
               disabled={composerDisabled}
+              submitDisabled={(imageCreationEnabled && (!quota || modelsLoading || Boolean(modelsError) || !selectedModel)) || (credits.present && credits.catalog?.enabled !== false && (!credits.catalog || !credits.wallet || Boolean(credits.error)))}
               draft={draft}
               health={health}
               imageCreationEnabled={imageCreationEnabled}

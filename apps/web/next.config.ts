@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   output: 'standalone',
+  env: { ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development' },
+  generateBuildId: async () => process.env.ZIMAGE_BUILD_SHA ?? null,
   outputFileTracingRoot: path.join(__dirname, '../..'),
   experimental:
     process.env.ZIMAGE_BUILD_CPUS === '1'

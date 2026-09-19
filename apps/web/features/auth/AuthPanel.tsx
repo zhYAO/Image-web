@@ -8,6 +8,7 @@ import { authFeedback } from './feedback';
 import { notifyAuthChange } from './AuthStatusProvider';
 import { safeReturnTo } from './return-to';
 import { useAuthCaptcha } from './use-auth-captcha';
+import { prefetchWorkspace } from '@/features/workspace/load-workspace';
 
 type Mode = 'login' | 'register' | 'recovery';
 
@@ -22,6 +23,7 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || captchaPending) return;
+    if (mode === 'login') prefetchWorkspace();
     setMessage(''); setFailed(false); setNextStep(null);
     const data = new FormData(event.currentTarget);
     const endpoint = mode === 'register' ? 'register' : mode === 'recovery' ? 'recovery' : 'login';

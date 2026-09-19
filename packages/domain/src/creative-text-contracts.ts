@@ -32,6 +32,16 @@ export const creativeTextOptimizeRequestSchema = z
     chatModel: z.enum(["doubao", "minimax"]).optional(),
     text: z.string().trim().min(1).max(6000),
     context: z.string().max(2000).optional(),
+    productContext: z.object({
+      name: z.string().max(160).optional(),
+      facts: z.string().max(4000).optional(),
+      description: z.string().max(4000).optional(),
+      sellingPoints: z.string().max(2000).optional(),
+      platform: z.string().max(80).optional(),
+      scene: z.string().max(80).optional(),
+      designStyle: z.string().max(2000).optional(),
+      imageRole: z.string().max(80).optional(),
+    }).strict().optional(),
     maxLength: z.number().int().min(1).max(6000).optional(),
   })
   .strict()

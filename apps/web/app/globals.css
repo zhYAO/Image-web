@@ -43,15 +43,16 @@
   --z-shadow-soft: 0 2px 8px rgba(37, 35, 42, 0.06);
   --z-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --z-glass-nav: rgba(255, 255, 255, 0.88);
+  --z-glass-nav: rgba(255, 255, 255, 0.68);
   --z-glass-control: #fff;
   --z-glass-rim: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0.48),
     rgba(255, 255, 255, 0)
   );
-  --z-glass-shadow: var(--z-glass-highlight), 0 4px 16px rgba(37, 35, 42, 0.06);
-  --z-glass-blur: 20px;
+  --z-glass-shadow: var(--z-glass-highlight), inset 0 -1px 0 rgba(112, 80, 181, 0.06), 0 8px 28px rgba(73, 53, 103, 0.08);
+  --z-glass-blur: 18px;
+  --z-duration-press: 100ms;
   --z-duration-fast: 160ms;
   --z-duration-overlay: 220ms;
   --z-space-4: 4px;
@@ -448,6 +449,19 @@ body
   -webkit-backdrop-filter: blur(var(--z-glass-blur));
   backdrop-filter: blur(var(--z-glass-blur));
 }
+/* Shared tactile feedback; semantic state never waits for an animation. */
+:where(button, a[role="button"], .glass-site-nav a) {
+  touch-action: manipulation;
+}
+:where(button:not(:disabled):not([aria-disabled="true"]), .glass-site-nav a):active {
+  transform: translateY(1px) scale(.985);
+  transition-duration: var(--z-duration-press);
+}
+.ant-select-dropdown, .ant-popover, .ant-modal {
+  --ant-motion-duration-mid: .18s;
+  --ant-motion-duration-slow: .22s;
+}
+
 /* Startup UI stays independent of hydration and provider initialization. */
 .workspace-loading {
   display: flex;

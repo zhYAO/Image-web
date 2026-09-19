@@ -1,15 +1,28 @@
-name: Phase 1 Web CI
+name: ZImage CI and Deploy
 
 on:
   pull_request:
   push:
     branches: [setup2, main]
 
+  workflow_dispatch:
+    inputs:
+      action:
+        description: '发布 main 或回滚到保留版本'
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+      release:
+        description: '回滚版本目录名；默认 previous'
+        default: previous
+        type: string
+
 permissions:
   contents: read
 
 jobs:
   quality:
+    if: github.event.inputs.action != 'rollback'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +37,15 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:coverage
+      - run: pnpm --filter @zimage/web test:acceptance-budget
+      - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
       - run: pnpm exec vitest run supabase/functions/generation-worker/image-providers.test.ts
       - run: pnpm build
         env:
           NEXT_PUBLIC_DATA_MODE: mock
 
   database:
+    if: github.event.inputs.action != 'rollback'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,3 +66,109 @@ jobs:
         with:
           name: database-generated-types
           path: database.generated.ts
+
+  production-build:
+    environment: production
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event.inputs.action != 'rollback'
+    needs: [quality, database]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build production HTTP application
+        run: pnpm --filter @zimage/web exec next build --webpack
+        env:
+          NEXT_PUBLIC_DATA_MODE: http
+          NEXT_PUBLIC_PHASE2_AUTH: 'true'
+          ZIMAGE_DEPLOYMENT_ENV: production
+          ZIMAGE_BUILD_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${{ vars.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE }}
+      - run: node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-${{ github.sha }}
+          path: /tmp/zimage-release.tgz
+          retention-days: 7
+
+  deploy:
+    environment: production
+    needs: [production-build]
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: zimage-production-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-${{ github.sha }}
+          path: /tmp/production
+      - name: Verify this is still main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(gh api "repos/$REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
+      - name: Configure restricted SSH connection
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Upload and activate immutable release
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          RELEASE_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          digest=$(sha256sum /tmp/production/zimage-release.tgz | cut -d ' ' -f1)
+          scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/zimage-release.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.tgz"
+          ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
+      - name: Remove runner key
+        if: always()
+        run: rm -f ~/.ssh/zimage
+
+  rollback:
+    environment: production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: zimage-production-release
+      cancel-in-progress: false
+    steps:
+      - name: Configure restricted SSH connection
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Restore retained release and verify health
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{6,79}$ ]] || exit 1
+          ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release rollback $RELEASE"
+      - name: Remove runner key
+        if: always()
+        run: rm -f ~/.ssh/zimage

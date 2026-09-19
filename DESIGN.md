@@ -1,6 +1,6 @@
 # ZImage 全站设计规范
 
-> 版本：1.1 · 更新日期：2026-09-16 · 状态：浅色紫系界面已实现，本地自动化通过；原生 200% 缩放待验，不代表生产验收。
+> 版本：1.2 · 更新日期：2026-09-19 · 状态：浅色紫系界面已实现，本地自动化通过；原生 200% 缩放待验，不代表生产验收。
 >
 > 适用范围：桌面 Web 全站。面向电商卖家、设计师及图片内容创作者，服务于发现模板、填写资料、预览方案、确认生成和整理交付的连续工作。
 
@@ -136,7 +136,7 @@
 | 浮层 | 白色实底、18px 圆角、轻阴影 | 菜单、选择器弹层、提示浮层 |
 | 模态 | 白色实底、24px 圆角、黑色 40% 遮罩 | 编辑、确认、登录相关对话框 |
 
-玻璃目标变量：`--z-glass-nav: rgba(255,255,255,.88)`、`--z-glass-control: #FFFFFF`、`--z-glass-blur: 20px`、`--z-glass-highlight: inset 0 1px 0 rgba(255,255,255,.85)`。侧栏须显式使用玻璃变量，不能靠把 `--z-panel` 改透明影响所有内容面板。
+玻璃目标变量：`--z-glass-nav: rgba(255,255,255,.68)`、`--z-glass-control: #FFFFFF`、`--z-glass-blur: 18px`、`--z-glass-highlight: inset 0 1px 0 rgba(255,255,255,.85)`。侧栏须显式使用玻璃变量，不能靠把 `--z-panel` 改透明影响所有内容面板。
 
 玻璃允许的常规背景仅为本规范的近白与淡紫环境。若悬浮条覆盖照片、视频式动图或未知深色内容，采用白色 96% 不透明度；对比度仍不达标时改实色白。不增加新视频功能。
 
@@ -294,7 +294,7 @@
 
 ### 9.3 动效与降级
 
-沿用 `--z-duration-fast: 160ms`、`--z-duration-overlay: 220ms`、`--z-ease: cubic-bezier(.22,1,.36,1)`。颜色、边框与轻阴影使用 160ms；已有浮层淡入淡出使用 220ms。禁止持续浮动、呼吸光、卡片弹跳和大幅缩放。
+沿用 `--z-duration-fast: 160ms`、`--z-duration-overlay: 220ms`、`--z-ease: cubic-bezier(.22,1,.36,1)`。按压反馈使用 100ms；颜色、边框与轻阴影使用 160ms；菜单进入使用 180ms，模态浮层使用 220ms。禁止持续浮动、呼吸光、卡片弹跳和大幅缩放。
 
 `prefers-reduced-motion: reduce` 下取消位移、缩放、平滑滚动和骨架扫光，旋转加载改静态图标加文本，仍保留状态变化。`prefers-reduced-transparency: reduce`、已有减少透明度入口或不支持模糊时，玻璃改白色实底，同时关闭标准与 WebKit 滤镜及装饰渐变。
 
@@ -322,7 +322,7 @@
 | `--z-radius-control` | `borderRadius` | 12 |
 | `--z-font-body`、统一字体栈 | `fontSize`, `fontFamily` | 14、同第 3 节 |
 | 常规 / 主要控件尺寸 | `controlHeight`, `controlHeightLG` | 40、44 |
-| `--z-duration-fast` / `--z-duration-overlay` | `motionDurationFast`, `motionDurationMid`, `motionDurationSlow` | `0.16s`, `0.16s`, `0.22s` |
+| `--z-duration-fast` / `--z-duration-overlay` | `motionDurationFast`, `motionDurationMid`, `motionDurationSlow` | `0.10s`, `0.18s`, `0.22s` |
 
 全局 `controlHeight: 40` 对应普通按钮；Input、Select、InputNumber 等表单控件通过组件主题或现有封装明确设为 44，主要按钮显式用 44，不能仅依靠全局高度推导。
 
@@ -393,3 +393,7 @@ LobeHub ThemeProvider 使用已安装版本支持的 `purple` 预设，固定 li
 - [awesome-design-md / Airbnb](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)：参考文档组织、图片卡片、分类与柔和形状；补齐本项目异步、错误、计费及中文规则。
 
 以上为第三方对品牌网站的设计分析，并非品牌官方设计规范。本文是 ZImage 的项目适配设计，紫色体系及工作台规则以用户确认方案和本项目约束为依据。
+
+### 2026-09-19 交互补充
+
+参考 UI UX Pro Max 的材质、对比度、键盘焦点和减少动画原则：顶部导航与左侧会话外壳共享玻璃底色、18px 模糊、125% 饱和度及边缘高光。正文、表单和图片检查维持清晰实底；减少透明度、不支持 backdrop-filter 和强制颜色模式使用实色。初始化采用会话、模型、额度独立状态，不以全屏遮罩阻断导航和资料编辑。AI 反馈准确区分润色、格式整理、原文返回和失败，用户编辑优先于异步结果。

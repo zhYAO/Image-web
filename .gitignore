@@ -20,3 +20,6 @@ test-results
 
 # Isolated Next.js verification builds
 .next-*
+
+# Python deployment checks
+__pycache__/

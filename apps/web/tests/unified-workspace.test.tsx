@@ -61,14 +61,41 @@ describe('UnifiedWorkspace', () => {
     }));
     render(<UnifiedWorkspace gateway={gateway} />);
     expect(screen.queryByRole('button', { name: /光影与静物/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: '创作输入' })).not.toBeInTheDocument();
-    expect(screen.getByRole('main', { name: 'ZImage 正在载入' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toBeVisible();
+    expect(screen.getByRole('region', { name: '会话列表' })).toHaveAttribute('aria-busy', 'true');
     await act(async () => releaseInitialization());
     fireEvent.click(await screen.findByRole('button', { name: /光影与静物/ }));
     expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('生成一张晨光下的陶瓷花瓶图片，柔和阴影，留白构图');
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '创建图片' })).toBeEnabled();
     expect(gateway.lastImageRequest).toBeUndefined();
+  });
+
+  it('keeps navigation and editing available while quota and model status are slow', async () => {
+    const gateway = createTestGateway();
+    vi.spyOn(gateway, 'getQuota').mockImplementation(() => new Promise(() => {}));
+    vi.spyOn(gateway, 'getProviderCapabilities').mockImplementation(() => new Promise(() => {}));
+    render(<UnifiedWorkspace gateway={gateway} />);
+    await screen.findByText('你好，想创作什么？');
+    const input = screen.getByRole('textbox', { name: '创作输入' });
+    fireEvent.change(input, { target: { value: '继续编辑，不等待额度' } });
+    expect(input).toHaveValue('继续编辑，不等待额度');
+    expect(screen.getByRole('button', { name: '新对话' })).toBeVisible();
+    expect(screen.queryByRole('main', { name: 'ZImage 正在载入' })).toBeNull();
+  });
+
+  it('retains a new session when the initial session list arrives late', async () => {
+    const gateway = createTestGateway();
+    const oldSessions = await gateway.listSessions();
+    let finish!: () => void;
+    vi.spyOn(gateway, 'listSessions').mockImplementationOnce(() => new Promise(resolve => {
+      finish = () => resolve(oldSessions);
+    }));
+    render(<UnifiedWorkspace gateway={gateway} />);
+    fireEvent.click(screen.getByRole('button', { name: '新对话' }));
+    await screen.findByRole('button', { name: '重命名 新的创作' });
+    await act(async () => finish());
+    expect(screen.getByRole('button', { name: '重命名 新的创作' })).toBeInTheDocument();
   });
 
   it('uses the create-image tool as the only explicit request router', async () => {

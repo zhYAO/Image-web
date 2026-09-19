@@ -25,9 +25,9 @@ describe('current-field AI editing', () => {
     expect(JSON.parse(options.body)).toMatchObject({ chatModel: 'minimax', field: 'title', text: '旧文案' });
   });
   it.each([
-    ['旧文案', '未产生修改', false],
+    ['旧文案', '原文已保留', false],
     ['旧文案。', '仅调整格式', true],
-    ['重新整理后的文案', '已优化表达', true],
+    ['重新整理后的文案', '已润色', true],
   ] as const)('reports the actual change for %s without extra requests', async (text, status, undo) => {
     vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text, mock: false })));
