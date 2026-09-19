@@ -15,7 +15,7 @@ pnpm install
 pnpm dev
 ```
 
-默认仍使用版本化 localStorage mock（`zimage:mock:v1`），便于无密钥开发。将 `NEXT_PUBLIC_DATA_MODE` 设置为 `http` 后，Web 会切换到 Supabase 匿名身份、真实 SSE、持久队列和 private Storage；所需变量见 `apps/web/.env.example`，本地统一写入 `apps/web/.env.local`，不再维护 `.env`。生产服务端凭据独立保存在服务器环境文件；构建与发布不复制本地环境文件。
+默认仍使用版本化 localStorage mock（`zimage:mock:v1`），便于无密钥开发。将 `NEXT_PUBLIC_DATA_MODE` 设置为 `http` 后，Web 会切换到 Supabase 身份校验、真实 SSE、持久队列和 private Storage；所需变量见 `apps/web/.env.example`，本地统一写入 `apps/web/.env.local`，不再维护 `.env`。生产服务端凭据独立保存在服务器环境文件；构建与发布不复制本地环境文件。
 
 数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Sentry、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
 

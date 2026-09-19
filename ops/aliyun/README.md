@@ -55,3 +55,18 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 ### CI 构建内存
 
 正式 HTTP Webpack 构建设置 `NODE_OPTIONS=--max-old-space-size=4096`。首次 Linux runner 运行已证明默认约 2GB V8 堆不足；此设置仅作用于构建 job，不改变生产服务运行内存或在服务器执行构建。
+
+### 首次自动发布与回滚实绩
+
+2026-09-19 的 main `0273dcf4264dfeb00b903bc8195e48b31aa7a235` [自动发布成功](https://github.com/zhYAO/Image-web/actions/runs/35439530082)，完整流水线24分31秒（门禁和构建后才发布）。[回滚到旧版](https://github.com/zhYAO/Image-web/actions/runs/35440930056)及[恢复新版](https://github.com/zhYAO/Image-web/actions/runs/35441010990)均已真实执行，当前为新 SHA，previous 为 `83cb890-20260917`。
+
+已核验公网 ready 版本、登录 200、匿名 session/account 401 和 Linux 原生图片优化 200。公网 HTTPS 可用；当前阿里云账号未显示已完成备案订单，不能据此确认接入完成。既有 Turnstile 测试配置和手动证书续期仍需后续处理。
+
+CLI 手动入口（需仓库 Actions 权限）：
+
+```sh
+gh workflow run ci.yml --ref main -f action=deploy
+gh workflow run ci.yml --ref main -f action=rollback -f release=previous
+# 指定恢复已保留的版本：
+gh workflow run ci.yml --ref main -f action=rollback -f release=0273dcf4264dfeb00b903bc8195e48b31aa7a235
+```
