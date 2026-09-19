@@ -23,7 +23,8 @@ describe("commerce entry and session deletion", () => {
     await screen.findByText("暂时无法打开创作空间");
     expect(screen.queryByRole("textbox", { name: "创作输入" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "重新打开" }));
-    expect(await screen.findByRole("region", { name: "商品套图向导" })).toBeVisible();
+    // The editor is now a separate chunk; wait for that user-visible region after retry.
+    expect(await screen.findByRole("region", { name: "商品套图向导" }, { timeout: 10000 })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "创作输入" })).toBeNull();
   });
   it("never exposes the chat composer while an explicit commerce entry initializes", async () => {

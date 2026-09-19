@@ -28,3 +28,12 @@
 - Final: fixed 发布多级符号链接越界 — `test_rejects_chained_symlinks_that_escape_after_resolution` RED→GREEN；禁用产物保留标记文件，独占创建标记，解包后核验全部链接实际解析路径；helper 6/6 通过。
 - Final: fixed 初始会话列表覆盖新会话 — `retains a new session when the initial session list arrives late` RED→GREEN；请求/本地更新版本一致才应用列表。
 - GitHub 环境仅允许 main，部署密钥与主机指纹已配置；服务端 helper root 拥有，部署账号 sudo 仅允许 helper。服务端模型及数据库凭据留在 `/etc/zimage/environment`。
+
+### 真实文字模型与桌面交互
+- HTTP 本地真实账号，初始积分 7.31；基线豆包 1 次 0.05、新短句豆包 1 次 0.05、参数豆包 2 次各 0.05、确认 MiniMax 1 次 0.10，最终 7.01，累计 0.30 积分。记录的是本应用实际账单；供应商人民币成本未从控制台获取。没有图片调用。
+- 确认日志：豆包 description 8338ms；MiniMax description 2073ms，均为 rewritten、hasProductContext=true。MiniMax 输出：“云杉 A7 随行杯，容量 500ml，整杯仅重 220g，轻盈便携，适合日常通勤随身使用。”参数和原品牌型号保持；不是 mock。
+- 桌面 Edge 连续三次打开/关闭模型菜单，然后 Escape：dialog 数量 0，焦点恢复“聊天模型 豆包”。商品资料编辑、页面导航和撤销实测通过。
+- 浏览器控制接口的缩放快捷键没有改变 CSS 视口宽度（仍为 1846）；不据此声称完成原生 200% 验收。减少动画/透明度与强制颜色已提供 CSS 分支，当前工具未完成系统偏好切换的视觉验收。
+- CI 数据库首轮 547 项中已执行断言均通过，但三个文件提前中断：两个清理测试用 SQL 模拟 Storage API 删除，被新版 Storage 防直接删除触发器拦截；另一个旧 RLS 测试未建立已验证 live session。仅修复事务回滚的测试夹具（Storage 删除开关与正式身份），不修改生产权限或迁移。上游依据：https://github.com/supabase/storage/pull/817。
+- 全量 UI 检查另发现 legacy `/?scene=` 初始化和失败路径短暂露出聊天输入；已恢复电商专属区域加载/重试，导航继续可用。首次冷加载编辑器的测试等待改为明确等待区域加载完成。
+- 标准 `pnpm build` 的 Turbopack 子进程在当前本机执行环境遇到绑定端口 EPERM，提升权限重跑仍相同；改用发布相同的 Webpack 构建复验，不把该失败算作标准构建成功。

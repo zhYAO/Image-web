@@ -1,4 +1,7 @@
 begin;
+-- Transactional metadata fixtures simulate Storage API deletion; no physical objects exist.
+-- https://github.com/supabase/storage/pull/817
+set local storage.allow_delete_query = 'true';
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 create function pg_temp.rid(label text) returns uuid language sql immutable as $$select md5('reference-history:'||label)::uuid$$;

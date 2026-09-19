@@ -64,10 +64,13 @@ select results_eq(
   'generated bucket is private'
 );
 
-insert into auth.users (id)
+-- RLS now also requires a verified live account; keep the original owner-isolation assertions.
+insert into auth.users (id, email, email_confirmed_at, is_anonymous)
 values
-  ('00000000-0000-0000-0000-0000000000a1'),
-  ('00000000-0000-0000-0000-0000000000b2');
+  ('00000000-0000-0000-0000-0000000000a1', 'foundation-a@example.com', now(), false),
+  ('00000000-0000-0000-0000-0000000000b2', 'foundation-b@example.com', now(), false);
+insert into auth.sessions (id, user_id) values
+  ('20000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a1');
 
 insert into public.sessions (id, user_id, title)
 values
@@ -77,6 +80,7 @@ values
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated","session_id":"20000000-0000-0000-0000-0000000000a1"}', true);
 
 select results_eq(
   $$select count(*)::bigint from public.sessions$$,

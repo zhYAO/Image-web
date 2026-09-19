@@ -662,6 +662,9 @@ body
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  :where(button, .glass-site-nav a):active {
+    transform: none !important;
+  }
   *,
   *::before,
   *::after {

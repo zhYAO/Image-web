@@ -1,4 +1,7 @@
 begin;
+-- Transactional metadata fixtures simulate Storage API deletion; no physical objects exist.
+-- https://github.com/supabase/storage/pull/817
+set local storage.allow_delete_query = 'true';
 set local timezone='UTC';
 create extension if not exists pgtap with schema extensions;
 select no_plan();

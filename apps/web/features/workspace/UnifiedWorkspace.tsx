@@ -131,6 +131,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [initializing, setInitializing] = useState(true);
   const [initializationError, setInitializationError] = useState<string>();
+  const [legacyCommerceEntry] = useState(() => !route && typeof window !== 'undefined' && Boolean(resolveCommerceLaunch(window.location.search).scene));
+  const legacyCommercePending = legacyCommerceEntry && (initializing || Boolean(initializationError));
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [quotaError, setQuotaError] = useState<string>();
   const [modelsError, setModelsError] = useState<string>();
@@ -952,7 +954,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
         <PreviewGroup preview={{ motionName: '' }}>
           <div aria-label="对话时间线" className={`${styles.timelineScroll} ${commerceActive ? styles.commerceScroll : ""}`} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
-            <CommerceWorkspace
+            {legacyCommercePending ? <div className={styles.statusFeedback} role={initializationError ? 'alert' : 'status'}>
+              {initializationError ? <><strong>暂时无法打开创作空间</strong><p>{initializationError}</p><button type="button" onClick={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }}>重新打开</button></> : '正在打开电商工作台…'}
+            </div> : <CommerceWorkspace
               ensureSession={ensureCommerceSession}
               onSavedSession={commerceSaved}
               onExitDraft={() => onNavigate?.('/create')}
@@ -1000,9 +1004,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                   />
                 );
               }}
-            />
+            />}
           </div>
-          {!commerceActive && !(commerceLaunch?.sessionId === activeSessionId && commerceMode?.sessionId !== activeSessionId) && <div className={styles.composerDock}>
+          {!legacyCommercePending && !commerceActive && !(commerceLaunch?.sessionId === activeSessionId && commerceMode?.sessionId !== activeSessionId) && <div className={styles.composerDock}>
             {showScrollToBottom && <Button aria-label="回到底部" className={styles.scrollToBottom} icon={<ArrowDown size={17} />} onClick={() => scrollToBottom('smooth')} shape="circle" />}
             <UnifiedComposer
               activePopover={activePopover}
