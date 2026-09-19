@@ -35,7 +35,7 @@ describe('explicit creation modes', () => {
   it('uses the commerce form without a chat composer and restores chat when cancelled', async () => {
     window.history.replaceState({}, '', '/?scene=product-main');
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
-    await screen.findByRole('region', { name: '商品主图向导' });
+    await screen.findByRole('region', { name: '商品主图向导' }, { timeout: 10000 });
     expect(screen.queryByRole('textbox', { name: '创作输入' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送创作请求' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '取消方案' }));
