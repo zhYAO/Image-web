@@ -1,8 +1,12 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 afterEach(() => cleanup());
+
+// Real Ant Design + deferred editor chunks can exceed RTL's 1s default under
+// coverage. This is a readiness deadline, not the separately measured load SLA.
+configure({ asyncUtilTimeout: 10000 });
 
 // Node 26 exposes an unavailable experimental localStorage as `undefined` when
 // no --localstorage-file is supplied. Vitest then keeps that Node global instead

@@ -17,7 +17,7 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     // The real Ant Design/Markdown integration suites also run on developer laptops.
     // Bound concurrent DOM workloads instead of competing for every CPU core.
-    maxWorkers: 1,
+    maxWorkers: process.env.CI ? 2 : 1,
     testTimeout: 60000,
     hookTimeout: 30000,
     reporters: ['verbose'],
