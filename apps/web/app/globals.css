@@ -1,0 +1,727 @@
+:root {
+  --z-bg: #f7f6fa;
+  --z-bg-gradient:
+    radial-gradient(
+      ellipse at 85% 0%,
+      rgba(197, 177, 230, 0.18),
+      transparent 48%
+    ),
+    linear-gradient(#f7f6fa, #f7f6fa);
+  --z-panel: #fff;
+  --z-panel-strong: #fff;
+  --z-text: #25232a;
+  --z-muted: #6f687a;
+  --z-placeholder: #6f687a;
+  --z-focus: #7050b5;
+  --z-control-bg: #fff;
+  --z-disabled: #817a8a;
+  --z-disabled-bg: #efedf3;
+  --z-success: #237449;
+  --z-success-soft: #eaf5ee;
+  --z-warning: #995400;
+  --z-warning-soft: #fff3df;
+  --z-error: #b42318;
+  --z-error-soft: #fdeeeb;
+  --z-border: #e6e1ec;
+  --z-border-subtle: #eeeaf3;
+  --z-border-control: #8b819b;
+  --z-primary: #7050b5;
+  --z-primary-hover: #6243a3;
+  --z-primary-active: #53368e;
+  --z-primary-soft: #f0eaf8;
+  --z-on-primary: #fff;
+  --z-accent: var(--z-primary);
+  --z-image-bg: #f5f5f5;
+  --z-scrim: rgba(0, 0, 0, 0.4);
+  --z-radius-control: 12px;
+  --z-radius-content: 18px;
+  --z-radius-shell: 24px;
+  --z-radius-sm: var(--z-radius-control);
+  --z-radius-md: var(--z-radius-content);
+  --z-radius-lg: var(--z-radius-shell);
+  --z-shadow: 0 8px 24px rgba(37, 35, 42, 0.1);
+  --z-shadow-soft: 0 2px 8px rgba(37, 35, 42, 0.06);
+  --z-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --z-glass-nav: rgba(255, 255, 255, 0.68);
+  --z-glass-control: #fff;
+  --z-glass-rim: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.48),
+    rgba(255, 255, 255, 0)
+  );
+  --z-glass-shadow: var(--z-glass-highlight), inset 0 -1px 0 rgba(112, 80, 181, 0.06), 0 8px 28px rgba(73, 53, 103, 0.08);
+  --z-glass-blur: 18px;
+  --z-duration-press: 100ms;
+  --z-duration-fast: 160ms;
+  --z-duration-overlay: 220ms;
+  --z-space-4: 4px;
+  --z-space-8: 8px;
+  --z-space-12: 12px;
+  --z-space-16: 16px;
+  --z-space-24: 24px;
+  --z-space-32: 32px;
+  --z-space-48: 48px;
+  --z-space-64: 64px;
+  --z-font-page-title: 28px;
+  --z-font-section-title: 20px;
+  --z-font-card-title: 16px;
+  --z-font-body: 14px;
+  --z-font-description: 12px;
+  --z-layer-sidebar: 8;
+  --z-layer-dock: 10;
+  --z-layer-affordance: 12;
+  --z-layer-popover: 30;
+  --z-layer-feedback: 40;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--z-bg-gradient);
+  color: var(--z-text);
+}
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  caret-color: transparent;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable="plaintext-only"] {
+  caret-color: auto;
+}
+a {
+  color: var(--z-primary);
+}
+a:hover {
+  color: var(--z-primary-hover);
+}
+input:not(:disabled)::placeholder,
+textarea:not(:disabled)::placeholder {
+  color: var(--z-placeholder);
+  opacity: 1;
+}
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: var(--z-disabled);
+  opacity: 1;
+}
+body :is(input, textarea, select):is(:user-invalid, [aria-invalid="true"]) {
+  border-color: var(--z-error) !important;
+}
+/* Only the outer shell of composite controls draws the keyboard ring. */
+body
+  :is(
+    button,
+    a,
+    input,
+    textarea,
+    select,
+    summary,
+    [role="button"]
+  ):focus-visible:not(:disabled):not([aria-disabled="true"]),
+body
+  :is(
+    .ant-select,
+    .ant-input-affix-wrapper,
+    .ant-input-number,
+    .ant-checkbox,
+    .ant-radio
+  ):not(.ant-select-disabled):not(.ant-input-affix-wrapper-disabled):not(
+    .ant-input-number-disabled
+  ):not(.ant-checkbox-disabled):not(.ant-radio-disabled):has(
+    input:focus-visible:not(:disabled)
+  ) {
+  outline: 3px solid var(--z-focus);
+  outline-offset: 3px;
+}
+body
+  :is(
+    .ant-select,
+    .ant-input-affix-wrapper,
+    .ant-input-number,
+    .ant-checkbox,
+    .ant-radio
+  )
+  input:focus-visible:not(:disabled) {
+  outline: none;
+}
+body
+  :is(button, a, input, textarea, select, [role="button"]):is(
+    :disabled,
+    [aria-disabled="true"]
+  ):focus-visible {
+  outline: none;
+}
+.glass-page {
+  min-height: 100dvh;
+  overflow: auto;
+  padding: 24px 32px 64px;
+  background: var(--z-bg-gradient);
+}
+.glass-card {
+  border: 1px solid var(--z-border);
+  border-radius: var(--z-radius-shell);
+  background: var(--z-panel);
+}
+.glass-form {
+  width: min(100%, 440px);
+  margin: 0 auto;
+  padding: 32px;
+}
+.glass-form h1,
+.glass-prose h1 {
+  margin: 8px 0 12px;
+  font-size: var(--z-font-page-title);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.glass-form h2,
+.glass-prose h2 {
+  font-size: var(--z-font-section-title);
+  line-height: 1.4;
+  font-weight: 600;
+  margin: 24px 0 12px;
+}
+.glass-kicker {
+  color: var(--z-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+.glass-muted {
+  color: var(--z-muted);
+  line-height: 1.6;
+}
+.glass-form form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+.glass-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--z-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.glass-form :is(input, textarea) {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--z-border-control);
+  border-radius: var(--z-radius-control);
+  padding: 10px 12px;
+  background: var(--z-control-bg);
+  color: var(--z-text);
+}
+.glass-form input:not([type="checkbox"]) {
+  height: 44px;
+}
+.glass-form :is(input, textarea):hover:not(:disabled),
+.glass-form :is(input, textarea):focus:not(:disabled) {
+  border-color: var(--z-focus);
+  box-shadow: none;
+}
+.glass-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  accent-color: var(--z-primary);
+}
+.glass-form label:has(input[type="checkbox"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-weight: 400;
+}
+.glass-form button,
+.glass-primary {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: var(--z-radius-control);
+  padding: 8px 16px;
+  background: var(--z-primary);
+  color: var(--z-on-primary);
+  cursor: pointer;
+  font-weight: 500;
+  box-shadow: none;
+  transition:
+    background var(--z-duration-fast) ease,
+    border-color var(--z-duration-fast) ease;
+}
+.glass-form button:hover:not(:disabled):not([aria-disabled="true"]),
+.glass-primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--z-primary-hover);
+}
+.glass-form button:active:not(:disabled):not([aria-disabled="true"]),
+.glass-primary:active:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--z-primary-active);
+}
+.glass-form form + form {
+  padding-top: 24px;
+  border-top: 1px solid var(--z-border);
+}
+.glass-form > button {
+  margin-top: 24px;
+  width: 100%;
+}
+.glass-form form + a {
+  display: inline-block;
+  margin-top: 24px;
+}
+.glass-form nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 24px;
+}
+.glass-form nav button {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--z-muted);
+}
+.glass-form
+  nav
+  button:is(:hover, :active, [aria-pressed="true"]):not(:disabled) {
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+}
+.glass-form :is(button, input, textarea, select):disabled,
+.glass-primary:is(:disabled, [aria-disabled="true"]) {
+  background: var(--z-disabled-bg);
+  color: var(--z-disabled);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 1;
+}
+.glass-form .glass-danger:not(:disabled) {
+  background: var(--z-error-soft);
+  color: var(--z-error);
+  border-color: var(--z-error);
+}
+.glass-form .glass-danger:is(:hover, :active):not(:disabled) {
+  background: var(--z-error);
+  color: white;
+}
+.glass-status,
+.glass-error {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: var(--z-primary);
+  background: var(--z-primary-soft);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.glass-error {
+  color: var(--z-error);
+  background: var(--z-error-soft);
+}
+.glass-prose {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  padding: 32px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.glass-prose h1 {
+  margin-top: 0;
+}
+.glass-prose p {
+  color: var(--z-text);
+  margin-block: 16px;
+}
+.glass-prose h2 {
+  margin-top: 32px;
+}
+.glass-site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1640px;
+  min-height: 56px;
+  margin: 0 auto 32px;
+  padding: 8px 16px;
+  border: 1px solid var(--z-border);
+  border-radius: var(--z-radius-shell);
+  background: var(--z-glass-rim), var(--z-glass-nav);
+  box-shadow: var(--z-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--z-glass-blur));
+  backdrop-filter: blur(var(--z-glass-blur));
+}
+.glass-site-nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--z-text);
+  text-decoration: none;
+  font-size: 14px;
+}
+.glass-site-nav a:hover {
+  background: var(--z-primary-soft);
+}
+.glass-site-nav .glass-brand {
+  font-size: 20px;
+  font-weight: 600;
+  padding-left: 0;
+}
+.glass-brand svg {
+  color: var(--z-primary);
+}
+.glass-brand span {
+  border-left: 1px solid var(--z-border);
+  padding-left: 12px;
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--z-muted);
+}
+.auth-layout {
+  max-width: 440px;
+  margin: 32px auto 0;
+}
+.account-panel {
+  width: min(100%, 1040px);
+}
+.account-panel > form {
+  max-width: 560px;
+}
+.account-panel > button {
+  width: auto;
+}
+.workspaceDrawer .ant-drawer-content {
+  background: var(--z-panel);
+}
+.workspaceDrawer .ant-drawer-header {
+  border-color: var(--z-border);
+}
+.ant-btn-primary {
+  min-height: 44px;
+}
+.ant-tooltip .ant-tooltip-inner {
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.ant-select-dropdown,
+.ant-popover .ant-popover-container,
+.ant-popover .ant-popover-inner,
+.ant-modal .ant-modal-container {
+  background: var(--z-panel);
+  border: 1px solid var(--z-border);
+  box-shadow: var(--z-shadow);
+  border-radius: 18px;
+}
+.ant-modal .ant-modal-container {
+  border-radius: 24px;
+  padding: 24px;
+}
+.ant-image-preview .ant-image-preview-operations {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--z-text);
+  border: 1px solid var(--z-border-control);
+  border-radius: 12px;
+  box-shadow: var(--z-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--z-glass-blur));
+  backdrop-filter: blur(var(--z-glass-blur));
+}
+/* Shared tactile feedback; semantic state never waits for an animation. */
+:where(button, a[role="button"], .glass-site-nav a) {
+  touch-action: manipulation;
+}
+:where(button:not(:disabled):not([aria-disabled="true"]), .glass-site-nav a):active {
+  transform: translateY(1px) scale(.985);
+  transition-duration: var(--z-duration-press);
+}
+.ant-select-dropdown, .ant-popover, .ant-modal {
+  --ant-motion-duration-mid: .18s;
+  --ant-motion-duration-slow: .22s;
+}
+
+/* Startup UI stays independent of hydration and provider initialization. */
+.workspace-loading {
+  display: flex;
+  height: 100dvh;
+  padding: 16px;
+  gap: 16px;
+  background: var(--z-bg);
+  color: var(--z-text);
+}
+.workspace-loading > aside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 240px;
+  padding: 24px;
+  border-radius: 24px;
+  background: var(--z-panel);
+}
+.workspace-loading > aside span {
+  color: var(--z-muted);
+  font-size: 12px;
+}
+.workspace-loading > section {
+  flex: 1;
+}
+.workspace-loading header {
+  padding: 16px;
+  border-bottom: 1px solid var(--z-border);
+}
+.workspace-loading [role="status"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 65%;
+  color: var(--z-muted);
+}
+.workspace-loading [role="alert"] {
+  max-width: 540px;
+  margin: 18vh auto 0;
+  padding: 24px;
+  border: 1px solid var(--z-border);
+  border-radius: 18px;
+  background: var(--z-panel);
+}
+.workspace-loading [role="alert"] button {
+  min-height: 44px;
+  margin: 12px 16px 0 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: var(--z-primary);
+  cursor: pointer;
+}
+.loading-orbit {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--z-primary-soft);
+  border-top-color: var(--z-primary);
+  border-radius: 50%;
+  animation: loading-orbit 1s linear infinite;
+}
+@keyframes loading-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.credit-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid var(--z-border-control);
+  background: var(--z-panel);
+  color: var(--z-text);
+  border-radius: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.credit-balance:hover {
+  background: var(--z-primary-soft);
+  border-color: var(--z-primary);
+}
+.credit-fee {
+  display: block;
+  font-size: 12px;
+  color: var(--z-muted);
+  line-height: 1.6;
+  margin-top: 4px;
+}
+.credit-fee button {
+  min-height: 40px;
+  padding: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--z-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.credit-account {
+  border-block: 1px solid var(--z-border);
+  padding-block: 24px;
+  margin-block: 24px;
+  overflow-x: auto;
+}
+.credit-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.credit-overview span {
+  font-size: 12px;
+  color: var(--z-muted);
+}
+.credit-overview strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--z-text);
+  font-variant-numeric: tabular-nums;
+}
+.credit-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.credit-table th,
+.credit-table td {
+  text-align: left;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--z-border);
+}
+.credit-table small {
+  display: block;
+  color: var(--z-muted);
+  font-size: 12px;
+}
+.credit-table :is(th, td):last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .workspaceDrawer .ant-drawer-content-wrapper {
+    width: 100% !important;
+  }
+  .workspace-loading > aside {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .glass-page {
+    padding: 16px 16px 32px;
+  }
+  .glass-brand span {
+    display: none;
+  }
+  .glass-site-nav {
+    padding-inline: 8px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .glass-site-nav a {
+    padding-inline: 8px;
+  }
+  .glass-form,
+  .glass-prose {
+    padding: 24px;
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :root {
+    --z-glass-nav: #fff;
+    --z-glass-rim: none;
+    --z-glass-blur: 0px;
+    --z-glass-highlight: 0 0 transparent;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --z-bg-gradient: linear-gradient(#f7f6fa, #f7f6fa);
+    --z-glass-nav: #fff;
+    --z-glass-rim: none;
+    --z-glass-blur: 0px;
+    --z-glass-highlight: 0 0 transparent;
+  }
+  .glass-site-nav,
+  .ant-image-preview .ant-image-preview-operations {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(button, .glass-site-nav a):active {
+    transform: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .loading-orbit,
+  .ant-spin-dot,
+  .anticon-loading {
+    animation: none !important;
+  }
+}
+@media (forced-colors: active) {
+  :root {
+    --z-bg: Canvas;
+    --z-bg-gradient: none;
+    --z-panel: Canvas;
+    --z-panel-strong: Canvas;
+    --z-control-bg: Canvas;
+    --z-glass-nav: Canvas;
+    --z-glass-blur: 0px;
+    --z-glass-control: Canvas;
+    --z-glass-rim: none;
+    --z-primary: LinkText;
+    --z-primary-hover: LinkText;
+    --z-primary-active: LinkText;
+    --z-primary-soft: Canvas;
+    --z-text: CanvasText;
+    --z-muted: CanvasText;
+    --z-placeholder: CanvasText;
+    --z-focus: Highlight;
+    --z-border: CanvasText;
+    --z-border-subtle: CanvasText;
+    --z-border-control: ButtonText;
+    --z-disabled: GrayText;
+    --z-disabled-bg: Canvas;
+    --z-image-bg: Canvas;
+    --z-shadow: none;
+    --z-shadow-soft: none;
+    --z-glass-shadow: none;
+  }
+  .glass-site-nav,
+  .ant-image-preview .ant-image-preview-operations {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    border: 1px solid ButtonText;
+  }
+  [aria-selected="true"],
+  [aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

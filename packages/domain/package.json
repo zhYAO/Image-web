@@ -1,0 +1,23 @@
+{
+  "name": "@zimage/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "3.2.6",
+    "typescript": "6.0.3",
+    "vitest": "3.2.6"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

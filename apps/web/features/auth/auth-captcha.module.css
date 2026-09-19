@@ -1,0 +1,52 @@
+.challenge {
+  padding: 12px;
+  border: 1px solid var(--z-border);
+  border-radius: 16px;
+  background: var(--z-panel-strong);
+  min-width: 0;
+}
+
+.widget {
+  width: 100%;
+  min-height: 65px;
+}
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+.status {
+  margin: 0;
+  color: var(--z-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.challenge[data-status="success"] .status {
+  color: var(--z-success);
+}
+.challenge:is(
+    [data-status="failed"],
+    [data-status="expired"],
+    [data-status="script-failed"]
+  )
+  .status {
+  color: var(--z-error);
+}
+
+/* Override the shared form's primary-button rules only for CAPTCHA recovery. */
+.challenge .feedback button.retry:not(:disabled):not([aria-disabled="true"]) {
+  padding: 4px 8px;
+  border: 1px solid var(--z-border);
+  color: var(--z-primary);
+  background: var(--z-control-bg);
+  box-shadow: none;
+  font-size: 12px;
+  min-height: 40px;
+  border-radius: 12px;
+  border-color: var(--z-border-control);
+}
+.challenge button.retry:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--z-primary-soft);
+}

@@ -1,0 +1,66 @@
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px 2px 2px;
+}
+.category {
+  border: 1px solid var(--z-border);
+  color: var(--z-muted);
+  font: inherit;
+  cursor: pointer;
+  min-height: 40px;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 8px;
+  transition: background var(--z-duration-fast) ease, transform var(--z-duration-press) var(--z-ease), box-shadow var(--z-duration-fast) ease;
+  background: rgba(255, 255, 255, .52);
+}
+.category:hover {
+  background: var(--z-panel-strong);
+}
+.category[aria-pressed="true"] {
+  font-weight: 600;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+  border-color: var(--z-primary);
+  box-shadow: none;
+}
+.category:focus-visible {
+  outline: 3px solid var(--z-focus);
+  outline-offset: 2px;
+}
+.empty {
+  padding: 12px 8px;
+  color: var(--z-muted);
+  font-size: 12px;
+}
+
+.sessionContent {
+  flex: 1;
+  min-width: 0;
+}
+.activityIcon {
+  flex-shrink: 0;
+  color: var(--z-muted);
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.badge {
+  border: 1px solid var(--z-border);
+  background: var(--z-panel);
+  color: var(--z-muted);
+  line-height: 1.4;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+@media (forced-colors: active), (prefers-reduced-transparency: reduce) {
+  .category { background: var(--z-panel); }
+}

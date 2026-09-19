@@ -1,0 +1,121 @@
+begin;
+
+create extension if not exists pgtap with schema extensions;
+
+select plan(44);
+
+select has_table('public', 'sessions', 'sessions exists');
+select has_table('public', 'timeline_items', 'timeline_items exists');
+select has_table('public', 'generation_batches', 'generation_batches exists');
+select has_table('public', 'generations', 'generations exists');
+select has_table('public', 'reference_uploads', 'reference_uploads exists');
+select has_table('private', 'quota_ledger', 'quota_ledger exists');
+select has_table('private', 'provider_health_windows', 'provider_health_windows exists');
+select has_table('private', 'cleanup_jobs', 'cleanup_jobs exists');
+select has_table('private', 'image_safety_audits', 'image_safety_audits exists');
+
+select ok((select relrowsecurity from pg_class where oid = 'public.sessions'::regclass), 'sessions has RLS');
+select ok((select relrowsecurity from pg_class where oid = 'public.timeline_items'::regclass), 'timeline_items has RLS');
+select ok((select relrowsecurity from pg_class where oid = 'public.generation_batches'::regclass), 'generation_batches has RLS');
+select ok((select relrowsecurity from pg_class where oid = 'public.generations'::regclass), 'generations has RLS');
+select ok((select relrowsecurity from pg_class where oid = 'public.reference_uploads'::regclass), 'reference_uploads has RLS');
+
+select ok(not has_table_privilege('anon', 'public.sessions', 'select'), 'anon cannot select sessions');
+select ok(not has_table_privilege('anon', 'public.timeline_items', 'select'), 'anon cannot select timeline items');
+select ok(not has_table_privilege('anon', 'public.generation_batches', 'select'), 'anon cannot select batches');
+select ok(not has_table_privilege('anon', 'public.generations', 'select'), 'anon cannot select generations');
+select ok(not has_table_privilege('anon', 'public.reference_uploads', 'select'), 'anon cannot select references');
+
+select ok(has_table_privilege('authenticated', 'public.sessions', 'select'), 'authenticated can select sessions');
+select ok(not has_table_privilege('authenticated', 'public.sessions', 'insert'), 'authenticated cannot bypass session quotas');
+select ok(not has_column_privilege('authenticated', 'public.sessions', 'title', 'update'), 'authenticated cannot bypass write quotas');
+select ok(not has_table_privilege('authenticated', 'public.sessions', 'delete'), 'authenticated cannot directly delete sessions');
+select ok(has_table_privilege('authenticated', 'public.timeline_items', 'select'), 'authenticated can select timeline items');
+select ok(not has_table_privilege('authenticated', 'public.timeline_items', 'insert'), 'authenticated cannot bypass the chat service');
+select ok(has_table_privilege('authenticated', 'public.generation_batches', 'select'), 'authenticated can select batches');
+select ok(not has_table_privilege('authenticated', 'public.generation_batches', 'insert'), 'authenticated cannot bypass generation submission');
+select ok(has_table_privilege('authenticated', 'public.generations', 'select'), 'authenticated can select generations');
+select ok(not has_table_privilege('authenticated', 'public.generations', 'insert'), 'authenticated cannot bypass quota reservation');
+select ok(has_table_privilege('authenticated', 'public.reference_uploads', 'select'), 'authenticated can select references');
+select ok(not has_table_privilege('authenticated', 'public.reference_uploads', 'insert'), 'authenticated cannot bypass upload validation');
+
+select ok(not has_table_privilege('authenticated', 'private.quota_ledger', 'select'), 'quota ledger is server-only');
+select ok(not has_table_privilege('authenticated', 'private.provider_health_windows', 'select'), 'health windows are server-only');
+select ok(not has_table_privilege('authenticated', 'private.cleanup_jobs', 'select'), 'cleanup jobs are server-only');
+select ok(not has_table_privilege('authenticated', 'private.image_safety_audits', 'select'), 'safety audits are server-only');
+select ok(not has_schema_privilege('authenticated', 'private', 'usage'), 'authenticated cannot use private schema');
+select ok(
+  not has_function_privilege('authenticated', 'public.request_session_deletion(uuid,uuid)', 'execute'),
+  'authenticated cannot call the privileged delete transition directly'
+);
+select ok(
+  has_function_privilege('service_role', 'public.request_session_deletion(uuid,uuid)', 'execute'),
+  'service role can call the privileged delete transition'
+);
+
+select results_eq(
+  $$select public from storage.buckets where id = 'uploads'$$,
+  array[false],
+  'uploads bucket is private'
+);
+select results_eq(
+  $$select public from storage.buckets where id = 'generated'$$,
+  array[false],
+  'generated bucket is private'
+);
+
+-- RLS now also requires a verified live account; keep the original owner-isolation assertions.
+insert into auth.users (id, email, email_confirmed_at, is_anonymous)
+values
+  ('00000000-0000-0000-0000-0000000000a1', 'foundation-a@example.com', now(), false),
+  ('00000000-0000-0000-0000-0000000000b2', 'foundation-b@example.com', now(), false);
+insert into auth.sessions (id, user_id) values
+  ('20000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a1');
+
+insert into public.sessions (id, user_id, title)
+values
+  ('10000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a1', 'owner session'),
+  ('10000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000b2', 'other session');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a1","role":"authenticated","session_id":"20000000-0000-0000-0000-0000000000a1"}', true);
+
+select results_eq(
+  $$select count(*)::bigint from public.sessions$$,
+  array[1::bigint],
+  'RLS exposes only the current user sessions'
+);
+
+select throws_ok(
+  $$insert into public.sessions (id, user_id, title) values ('10000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a1', 'allowed')$$,
+  '42501',
+  'permission denied for table sessions',
+  'even the owner must create a session through the quota-guarded server route'
+);
+
+select throws_ok(
+  $$insert into public.sessions (id, user_id, title) values ('10000000-0000-0000-0000-0000000000b3', '00000000-0000-0000-0000-0000000000b2', 'forbidden')$$,
+  '42501',
+  'permission denied for table sessions',
+  'direct cross-owner session creation is also denied before RLS'
+);
+
+reset role;
+insert into public.timeline_items (id, session_id, kind, role, text)
+values
+  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-0000000000a1', 'message', 'user', 'first'),
+  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-0000000000a1', 'message', 'assistant', 'second');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', true);
+
+select results_eq(
+  $$select sequence from public.timeline_items where session_id = '10000000-0000-0000-0000-0000000000a1' order by sequence$$,
+  array[1::bigint, 2::bigint],
+  'timeline sequence is allocated atomically and remains stable'
+);
+
+select * from finish();
+rollback;

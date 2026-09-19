@@ -1,0 +1,90 @@
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+.editor {
+  position: relative;
+  display: flex;
+}
+.editor textarea {
+  resize: vertical;
+}
+.sparkle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: var(--z-primary);
+  background: transparent;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  top: 2px;
+  right: 2px;
+}
+.sparkle:hover:not(:disabled) {
+  background: var(--z-primary-soft);
+}
+.sparkle:disabled {
+  cursor: default;
+  opacity: 1;
+  color: var(--z-disabled);
+}
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--z-muted);
+  font-size: 12px;
+}
+.feedback button,
+.suggestion button {
+  border: 0;
+  padding: 3px 6px;
+  background: transparent;
+  color: var(--z-primary);
+  cursor: pointer;
+  font: inherit;
+}
+.suggestion {
+  padding: 10px;
+  border: 1px solid var(--z-border);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.suggestion p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.field button:focus-visible,
+.editor input:focus-visible,
+.editor textarea:focus-visible {
+  outline: 3px solid var(--z-focus);
+  outline-offset: 2px;
+}
+.editor input,
+.editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--z-border);
+  padding: 10px 40px 10px 12px;
+  background: var(--z-panel-strong);
+  color: inherit;
+  font: inherit;
+  line-height: 1.5;
+  padding-right: 48px;
+  border-color: var(--z-border-control);
+  border-radius: 12px;
+  min-height: 44px;
+}
+.editor input, .editor textarea {
+  border-color: var(--z-border-control);
+  border-radius: 12px;
+  min-height: 44px;
+}

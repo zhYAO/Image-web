@@ -1,0 +1,25 @@
+# External projects (local-only)
+doc/lobehub-canary/
+doc/LangGraphPj/
+doc/OpenChatCut/
+node_modules
+.pnpm-store
+.next
+coverage
+playwright-report
+playwright-report-*
+test-results
+*.tsbuildinfo
+.DS_Store
+
+.design-qa/
+.env
+.env.local
+
+.superdesign/tmp/
+
+# Isolated Next.js verification builds
+.next-*
+
+# Python deployment checks
+__pycache__/
