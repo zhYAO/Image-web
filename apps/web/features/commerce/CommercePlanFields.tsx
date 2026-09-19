@@ -95,6 +95,9 @@ export function CommercePlanFields({
               disabled={disabled}
               onChange={(instruction) => update(slot.id, { instruction })}
             />
+            <label>文字方式<CommerceSelect aria-label={`第 ${number} 张文字方式`} disabled={disabled} value={slot.textMode ?? (slot.exactText ? 'exact' : 'none')} onChange={value => update(slot.id, { textMode: value as CommerceSlot['textMode'] })}>
+              <option value="auto">从商品描述提炼</option><option value="exact">指定准确文案</option><option value="none">不加文字</option>
+            </CommerceSelect></label>
             <CreativeTextField
               label="准确文案"
               aria-label={`第 ${number} 张文案`}
@@ -104,7 +107,7 @@ export function CommercePlanFields({
               maxLength={1000}
               placeholder="留空则不添加营销文字"
               disabled={disabled}
-              onChange={(exactText) => update(slot.id, { exactText })}
+              onChange={(exactText) => update(slot.id, { exactText, textMode: exactText ? 'exact' : 'none' })}
             />
             <label>
               生成模型

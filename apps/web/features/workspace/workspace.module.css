@@ -2196,3 +2196,7 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.workspaceBody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.workspaceBody[hidden] { display: none; }
+.commerceScroll { display: flex; flex-direction: column; overflow: hidden; }

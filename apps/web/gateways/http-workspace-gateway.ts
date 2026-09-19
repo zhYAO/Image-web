@@ -112,9 +112,9 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     return (await this.json('/api/sessions', listSessionsResponseSchema)).sessions;
   }
 
-  async createSession(title?: string) {
+  async createSession(title?: string, requestId?: string) {
     return (await this.json('/api/sessions', sessionResponseSchema, {
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, requestId }),
       method: 'POST',
     })).session;
   }

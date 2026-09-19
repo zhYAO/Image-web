@@ -1,10 +1,10 @@
+import { readPending, persistPending, type PendingSubmission } from "./commerce-submission";
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
 import { notifyCreditsChanged } from "@/gateways/mock-credit-ledger";
 import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
-  commerceSubmitSchema,
   WorkspaceError,
   validateCommercePlan,
   type CommerceGateway,
@@ -68,36 +68,6 @@ function mergeEdit(
       ),
     },
   };
-}
-
-interface PendingSubmission {
-  key: string;
-  requestId: string;
-  rejected?: boolean;
-}
-function readPending(storageKey: string): PendingSubmission | undefined {
-  try {
-    const value = JSON.parse(
-      window.sessionStorage.getItem(storageKey) ?? "null",
-    ) as PendingSubmission | null;
-    if (!value || typeof value.key !== "string") return;
-    commerceSubmitSchema.parse({
-      ...JSON.parse(value.key),
-      requestId: value.requestId,
-    });
-    return value;
-  } catch {
-    return;
-  }
-}
-function persistPending(storageKey: string, request?: PendingSubmission) {
-  try {
-    if (request)
-      window.sessionStorage.setItem(storageKey, JSON.stringify(request));
-    else window.sessionStorage.removeItem(storageKey);
-  } catch {
-    /* In-memory identity remains available when browser storage is disabled. */
-  }
 }
 
 export function CommerceTaskCard({
@@ -523,7 +493,9 @@ export function CommerceTaskCard({
                 )}
               <p>
                 {slot.instruction || (task.brief.contentMode === "content" ? "按原文内容与模板排版" : "按商品事实与模板规划")}
-                {slot.exactText && (
+                {slot.textMode === 'auto' && <><br />文案：从商品描述自动提炼</>}
+                {slot.textMode === 'none' && <><br />不加文字</>}
+                {slot.exactText && (!slot.textMode || slot.textMode === 'exact') && (
                   <>
                     <br />
                     文案：{slot.exactText}

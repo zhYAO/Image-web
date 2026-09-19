@@ -26,7 +26,7 @@ import {
 import { Alert, Button, Drawer, Select, Space } from 'antd';
 import PreviewGroup from 'antd/es/image/PreviewGroup';
 import { Archive, ArrowDown, ChevronRight, Menu } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
 import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce/commerce-ui';
@@ -36,6 +36,8 @@ import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
 import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
+import { sessionHref, isLocalCommerceDraft, type WorkspaceRoute } from './workspace-route';
+import { mergeSessionActivity } from './session-category';
 import { lastComposerSession } from '@/store/composer-storage';
 
 import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
@@ -51,6 +53,9 @@ import { WorkspaceLoading } from './WorkspaceLoading';
 
 interface UnifiedWorkspaceProps {
   gateway?: WorkspaceGateway;
+  route?: WorkspaceRoute;
+  ownerKey?: string;
+  onNavigate?: (url: string, replace?: boolean) => void;
 }
 
 interface OptimisticImageTurn extends OptimisticImageTurnView {
@@ -91,8 +96,13 @@ const nextSequence = (items: TimelineItem[]) => (
   items.reduce((maximum, item) => Math.max(maximum, item.sequence), 0) + 1
 );
 
-export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceProps) {
+export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, ownerKey = "local" }: UnifiedWorkspaceProps) {
   const credits = useCredits();
+  const routeRef = useRef(route);
+  useLayoutEffect(() => { routeRef.current = route; }, [route]);
+  const [routeError, setRouteError] = useState<string>();
+  const [commerceDraftIds, setCommerceDraftIds] = useState<ReadonlySet<string>>(new Set());
+  const onDraftSessionsChange = useCallback((ids: string[]) => setCommerceDraftIds(new Set(ids)), []);
   const gateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
   const {
     activateComposer,
@@ -157,8 +167,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   }, []);
 
   const updateSessions = useCallback((next: Session[]) => {
-    sessionsRef.current = next;
-    setSessions(next);
+    const merged = mergeSessionActivity(next, sessionsRef.current);
+    sessionsRef.current = merged;
+    setSessions(merged);
   }, []);
 
   const updateRuntime = useCallback((sessionId: string, updater: (runtime: SessionRuntime) => SessionRuntime) => {
@@ -235,23 +246,24 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       const launchCommerce = resolveCommerceLaunch(launchUrl.search);
       const launchScene = launchCommerce.scene;
       let initialId = lastComposerSession(nextSessions.map(session => session.id)) ?? nextSessions[0]?.id;
-      if (launchScene) {
+      if (launchScene && !routeRef.current) {
         const session = await gateway.createSession();
         if (cancelled) return;
         updateSessions([session, ...nextSessions]);
         initialId = session.id;
       }
-      setActiveSessionId(initialId);
-      if (launchScene && initialId) {
+      if (routeRef.current) initialId = undefined;
+      if (!routeRef.current) setActiveSessionId(initialId);
+      if (!routeRef.current && launchScene && initialId) {
         setCommerceLaunch({ scene: launchScene, platform: launchCommerce.platform, initialTemplateId: templatesForScene(launchScene).find(template => template.id === launchUrl.searchParams.get('template'))?.id, sessionId: initialId });
       }
       // Legacy Skill links must never implicitly open a commerce workflow.
-      if (launchUrl.searchParams.has('skill')) {
+      if (!routeRef.current && launchUrl.searchParams.has('skill')) {
         launchUrl.searchParams.delete('skill');
         launchUrl.searchParams.delete('new');
         window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
       }
-      if (launchScene) {
+      if (launchScene && !routeRef.current) {
         launchUrl.searchParams.delete('scene');
         launchUrl.searchParams.delete('platform');
         launchUrl.searchParams.delete('template');
@@ -277,6 +289,62 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       cancelled = true;
     };
   }, [gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
+
+  const appliedRoute = useRef<string | undefined>(undefined);
+  const routeScope = route?.kind === 'session' ? `session:${route.sessionId}` : route?.kind === 'commerce' ? `commerce:${ownerKey}:${route.scene}` : route?.kind;
+  useEffect(() => {
+    if (route?.kind === 'outside') { appliedRoute.current = undefined; return; }
+    if (initializing || !route || appliedRoute.current === routeScope) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+    if (cancelled) return;
+    appliedRoute.current = routeScope;
+    setRouteError(undefined);
+    if (route.kind === 'invalid') {
+      setRouteError('页面不存在，请选择创作方式或历史会话。');
+      return;
+    }
+    if (route.kind === 'session') {
+      if (!sessionsRef.current.some(session => session.id === route.sessionId)) {
+        setRouteError('会话不存在、已删除或无权访问。');
+        setActiveSessionId(undefined);
+        return;
+      }
+      setActiveSessionId(route.sessionId);
+      setCommerceLaunch(undefined);
+      void refreshTimeline(route.sessionId, true);
+    } else if (route.kind === 'commerce') {
+      const id = `commerce-draft:${ownerKey}:${route.scene}`;
+      setActiveSessionId(id);
+      updateRuntime(id, () => createRuntime('ready'));
+      setCommerceLaunch({ sessionId: id, scene: route.scene, platform: route.platform,
+        initialTemplateId: templatesForScene(route.scene).find(item => item.id === route.template)?.id });
+    } else {
+      setActiveSessionId(undefined);
+      setCommerceLaunch(undefined);
+    }
+    });
+    return () => { cancelled = true; };
+  }, [route, routeScope, initializing, ownerKey, setActiveSessionId, refreshTimeline, updateRuntime]);
+
+  const ensureCommerceSession = async (title: string, requestId: string) => {
+    const session = await gateway.createSession(title.slice(0, 100), requestId);
+    updateSessions([{ ...session, activityTypes: ['commerce'] }, ...sessionsRef.current.filter(item => item.id !== session.id)]);
+    return session.id;
+  };
+  const commerceSaved = (task: import('@zimage/domain').CommerceTask, sourceId: string) => {
+    const current = useWorkspaceStore.getState();
+    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside';
+    if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, task.sessionId);
+    updateSessions([{ ...sessionsRef.current.find(item => item.id === task.sessionId)!, id: task.sessionId,
+      title: sessionsRef.current.find(item => item.id === task.sessionId)?.title ?? task.brief.name,
+      status: 'active', createdAt: task.createdAt, updatedAt: task.updatedAt, activityTypes: ['commerce'] },
+      ...sessionsRef.current.filter(item => item.id !== task.sessionId)]);
+    if (stillHere) {
+      setActiveSessionId(task.sessionId);
+      onNavigate?.(sessionHref(task.sessionId, task.id, task.runs.length ? 'results' : 'plan'), true);
+    }
+  };
 
   useEffect(() => {
     for (const reference of references) {
@@ -368,6 +436,9 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const createSession = async () => {
+    if (onNavigate) {
+      setActiveSessionId(undefined); setDraft(''); setReferences([]); onNavigate('/'); return;
+    }
     try {
       const session = await gateway.createSession();
       updateRuntime(session.id, () => createRuntime('ready'));
@@ -382,9 +453,11 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
 
   const ensureSession = async (prompt: string) => {
     if (activeSessionId) return activeSessionId;
-    const session = await gateway.createSession(prompt);
+    const session = await gateway.createSession(prompt.slice(0, 100));
+    updateSessions([session, ...sessionsRef.current.filter(item => item.id !== session.id)]);
     updateRuntime(session.id, () => createRuntime('ready'));
     setActiveSessionId(session.id, true);
+    onNavigate?.(sessionHref(session.id), true);
     await refreshSessions();
     return session.id;
   };
@@ -673,6 +746,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       if (wasActive) {
         const nextId = next[0]?.id;
         setActiveSessionId(nextId);
+        onNavigate?.(nextId ? sessionHref(nextId) : "/", true);
         if (nextId) await refreshTimeline(nextId, true);
       }
     } catch (error: unknown) {
@@ -696,6 +770,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
   };
 
   const selectSession = (sessionId: string) => {
+    if (onNavigate) { onNavigate(sessionHref(sessionId)); setSessionDrawerOpen(false); return; }
     setActiveSessionId(sessionId);
     void refreshTimeline(sessionId, true);
     setSessionDrawerOpen(false);
@@ -787,6 +862,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
       busySessionIds={busySessionIds}
       deleting={Boolean(deletingSessionId)}
       onCollapse={() => setSidebarCollapsed(true)}
+      commerceDraftIds={commerceDraftIds}
       onCreate={() => void createSession()}
       onDelete={deleteSession}
       onRename={(sessionId, title) => void renameSession(sessionId, title)}
@@ -839,10 +915,21 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
         </header>
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
+        {routeError && <div className={styles.statusFeedback} role="alert">{routeError} <Link href="/create">返回创作目录</Link></div>}
+        <div className={styles.workspaceBody} hidden={Boolean(routeError)}>
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
         <PreviewGroup preview={{ motionName: '' }}>
-          <div aria-label="对话时间线" className={styles.timelineScroll} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
+          <div aria-label="对话时间线" className={`${styles.timelineScroll} ${commerceActive ? styles.commerceScroll : ""}`} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
             <CommerceWorkspace
+              ensureSession={ensureCommerceSession}
+              onSavedSession={commerceSaved}
+              onExitDraft={() => onNavigate?.('/create')}
+              ownerKey={ownerKey}
+              onDraftSessionsChange={onDraftSessionsChange}
+              requestedTaskId={route?.kind === 'session' ? route.taskId : undefined}
+              requestedView={route?.kind === 'session' ? route.view : undefined}
+              routeDriven={Boolean(route)}
+              onViewChange={(id, task, view) => { if (onNavigate && !isLocalCommerceDraft(id)) onNavigate(sessionHref(id, task, view)); }}
               ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
               items={activeRuntime?.timeline ?? []} references={references} capabilities={capabilities}
               timelineLoading={initializing || activeRuntime?.loadStatus === 'loading'}
@@ -916,6 +1003,7 @@ export function UnifiedWorkspace({ gateway: providedGateway }: UnifiedWorkspaceP
             />
           </div>}
         </PreviewGroup>
+        </div>
       </main>
       <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar}</Drawer>
       <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</Drawer>

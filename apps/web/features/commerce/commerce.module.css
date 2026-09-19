@@ -1142,7 +1142,8 @@ button.primary:hover:not(:disabled) {
   display: grid;
   align-items: stretch;
   margin-top: 0;
-  height: max(420px, calc(100dvh - 310px));
+  flex: 1;
+  min-height: 0;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 24px;
 }
@@ -1150,7 +1151,8 @@ button.primary:hover:not(:disabled) {
   max-width: none;
   display: grid;
   align-items: stretch;
-  height: max(460px, calc(100dvh - 245px));
+  flex: 1;
+  min-height: 0;
   width: calc(100% - 48px);
   margin: 0 24px 24px;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -1720,7 +1722,7 @@ button.primary:active:not(:disabled) {
   .wizardSettings {
     position: sticky;
     top: 12px;
-    max-height: max(360px, calc(100dvh - 280px));
+    max-height: none;
     overflow-y: auto;
     padding-right: 6px;
   }
@@ -1753,7 +1755,7 @@ button.primary:active:not(:disabled) {
   .wizardSettings {
     display: flex;
     flex-direction: column;
-    max-height: max(360px, calc(100dvh - 280px));
+    max-height: none;
     overflow: hidden;
   }
   .wizardSettings > .wizardFormScroll {
@@ -1930,3 +1932,43 @@ button.primary:active:not(:disabled) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The workspace supplies its actual remaining height, including notices and headers. */
+.commerceRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.commerceRoot > .workbenchHeader,
+.commerceRoot > .notice,
+.commerceRoot > .relatedConversation {
+  flex-shrink: 0;
+}
+.draftWorkbench,
+.wizardEmbedded {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.draftWorkbench[hidden],
+.savedWorkbench[hidden] { display: none; }
+.wizardEmbedded,
+.savedWorkbench { margin-bottom: 8px; }
+.wizardEmbedded > .heading { flex-shrink: 0; }
+.wizardEmbedded .wizardColumns { grid-template-rows: minmax(0, 1fr); }
+.referenceRole { font-size: 12px; }
+.relatedConversation[open] { max-height: 35%; overflow: auto; }
+@container workspace (max-width: 871px) {
+  .commerceRoot { overflow-y: auto; }
+  .draftWorkbench, .wizardEmbedded, .savedWorkbench { flex: none; }
+  .wizardEmbedded .wizardColumns { grid-template-rows: auto; }
+}
+
+.generationSummary { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; flex-wrap: wrap; }
+.wizardControls .generationSummary .note { flex-basis: auto; }
+.wizardEmbedded .wizardControls > button:not(.primary) { padding: 8px 5px; font-size: 12px; white-space: nowrap; }
+.wizardEmbedded .wizardSettings { padding-top: 14px; }
+.wizardEmbedded input[type="file"] { padding: 10px; }
+.wizardEmbedded .formBody > p:first-child { margin-top: 0; }

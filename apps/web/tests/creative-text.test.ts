@@ -26,6 +26,6 @@ describe('field optimization safeguards', () => {
     const result = await optimizeCreativeText({ field: 'instruction', text: '突出商品' }, async function* () {
       yield '{"text":"'; yield '突出商品主体，保持背景简洁。"}';
     });
-    expect(result).toEqual({ text: '突出商品主体，保持背景简洁。', mock: false });
+    expect(result).toEqual({ text: '突出商品主体，保持背景简洁。', mock: false, changeType: 'rewritten' });
   });
 });

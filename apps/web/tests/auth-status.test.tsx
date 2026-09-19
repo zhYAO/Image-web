@@ -69,13 +69,13 @@ describe("shared authentication presentation", () => {
     await act(async () => complete(new Response("{}", { status: 200 })));
     expect(screen.getByRole("link", { name: "登录" })).toBeVisible();
   });
-  it("preserves the explicit scene when an expired account redirects to login", async () => {
+  it.each(['/?scene=product-set', '/create/product-set?platform=taobao', '/sessions/abc?task=xyz&view=results'])("preserves %s when an expired account redirects to login", async (path) => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(new Response("{}", { status: 401 })),
     );
-    window.history.replaceState({}, "", "/?scene=product-set");
+    window.history.replaceState({}, "", path);
     render(
       <AuthStatusProvider>
         <AnonymousAuthGate>
@@ -85,7 +85,7 @@ describe("shared authentication presentation", () => {
     );
     await waitFor(() =>
       expect(replace).toHaveBeenCalledWith(
-        "/login?returnTo=%2F%3Fscene%3Dproduct-set",
+        `/login?returnTo=${encodeURIComponent(path)}`,
       ),
     );
     expect(screen.queryByText("private workspace")).toBeNull();

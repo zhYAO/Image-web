@@ -4,6 +4,7 @@ import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
   COMMERCE_TEMPLATES,
+  type CommerceScene,
 } from "@zimage/domain";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,6 +13,7 @@ import { TemplatePreview } from "./TemplatePreview";
 import { commerceExampleForScene } from "./commerce-examples";
 import { useState } from "react";
 import { useAuthStatus } from "@/features/auth/AuthStatusProvider";
+import { commerceHref } from "@/features/workspace/workspace-route";
 import styles from "./commerce.module.css";
 
 export function CommerceCatalogue() {
@@ -20,8 +22,7 @@ export function CommerceCatalogue() {
   const platformName = COMMERCE_PLATFORMS.find(
     (item) => item.id === platform,
   )?.name;
-  const launchUrl = (scene: string, templateId?: string) =>
-    `/?scene=${scene}${scene === "xhs-poster" ? "&platform=xiaohongshu" : platform !== "all" ? `&platform=${platform}` : ""}${templateId ? `&template=${encodeURIComponent(templateId)}` : ""}`;
+  const launchUrl = (scene: string, templateId?: string) => commerceHref(scene as CommerceScene, platform, templateId);
   return (
     <div className={styles.cataloguePage}>
       <main className={styles.catalogue}>
@@ -80,7 +81,7 @@ export function CommerceCatalogue() {
         </header>
         <div className={styles.catalogueSectionHeading}>
           <h2>七种生图类型</h2>
-          <span>商品与内容 → 创作方案 → 成品</span>
+          <span>上传素材 → 填写描述 → 一键生成</span>
         </div>
         <div className={styles.catalogueGrid}>
           {COMMERCE_SCENES.map((scene, index) => (

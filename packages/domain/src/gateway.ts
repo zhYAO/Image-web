@@ -40,7 +40,7 @@ export interface WorkspaceGateway {
   ): Promise<SkillTask>;
 
   listSessions(): Promise<Session[]>;
-  createSession(title?: string): Promise<Session>;
+  createSession(title?: string, requestId?: string): Promise<Session>;
   renameSession(sessionId: string, title: string): Promise<Session>;
   deleteSession(sessionId: string): Promise<void>;
   getTimeline(sessionId: string): Promise<TimelineItem[]>;

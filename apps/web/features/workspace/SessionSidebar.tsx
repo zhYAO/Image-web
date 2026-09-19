@@ -1,23 +1,21 @@
-import type { Session, SessionActivityType } from '@zimage/domain';
+import type { Session } from '@zimage/domain';
 import { Button, Input, Popconfirm, Spin, Tooltip } from 'antd';
 import Link from 'next/link';
-import { Check, ChevronsLeft, MessageSquarePlus, Pencil, ShoppingBag, ArrowUpRight, Trash2, X, MessageCircle, Image as ImageIcon } from 'lucide-react';
+import { Check, ChevronsLeft, MessageSquarePlus, Pencil, ShoppingBag, ArrowUpRight, Trash2, X, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import styles from './workspace.module.css';
 import filters from './session-sidebar.module.css';
 
-type DisplayActivity = Exclude<SessionActivityType, 'poster'>;
-const activityLabels = { chat: '聊天', image: '普通生图', commerce: '电商生图' } as const;
-const activityIcons = { chat: MessageCircle, image: ImageIcon, commerce: ShoppingBag };
-const sessionActivities = (session: Session): DisplayActivity[] =>
-  [...new Set((session.activityTypes?.length ? session.activityTypes : ['chat'] as const)
-    .map(activity => activity === 'poster' ? 'commerce' as const : activity))];
+import { sessionCategory, type SessionCategory } from './session-category';
 
-const categories = [['all', '全部'], ['chat', '聊天'], ['image', '普通生图'], ['commerce', '电商生图']] as const;
+const activityLabels = { general: '普通创作', commerce: '电商生图', unknown: '类型待确认' } as const;
+const activityIcons = { general: MessageCircle, commerce: ShoppingBag, unknown: MessageCircle };
+const categories = [['all', '全部'], ['general', '普通创作'], ['commerce', '电商生图']] as const;
 
 interface SessionSidebarProps {
   activeSessionId?: string;
+  commerceDraftIds?: ReadonlySet<string>;
   busySessionIds?: ReadonlySet<string>;
   sessions: Session[];
   deleting?: boolean;
@@ -31,6 +29,7 @@ interface SessionSidebarProps {
 export function SessionSidebar({
   activeSessionId,
   busySessionIds,
+  commerceDraftIds,
   sessions,
   deleting = false,
   onCreate,
@@ -41,8 +40,9 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const [editingId, setEditingId] = useState<string>();
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<'all' | DisplayActivity>('all');
-  const visibleSessions = sessions.filter(session => category === 'all' || sessionActivities(session).includes(category));
+  const [category, setCategory] = useState<'all' | SessionCategory>('all');
+  const typeOf = (session: Session) => sessionCategory(session, commerceDraftIds?.has(session.id));
+  const visibleSessions = sessions.filter(session => category === 'all' || typeOf(session) === category);
 
   const beginRename = (session: Session) => {
     setEditingId(session.id);
@@ -99,7 +99,7 @@ export function SessionSidebar({
             ) : (
               <div className={filters.sessionContent}>
               <div className={styles.sessionTitleRow}>
-                {(() => { const Icon = activityIcons[sessionActivities(session)[0]!]; return <Icon className={filters.activityIcon} size={14} aria-hidden />; })()}
+                {(() => { const Icon = activityIcons[typeOf(session)]; return <Icon className={filters.activityIcon} size={14} aria-hidden />; })()}
                 <button
                   className={styles.sessionTitle}
                   disabled={deleting}
@@ -114,7 +114,7 @@ export function SessionSidebar({
                 )}
               </div>
               <div className={filters.badges} aria-label="会话类型">
-                {sessionActivities(session).map(activity => <span className={filters.badge} key={activity}>{activityLabels[activity]}</span>)}
+                <span className={filters.badge}>{activityLabels[typeOf(session)]}</span>
               </div>
               </div>
             )}

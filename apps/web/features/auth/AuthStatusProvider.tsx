@@ -10,9 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { clearCommerceDraft } from '@/features/commerce/commerce-draft-storage';
 
 type AuthStatus = "checking" | "authorized" | "guest" | "error";
 const AuthStatusContext = createContext<{
+  ownerId?: string;
   status: AuthStatus;
   refresh: () => void;
 }>({ status: "checking", refresh: () => undefined });
@@ -23,6 +25,8 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(
     enabled ? "checking" : "authorized",
   );
+  const [ownerId, setOwnerId] = useState<string | undefined>(enabled ? undefined : 'local');
+  const verifiedOwner = useRef<string | undefined>(undefined);
   const epoch = useRef(0);
   const inFlight = useRef(false);
   const refresh = useCallback(() => {
@@ -30,8 +34,16 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
     inFlight.current = true;
     const version = ++epoch.current;
     void fetch("/api/account", { cache: "no-store" })
-      .then((response) => {
-        if (epoch.current === version)
+      .then(async (response) => {
+        const account = response.ok ? await response.json().catch(() => ({})) : {};
+        if (epoch.current === version) {
+          const nextOwner = typeof account.id === 'string' ? account.id : undefined;
+          if (verifiedOwner.current && verifiedOwner.current !== nextOwner && (response.ok || response.status === 401)) {
+            useWorkspaceStore.getState().reset();
+            clearCommerceDraft();
+          }
+          verifiedOwner.current = nextOwner;
+          setOwnerId(nextOwner);
           setStatus(
             response.ok
               ? "authorized"
@@ -39,6 +51,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
                 ? "guest"
                 : "error",
           );
+        }
       })
       .catch(() => {
         if (epoch.current === version) setStatus("error");
@@ -52,14 +65,21 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
     const expired = () => {
       epoch.current++;
       useWorkspaceStore.getState().reset();
+      clearCommerceDraft();
+      verifiedOwner.current = undefined;
+      setOwnerId(undefined);
       setStatus("guest");
     };
     const changed = (event: Event) => {
       epoch.current++;
       useWorkspaceStore.getState().reset();
+      clearCommerceDraft();
+      verifiedOwner.current = undefined;
+      setOwnerId(undefined);
       setStatus(
-        (event as CustomEvent<boolean>).detail ? "authorized" : "guest",
+        (event as CustomEvent<boolean>).detail ? "checking" : "guest",
       );
+      if ((event as CustomEvent<boolean>).detail) { inFlight.current = false; refresh(); }
     };
     const visible = () => {
       if (document.visibilityState === "visible") refresh();
@@ -76,7 +96,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
   return (
-    <AuthStatusContext.Provider value={{ status, refresh }}>
+    <AuthStatusContext.Provider value={{ status, refresh, ownerId }}>
       {children}
     </AuthStatusContext.Provider>
   );

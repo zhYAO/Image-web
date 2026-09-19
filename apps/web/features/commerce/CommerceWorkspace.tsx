@@ -32,6 +32,8 @@ import {
 import { CommerceWizard, type CommerceWizardProps } from "./CommerceWizard";
 import { planOf, isExplicitImageRequest } from "./commerce-ui";
 import { useCommerceTasks } from "./use-commerce-tasks";
+import { isLocalCommerceDraft, type CommerceView } from "@/features/workspace/workspace-route";
+import { loadCommerceDraft, clearCommerceDraft } from "./commerce-draft-storage";
 import styles from "./commerce.module.css";
 
 export interface CommerceWorkspaceHandle {
@@ -56,6 +58,15 @@ export function CommerceWorkspace({
   gateway,
   sessionId,
   launch,
+  ownerKey = 'local',
+  ensureSession,
+  onSavedSession,
+  onDraftSessionsChange,
+  requestedTaskId,
+  requestedView,
+  routeDriven = false,
+  onViewChange,
+  onExitDraft,
   items,
   timelineLoading = false,
   renderTimeline,
@@ -68,6 +79,15 @@ export function CommerceWorkspace({
   gateway?: CommerceGateway;
   sessionId?: string;
   launch?: CommerceLaunch;
+  ownerKey?: string;
+  ensureSession?: (title: string, requestId: string) => Promise<string>;
+  onSavedSession?: (task: CommerceTask, sourceId: string) => void;
+  onDraftSessionsChange?: (ids: string[]) => void;
+  requestedTaskId?: string;
+  requestedView?: CommerceView;
+  routeDriven?: boolean;
+  onViewChange?: (sessionId: string, taskId: string, view?: CommerceView) => void;
+  onExitDraft?: () => void;
   onModeChange?: (sessionId: string | undefined, active: boolean) => void;
   onTaskChanged?: () => void | Promise<unknown>;
   onReferencesAdopt: (
@@ -107,7 +127,7 @@ export function CommerceWorkspace({
   const { tasks, cachedTasks, accept, error, loading, refresh } =
     useCommerceTasks(
       gateway,
-      sessionId,
+      isLocalCommerceDraft(sessionId) ? undefined : sessionId,
       Boolean(
         sessionId && Object.values(pendingSubmissions).includes(sessionId),
       ),
@@ -124,8 +144,10 @@ export function CommerceWorkspace({
     Record<string, "examples" | "plan" | "results">
   >({});
   const chooseTask = (id: string, targetSession = sessionId) => {
-    if (targetSession)
-      setSelectedBySession((current) => ({ ...current, [targetSession]: id }));
+    if (targetSession) {
+      setSelectedBySession(current => ({ ...current, [targetSession]: id }));
+      onViewChange?.(targetSession, id);
+    }
   };
   const [note, setNote] = useState<string>();
   const [autoStartTasks, setAutoStartTasks] = useState<Record<string, boolean>>(
@@ -139,7 +161,6 @@ export function CommerceWorkspace({
     Record<string, string[]>
   >({});
   const promotionKeys = useRef(new Map<string, string>());
-  const launched = useRef<string | undefined>(undefined);
   const [consumedLaunch, setConsumedLaunch] = useState<string>();
   const open = (scene: CommerceScene, prompt?: string) => {
     if (!sessionId) return;
@@ -153,7 +174,7 @@ export function CommerceWorkspace({
           ),
         );
         setNote(
-          "已把本次要求加入当前未保存方案；请检查分图内容，再保存并确认。",
+          "已把本次要求加入当前草稿，生成时将使用最新内容。",
         );
       } else
         setNote("已保留当前未保存方案。请先完成或取消它，再开始新的商品方案。");
@@ -163,7 +184,7 @@ export function CommerceWorkspace({
       ...current,
       { id: crypto.randomUUID(), sessionId, scene, prompt },
     ]);
-    setNote("已打开新方案；发送只用于规划，保存并确认后才会生成。");
+    setNote(undefined);
   };
   useImperativeHandle(ref, () => ({
     open,
@@ -225,14 +246,19 @@ export function CommerceWorkspace({
     },
   }));
   useEffect(() => {
-    if (!launch || launched.current === launch.sessionId) return;
-    launched.current = launch.sessionId;
-    setConsumedLaunch(launch.sessionId);
-    setDrafts((current) => [
-      ...current,
-      { ...launch, id: crypto.randomUUID() },
-    ]);
-  }, [launch]);
+    let cancelled = false;
+    // Restore tab-local drafts after the parent has resolved session ownership.
+    void Promise.resolve().then(() => {
+      if (cancelled || !sessionId) return;
+      const restored = loadCommerceDraft(`${ownerKey}:${sessionId}`);
+      const next = launch?.sessionId === sessionId ? launch : restored ? { sessionId, scene: restored.scene } : undefined;
+      if (!next) return;
+      setConsumedLaunch(sessionId);
+      setDrafts(current => current.some(draft => draft.sessionId === sessionId) ? current : [...current, { ...next, id: crypto.randomUUID() }]);
+    });
+    return () => { cancelled = true; };
+  }, [launch, sessionId, ownerKey]);
+  useEffect(() => { onDraftSessionsChange?.(drafts.map(draft => draft.sessionId)); }, [drafts, onDraftSessionsChange]);
   const promote = async (task: CommerceTask, generationId: string) => {
     if (!gateway || !sessionId || task.sessionId !== sessionId) return;
     const currentDraft = drafts.find((draft) => draft.sessionId === sessionId);
@@ -327,7 +353,7 @@ export function CommerceWorkspace({
   const hasCommerce = Boolean(
     tasks.length ||
     drafts.some((draft) => draft.sessionId === sessionId) ||
-    (launch?.sessionId === sessionId && consumedLaunch !== launch?.sessionId),
+    (launch && launch.sessionId === sessionId && consumedLaunch !== launch.sessionId),
   );
   useEffect(() => {
     onModeChange?.(sessionId, hasCommerce);
@@ -336,19 +362,20 @@ export function CommerceWorkspace({
     if (generate)
       setAutoStartTasks((current) => ({ ...current, [task.id]: true }));
     acceptAndRefresh(task);
-    chooseTask(task.id, task.sessionId);
+    setSelectedBySession(current => ({ ...current, [task.sessionId]: task.id }));
     setPanels((current) => ({
       ...current,
-      [task.id]: generate ? "results" : "plan",
+      [task.id]: generate || task.runs.length ? "results" : "plan",
     }));
     setDrafts((current) => current.filter((item) => item.id !== draft.id));
-    setNote(generate ? undefined : "方案已保存，可随时生成。");
+    setNote(generate || task.runs.length ? undefined : "方案已保存，可随时生成。");
+    onSavedSession?.(task, draft.sessionId);
   };
   const coordinatedLoading = timelineLoading || loading;
   const currentDraft = drafts.find((draft) => draft.sessionId === sessionId);
-  const requestedTask = selectedBySession[sessionId ?? ""];
+  const requestedTask = requestedTaskId ?? (routeDriven ? undefined : selectedBySession[sessionId ?? ""]);
   const selectedTask =
-    tasks.find((task) => task.id === requestedTask) ?? tasks.at(-1);
+    tasks.find((task) => task.id === requestedTask) ?? (requestedTaskId && requestedTaskId !== "draft" ? undefined : tasks.at(-1));
   const showDraft = Boolean(
     currentDraft &&
     (!requestedTask ||
@@ -357,10 +384,12 @@ export function CommerceWorkspace({
   );
   const panelKey = showDraft ? currentDraft!.id : (selectedTask?.id ?? "");
   const panel =
-    panels[panelKey] ??
+    requestedView ?? ((!routeDriven || showDraft) ? panels[panelKey] : undefined) ??
     (showDraft ? "examples" : selectedTask?.runs.length ? "results" : "plan");
-  const setPanel = (value: "examples" | "plan" | "results") =>
-    setPanels((current) => ({ ...current, [panelKey]: value }));
+  const setPanel = (value: CommerceView) => {
+    setPanels(current => ({ ...current, [panelKey]: value }));
+    if (sessionId && selectedTask && !showDraft) onViewChange?.(sessionId, selectedTask.id, value);
+  };
   const panelTabs = (
     <div
       className={styles.workbenchTabs}
@@ -386,7 +415,8 @@ export function CommerceWorkspace({
     </div>
   );
   return (
-    <>
+    <section className={hasCommerce ? styles.commerceRoot : undefined}>
+      {requestedTaskId && requestedTaskId !== "draft" && !selectedTask && !loading && <p role="alert">任务不存在或不属于此会话，请选择其他任务。</p>}
       {error && (
         <p className={styles.notice} role="alert">
           电商任务加载失败：{error}
@@ -454,6 +484,7 @@ export function CommerceWorkspace({
                 · 方案 v{selectedTask.revision}
               </p>
               <dl>
+                {selectedTask.brief.description && <div><dt>商品描述</dt><dd>{selectedTask.brief.description}</dd></div>}
                 <div>
                   <dt>投放平台</dt>
                   <dd>
@@ -568,6 +599,7 @@ export function CommerceWorkspace({
       </div>
       {drafts.map((draft) => (
         <div
+          className={styles.draftWorkbench}
           key={draft.id}
           hidden={
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
@@ -577,6 +609,8 @@ export function CommerceWorkspace({
             <CommerceWizard
               {...wizardProps}
               {...draft}
+              draftKey={`${ownerKey}:${draft.sessionId}`}
+              ensureSession={ensureSession}
               embedded
               active={draft.sessionId === sessionId}
               promotedStyleIds={promotedStyles[draft.sessionId]}
@@ -588,10 +622,12 @@ export function CommerceWorkspace({
               }
               onSaved={(task, generate) => saved(draft, task, generate)}
               onClose={() => {
+                clearCommerceDraft(`${ownerKey}:${draft.sessionId}`);
                 setDrafts((current) =>
                   current.filter((item) => item.id !== draft.id),
                 );
                 if (selectedTask) chooseTask(selectedTask.id);
+                else if (isLocalCommerceDraft(draft.sessionId)) onExitDraft?.();
               }}
             />
           </AntdImage.PreviewGroup>
@@ -618,6 +654,6 @@ export function CommerceWorkspace({
         hasCommerce || Boolean(visible.length),
         coordinatedLoading,
       )}
-    </>
+    </section>
   );
 }

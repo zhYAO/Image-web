@@ -38,6 +38,7 @@ interface ComposerSlice extends ComposerState {
   composers: Record<string, ComposerState>;
   activateComposer: (sessionId?: string, defaults?: Partial<ComposerState>, inheritCurrent?: boolean) => void;
   forgetComposer: (sessionId: string) => void;
+  transferComposer: (from: string, to: string) => void;
   setAspectRatio: (value: AspectRatio) => void;
   setResolution: (value: ImageResolution) => void;
   setCount: (value: number) => void;
@@ -104,6 +105,18 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
     delete composers[sessionId];
     return { composers, ...(state.activeComposerSessionId === sessionId
       ? { ...emptyComposer(), activeComposerSessionId: undefined } : {}) };
+  }),
+  transferComposer: (from, to) => set(state => {
+    const source = state.activeComposerSessionId === from ? snapshot(state) : state.composers[from];
+    if (!source) return {};
+    const composers = { ...state.composers, [to]: source };
+    delete composers[from];
+    saveComposer(to, source);
+    void saveAttachments(to, source.references);
+    clearComposer(from);
+    forgottenAttachments.add(from);
+    void clearAttachments(from);
+    return { composers, ...(state.activeComposerSessionId === from ? { activeComposerSessionId: to } : {}) };
   }),
   setAspectRatio: (aspectRatio) => set({ aspectRatio }),
   setResolution: (resolution) => set({ resolution }),

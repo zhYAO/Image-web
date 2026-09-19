@@ -59,8 +59,29 @@ describe('session service', () => {
     await expect(service.rename(userId, session.id, { title: '  新标题  ' })).resolves.toEqual({ session });
 
     expect(repository.list).toHaveBeenCalledWith(userId);
-    expect(repository.create).toHaveBeenCalledWith(userId, '新会话');
+    expect(repository.create).toHaveBeenCalledWith(userId, '新会话', undefined);
     expect(repository.rename).toHaveBeenCalledWith(userId, session.id, '新标题');
+  });
+
+  it('passes a durable session identity only after UUID validation', async () => {
+    const repository = store();
+    const service = createSessionService(repository);
+    const requestId = crypto.randomUUID();
+    await service.create(userId, { title: '商品方案', requestId });
+    expect(repository.create).toHaveBeenCalledWith(userId, '商品方案', requestId);
+    await expect(service.create(userId, { requestId: 'not-a-uuid' })).rejects.toThrow();
+    expect(repository.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays session creation without overwriting data and checks ownership before returning', async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) };
+    query.select.mockReturnValue(query); query.eq.mockReturnValue(query);
+    const adminQuery = { upsert: vi.fn().mockResolvedValue({ error: null }) };
+    const repository = new SupabaseSessionStore({ from: vi.fn().mockReturnValue(query) } as unknown as SupabaseClient,
+      { from: vi.fn().mockReturnValue(adminQuery) } as unknown as SupabaseClient);
+    await expect(repository.create(userId, '商品方案', session.id)).rejects.toMatchObject({ status: 503 });
+    expect(adminQuery.upsert).toHaveBeenCalledWith({ id: session.id, title: '商品方案', user_id: userId }, { onConflict: 'id', ignoreDuplicates: true });
+    expect(query.eq.mock.calls).toEqual([['id', session.id], ['user_id', userId], ['status', 'active']]);
   });
 
   it('turns repeat deletion and missing sessions into stable public failures', async () => {

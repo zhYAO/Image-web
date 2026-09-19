@@ -56,21 +56,45 @@ export class SupabaseSessionStore implements SessionStore {
         .eq('status', 'active')
         .order('updated_at', { ascending: false });
       if (legacy.error) throw databaseFailure('会话列表暂时不可用，请稍后重试。');
-      return (legacy.data ?? []).map(toSession);
+      const sessions = (legacy.data ?? []).map(toSession);
+      return this.fillMissingActivity(userId, sessions);
     }
     if (error) throw databaseFailure('会话列表暂时不可用，请稍后重试。');
-    return (data ?? []).map(toSession);
+    return this.fillMissingActivity(userId, (data ?? []).map(toSession));
   }
 
-  async create(userId: string, title: string) {
+  private async fillMissingActivity(userId: string, sessions: Session[]) {
+    const missing = sessions.filter(session => !session.activityTypes?.length);
+    if (!missing.length) return sessions;
+    const commerce = await this.userClient.from('commerce_tasks').select('session_id')
+      .eq('user_id', userId).in('session_id', missing.map(session => session.id));
+    if (commerce.error) throw databaseFailure('会话类型暂时无法核验，请稍后重试。');
+    const ids = new Set((commerce.data ?? []).map(row => row.session_id));
+    return sessions.map(session => session.activityTypes?.length ? session : {
+      ...session, activityTypes: [ids.has(session.id) ? 'commerce' : 'chat'] as Session['activityTypes'],
+    });
+  }
+
+  async create(userId: string, title: string, requestId?: string) {
     if (!this.adminClient) throw databaseFailure('暂时无法创建会话，请稍后重试。');
+    if (requestId) {
+      // The existing primary key is the replay identity; never overwrite another owner or revive a deleting session.
+      const inserted = await this.adminClient.from('sessions').upsert(
+        { id: requestId, title, user_id: userId }, { onConflict: 'id', ignoreDuplicates: true },
+      );
+      if (inserted.error) throw databaseFailure('暂时无法创建会话，请稍后重试。');
+      const result = await this.userClient.from('sessions').select(sessionColumns)
+        .eq('id', requestId).eq('user_id', userId).eq('status', 'active').maybeSingle();
+      if (result.error || !result.data) throw databaseFailure('会话不存在或暂时无法恢复。');
+      return toSession({ ...result.data, activity_types: ['chat'] });
+    }
     const { data, error } = await this.adminClient
       .from('sessions')
       .insert({ title, user_id: userId })
       .select(sessionColumns)
       .single();
     if (error || !data) throw databaseFailure('暂时无法创建会话，请稍后重试。');
-    return toSession(data);
+    return toSession({ ...data, activity_types: ['chat'] });
   }
 
   async rename(userId: string, sessionId: string, title: string) {

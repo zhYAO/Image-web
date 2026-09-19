@@ -38,7 +38,7 @@ describe('explicit creation modes', () => {
     await screen.findByRole('region', { name: '商品主图向导' });
     expect(screen.queryByRole('textbox', { name: '创作输入' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '发送创作请求' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '取消未保存方案' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消方案' }));
     expect(await screen.findByRole('textbox', { name: '创作输入' })).toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@ import { ApiRouteError } from '@/server/api-error';
 export type SessionDeletionResult = 'accepted' | 'already_deleting' | 'not_found';
 
 export interface SessionStore {
-  create(userId: string, title: string): Promise<Session>;
+  create(userId: string, title: string, requestId?: string): Promise<Session>;
   list(userId: string): Promise<Session[]>;
   rename(userId: string, sessionId: string, title: string): Promise<Session>;
   requestDeletion(userId: string, sessionId: string): Promise<SessionDeletionResult>;
@@ -35,7 +35,7 @@ export function createSessionService(store: SessionStore) {
 
     async create(userId: string, input: CreateSessionRequest) {
       const request = createSessionRequestSchema.parse(input);
-      const session = await store.create(parseUserId(userId), request.title ?? '新的创作');
+      const session = await store.create(parseUserId(userId), request.title ?? '新的创作', request.requestId);
       return { session };
     },
 

@@ -11,6 +11,7 @@ import {
   type CommerceBrief,
 } from "@zimage/domain";
 import { describe, expect, it } from "vitest";
+import { cloneElement } from 'react';
 import { CommerceWorkspace } from "@/features/commerce/CommerceWorkspace";
 import {
   createTestGateway,
@@ -60,7 +61,7 @@ describe("persistent commerce workbench", () => {
           ),
         },
       });
-    render(
+    const workbench = (
       <CommerceWorkspace
         ref={null}
         gateway={gateway.commerce}
@@ -78,8 +79,9 @@ describe("persistent commerce workbench", () => {
             <div role="alert">历史加载失败，请重试</div>
           ) : null
         }
-      />,
+      />
     );
+    const view = render(workbench);
     const history = await screen.findByRole("combobox", {
       name: "当前会话任务",
     });
@@ -115,5 +117,10 @@ describe("persistent commerce workbench", () => {
         (task) => task.runs.length === 0,
       ),
     ).toBe(true);
+    view.rerender(cloneElement(workbench, { routeDriven: true, requestedTaskId: (white as HTMLOptionElement).value, requestedView: 'examples' }));
+    expect(screen.getByRole('button', { name: '示例' })).toHaveAttribute('aria-pressed', 'true');
+    view.rerender(cloneElement(workbench, { routeDriven: true }));
+    expect(screen.getByRole('button', { name: '方案' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('combobox', { name: '当前会话任务' })).toHaveValue((await gateway.commerce.list(session.id)).at(-1)!.id);
   });
 });

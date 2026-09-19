@@ -35,7 +35,7 @@ describe('stateless field optimization route', () => {
   it('charges chat preview with no session creation or image writes', async () => {
     const response = await POST(request());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ text: '新标题', mock: false });
+    expect(await response.json()).toEqual({ text: '新标题', mock: false, changeType: 'rewritten' });
     expect(operations.map(op => op.name)).toEqual(['assert_chat_provider_available', 'reserve_preview_usage', 'record_chat_provider_result', 'commit_preview_usage']);
     expect(operations[1]?.input).toMatchObject({ p_user_id: userId, p_operation: 'chat', p_creates_session: false });
   });

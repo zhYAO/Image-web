@@ -20,15 +20,22 @@ import {
 } from "@zimage/domain";
 import { Image as AntdImage } from "antd";
 import { Layers3 } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import { defaultTemplate } from "./commerce-ui";
 import styles from "./commerce.module.css";
 import { TemplatePreview } from "./TemplatePreview";
+import { loadCommerceDraft, saveCommerceDraft, clearCommerceDraft, type CommerceDraftState } from "./commerce-draft-storage";
+import { submitCommerceOnce } from "./commerce-submission";
+import { isLocalCommerceDraft } from "@/features/workspace/workspace-route";
+import { notifyCreditsChanged } from "@/gateways/mock-credit-ledger";
 import { CreativeTextField } from "./CreativeTextField";
+import { useWorkspaceStore } from "@/store/workspace-store";
 
 export interface CommerceWizardProps {
   active?: boolean;
+  ensureSession?: (title: string, requestId: string) => Promise<string>;
+  draftKey?: string;
   embedded?: boolean;
   rightHeader?: ReactNode;
   previewPanel?: "examples" | "plan";
@@ -60,6 +67,8 @@ export interface CommerceWizardProps {
 
 export function CommerceWizard({
   active = true,
+  ensureSession,
+  draftKey,
   embedded = false,
   rightHeader,
   previewPanel,
@@ -84,9 +93,15 @@ export function CommerceWizard({
   const definition = COMMERCE_SCENES.find((item) => item.id === scene)!;
   const isPoster = scene === "xhs-poster";
   const credits = useCredits();
+  const selectedChatModel = useWorkspaceStore(state => state.selectedChatModel);
+  const setSelectedChatModel = useWorkspaceStore(state => state.setSelectedChatModel);
+  const storageKey = draftKey ?? sessionId;
+  const [restored] = useState(() => loadCommerceDraft(storageKey));
+  const remoteSession = useRef(restored?.sessionId);
+  const [generationSettings, setGenerationSettings] = useState(restored?.settings ?? settings);
   const [step, setStep] = useState(1);
   const [brief, setBrief] = useState<CommerceBrief>(
-    seedPlan?.brief ?? {
+    restored?.brief ?? seedPlan?.brief ?? {
       name: "",
       facts: "",
       sellingPoints: "",
@@ -98,25 +113,25 @@ export function CommerceWizard({
     },
   );
   const contentOnly = isPoster && brief.contentMode === "content";
-  const [roles, setRoles] = useState<Record<string, "product" | "style">>({});
+  const [roles, setRoles] = useState<Record<string, "product" | "style">>(restored?.roles ?? {});
   const [count, setCount] = useState<number>(
-    seedPlan?.slots.length ?? definition.count,
+    restored?.count ?? seedPlan?.slots.length ?? definition.count,
   );
   const [templateId, setTemplateId] = useState(
-    seedPlan?.templateId ??
+    restored?.templateId ?? seedPlan?.templateId ??
       (templatesForScene(scene).some((item) => item.id === initialTemplateId)
         ? initialTemplateId!
         : defaultTemplate(scene)),
   );
   const [instruction, setInstruction] = useState(
-    prompt || seedPlan?.slots[0]?.instruction || "",
+    restored?.instruction ?? (prompt || seedPlan?.slots[0]?.instruction || ""),
   );
   const [lastBuiltInstruction, setLastBuiltInstruction] = useState(
-    seedPlan?.slots[0]?.instruction ?? "",
+    restored?.lastBuiltInstruction ?? restored?.instruction ?? seedPlan?.slots[0]?.instruction ?? "",
   );
   const [preparedSignature, setPreparedSignature] = useState<string>();
   const [seenPrompt, setSeenPrompt] = useState(prompt);
-  const [plan, setPlan] = useState<CommercePlan | undefined>(seedPlan);
+  const [plan, setPlan] = useState<CommercePlan | undefined>(restored?.plan ?? seedPlan);
   const promotedKey = promotedStyleIds.join("|");
   const [seenPromotion, setSeenPromotion] = useState(promotedKey);
   if (seenPromotion !== promotedKey) {
@@ -139,8 +154,17 @@ export function CommerceWizard({
     undefined,
   );
   const locked = useRef(false);
+  const creation = useRef(restored?.creation);
+  const [recoveringCreate, setRecoveringCreate] = useState(Boolean(restored?.creation));
+  const sessionRequest = useRef<string>(restored?.sessionId ?? crypto.randomUUID());
+  const draftSnapshot = (): CommerceDraftState => ({ scene, brief, count, templateId, instruction, lastBuiltInstruction, roles,
+    settings: generationSettings, plan, sessionId: remoteSession.current, creation: creation.current });
+  useEffect(() => {
+    if (!active) return;
+    try { saveCommerceDraft(storageKey, draftSnapshot()); } catch { /* Remote actions fail closed if recovery cannot be saved. */ }
+  });
   const referenceKey = (reference: UploadReference) =>
-    reference.previewUrl ?? reference.id ?? reference.name;
+    reference.file ? `${reference.name}:${reference.size}:${reference.file.lastModified}` : reference.id ?? reference.name;
   const roleOf = (reference: UploadReference) =>
     contentOnly
       ? "style"
@@ -155,7 +179,7 @@ export function CommerceWizard({
   const referenceSignature = JSON.stringify(
     references.map((reference) => [referenceKey(reference), roleOf(reference)]),
   );
-  // Upload completion supplies an ID for the same file; previewUrl keeps that identity stable.
+  // File identity survives upload completion and restored object URLs.
   if (
     active &&
     preparedSignature &&
@@ -163,18 +187,12 @@ export function CommerceWizard({
     step > 1
   ) {
     setStep(1);
-    setError("共享参考图或用途已变化，请重新确认商品资料，再生成分图方案。");
+    setError("共享参考图或用途已变化，生成时将按最新素材重新准备。");
   }
-  const requirePreparedReferences = () => {
-    if (!active || preparedSignature !== referenceSignature)
-      throw new Error(
-        "共享参考图或用途已变化，请重新确认商品资料，再生成分图方案。",
-      );
-  };
   const invalidatePreview = () => {
     if (step === 3) {
       setStep(1);
-      setError("方案资料已修改，请重新预览分图方案后再确认。");
+      setError("方案资料已修改，生成时将使用最新资料。");
     }
   };
   const patch = (value: Partial<CommerceBrief>) => {
@@ -197,53 +215,57 @@ export function CommerceWizard({
       setBusy(false);
     }
   };
-  const prepare = () =>
-    act(async () => {
+  const preparePlan = async (previewOnly = false): Promise<CommercePlan> => {
       if (!gateway) throw new Error("电商服务暂未连接，请稍后重试。");
-      // Ask exactly one blocking question before spending an upload request.
-      if (!contentOnly && !references.some((reference) => roleOf(reference) === "product"))
+      if (creation.current) {
+        // A lost create response must replay the original body even after reload.
+        return creation.current.plan;
+      }
+      if (!contentOnly && !references.some(reference => roleOf(reference) === 'product'))
         throw new Error("请上传至少一张清晰的真实商品图。");
-      if (!brief.name.trim())
-        throw new Error(
-          contentOnly ? "请填写海报标题。" : "这个商品的名称是什么？",
-        );
-      if (
-        scene === "style-reference" &&
-        !references.some((reference) => roleOf(reference) === "style")
-      )
+      const description = brief.description?.trim() || [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n');
+      const name = brief.name.trim() || description.split(/[\n。！？]/).find(line => line.trim())?.trim().slice(0, 160) || '';
+      if (!name) throw new Error(contentOnly ? "请填写海报标题。" : "请填写商品描述，包含商品名称或主要特点。");
+      if (scene === 'style-reference' && !references.some(reference => roleOf(reference) === 'style'))
         throw new Error("请添加一张风格参考图。");
+      let targetSession = remoteSession.current ?? sessionId;
+      if (!previewOnly && isLocalCommerceDraft(targetSession)) {
+        if (!ensureSession) throw new Error('暂时无法保存会话，请重试。');
+        // Client-selected UUID makes session creation itself safe to replay.
+        remoteSession.current = sessionRequest.current;
+        saveCommerceDraft(storageKey, draftSnapshot());
+        targetSession = await ensureSession(name, sessionRequest.current);
+        remoteSession.current = targetSession;
+        saveCommerceDraft(storageKey, draftSnapshot());
+      } else if (!previewOnly && ensureSession && isLocalCommerceDraft(sessionId)) {
+        targetSession = await ensureSession(name, targetSession);
+      }
       const productReferenceIds: string[] = [];
       const styleReferenceIds: string[] = [];
       for (const reference of references) {
-        if (reference.status !== "ready")
-          throw new Error("请等待参考图上传完成，或移除失败图片后重试。");
+        if (reference.status !== 'ready') throw new Error('请等待参考图上传完成，或移除失败图片后重试。');
         let id = reference.id ?? uploadIds.current.get(reference);
+        if (!id && previewOnly) id = crypto.randomUUID();
         if (!id) {
           const { previewUrl: _preview, ...upload } = reference;
           void _preview;
-          id = await gateway.upload(sessionId, upload);
+          id = await gateway.upload(targetSession, upload);
           uploadIds.current.set(reference, id);
           onReferenceUploaded(reference, id, sessionId);
         }
-        (roleOf(reference) === "style"
-          ? styleReferenceIds
-          : productReferenceIds
-        ).push(id);
+        (roleOf(reference) === 'style' ? styleReferenceIds : productReferenceIds).push(id);
       }
-      const complete = { ...brief, productReferenceIds, styleReferenceIds };
+      const complete = { ...brief, name, ...(contentOnly ? {} : { description }), productReferenceIds, styleReferenceIds };
       const question = nextCommerceQuestion(complete, scene);
       if (question) throw new Error(question);
       setBrief(complete);
       setPreparedSignature(referenceSignature);
       const nextPlan = makePlan(complete);
-      setSelectedSlotId((current) =>
-        nextPlan.slots.some((slot) => slot.id === current)
-          ? current
-          : nextPlan.slots[0]?.id,
-      );
-      setStep(3);
-      onPreview?.();
-    });
+      setSelectedSlotId(current => nextPlan.slots.some(slot => slot.id === current) ? current : nextPlan.slots[0]?.id);
+      saveCommerceDraft(storageKey, { ...draftSnapshot(), brief: complete, plan: nextPlan });
+      return nextPlan;
+  };
+  const prepare = () => act(async () => { await preparePlan(true); setStep(3); onPreview?.(); });
   const makePlan = (preparedBrief: CommerceBrief) => {
     const generatedExactText = (source: CommerceBrief, role: string) => {
       if (
@@ -264,8 +286,8 @@ export function CommerceWizard({
       scene,
       count,
       isPoster
-        ? { ...settings, aspectRatio: "3:4", resolution: "2K" }
-        : settings,
+        ? { ...generationSettings, aspectRatio: "3:4", resolution: "2K" }
+        : generationSettings,
     ).map((slot, index) => {
       const previous = plan?.slots[index];
       const previousGeneratedText = previous
@@ -281,6 +303,7 @@ export function CommerceWizard({
       return {
           ...slot,
           ...previous,
+          textMode: previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
           exactText:
             previous && previous.exactText !== previousGeneratedText
               ? previous.exactText
@@ -317,43 +340,51 @@ export function CommerceWizard({
     const key = JSON.stringify(nextPlan);
     if (createRequest.current?.key !== key)
       createRequest.current = { key, requestId: crypto.randomUUID() };
-    const task = await gateway.create({
-      sessionId,
-      plan: nextPlan,
-      requestId: createRequest.current.requestId,
-    });
-    credits.remember(task.id, billing);
-    onSaved(task, generate);
+    setRecoveringCreate(true);
+    creation.current ??= { requestId: createRequest.current.requestId, plan: nextPlan };
+    saveCommerceDraft(storageKey, { ...draftSnapshot(), creation: creation.current });
+    let task = await gateway.create({ sessionId: remoteSession.current ?? sessionId, ...creation.current });
+    if (generate) {
+      try {
+        task = await submitCommerceOnce(gateway, task, billing);
+        notifyCreditsChanged();
+      } catch (cause) {
+        // The task card owns recovery of this exact persisted submit request.
+        clearCommerceDraft(storageKey);
+        onSaved(task, false);
+        throw cause;
+      }
+    }
+    clearCommerceDraft(storageKey);
+    onSaved(task, false);
   };
-  const save = (generate = false) =>
-    act(async () => {
-      if (!gateway || !plan) return;
-      requirePreparedReferences();
-      await savePlan(plan, generate);
-    });
+  const save = (generate = false) => act(async () => {
+    const nextPlan = await preparePlan();
+    await savePlan(nextPlan, generate);
+  });
+  const feeSlots = Array.from({ length: count }, (_, index) => plan?.slots[index] ?? generationSettings);
   return (
     <section
       aria-label={`${definition.name}向导`}
       className={`${styles.wizard} ${styles.wizardWorkbench} ${embedded ? styles.wizardEmbedded : ""}`}
     >
-      <div className={styles.heading}>
+      {!embedded && <div className={styles.heading}>
         <h2>{definition.name}</h2>
         <button onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? "展开资料" : "收起资料"}
         </button>
-      </div>
+      </div>}
       {!collapsed && (
         <div className={styles.wizardColumns}>
           <div className={styles.wizardSettings}>
             <div className={styles.wizardFormScroll}>
-              <fieldset disabled={busy} className={styles.formBody}>
-                <>
+              <fieldset disabled={busy || recoveringCreate} className={styles.formBody}>
                   {isPoster && (
                     <label>内容类型<CommerceSelect aria-label="海报内容类型" value={brief.contentMode ?? "product"} onChange={(value) => patch({ contentMode: value as "product" | "content" })}><option value="content">通用内容</option><option value="product">商品种草</option></CommerceSelect></label>
                   )}
-                  <p>{contentOnly ? "填写标题与正文，选择风格制作海报。多张内容请按段落分行。" : "上传商品图，填写名称，即可开始。卖点和风格可按需补充。"}</p>
+                  <p>{contentOnly ? "填写标题与正文，选择风格制作海报。多张内容请按段落分行。" : "上传商品图，描述商品特点，即可一键生成。"}</p>
                   <label>
-                    {contentOnly ? "风格参考图（选填）" : "商品与风格图片"}
+                    {contentOnly ? "风格参考图（选填）" : "商品图片"}
                     <input
                       aria-label="上传电商参考图"
                       type="file"
@@ -366,6 +397,16 @@ export function CommerceWizard({
                       }}
                     />
                   </label>
+                  {scene === 'style-reference' && <label>风格参考图
+                    <input aria-label="上传风格参考图" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => {
+                      if (event.target.files) {
+                        const additions = Object.fromEntries(Array.from(event.target.files).map(file => [`${file.name}:${file.size}:${file.lastModified}`, 'style' as const]));
+                        setRoles(current => ({ ...current, ...additions }));
+                        onReferenceAdd(event.target.files);
+                      }
+                      event.target.value = '';
+                    }} />
+                  </label>}
                   <p className={styles.note}>
                     合计最多 4 张，每张不超过 10 MB。
                   </p>
@@ -381,7 +422,7 @@ export function CommerceWizard({
                           />
                         )}
                         <span>{reference.name}</span>
-                        <label>
+                        <details className={styles.referenceRole}><summary>{roleOf(reference) === "product" ? "商品图" : "风格图"}</summary><label>
                           素材用途
                           <CommerceSelect
                             aria-label={`参考图 ${index + 1} 用途`}
@@ -405,19 +446,29 @@ export function CommerceWizard({
                             <option value="product">真实商品图</option>
                             <option value="style">风格参考图</option>
                           </CommerceSelect>
-                        </label>
+                        </label></details>
                         <button onClick={() => onReferenceRemove(index)}>
                           移除参考图 {index + 1}
                         </button>
                       </div>
                     ))}
                   </div>
+                  {!contentOnly && <CreativeTextField field="description" label="商品描述" multiline rows={4} maxLength={4000}
+                    placeholder="例如：米白色女士衬衫，棉质面料，宽松版型，适合日常通勤。可补充已确认的规格和卖点。"
+                    value={brief.description ?? [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n')}
+                    onChange={description => patch({ description })} />}
+                  <details className={styles.advancedOptions} open={contentOnly || undefined}>
+                    <summary>高级设置 · 平台、风格、数量与分图</summary>
+                  <label>文字优化模型<CommerceSelect aria-label="文字优化模型" disabled={busy || recoveringCreate}
+                    value={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} onChange={setSelectedChatModel}>
+                    <option value="doubao">豆包</option><option value="minimax">MiniMax</option>
+                  </CommerceSelect></label>
                   <CreativeTextField field={contentOnly ? "title" : "name"} label={contentOnly ? "海报标题" : "商品名称"} maxLength={160} value={brief.name} onChange={(name) => patch({ name })} />
                   <div className={styles.twoColumns}>
                     <label>
                       平台
                       <CommerceSelect
-                        disabled={busy || isPoster}
+                        disabled={busy || recoveringCreate || isPoster}
                         aria-label="创作平台"
                         value={brief.platform}
                         onChange={(value) =>
@@ -436,7 +487,7 @@ export function CommerceWizard({
                     <label>
                       用途
                       <CommerceSelect
-                        disabled={busy}
+                        disabled={busy || recoveringCreate}
                         aria-label="创作用途"
                         value={brief.placement}
                         onChange={(value) => patch({ placement: value })}
@@ -460,12 +511,10 @@ export function CommerceWizard({
                       />
                     </>
                   )}
-                </>
-                <>
                   <label>
                     风格方向
                     <CommerceSelect
-                      disabled={busy}
+                      disabled={busy || recoveringCreate}
                       aria-label="风格模板"
                       value={templateId}
                       onChange={(value) => {
@@ -499,7 +548,7 @@ export function CommerceWizard({
                   <label>
                     图片数量
                     <CommerceSelect
-                      disabled={busy}
+                      disabled={busy || recoveringCreate}
                       aria-label="方案图片数量"
                       value={count}
                       onChange={(value) => {
@@ -531,52 +580,29 @@ export function CommerceWizard({
                     建议角色：{definition.roles.join("、")}
                     ；也可展开逐图设置调整。
                   </p>
-                </>
+                    <label>生成模型<CommerceSelect disabled={busy || recoveringCreate} aria-label="电商生成模型" value={`${generationSettings.provider}::${generationSettings.model}`} onChange={value => {
+                      const [provider, model] = value.split('::');
+                      const capability = capabilities.find(item => item.provider === provider)?.models.find(item => item.id === model);
+                      if (provider && model && capability) { invalidatePreview(); const nextSettings = { provider, model,
+                        aspectRatio: capability.aspectRatios.includes(generationSettings.aspectRatio) ? generationSettings.aspectRatio : capability.aspectRatios[0]!,
+                        resolution: capability.resolutions.includes(generationSettings.resolution) ? generationSettings.resolution : capability.resolutions[0]! }; setGenerationSettings(nextSettings); setPlan(current => current && ({ ...current, slots: current.slots.map(slot => ({ ...slot, ...nextSettings })) })); }
+                    }}>{capabilities.flatMap(provider => provider.models.map(model => <option key={`${provider.provider}::${model.id}`} value={`${provider.provider}::${model.id}`}>{model.label}</option>))}</CommerceSelect></label>
+                  </details>
               </fieldset>
             </div>
             {error && <p role="alert">{error}</p>}
+            {recoveringCreate && !busy && <p className={styles.note}>已保留本次方案，点击生成或保存将恢复同一任务。</p>}
             <div className={`${styles.actions} ${styles.wizardControls}`}>
-              <p className={styles.note}>
+              <div className={styles.generationSummary}><p className={styles.note}>
                 本次生成 {step === 3 ? plan?.slots.length : count}{" "}
-                张，消耗同等图片额度
+                张
               </p>
-              {step !== 3 && (
-                <button
-                  className={styles.primary}
-                  disabled={busy}
-                  onClick={() => void prepare()}
-                >
-                  {busy ? "正在准备…" : "预览分图方案"}
-                </button>
-              )}
-              {step === 3 && plan && (
-                <CreditFee
-                  items={plan.slots.map((slot) =>
-                    imageCreditItem({ ...slot, count: 1 }),
-                  )}
-                />
-              )}
-              {step === 3 && (
-                <button
-                  className={styles.primary}
-                  disabled={busy}
-                  onClick={() => void save(true)}
-                >
-                  {busy
-                    ? "正在准备…"
-                    : `确认生成 ${plan?.slots.length ?? count} 张`}
-                </button>
-              )}
-              {step === 3 && (
-                <button
-                  disabled={busy}
-                  onClick={() => void save()}
-                >
-                  {busy ? "正在保存…" : "保存方案，稍后生成"}
-                </button>
-              )}
-              <button disabled={busy} onClick={onClose}>
-                取消未保存方案
+              <CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} /></div>
+              <button className={styles.primary} disabled={busy || !active} onClick={() => void save(true)}>{busy ? '正在准备…' : `一键生成 ${step === 3 ? plan?.slots.length ?? count : count} 张`}</button>
+              <button disabled={busy || !active} onClick={() => void prepare()}>调整分图方案</button>
+              <button disabled={busy || !active} onClick={() => void save()}>保存草稿</button>
+              <button disabled={busy} onClick={() => { clearCommerceDraft(storageKey); onClose(); }}>
+                取消方案
               </button>
             </div>
           </div>
@@ -596,9 +622,9 @@ export function CommerceWizard({
               <span>{count} 张图片</span>
             </div>
             {showPlan ? (
-              <fieldset disabled={busy} className={styles.formBody}>
+              <fieldset disabled={busy || recoveringCreate} className={styles.formBody}>
                 <CommercePlanFields
-                  disabled={busy}
+                  disabled={busy || recoveringCreate}
                   plan={plan}
                   capabilities={capabilities}
                   onChange={setPlan}
@@ -610,7 +636,7 @@ export function CommerceWizard({
               <>
                 <h3>预览你的分图方案</h3>
                 <p className={styles.note}>
-                  填写或更新左侧商品资料后，点击“预览分图方案”。这里会展示每张图片的角色、准确文案与构图要求，确认前不会开始生成。
+                  填写左侧商品资料后，可点击“调整分图方案”查看和编辑每张图，也可以直接一键生成。
                 </p>
               </>
             ) : (

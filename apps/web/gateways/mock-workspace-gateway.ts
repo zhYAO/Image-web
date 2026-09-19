@@ -188,15 +188,18 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     );
   }
 
-  async createSession(title = '新的创作') {
-    return this.serializeMutation(() => this.createSessionNow(title));
+  async createSession(title = '新的创作', requestId?: string) {
+    return this.serializeMutation(() => {
+      if (requestId && this.state.sessions.some(session => session.id === requestId)) return clone(this.requireSession(requestId));
+      return this.createSessionNow(title, requestId);
+    });
   }
 
-  private createSessionNow(title: string) {
+  private createSessionNow(title: string, requestId?: string) {
     const timestamp = this.timestamp();
     const session: Session = {
       createdAt: timestamp,
-      id: this.id('session'),
+      id: requestId ?? this.id('session'),
       status: 'active',
       title,
       updatedAt: timestamp,

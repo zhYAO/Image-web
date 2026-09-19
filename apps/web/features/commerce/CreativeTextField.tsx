@@ -3,6 +3,7 @@
 import { useLayoutEffect, useId, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
+import { creativeTextChange } from "@zimage/domain";
 import type {
   CreativeTextOptimizeRequest,
   CreativeTextFieldName,
@@ -51,6 +52,8 @@ function CreativeTextFieldEditor({
   "aria-label": ariaLabel,
 }: CreativeTextFieldProps) {
   const credits = useCredits();
+  const formatOnly = ["name", "facts", "role"].includes(field);
+  const actionLabel = formatOnly ? "AI 整理格式" : "AI 优化当前内容";
   const lastRequest = useRef<
     { key: string; input: CreativeTextOptimizeRequest } | undefined
   >(undefined);
@@ -80,6 +83,11 @@ function CreativeTextFieldEditor({
   );
 
   function apply(text: string) {
+    if (text === current.current) {
+      setSuggestion(undefined);
+      setStatus('未产生修改，当前内容已保留。');
+      return;
+    }
     setUndo({ before: current.current, after: text });
     current.current = text;
     onChange(text);
@@ -130,6 +138,11 @@ function CreativeTextFieldEditor({
       );
       lastRequest.current = undefined;
       if (active.current !== controller || controller.signal.aborted) return;
+      const change = creativeTextChange(submitted, result.text);
+      if (change === 'unchanged') {
+        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}未产生修改，当前内容已保留。`);
+        return;
+      }
       if (
         current.current !== submitted ||
         revision.current !== startedRevision
@@ -140,7 +153,7 @@ function CreativeTextFieldEditor({
         );
       } else {
         apply(result.text);
-        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}已优化当前内容。`);
+        setStatus(`${result.mock ? 'Mock 演示 · ' : ''}${change === 'formatted' ? '仅调整格式。' : '已优化表达。'}`);
       }
     } catch (error) {
       if(error instanceof Error && "newRequest" in error && error.newRequest)lastRequest.current=undefined;
@@ -175,7 +188,7 @@ function CreativeTextFieldEditor({
       {label && <label htmlFor={inputId}>{label}</label>}
       <div className={styles.editor}>
       {multiline ? <textarea {...props} rows={rows} /> : <input {...props} />}
-      <button className={styles.sparkle} type="button" title="AI 优化当前内容" aria-label="AI 优化当前内容" disabled={disabled || pending || !value.trim()} onClick={() => void optimize()}><Sparkles size={16} aria-hidden="true" /></button>
+      <button className={styles.sparkle} type="button" title={actionLabel} aria-label={actionLabel} disabled={disabled || pending || !value.trim()} onClick={() => void optimize()}><Sparkles size={16} aria-hidden="true" /></button>
     </div>
       <CreditFee
         items={[

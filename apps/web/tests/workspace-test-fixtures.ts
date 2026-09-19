@@ -222,6 +222,7 @@ export function setupWorkspaceTest() {
   afterEach(() => vi.restoreAllMocks());
 
   beforeEach(() => {
+    sessionStorage.clear();
     useWorkspaceStore.getState().reset();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();

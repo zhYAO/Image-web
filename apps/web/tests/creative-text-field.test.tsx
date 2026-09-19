@@ -24,6 +24,22 @@ describe('current-field AI editing', () => {
     expect(url).toBe('/api/creative-text/optimize');
     expect(JSON.parse(options.body)).toMatchObject({ chatModel: 'minimax', field: 'title', text: '旧文案' });
   });
+  it.each([
+    ['旧文案', '未产生修改', false],
+    ['旧文案。', '仅调整格式', true],
+    ['重新整理后的文案', '已优化表达', true],
+  ] as const)('reports the actual change for %s without extra requests', async (text, status, undo) => {
+    vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text, mock: false })));
+    vi.stubGlobal('fetch', fetcher);
+    render(<Harness field="description" />);
+    fireEvent.click(screen.getByRole('button', { name: 'AI 优化当前内容' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(status));
+    expect(screen.getByRole('textbox')).toHaveValue(text);
+    expect(Boolean(screen.queryByRole('button', { name: '撤销优化' }))).toBe(undo);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toMatchObject({ field: 'description', text: '旧文案' });
+  });
   it('disables empty optimization', () => {
     render(<Harness initial=" " />);
     expect(screen.getByRole('button', { name: 'AI 优化当前内容' })).toBeDisabled();
@@ -73,7 +89,7 @@ describe('current-field AI editing', () => {
     expect(screen.getByRole('textbox')).toHaveValue('旧文案');
     expect(screen.queryByRole('button', { name: '应用建议' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '撤销优化' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI 优化当前内容' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'AI 整理格式' })).toBeEnabled();
   });
   it('clears a pending suggestion when the field type changes', async () => {
     vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');

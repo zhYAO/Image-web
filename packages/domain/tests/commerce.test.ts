@@ -22,6 +22,18 @@ const brief = {
   styleReferenceIds: [],
 };
 describe("commerce planning", () => {
+  it('includes the full description and preserves legacy, automatic, exact and no-text copy rules', () => {
+    const described = { ...brief, description: '米白色棉质衬衫。宽松版型，适合通勤。' };
+    const slot = { ...buildCommerceSlots(brief, 'product-set', 1, settings)[0]!, exactText: '已确认文字' };
+    const compile = (textMode?: 'auto' | 'exact' | 'none') => compileCommerceSlot(described, { ...slot, textMode }, 'soft-studio');
+    expect(compile()).toContain('仅绘制以下确认文案：已确认文字');
+    expect(compile('exact')).toContain('仅绘制以下确认文案：已确认文字');
+    expect(compile('none')).toContain('文字：不添加营销文字');
+    expect(compile('none')).not.toContain('仅绘制以下确认文案');
+    expect(compile('auto')).toContain(described.description);
+    expect(compile('auto')).toContain('提炼适合本张角色');
+    expect(compile('auto')).not.toContain('仅绘制以下确认文案');
+  });
   it('compiles different art direction for each ecommerce role even with one shared style', () => {
     const slots = buildCommerceSlots(brief, 'product-set', 5, settings);
     const prompts = slots.map((slot) => compileCommerceSlot(brief, slot, 'soft-studio'));

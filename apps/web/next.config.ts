@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'node:path';
 import { withSentryConfig } from '@sentry/nextjs';
 
 const dataMode = process.env.NEXT_PUBLIC_DATA_MODE ?? 'mock';
@@ -13,6 +14,12 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
+  experimental:
+    process.env.ZIMAGE_BUILD_CPUS === '1'
+      ? { cpus: 1, webpackMemoryOptimizations: true, webpackBuildWorker: true }
+      : undefined,
   transpilePackages: ['@zimage/domain'],
 };
 

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const input = createSessionRequestSchema.parse(await readJson(request));
     const admin = createSupabaseAdminClient();
     return withPreviewUsageReservation(createPreviewUsageGuard(admin), {
-      businessKey: `session:${correlationId}`,
+      businessKey: `session:${input.requestId ?? correlationId}`,
       correlationId,
       createsSession: true,
       operation: 'session_create',

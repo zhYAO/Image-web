@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { COMMERCE_TEMPLATES, IMAGE_PROVIDER_CAPABILITIES, type CommercePlan } from '@zimage/domain';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommerceWizard } from '@/features/commerce/CommerceWizard';
 import { createTestGateway } from './workspace-test-fixtures';
+
+beforeEach(() => sessionStorage.clear());
 
 async function wizard(initialTemplateId?: string, seedPlan?: CommercePlan) {
   const gateway = createTestGateway();
@@ -20,15 +22,15 @@ function fill() {
   fireEvent.change(screen.getByLabelText('海报内容'), { target: { value: '整理书桌\n散步放松\n阅读随笔\n做一顿饭\n写下灵感\n早点休息\n慢慢喝茶' } });
 }
 async function preview(count = 1) {
-  fireEvent.click(screen.getByRole('button', { name: '预览分图方案' }));
-  await screen.findByRole('button', { name: `确认生成 ${count} 张` });
+  fireEvent.click(screen.getByRole('button', { name: '调整分图方案' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: `一键生成 ${count} 张` })).toBeEnabled());
 }
 describe('小红书海报字段方案', () => {
   it('uses a scene-compatible initial template and saves content without product references at 3:4 2K', async () => {
     const { create } = await wizard('xhs-retro'); fill();
     await preview();
     expect(create).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '保存方案，稍后生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0].plan).toMatchObject({ templateId: 'xhs-retro', brief: { contentMode: 'content', platform: 'xiaohongshu', productReferenceIds: [] }, slots: [{ aspectRatio: '3:4', resolution: '2K', role: '海报封面' }] });
   });
@@ -37,9 +39,9 @@ describe('小红书海报字段方案', () => {
     expect(screen.getByLabelText('风格模板').closest('.ant-select')).toHaveTextContent('清新种草');
     await choose('海报内容类型', '商品种草');
     fireEvent.change(screen.getByLabelText('商品名称'), { target: { value: '陶瓷杯' } });
-    fireEvent.click(screen.getByRole('button', { name: '预览分图方案' }));
+    fireEvent.click(screen.getByRole('button', { name: '调整分图方案' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('请上传至少一张清晰的真实商品图');
-    expect(screen.queryByRole('button', { name: /确认生成/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /一键生成/ })).toBeEnabled();
   });
   it('keeps a saved historical template explicit and preserves it on save', async () => {
     const seedPlan: CommercePlan = {
@@ -52,7 +54,7 @@ describe('小红书海报字段方案', () => {
     expect(screen.getByLabelText('风格模板').closest('.ant-select')).toHaveTextContent(`历史模板 · ${historical.name}`);
     for (const guidance of screen.getAllByText(historical.guidance)) expect(guidance).toBeVisible();
     await preview();
-    fireEvent.click(screen.getByRole('button', { name: '保存方案，稍后生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0].plan.templateId).toBe('soft-studio');
   });
@@ -67,7 +69,7 @@ describe('小红书海报字段方案', () => {
     await choose('方案图片数量', '3'); await preview(3);
     expect(screen.getByLabelText('第 2 张文案')).toHaveValue('我的编辑文案');
     expect(screen.getByLabelText('第 2 张角色')).toHaveValue('自定义内容卡');
-    fireEvent.click(screen.getByRole('button', { name: '保存方案，稍后生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0].plan.slots).toHaveLength(3);
     expect(create.mock.calls[0]?.[0].plan.slots[2]?.exactText).toBe('新段落二');

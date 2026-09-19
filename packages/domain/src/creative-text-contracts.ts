@@ -2,6 +2,7 @@ import { creditConfirmationSchema } from "./credits";
 import { z } from "zod";
 
 export const creativeTextFieldSchema = z.enum([
+  "description",
   "name",
   "role",
   "facts",
@@ -13,6 +14,7 @@ export const creativeTextFieldSchema = z.enum([
 ]);
 export type CreativeTextFieldName = z.infer<typeof creativeTextFieldSchema>;
 export const creativeTextFieldLimits: Record<CreativeTextFieldName, number> = {
+  description: 4000,
   name: 160,
   role: 80,
   facts: 4000,
@@ -42,5 +44,10 @@ export const creativeTextOptimizeRequestSchema = z
       });
   });
 export type CreativeTextOptimizeRequest = z.infer<typeof creativeTextOptimizeRequestSchema>;
-export const creativeTextOptimizeResponseSchema = z.object({ text: z.string().trim().min(1).max(6000), mock: z.boolean() }).strict();
+export function creativeTextChange(before: string, after: string): 'rewritten' | 'formatted' | 'unchanged' {
+  if (before === after) return 'unchanged';
+  const words = (text: string) => text.replace(/[\s\p{P}]/gu, '');
+  return words(before) === words(after) ? 'formatted' : 'rewritten';
+}
+export const creativeTextOptimizeResponseSchema = z.object({ text: z.string().trim().min(1).max(6000), mock: z.boolean(), changeType: z.enum(['rewritten', 'formatted', 'unchanged']).optional() }).strict();
 export type CreativeTextOptimizeResponse = z.infer<typeof creativeTextOptimizeResponseSchema>;

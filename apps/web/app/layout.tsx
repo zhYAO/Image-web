@@ -3,7 +3,8 @@ import "./globals.css";
 
 import { CreditsProvider } from "@/features/credits/CreditsProvider";
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { WorkspaceHost } from './workspace-host';
 import { AuthStatusProvider } from "@/features/auth/AuthStatusProvider";
 import { AppProviders } from "./providers";
 
@@ -20,7 +21,7 @@ export default function RootLayout({
       <body>
         <AppProviders>
           <AuthStatusProvider>
-            <CreditsProvider>{children}</CreditsProvider>
+            <CreditsProvider><Suspense fallback={children}><WorkspaceHost>{children}</WorkspaceHost></Suspense></CreditsProvider>
           </AuthStatusProvider>
         </AppProviders>
       </body>

@@ -46,6 +46,7 @@ export const sessionSchema = z.strictObject({
 });
 
 export const createSessionRequestSchema = z.strictObject({
+  requestId: z.uuid().optional(),
   title: titleSchema.optional(),
 });
 

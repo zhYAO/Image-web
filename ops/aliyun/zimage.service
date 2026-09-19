@@ -1,0 +1,25 @@
+[Unit]
+Description=ZImage Web
+After=network-online.target mihomo.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zimage
+Group=zimage
+WorkingDirectory=/opt/zimage/current/apps/web
+EnvironmentFile=/etc/zimage/environment
+Environment=NODE_OPTIONS=--max-old-space-size=640
+ExecStart=/opt/zimage/toolchain/node-v24.19.0-linux-x64/bin/node server.js
+MemoryMax=850M
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
