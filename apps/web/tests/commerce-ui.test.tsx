@@ -113,6 +113,7 @@ function Card({
 describe("commerce UI", () => {
   setupWorkspaceTest();
   afterEach(() => {
+    vi.useRealTimers();
     window.history.replaceState(null, "", "/");
     window.sessionStorage.clear();
   });
@@ -479,6 +480,8 @@ describe("commerce UI", () => {
     expect(message).toBe("已发起 3 张下载。");
   });
   it("promotes a successful sample into a shared style reference and opens a separate draft without generating", async () => {
+    // Regression: real timers must not determine which fixture session opens.
+    vi.useFakeTimers({ toFake: ["Date"] });
     const gateway = createTestGateway();
     const original = await createPlan(gateway, 1);
     await gateway.commerce.submit(original.id, {

@@ -193,6 +193,7 @@ export class FailOnceImageGateway extends CapturingGateway {
 
 type TestGatewayConstructor<T extends MockWorkspaceGateway> = new (options?: {
   delay?: (milliseconds: number) => Promise<void>;
+  now?: () => Date;
   storage?: StorageLike;
 }) => T;
 interface TestGatewayOptions {
@@ -208,8 +209,12 @@ export function createTestGateway<T extends MockWorkspaceGateway>(
   Gateway: TestGatewayConstructor<T> = MockWorkspaceGateway as TestGatewayConstructor<T>,
   options: TestGatewayOptions = {},
 ) {
+  // Zero-delay fixtures can create/update sessions in the same wall-clock
+  // millisecond. Keep their intended activity order deterministic on fast CI.
+  let timestamp = Date.now();
   return new Gateway({
     delay: options.delay ?? (async () => undefined),
+    now: () => new Date(timestamp++),
     storage: new TestStorage(),
   });
 }
