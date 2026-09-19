@@ -7,13 +7,308 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.17"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      account_profiles: {
+        Row: {
+          accepted_legal_at: string | null
+          accepted_legal_version: string | null
+          created_at: string
+          display_name: string | null
+          status: Database["public"]["Enums"]["account_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accepted_legal_at?: string | null
+          accepted_legal_version?: string | null
+          created_at?: string
+          display_name?: string | null
+          status?: Database["public"]["Enums"]["account_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accepted_legal_at?: string | null
+          accepted_legal_version?: string | null
+          created_at?: string
+          display_name?: string | null
+          status?: Database["public"]["Enums"]["account_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      commerce_exports: {
+        Row: {
+          created_at: string
+          id: string
+          items: Json
+          revision: number
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          items: Json
+          revision: number
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          items?: Json
+          revision?: number
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_exports_task_id_revision_fkey"
+            columns: ["task_id", "revision"]
+            isOneToOne: false
+            referencedRelation: "commerce_revisions"
+            referencedColumns: ["task_id", "revision"]
+          },
+        ]
+      }
+      commerce_revisions: {
+        Row: {
+          created_at: string
+          plan: Json
+          revision: number
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          plan: Json
+          revision: number
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          plan?: Json
+          revision?: number
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_revisions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "commerce_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commerce_run_items: {
+        Row: {
+          batch_id: string
+          compatibility_hash: string
+          generation_id: string
+          parent_generation_id: string | null
+          position: number
+          run_id: string
+          selection_version: number
+          slot_id: string
+          task_id: string
+        }
+        Insert: {
+          batch_id: string
+          compatibility_hash: string
+          generation_id: string
+          parent_generation_id?: string | null
+          position: number
+          run_id: string
+          selection_version: number
+          slot_id: string
+          task_id: string
+        }
+        Update: {
+          batch_id?: string
+          compatibility_hash?: string
+          generation_id?: string
+          parent_generation_id?: string | null
+          position?: number
+          run_id?: string
+          selection_version?: number
+          slot_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_run_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: true
+            referencedRelation: "generation_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_run_items_generation_id_fkey"
+            columns: ["generation_id"]
+            isOneToOne: true
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_run_items_parent_generation_id_fkey"
+            columns: ["parent_generation_id"]
+            isOneToOne: false
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_run_items_run_id_task_id_fkey"
+            columns: ["run_id", "task_id"]
+            isOneToOne: false
+            referencedRelation: "commerce_runs"
+            referencedColumns: ["id", "task_id"]
+          },
+        ]
+      }
+      commerce_runs: {
+        Row: {
+          created_at: string
+          id: string
+          request_id: string
+          revision: number
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          request_id: string
+          revision: number
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          request_id?: string
+          revision?: number
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_runs_task_id_revision_fkey"
+            columns: ["task_id", "revision"]
+            isOneToOne: false
+            referencedRelation: "commerce_revisions"
+            referencedColumns: ["task_id", "revision"]
+          },
+        ]
+      }
+      commerce_selections: {
+        Row: {
+          compatibility_hash: string | null
+          generation_id: string | null
+          pending_generation_id: string | null
+          selection_version: number
+          slot_id: string
+          task_id: string
+        }
+        Insert: {
+          compatibility_hash?: string | null
+          generation_id?: string | null
+          pending_generation_id?: string | null
+          selection_version?: number
+          slot_id: string
+          task_id: string
+        }
+        Update: {
+          compatibility_hash?: string | null
+          generation_id?: string | null
+          pending_generation_id?: string | null
+          selection_version?: number
+          slot_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_selections_generation_id_fkey"
+            columns: ["generation_id"]
+            isOneToOne: false
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_selections_pending_generation_id_fkey"
+            columns: ["pending_generation_id"]
+            isOneToOne: false
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commerce_selections_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "commerce_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commerce_tasks: {
+        Row: {
+          archived: boolean
+          created_at: string
+          id: string
+          revision: number
+          session_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          revision?: number
+          session_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string
+          id?: string
+          revision?: number
+          session_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commerce_tasks_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_batches: {
         Row: {
           config: Json
@@ -169,6 +464,7 @@ export type Database = {
           original_filename: string
           session_id: string
           size_bytes: number
+          source_generation_id: string | null
           status: string
           storage_bucket: string
           storage_path: string
@@ -176,6 +472,7 @@ export type Database = {
           upload_expires_at: string
           user_id: string
           width: number
+          write_state: string
         }
         Insert: {
           created_at?: string
@@ -185,6 +482,7 @@ export type Database = {
           original_filename: string
           session_id: string
           size_bytes: number
+          source_generation_id?: string | null
           status?: string
           storage_bucket?: string
           storage_path: string
@@ -192,6 +490,7 @@ export type Database = {
           upload_expires_at?: string
           user_id: string
           width: number
+          write_state?: string
         }
         Update: {
           created_at?: string
@@ -201,6 +500,7 @@ export type Database = {
           original_filename?: string
           session_id?: string
           size_bytes?: number
+          source_generation_id?: string | null
           status?: string
           storage_bucket?: string
           storage_path?: string
@@ -208,6 +508,7 @@ export type Database = {
           upload_expires_at?: string
           user_id?: string
           width?: number
+          write_state?: string
         }
         Relationships: [
           {
@@ -314,10 +615,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      credit_dispatch: { Args: { p_user_id: string; p_action: string; p_input?: Json }; Returns: Json };
-      credit_admin: { Args: { p_input: Json }; Returns: Json };
-      get_commerce_capabilities: { Args: Record<PropertyKey, never>; Returns: Json };
-
       archive_image_message: {
         Args: { p_message_id: number }
         Returns: boolean
@@ -326,10 +623,38 @@ export type Database = {
         Args: { p_provider: string }
         Returns: boolean
       }
+      claim_account_cleanup_job: { Args: never; Returns: Json }
       claim_cleanup_job: { Args: never; Returns: Json }
+      claim_cleanup_work: { Args: never; Returns: Json }
       claim_image_generation: { Args: never; Returns: Json }
+      cleanup_worker_step: {
+        Args: {
+          p_claim_token: string
+          p_error_code?: string
+          p_job_id: string
+          p_job_type: string
+          p_operation: string
+        }
+        Returns: Json
+      }
+      commerce_dispatch: {
+        Args: {
+          p_compiled: Json
+          p_correlation_id: string
+          p_input: Json
+          p_operation: string
+          p_request_hash: string
+          p_task_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       commit_preview_usage: {
         Args: { p_business_key: string; p_user_id: string }
+        Returns: boolean
+      }
+      complete_account_cleanup_job: {
+        Args: { p_user_id: string }
         Returns: boolean
       }
       complete_chat_turn: {
@@ -346,6 +671,26 @@ export type Database = {
         }
         Returns: undefined
       }
+      consume_auth_rate_limit: {
+        Args: {
+          p_action: string
+          p_block_seconds?: number
+          p_email_hash: string
+          p_ip_hash: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
+      credit_admin: { Args: { p_input: Json }; Returns: Json }
+      credit_dispatch: {
+        Args: { p_action: string; p_input?: Json; p_user_id: string }
+        Returns: Json
+      }
+      fail_account_cleanup_job: {
+        Args: { p_error_code: string; p_user_id: string }
+        Returns: Json
+      }
       fail_cleanup_job: {
         Args: { p_error_code: string; p_job_id: string }
         Returns: Json
@@ -360,13 +705,53 @@ export type Database = {
         }
         Returns: undefined
       }
+      generation_worker_step: {
+        Args: {
+          p_claim_token: string
+          p_generation_id: string
+          p_operation: string
+          p_payload?: Json
+        }
+        Returns: Json
+      }
+      get_commerce_capabilities: { Args: never; Returns: Json }
       get_provider_health: { Args: never; Returns: Json }
       get_user_quota: { Args: { p_user_id: string }; Returns: Json }
+      list_sessions_with_activity: {
+        Args: { p_user_id: string }
+        Returns: {
+          activity_types: string[]
+          created_at: string
+          id: string
+          status: string
+          title: string
+          updated_at: string
+        }[]
+      }
       mark_provider_submission_started: {
         Args: { p_generation_id: string }
         Returns: boolean
       }
+      promote_commerce_reference: {
+        Args: {
+          p_generation_id: string
+          p_metadata?: Json
+          p_request_id: string
+          p_task_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       prune_preview_usage: { Args: never; Returns: number }
+      reconcile_reference_promotion_usage: {
+        Args: {
+          p_business_key: string
+          p_bytes: number
+          p_correlation_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       record_chat_provider_result: {
         Args: { p_is_error: boolean; p_provider: string }
         Returns: undefined
@@ -391,6 +776,10 @@ export type Database = {
         }
         Returns: Json
       }
+      reference_write_intent: {
+        Args: { p_operation: string; p_reference_id: string; p_user_id: string }
+        Returns: Json
+      }
       release_preview_usage: {
         Args: {
           p_business_key: string
@@ -399,10 +788,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      request_account_deletion: { Args: never; Returns: boolean }
       request_session_deletion: {
         Args: { p_session_id: string; p_user_id: string }
         Returns: string
       }
+      require_verified_user_id: { Args: never; Returns: string }
       reserve_preview_usage: {
         Args: {
           p_business_key: string
@@ -454,7 +845,7 @@ export type Database = {
       unschedule_generation_worker: { Args: never; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      account_status: "active" | "deleting"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -580,7 +971,13 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  public: {
+  graphql_public: {
     Enums: {},
   },
+  public: {
+    Enums: {
+      account_status: ["active", "deleting"],
+    },
+  },
 } as const
+
