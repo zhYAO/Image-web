@@ -88,7 +88,7 @@ describe('commerce navigation and durable drafts', () => {
     expect(ensure).toHaveBeenCalledTimes(1);
     expect((await gateway.commerce.list(savedInput.sessionId))).toHaveLength(1);
     expect(savedInput.plan.brief).toMatchObject({ name: '米白色棉质衬衫', description: '米白色棉质衬衫。宽松版型，适合日常通勤。' });
-    expect(savedInput.plan.slots.map(slot => slot.textMode)).toEqual(['none', 'auto', 'auto', 'auto', 'auto']);
+    expect(savedInput.plan.slots.map(slot => slot.textMode)).toEqual(['none', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto']);
   });
 
   it('restores the global instruction baseline without overwriting individually edited slots', async () => {

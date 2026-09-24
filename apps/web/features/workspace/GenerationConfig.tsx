@@ -126,10 +126,10 @@ const ratioShape: Record<AspectRatio, { height: number; width: number }> = {
 
 interface GenerationParameterPopoverProps {
   aspectRatio: AspectRatio;
-  count: number;
+  count?: number;
   model?: ModelCapability;
   onAspectRatioChange: (ratio: AspectRatio) => void;
-  onCountChange: (count: number) => void;
+  onCountChange?: (count: number) => void;
   onOpenChange: (open: boolean) => void;
   onResolutionChange: (resolution: ImageResolution) => void;
   open: boolean;
@@ -138,16 +138,13 @@ interface GenerationParameterPopoverProps {
 
 export function GenerationParameterPopover({
   aspectRatio,
-  count,
   model,
   onAspectRatioChange,
-  onCountChange,
   onOpenChange,
   onResolutionChange,
   open,
   resolution,
 }: GenerationParameterPopoverProps) {
-  const maxImages = Math.min(model?.maxImages ?? 1, 4);
   return (
     <PopoverShell
       ariaLabel="生成参数"
@@ -158,12 +155,12 @@ export function GenerationParameterPopover({
         <Button
           aria-expanded={open}
           aria-haspopup="dialog"
-          aria-label={`生成参数 ${aspectRatio} ${resolution} ${count}张`}
+          aria-label={`生成参数 ${aspectRatio} ${resolution}`}
           className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
           icon={<SlidersHorizontal size={15} />}
           onClick={() => onOpenChange(!open)}
         >
-          {aspectRatio}<span className={styles.toolbarDivider} />{resolution}<span className={styles.toolbarDivider} />{count}
+          {resolution}<span className={styles.toolbarDivider} />{aspectRatio}
         </Button>
       )}
     >
@@ -202,23 +199,6 @@ export function GenerationParameterPopover({
               type="button"
             >
               {item === '1K' ? '标准 1K' : '高清 2K'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className={styles.popoverSection}>
-        <div className={styles.popoverLabel}>选择生成数量</div>
-        <div className={styles.segmentedOptions}>
-          {Array.from({ length: maxImages }, (_, index) => index + 1).map((item) => (
-            <button
-              aria-label={`生成数量 ${item}`}
-              aria-pressed={count === item}
-              className={`${styles.segmentedOption} ${count === item ? styles.optionActive : ''}`}
-              key={item}
-              onClick={() => onCountChange(item)}
-              type="button"
-            >
-              {item}
             </button>
           ))}
         </div>

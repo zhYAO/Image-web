@@ -3,6 +3,8 @@ import { CreativeTextField } from "./CreativeTextField";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   COMMERCE_TEMPLATES,
+  SELLING_LAYOUTS,
+  APLUS_SPECS,
   type CommercePlan,
   type CommerceSlot,
   type ProviderCapability,
@@ -76,6 +78,10 @@ export function CommercePlanFields({
             <legend>
               第 {number} 张 · {slot.role}
             </legend>
+            {slot.outputSpec && <p className={styles.note}>{APLUS_SPECS[slot.outputSpec].label}</p>}
+            {slot.category === 'selling' && <label>卖点版式<CommerceSelect aria-label={`第 ${number} 张卖点版式`} value={slot.layout ?? '自动分配'} onChange={value => update(slot.id, { layout: value as CommerceSlot['layout'] })}>
+              {SELLING_LAYOUTS.map(layout => <option key={layout}>{layout}</option>)}
+            </CommerceSelect></label>}
             <CreativeTextField productContext={{
                 name: plan.brief.name, facts: plan.brief.facts, description: plan.brief.description,
                 sellingPoints: plan.brief.sellingPoints, platform: plan.brief.platform,
@@ -132,7 +138,10 @@ export function CommercePlanFields({
                 value={`${slot.provider}::${slot.model}`}
                 onChange={(value) => {
                   const [provider, model] = value.split("::");
-                  update(slot.id, { provider, model });
+                  const selected = capabilities.find(item => item.provider === provider)?.models.find(item => item.id === model);
+                  update(slot.id, { provider, model,
+                    resolution: selected && !selected.resolutions.includes(slot.resolution) ? selected.resolutions[0] : slot.resolution,
+                    aspectRatio: selected && !selected.aspectRatios.includes(slot.aspectRatio) ? selected.aspectRatios[0] : slot.aspectRatio });
                 }}
               >
                 {capabilities.flatMap((provider) =>

@@ -201,7 +201,7 @@ describe('workspace presentation components', () => {
     );
 
     expect(screen.queryByRole('dialog', { name: '生成参数' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 2K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 2K' }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
 
     rerender(
@@ -221,7 +221,7 @@ describe('workspace presentation components', () => {
     expect(screen.getByRole('button', { name: '关闭生成参数' })).toHaveFocus();
     expect(screen.getByRole('button', { name: '比例 16:9' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '比例 3:4' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '生成数量 2' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /生成数量/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '生成数量 3' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
     expect(onAspectRatioChange).toHaveBeenCalledWith('16:9');
@@ -229,7 +229,7 @@ describe('workspace presentation components', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
-    expect(screen.getByRole('button', { name: '生成参数 1:1 2K 2张' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '生成参数 1:1 2K' })).toHaveFocus();
   });
 
   it('normalizes generation values against the newly selected model capability', () => {
@@ -411,11 +411,12 @@ describe('workspace presentation components', () => {
     expect(screen.queryByTestId('direct-generation-prompt')).not.toBeInTheDocument();
   });
 
-  it('fills an inspiration prompt without submitting and exercises all store actions', () => {
+  it('shows commerce instead of inspiration and exercises store actions', () => {
     const onInspiration = vi.fn();
     render(<WorkspaceTimeline items={[]} onDownloadBatch={vi.fn()} onRecreate={vi.fn()} onInspiration={onInspiration} streamingText="" />);
-    fireEvent.click(screen.getByRole('button', { name: /想象一片风景/ }));
-    expect(onInspiration).toHaveBeenCalledWith('生成一张月光下的海岸风景图，静谧蓝调，电影质感');
+    expect(screen.queryByRole('button', { name: /想象一片风景/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '电商生图' })).toBeInTheDocument();
+    expect(onInspiration).not.toHaveBeenCalled();
 
     const store = useWorkspaceStore.getState();
     store.setDraft('draft');

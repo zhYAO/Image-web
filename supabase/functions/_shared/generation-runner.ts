@@ -34,7 +34,7 @@ export interface ClaimedGeneration {
   generationId: string;
   messageId: number;
   model: string;
-  params: { aspectRatio: ImageAspectRatio; referenceIds?: string[]; resolution: ImageResolution };
+  params: { aspectRatio: ImageAspectRatio; referenceIds?: string[]; resolution: ImageResolution; targetWidth?: number; targetHeight?: number };
   prompt: string;
   provider: 'gemini' | 'seedream';
   readCount: number;
@@ -94,7 +94,9 @@ export function parseClaim(value: unknown): ClaimedGeneration | QueueAction | nu
     || !['1:1', '3:4', '4:3', '9:16', '16:9'].includes(String(params.aspectRatio))
     || !['1K', '2K'].includes(String(params.resolution))
     || !referenceIds.every(isUuid)
-    || referenceIds.length > 4
+    || referenceIds.length > 14
+    || ((params.targetWidth !== undefined || params.targetHeight !== undefined) &&
+      (!Number.isInteger(params.targetWidth) || !Number.isInteger(params.targetHeight) || Number(params.targetWidth) < 1 || Number(params.targetHeight) < 1 || Number(params.targetWidth) > 8192 || Number(params.targetHeight) > 8192))
   ) throw new Error('invalid_queue_claim');
 
   const parsedReferences = references.map((value): QueueReference => {
@@ -175,6 +177,8 @@ async function callProvider(claim: ClaimedGeneration, references: ProviderRefere
       model: configuration.model,
       prompt: claim.prompt,
       references,
+      targetWidth: claim.params.targetWidth,
+      targetHeight: claim.params.targetHeight,
       resolution: claim.params.resolution,
     };
     return claim.provider === 'gemini'

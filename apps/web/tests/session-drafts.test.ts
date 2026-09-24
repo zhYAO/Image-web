@@ -10,9 +10,9 @@ describe('session composer ownership', () => {
     store().setCount(4);
     store().selectSkill('white-background');
     store().activateComposer('first', {}, true);
-    expect(store()).toMatchObject({ activeComposerSessionId: 'first', explicitImageToolEnabled: true, count: 4, selectedSkillId: 'white-background' });
+    expect(store()).toMatchObject({ activeComposerSessionId: 'first', explicitImageToolEnabled: true, count: 1, selectedSkillId: 'white-background' });
     store().activateComposer('second');
-    expect(store()).toMatchObject({ explicitImageToolEnabled: false, count: 2, selectedSkillId: undefined });
+    expect(store()).toMatchObject({ explicitImageToolEnabled: false, count: 1, selectedSkillId: undefined });
   });
   it('starts a new session empty and restores the previous session draft and settings', () => {
     const store = useWorkspaceStore.getState;
@@ -21,10 +21,10 @@ describe('session composer ownership', () => {
     store().setExplicitImageToolEnabled(true);
     store().setCount(4);
     store().activateComposer('B');
-    expect(store()).toMatchObject({ draft: '', explicitImageToolEnabled: false, count: 2 });
+    expect(store()).toMatchObject({ draft: '', explicitImageToolEnabled: false, count: 1 });
     store().setDraft('B draft');
     store().activateComposer('A');
-    expect(store()).toMatchObject({ draft: 'A draft', explicitImageToolEnabled: true, count: 4 });
+    expect(store()).toMatchObject({ draft: 'A draft', explicitImageToolEnabled: true, count: 1 });
   });
   it('isolates references and Skill choices and clears all content on account reset', () => {
     const store = useWorkspaceStore.getState;
@@ -54,7 +54,7 @@ describe('session composer ownership', () => {
     store().activateComposer('different-account-session');
     expect(store().draft).toBe('');
     store().activateComposer('reload');
-    expect(store()).toMatchObject({ draft: 'unsent product prompt', selectedChatModel: 'minimax', count: 3, references: [] });
+    expect(store()).toMatchObject({ draft: 'unsent product prompt', selectedChatModel: 'minimax', count: 1, references: [] });
   });
   it('clears saved drafts when an account resets or a session is forgotten', () => {
     const store = useWorkspaceStore.getState;

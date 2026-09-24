@@ -15,6 +15,20 @@ import { assertTrustedOrigin, executeRoute, requireVerifiedUserId } from '@/serv
 
 export const runtime = 'nodejs';
 
+export async function GET(request: Request) {
+  return executeRoute(async () => {
+    const userClient = await createSupabaseServerClient();
+    const userId = await requireVerifiedUserId(userClient);
+    const sessionId = z.uuid().parse(new URL(request.url).searchParams.get('sessionId'));
+    const ownership = await userClient.from('sessions').select('id').eq('id', sessionId).eq('user_id', userId).eq('status', 'active').maybeSingle();
+    if (ownership.error) throw temporaryFailure('暂时无法验证会话，请稍后重试。');
+    if (!ownership.data) throw new ApiRouteError({ code: 'not_found', message: '会话不存在或无权访问。', retryable: false, status: 404 });
+    const existing = await userClient.from('reference_uploads').select('id', { count: 'exact', head: true }).eq('session_id', sessionId).eq('user_id', userId).or('status.eq.active,write_state.eq.pending');
+    if (existing.error) throw temporaryFailure('暂时无法验证参考图数量，请稍后重试。');
+    return NextResponse.json({ count: existing.count ?? 0, limit: 64 }, { headers: { 'cache-control': 'private, no-store' } });
+  });
+}
+
 function temporaryFailure(message: string) {
   return new ApiRouteError({ code: 'network', message, retryable: true, status: 503 });
 }

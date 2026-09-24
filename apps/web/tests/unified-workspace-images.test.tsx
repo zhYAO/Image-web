@@ -1,4 +1,4 @@
-import type { WorkspaceGateway } from '@zimage/domain';
+import type { GenerationBatch, TimelineItem, WorkspaceGateway } from '@zimage/domain';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { UnifiedWorkspace } from '@/features/workspace/UnifiedWorkspace';
@@ -6,6 +6,67 @@ import { setupWorkspaceTest, CapturingGateway, SeedreamOnlyGateway, MultiModelGa
 
 describe('UnifiedWorkspace', () => {
   setupWorkspaceTest();
+
+  it('polls active generation without polling a batch waiting for reconciliation', async () => {
+    class ReconciliationGateway extends CapturingGateway {
+      readonly polledBatchIds: string[] = [];
+      private batches: GenerationBatch[] = [];
+
+      setBatches(sessionId: string) {
+        const base = {
+          sessionId,
+          source: 'direct' as const,
+          prompt: '商品图',
+          provider: 'seedream',
+          model: 'seedream-4.5',
+          config: { aspectRatio: '1:1' as const, count: 2, resolution: '2K' as const },
+          createdAt: '2026-09-16T09:00:00.000Z',
+        };
+        this.batches = [
+          {
+            ...base,
+            id: '30000000-0000-4000-8000-0000000000a1',
+            status: 'processing',
+            assets: [
+              { id: '40000000-0000-4000-8000-0000000000a1', status: 'succeeded', url: 'https://example.invalid/image.jpg' },
+              { id: '40000000-0000-4000-8000-0000000000a2', status: 'processing', error: { code: 'CONFLICT', message: '生成结果待核对', retryable: false } },
+            ],
+          },
+          {
+            ...base,
+            id: '30000000-0000-4000-8000-0000000000a2',
+            status: 'processing',
+            assets: [{ id: '40000000-0000-4000-8000-0000000000a3', status: 'processing' }],
+          },
+        ];
+      }
+
+      override async getTimeline(sessionId: string): Promise<TimelineItem[]> {
+        return this.batches.map((batch, index) => ({
+          id: `50000000-0000-4000-8000-0000000000a${index + 1}`,
+          sessionId,
+          sequence: index + 1,
+          createdAt: batch.createdAt,
+          type: 'generation' as const,
+          batch,
+        }));
+      }
+
+      override async getGenerationBatch(batchId: string): Promise<GenerationBatch> {
+        this.polledBatchIds.push(batchId);
+        return this.batches.find((batch) => batch.id === batchId)!;
+      }
+    }
+
+    const gateway = createTestGateway(ReconciliationGateway);
+    const session = await gateway.createSession('轮询检测');
+    gateway.setBatches(session.id);
+    render(<UnifiedWorkspace gateway={gateway} />);
+
+    await screen.findAllByText('待核对');
+    await waitFor(() => expect(gateway.polledBatchIds).toContain('30000000-0000-4000-8000-0000000000a2'));
+    expect(gateway.polledBatchIds).not.toContain('30000000-0000-4000-8000-0000000000a1');
+  });
 
   it('keeps the create-image tool enabled after a queued request', async () => {
     const gateway = createTestGateway(CapturingGateway);
@@ -36,7 +97,7 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
 
     expect(screen.getByTestId('optimistic-image-turn')).toHaveTextContent('生成一只在海边奔跑的白猫');
-    expect(screen.getAllByText('等待队列处理')).toHaveLength(2);
+    expect(screen.getAllByText('等待队列处理')).toHaveLength(1);
     expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('');
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
 
@@ -84,7 +145,7 @@ describe('UnifiedWorkspace', () => {
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.click(screen.getByRole('button', { name: /图片设置/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
     fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '请生成一张白底马克杯商品图' },
@@ -101,7 +162,7 @@ describe('UnifiedWorkspace', () => {
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.click(screen.getByRole('button', { name: /图片设置/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
     fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
@@ -170,13 +231,15 @@ describe('UnifiedWorkspace', () => {
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '图片设置 Studio Wide 1:1 1K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 1K' }));
     fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
+    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Studio · Portrait' }));
-    expect(screen.getByRole('button', { name: '图片设置 Studio Portrait 3:4 1K 2张' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成参数 3:4 1K' })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 3:4 1K' }));
     fireEvent.click(screen.getByRole('button', { name: '分辨率 2K' }));
-    fireEvent.click(screen.getByRole('button', { name: '生成数量 4' }));
+    expect(screen.queryByRole('button', { name: /生成数量/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '生成一张秋日产品海报' },
     });
@@ -185,7 +248,7 @@ describe('UnifiedWorkspace', () => {
     await waitFor(() => expect(gateway.lastImageRequest).toBeDefined());
     expect(gateway.lastImageRequest).toMatchObject({
       aspectRatio: '3:4',
-      count: 4,
+      count: 1,
       model: 'portrait',
       provider: 'Studio',
       resolution: '2K',

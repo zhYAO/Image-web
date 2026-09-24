@@ -69,7 +69,7 @@ describe("commerce plan preview", () => {
   it("lets an enclosing workbench keep the examples panel selected after preview", async () => {
     await renderWizard("product-set", "examples");
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     expect(screen.getByText("预览对应所选模板的视觉方向，不是你的生成结果；其他分图按各自角色布局呈现。")).toBeVisible();
     expect(screen.queryByLabelText("第 1 张角色")).toBeNull();
   });
@@ -82,10 +82,10 @@ describe("commerce plan preview", () => {
     expect(screen.getByRole("button", { name: /一键生成/ })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     expect(create).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "一键生成 5 张" }));
+    fireEvent.click(screen.getByRole("button", { name: "一键生成 7 张" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ slots: expect.any(Array), runs: expect.any(Array) }), false));
     expect(submit).toHaveBeenCalledTimes(1);
@@ -95,7 +95,7 @@ describe("commerce plan preview", () => {
     const { gateway } = await renderWizard();
     const create = vi.spyOn(gateway.commerce, "create");
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     const firstRole = screen.getByLabelText("第 1 张角色");
     const firstSlot = firstRole.closest("fieldset")!;
     const firstIdentity = firstSlot.getAttribute("data-slot-id");
@@ -108,7 +108,7 @@ describe("commerce plan preview", () => {
     expect(screen.getByRole("button", { name: "调整分图方案" })).toBeVisible();
     expect(create).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     expect(screen.getByLabelText("第 1 张角色")).toHaveValue("自定义封面");
     expect(screen.getByLabelText("第 1 张角色").closest("fieldset")).toHaveAttribute(
       "data-slot-id",
@@ -122,7 +122,7 @@ describe("commerce plan preview", () => {
       target: { value: "初始卖点" },
     });
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /编辑第 2 张：/ }));
     expect(screen.getByLabelText("第 2 张文案")).toHaveValue(
       "白色陶瓷杯\n初始卖点",
@@ -132,7 +132,7 @@ describe("commerce plan preview", () => {
       target: { value: "更新卖点" },
     });
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     expect(screen.getByLabelText("第 2 张文案")).toHaveValue(
       "白色陶瓷杯\n更新卖点",
     );
@@ -144,7 +144,7 @@ describe("commerce plan preview", () => {
       target: { value: "新商品名" },
     });
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 5 张" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
     expect(screen.getByLabelText("第 2 张文案")).toHaveValue("");
   });
 
@@ -164,7 +164,7 @@ describe("commerce plan preview", () => {
     expect(screen.getByRole("button", { name: "保存草稿" })).toBeEnabled();
   });
 
-  it.each(COMMERCE_SCENES)("shows selectable per-scene slots for $name", async ({ id, roles, count }) => {
+  it.each(COMMERCE_SCENES.filter(scene => scene.id !== 'batch' && scene.id !== 'clone'))("shows selectable per-scene slots for $name", async ({ id, roles, count }) => {
     await renderWizard(id);
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     const preview = await screen.findByRole("complementary", { name: "电商方案预览" });

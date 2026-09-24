@@ -8,6 +8,7 @@ import {
   type CommercePlan,
   type UploadReference,
   type CommerceTask,
+  type CreativeBatch,
   type TimelineItem,
 } from "@zimage/domain";
 import {
@@ -25,6 +26,7 @@ import { Image as AntdImage } from "antd";
 import Link from "next/link";
 import { ArrowLeft, Layers3, Plus } from "lucide-react";
 import { TemplatePreview } from "./TemplatePreview";
+import { CommerceBatchWizard } from './CommerceBatchWizard';
 import { templateName } from "./commerce-ui";
 import {
   CommerceTaskCard,
@@ -64,8 +66,10 @@ export function CommerceWorkspace({
   ownerKey = 'local',
   ensureSession,
   onSavedSession,
+  onBatchCreated,
   onDraftSessionsChange,
   requestedTaskId,
+  requestedBatchId,
   requestedView,
   routeDriven = false,
   onViewChange,
@@ -85,8 +89,10 @@ export function CommerceWorkspace({
   ownerKey?: string;
   ensureSession?: (title: string, requestId: string) => Promise<string>;
   onSavedSession?: (task: CommerceTask, sourceId: string) => void;
+  onBatchCreated?: (batch: CreativeBatch, sourceId: string) => void;
   onDraftSessionsChange?: (ids: string[]) => void;
   requestedTaskId?: string;
+  requestedBatchId?: string;
   requestedView?: CommerceView;
   routeDriven?: boolean;
   onViewChange?: (sessionId: string, taskId: string, view?: CommerceView) => void;
@@ -354,7 +360,7 @@ export function CommerceWorkspace({
     (item) => item.type !== "generation" || !underlying.has(item.batch.id),
   );
   const hasCommerce = Boolean(
-    tasks.length ||
+    tasks.length || requestedBatchId ||
     drafts.some((draft) => draft.sessionId === sessionId) ||
     (launch && launch.sessionId === sessionId && consumedLaunch !== launch.sessionId),
   );
@@ -470,7 +476,7 @@ export function CommerceWorkspace({
       <div
         className={styles.savedWorkbench}
         hidden={
-          !hasCommerce || showDraft || !selectedTask || coordinatedLoading
+          !hasCommerce || showDraft || !selectedTask || coordinatedLoading || Boolean(requestedBatchId)
         }
       >
         <aside className={styles.savedBrief} aria-label={selectedTask?.brief.contentMode === "content" ? "已保存内容资料" : "已保存商品资料"}>
@@ -592,6 +598,7 @@ export function CommerceWorkspace({
                       confirmationRequest={confirmations[task.id]}
                       onSubmissionPendingChange={markSubmissionPending}
                       onPromote={promote}
+                      originalPreviewUrl={wizardProps.references.find(reference => reference.id === task.brief.productReferenceIds[0])?.previewUrl}
                     />
                   </AntdImage.PreviewGroup>
                 )}
@@ -600,6 +607,7 @@ export function CommerceWorkspace({
           </div>
         </section>
       </div>
+      {requestedBatchId && sessionId && !coordinatedLoading && <CommerceBatchWizard gateway={gateway} batchId={requestedBatchId} sessionId={sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} />}
       {drafts.map((draft) => (
         <div
           className={styles.draftWorkbench}
@@ -608,7 +616,7 @@ export function CommerceWorkspace({
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
           }
         >
-          <AntdImage.PreviewGroup>
+          {draft.scene === 'batch' ? <CommerceBatchWizard gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
             <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}
@@ -635,7 +643,7 @@ export function CommerceWorkspace({
               }}
             />
             </Suspense>
-          </AntdImage.PreviewGroup>
+          </AntdImage.PreviewGroup>}
         </div>
       ))}
       {hasCommerce && visible.length > 0 && !coordinatedLoading && (
