@@ -4,6 +4,8 @@ const sceneImages: Record<CommerceScene, string> = {
   "product-main": "product-main",
   "product-set": "selling-point",
   detail: "detail-hero",
+  clone: "selling-point",
+  batch: "selling-point",
   social: "social-cover",
   "style-reference": "selling-point",
   model: "model",

@@ -28,8 +28,14 @@ const directions: Record<string, string> = {
 };
 
 export function commerceArtDirection(role: string) {
+  const alias: Record<string, string> = {
+    白底商品图: '商品主图', 品牌首屏: '详情首屏', 产品展示: '商品主图', 功能介绍: '核心卖点',
+    规格参数: '商品说明', 尺寸说明: '商品说明', 结构拆解: '材质细节', 使用步骤: '商品说明',
+    适用人群: '使用场景', 对比展示: '商品说明', 包装内容: '商品说明', 品牌故事: '详情首屏',
+    常见问题: '商品说明', 购买提示: '商品说明', 卖点延展: '核心卖点', 场景延展: '使用场景',
+  };
   return (
-    directions[role] ??
+    directions[role] ?? directions[alias[role] ?? ''] ??
     `按照“${role}”的交付用途制作电商成品图，明确主体、构图、光线与文字信息层级，商品始终为视觉中心。`
   );
 }

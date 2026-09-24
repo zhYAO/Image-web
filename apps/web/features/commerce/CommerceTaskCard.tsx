@@ -17,7 +17,7 @@ import { Image as AntdImage } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import {
-  exportCommerceImages,
+  downloadCommerceFile,
   planOf,
   templateName,
   unsettledCommerceItem,
@@ -83,9 +83,11 @@ export function CommerceTaskCard({
   autoStart = false,
   view = "results",
   onSubmitted,
+  originalPreviewUrl,
 }: {
   view?: "plan" | "results";
   onSubmitted?: () => void;
+  originalPreviewUrl?: string;
   autoStart?: boolean;
   task: CommerceTask;
   gateway: CommerceGateway;
@@ -132,7 +134,19 @@ export function CommerceTaskCard({
     );
   }
   const [message, setMessage] = useState<string>();
+  const [exportFormat, setExportFormat] = useState<'jpg' | 'png'>('jpg');
+  const [exportFocus, setExportFocus] = useState({ x: 0.5, y: 0.5 });
+  const [originalUrl, setOriginalUrl] = useState(originalPreviewUrl);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (task.scene !== 'product-main' || originalPreviewUrl || !task.brief.productReferenceIds[0]) return;
+    let active = true;
+    void fetch(`/api/references/${task.brief.productReferenceIds[0]}/asset-url`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => { if (active && typeof result?.url === 'string') setOriginalUrl(result.url); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [task.scene, task.brief.productReferenceIds, originalPreviewUrl]);
   const storageKey = `zimage-commerce-submit:${task.id}`;
   const [pendingRequest, setPendingRequest] = useState(() =>
     readPending(storageKey),
@@ -443,10 +457,10 @@ export function CommerceTaskCard({
                   方案 {String(index + 1).padStart(2, "0")}
                 </span>
               ) : image?.url && !image.expired ? (
-                <AntdImage
-                  src={image.url}
-                  alt={`${task.brief.name} 第 ${index + 1} 张当前选图`}
-                />
+                <div className={task.scene === 'product-main' && originalUrl ? styles.originalCompare : undefined}>
+                  {task.scene === 'product-main' && originalUrl && <figure><AntdImage src={originalUrl} alt={`${task.brief.name} 原图`} /><figcaption>商品原图</figcaption></figure>}
+                  <figure><AntdImage src={image.url} alt={`${task.brief.name} 第 ${index + 1} 张当前选图`} /><figcaption>生成候选 {index + 1}</figcaption></figure>
+                </div>
               ) : (
                 <div className={styles.placeholder}>
                   {image?.expired
@@ -578,7 +592,7 @@ export function CommerceTaskCard({
                     onClick={() =>
                       void perform(async () =>
                         setMessage(
-                          await exportCommerceImages(gateway, task, [slot.id]),
+                          await downloadCommerceFile(gateway, task, [slot.id], 'single', exportFormat, exportFocus),
                         ),
                       )
                     }
@@ -607,6 +621,8 @@ export function CommerceTaskCard({
         )}
       {message && <p role="status">{message}</p>}
       <div className={styles.actions}>
+        <label>导出格式<select aria-label="导出格式" value={exportFormat} onChange={event => setExportFormat(event.target.value as 'jpg' | 'png')}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
+        {task.scene === 'detail' && <label>横向裁切位置<input aria-label="横向裁切位置" type="range" min="0" max="100" value={exportFocus.x * 100} onChange={event => setExportFocus(current => ({ ...current, x: Number(event.target.value) / 100 }))} /></label>}
         {task.runs
           .filter((run) => run.items.some((item) => item.status === "pending"))
           .map((run) => (
@@ -667,17 +683,16 @@ export function CommerceTaskCard({
           onClick={() =>
             void perform(async () =>
               setMessage(
-                await exportCommerceImages(
-                  gateway,
-                  task,
-                  available.map((slot) => slot.id),
-                ),
+                await downloadCommerceFile(gateway, task, available.map((slot) => slot.id), 'zip', exportFormat, exportFocus),
               ),
             )
           }
         >
-          下载当前选图（{available.length} 张）
+          ZIP 下载当前选图（{available.length} 张）
         </button>
+        {task.scene === 'detail' && available.some(slot => slot.outputSpec === 'standard') && <button disabled={busy} onClick={() => void perform(async () => setMessage(await downloadCommerceFile(gateway, task, available.filter(slot => slot.outputSpec === 'standard').map(slot => slot.id), 'long', exportFormat, exportFocus)))}>导出普通 A+ 长图</button>}
+        {task.scene === 'detail' && available.some(slot => slot.outputSpec === 'desktop') && <button disabled={busy} onClick={() => void perform(async () => setMessage(await downloadCommerceFile(gateway, task, available.filter(slot => slot.outputSpec === 'desktop').map(slot => slot.id), 'long', exportFormat, exportFocus)))}>导出桌面长图</button>}
+        {task.scene === 'detail' && available.some(slot => slot.outputSpec === 'mobile') && <button disabled={busy} onClick={() => void perform(async () => setMessage(await downloadCommerceFile(gateway, task, available.filter(slot => slot.outputSpec === 'mobile').map(slot => slot.id), 'long', exportFormat, exportFocus)))}>导出移动长图</button>}
       </div>
       {edit && <p role="status">请先保存或取消当前修改，再确认生成。</p>}
       <CreditFee

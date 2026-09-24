@@ -1,0 +1,117 @@
+.carousel {
+  width: min(100%, 860px);
+  text-align: left;
+  margin: 32px auto 0;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.counter {
+  color: var(--z-muted);
+  font-size: 12px;
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.controls button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.7);
+  border: 1px solid var(--z-border);
+  color: var(--z-text);
+  cursor: pointer;
+}
+.controls button:hover {
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+}
+.viewport {
+  overflow: hidden;
+  touch-action: pan-y;
+  border-radius: 20px;
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  animation: slide 260ms var(--z-ease);
+}
+.card {
+  overflow: hidden;
+  border: 1px solid var(--z-border);
+  border-radius: 20px;
+  color: var(--z-text);
+  background: rgb(255 255 255 / 0.8);
+  text-decoration: none;
+  user-select: none;
+}
+.card:hover {
+  border-color: var(--z-primary);
+}
+.cover {
+  aspect-ratio: 1.6;
+  overflow: hidden;
+  background: var(--z-primary-soft);
+}
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 35%;
+  pointer-events: none;
+}
+.caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.caption svg {
+  color: var(--z-primary);
+}
+.card:focus-visible,
+.controls button:focus-visible {
+  outline: 3px solid var(--z-focus);
+  outline-offset: -3px;
+}
+@keyframes slide {
+  from {
+    opacity: 0.45;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@media (max-width: 767px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .carousel {
+    margin-top: 24px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cards {
+    animation: none;
+  }
+}

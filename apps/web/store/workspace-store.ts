@@ -7,7 +7,7 @@ let attachmentEpoch = 0;
 const forgottenAttachments = new Set<string>();
 
 interface WorkspaceSlice {
-  activePopover?: 'image-settings' | 'model' | 'skill';
+  activePopover?: 'image-settings' | 'image-model' | 'model' | 'skill';
   sidebarCollapsed: boolean;
   sessionDrawerOpen: boolean;
   configDrawerOpen: boolean;
@@ -64,10 +64,10 @@ type WorkspaceUiState = WorkspaceSlice & ComposerSlice & CapabilitySlice & {
 
 const emptyComposer = (): ComposerState => ({
   draft: '', explicitImageToolEnabled: false, selectedSkillId: undefined, skillValues: {},
-  aspectRatio: '1:1', resolution: '2K', count: 2, selectedChatModel: 'doubao',
+  aspectRatio: '1:1', resolution: '2K', count: 1, selectedChatModel: 'doubao',
   selectedProvider: undefined, selectedModelId: undefined, skillPromptOverride: undefined, references: [],
 });
-const snapshot = (state: ComposerState): ComposerState => Object.fromEntries(
+export const snapshotComposer = (state: ComposerState): ComposerState => Object.fromEntries(
   Object.keys(emptyComposer()).map((key) => [key, state[key as keyof ComposerState]]),
 ) as unknown as ComposerState;
 
@@ -92,10 +92,10 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   activateComposer: (sessionId, defaults, inheritCurrent = false) => set((state) => {
     if (sessionId === state.activeComposerSessionId) return {};
     const composers = { ...state.composers };
-    if (state.activeComposerSessionId) composers[state.activeComposerSessionId] = snapshot(state);
-    else if (inheritCurrent && sessionId) composers[sessionId] = snapshot(state);
+    if (state.activeComposerSessionId) composers[state.activeComposerSessionId] = snapshotComposer(state);
+    else if (inheritCurrent && sessionId) composers[sessionId] = snapshotComposer(state);
     return { ...emptyComposer(), ...defaults, ...(sessionId ? loadComposer(sessionId) : undefined), ...composers[sessionId ?? ''], composers,
-      activeComposerSessionId: sessionId, activePopover: undefined, configDrawerOpen: false };
+      count: 1, activeComposerSessionId: sessionId, activePopover: undefined, configDrawerOpen: false };
   }),
   forgetComposer: (sessionId) => set((state) => {
     forgottenAttachments.add(sessionId);
@@ -107,7 +107,7 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
       ? { ...emptyComposer(), activeComposerSessionId: undefined } : {}) };
   }),
   transferComposer: (from, to) => set(state => {
-    const source = state.activeComposerSessionId === from ? snapshot(state) : state.composers[from];
+    const source = state.activeComposerSessionId === from ? snapshotComposer(state) : state.composers[from];
     if (!source) return {};
     const composers = { ...state.composers, [to]: source };
     delete composers[from];
@@ -144,7 +144,7 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
 }));
 
 useWorkspaceStore.subscribe((state, previous) => {
-  if (state.activeComposerSessionId) saveComposer(state.activeComposerSessionId, snapshot(state));
+  if (state.activeComposerSessionId) saveComposer(state.activeComposerSessionId, snapshotComposer(state));
   const sessionId = state.activeComposerSessionId;
   if (!sessionId) return;
   if (sessionId === previous.activeComposerSessionId) {

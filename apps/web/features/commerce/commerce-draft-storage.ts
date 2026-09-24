@@ -6,7 +6,11 @@ const maxAge = 24 * 60 * 60 * 1000;
 export const commerceDraftSchema = z.object({
   scene: commerceSceneSchema,
   brief: commerceBriefSchema,
-  count: z.number().int().min(1).max(8),
+  count: z.number().int().min(1).max(32),
+  categoryCounts: z.object({ white: z.number().int().min(0).max(20), selling: z.number().int().min(0).max(20), scene: z.number().int().min(0).max(20), other: z.number().int().min(0).max(20) }).optional(),
+  detailModules: z.array(z.string()).max(16).optional(),
+  advancedAplus: z.boolean().optional(),
+  touchedPresets: z.object({ region: z.boolean(), language: z.boolean(), aspectRatio: z.boolean() }).optional(),
   templateId: z.string(),
   instruction: z.string().max(2000),
   lastBuiltInstruction: z.string().max(2000).optional(),

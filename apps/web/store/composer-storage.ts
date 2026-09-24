@@ -37,7 +37,7 @@ export function loadComposer(sessionId: string): Partial<ComposerState> | undefi
     // Whitelist fields: stored data cannot introduce actions or attachment URLs.
     return {
       draft: draft.draft, explicitImageToolEnabled: draft.explicitImageToolEnabled,
-      aspectRatio: draft.aspectRatio, resolution: draft.resolution, count: draft.count,
+      aspectRatio: draft.aspectRatio, resolution: draft.resolution, count: 1,
       selectedChatModel: draft.selectedChatModel,
       selectedProvider: typeof draft.selectedProvider === 'string' ? draft.selectedProvider : undefined,
       selectedModelId: typeof draft.selectedModelId === 'string' ? draft.selectedModelId : undefined,

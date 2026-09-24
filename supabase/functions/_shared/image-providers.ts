@@ -12,6 +12,8 @@ export interface ProviderImageInput {
   prompt: string;
   references: ProviderReference[];
   resolution: ImageResolution;
+  targetWidth?: number;
+  targetHeight?: number;
 }
 
 export interface ProviderImageResult {
@@ -115,6 +117,12 @@ export function decodeGeminiResponse(value: unknown): ProviderImageResult {
 }
 
 export function buildSeedreamRequest(input: ProviderImageInput) {
+  const targetSize = input.targetWidth && input.targetHeight ? (() => {
+    const scale = Math.max(1, Math.sqrt(3_686_400 / (input.targetWidth * input.targetHeight)));
+    const width = Math.ceil(input.targetWidth * scale / 16) * 16;
+    const height = Math.ceil(input.targetHeight * scale / 16) * 16;
+    return width * height <= 16_777_216 && width / height >= 1 / 16 && width / height <= 16 ? `${width}x${height}` : undefined;
+  })() : undefined;
   return {
     ...(input.references.length ? {
       image: input.references.map((reference) =>
@@ -124,7 +132,7 @@ export function buildSeedreamRequest(input: ProviderImageInput) {
     prompt: input.prompt,
     response_format: 'b64_json',
     sequential_image_generation: 'disabled',
-    size: seedreamSizes[input.resolution][input.aspectRatio],
+    size: targetSize ?? seedreamSizes[input.resolution][input.aspectRatio],
     stream: false,
     watermark: false,
   };

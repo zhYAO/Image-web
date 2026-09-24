@@ -1,26 +1,29 @@
 import { VISUAL_DIRECTIONS } from "./commerce-visuals";
+export const COMMERCE_PRIMARY_SCENE_IDS = ['product-set', 'detail', 'clone', 'batch', 'product-main'] as const;
 export const COMMERCE_SCENES = [
   {
     id: "product-main",
-    name: "商品主图",
-    description: "清晰展示真实商品，适合主图与产品目录。",
+    name: "AI 商品图",
+    description: "上传商品，选择场景或自定义要求，生成候选图并继续修改。",
     count: 1,
     roles: ["商品主图"],
   },
   {
     id: "product-set",
     name: "商品套图",
-    description: "统一规划主图、卖点、细节与使用场景。",
-    count: 5,
-    roles: ["商品主图", "核心卖点", "材质细节", "使用场景", "商品说明"],
+    description: "上传商品、分配白底／卖点／场景／其他图，生成完整上架套图。",
+    count: 7,
+    roles: ["商品主图", "核心卖点", "材质细节", "使用场景", "商品说明", "卖点延展", "场景延展"],
   },
   {
     id: "detail",
-    name: "详情图",
-    description: "独立详情图片，AI 绘制图文；改字需要重新生成。",
-    count: 5,
-    roles: ["详情首屏", "核心卖点", "材质细节", "使用场景", "商品说明"],
+    name: "A+ 详情页",
+    description: "先编辑视觉策略与模块文案，再生成普通或高级 A+ 图片。",
+    count: 6,
+    roles: ["品牌首屏", "核心卖点", "产品展示", "使用场景", "材质细节", "功能介绍"],
   },
+  { id: "clone", name: "爆款图复刻", description: "每张参考图独立设置要求，按图逐张生成。", count: 1, roles: ["参考风格"] },
+  { id: "batch", name: "批量生成", description: "统一参数、逐商品覆盖，即时提交并跟踪进度。", count: 1, roles: ["批量商品"] },
   {
     id: "social",
     name: "种草图文",
@@ -46,8 +49,15 @@ export const COMMERCE_SCENES = [
 ] as const;
 export const COMMERCE_PLATFORMS = [
   { id: "taobao", name: "淘宝" },
+  { id: "tmall", name: "天猫" },
+  { id: "jd", name: "京东" },
+  { id: "pinduoduo", name: "拼多多" },
   { id: "douyin", name: "抖音" },
   { id: "xiaohongshu", name: "小红书" },
+  { id: "amazon", name: "Amazon" },
+  { id: "shopee", name: "Shopee" },
+  { id: "tiktok", name: "TikTok Shop" },
+  { id: "shopify", name: "Shopify" },
 ] as const;
 const source = {
   kind: "original" as const,
@@ -108,5 +118,7 @@ export function sceneForSkill(skillId?: string) {
 }
 
 export function templatesForScene(scene: string) {
+  if (scene === 'clone') return COMMERCE_TEMPLATES.filter(t => t.published);
+  if (scene === 'product-main') return COMMERCE_TEMPLATES.filter(t => t.published && (t.visual.scenes.includes('product-main') || t.visual.scenes.includes('product-set')));
   return COMMERCE_TEMPLATES.filter(t => t.published && t.visual.scenes.includes(scene));
 }

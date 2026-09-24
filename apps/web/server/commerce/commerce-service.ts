@@ -171,6 +171,7 @@ async function compile(plan: CommercePlan) {
         resolution: slot.resolution,
         count: 1,
         referenceIds: slot.referenceIds,
+        ...(slot.targetWidth && slot.targetHeight ? { targetWidth: slot.targetWidth, targetHeight: slot.targetHeight } : {}),
         registryVersion: MODEL_REGISTRY_VERSION,
       };
       return {

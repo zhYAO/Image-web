@@ -1,5 +1,6 @@
 import {
   COMMERCE_SCENES,
+  COMMERCE_PLATFORMS,
   COMMERCE_TEMPLATES,
   hasExplicitImageIntent,
   type CommerceScene,
@@ -10,15 +11,14 @@ import {
   type CommerceItem,
 } from "@zimage/domain";
 import { downloadImages } from "@/features/workspace/download-images";
+import { HttpCommerceGateway } from '@/gateways/http-commerce-gateway';
 
 export function resolveCommerceLaunch(search: string) {
   const params = new URLSearchParams(search);
   const scene = COMMERCE_SCENES.find(
     (entry) => entry.id === params.get("scene"),
   )?.id;
-  const platform = ["taobao", "douyin", "xiaohongshu"].find(
-    (entry) => entry === params.get("platform"),
-  ) as CommercePlan["brief"]["platform"] | undefined;
+  const platform = COMMERCE_PLATFORMS.find(entry => entry.id === params.get('platform'))?.id;
   return { scene, platform };
 }
 
@@ -102,6 +102,29 @@ export async function exportCommerceImages(
     (item) => item.expired || !item.url,
   ).length;
   return `已发起 ${result.downloaded} 张下载${expired ? `，${expired} 张已到期或不可用` : ""}${result.failed ? `，${result.failed} 张下载失败，请重试` : ""}。`;
+}
+
+export async function downloadCommerceFile(gateway: CommerceGateway, task: CommerceTask, slotIds: string[], mode: 'single' | 'zip' | 'long', format: 'jpg' | 'png', focus = { x: 0.5, y: 0.5 }) {
+  if (!(gateway instanceof HttpCommerceGateway)) return exportCommerceImages(gateway, task, slotIds);
+  const selections = task.slots.filter(slot => slotIds.includes(slot.id)).flatMap(slot => {
+    const selection = task.selections.find(item => item.slotId === slot.id);
+    return selection ? [{ slotId: slot.id, generationId: selection.generationId }] : [];
+  });
+  if (!selections.length) throw new Error('当前没有已选图片。');
+  const response = await fetch(`/api/creative-tasks/${task.id}/download`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ requestId: crypto.randomUUID(), revision: task.revision, selections, mode, format, focus }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message || '导出失败，请稍后重试。');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const name = mode === 'zip' ? 'commerce-images.zip' : mode === 'long' ? `commerce-long.${format}` : `commerce-image.${format}`;
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return `已下载 ${name}。`;
 }
 
 export function unsettledCommerceItem(item: CommerceItem | undefined) {

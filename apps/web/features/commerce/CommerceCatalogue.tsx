@@ -2,6 +2,7 @@
 
 import {
   COMMERCE_PLATFORMS,
+  COMMERCE_PRIMARY_SCENE_IDS,
   COMMERCE_SCENES,
   COMMERCE_TEMPLATES,
   type CommerceScene,
@@ -17,6 +18,8 @@ import { commerceHref } from "@/features/workspace/workspace-route";
 import styles from "./commerce.module.css";
 
 export function CommerceCatalogue() {
+  const featured = COMMERCE_PRIMARY_SCENE_IDS.map(id => COMMERCE_SCENES.find(scene => scene.id === id)!);
+  const extra = COMMERCE_SCENES.filter(scene => !COMMERCE_PRIMARY_SCENE_IDS.some(id => id === scene.id));
   const { status } = useAuthStatus();
   const [platform, setPlatform] = useState("all");
   const platformName = COMMERCE_PLATFORMS.find(
@@ -32,7 +35,7 @@ export function CommerceCatalogue() {
             ZImage <span>工作区</span>
           </Link>
           <div className={styles.sceneNavigation}>
-            {COMMERCE_SCENES.map((scene) => (
+            {featured.map((scene) => (
               <Link key={scene.id} href={launchUrl(scene.id)}>
                 {scene.name}
               </Link>
@@ -52,7 +55,7 @@ export function CommerceCatalogue() {
           <div>
             <p className={styles.eyebrow}>ZIMAGE / 电商创作</p>
             <h1>选择生图类型</h1>
-            <p>商品主图、成套图文或小红书海报，选择类型后开始创作。</p>
+            <p>从商品套图、A+ 详情页、复刻、批量或 AI 商品图开始创作。</p>
           </div>
           <div>
             <div
@@ -74,17 +77,17 @@ export function CommerceCatalogue() {
             </div>
             <p className={styles.filterCaption} aria-live="polite">
               {platformName
-                ? `${platformName} · ${COMMERCE_SCENES.length} 种生图类型，进入后可调整用途`
-                : "七种生图类型，支持商品创作与内容分享"}
+                ? `${platformName} · 五条核心生图流程，进入后可调整用途`
+                : "五条核心电商生图流程，历史创作仍可继续"}
             </p>
           </div>
         </header>
         <div className={styles.catalogueSectionHeading}>
-          <h2>七种生图类型</h2>
+          <h2>电商生图</h2>
           <span>上传素材 → 填写描述 → 一键生成</span>
         </div>
         <div className={styles.catalogueGrid}>
-          {COMMERCE_SCENES.map((scene, index) => (
+          {featured.map((scene, index) => (
             <article className={styles.scene} key={scene.id}>
               <div className={styles.exampleCover}>
                 <Image
@@ -103,7 +106,7 @@ export function CommerceCatalogue() {
                 </div>
                 <p>{scene.description}</p>
                 <div className={styles.sceneFooter}>
-                  <span>建议 {scene.count} 张 · 可选 1–8 张</span>
+                  <span>{scene.id === 'batch' ? '最多 20 个商品任务' : scene.id === 'clone' ? '最多 20 张参考图' : scene.id === 'detail' ? '最多 16 个模块' : scene.id === 'product-set' ? '默认 7 张 · 最多 20 张' : '每次最多 4 张'}</span>
                   <Link
                     aria-label={`开始${scene.name} →`}
                     className={styles.primaryLink}
@@ -116,6 +119,9 @@ export function CommerceCatalogue() {
             </article>
           ))}
         </div>
+        <section className={styles.moreCreations}><div className={styles.catalogueSectionHeading}><h2>更多创作</h2><span>保留原有入口与历史任务</span></div>
+          <div className={styles.moreCreationLinks}>{extra.map(scene => <Link href={launchUrl(scene.id)} key={scene.id}>{scene.name} →</Link>)}</div>
+        </section>
         <section>
           <div className={styles.catalogueSectionHeading}>
             <h2>原创风格方向</h2>
@@ -135,8 +141,7 @@ export function CommerceCatalogue() {
         </section>
         <footer className={styles.catalogueFooter}>
           <p className={styles.note}>
-            商品图与风格图合计最多 4 张 PNG、JPEG 或 WebP，每张不超过 10
-            MB。上传、保存和生成需登录。详情图文字由 AI 绘制，改字需要重新生成。
+            商品原图最多 6 张、复刻参考图最多 20 张 PNG、JPEG 或 WebP，每张不超过 10 MB。上传、保存和生成需登录；修改图片文字需要重新生成。
           </p>
           <Link href="/">继续最近创作 →</Link>
         </footer>
