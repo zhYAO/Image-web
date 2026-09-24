@@ -91,6 +91,38 @@ describe('HttpWorkspaceGateway', () => {
     expect(fetcher).toHaveBeenCalledWith('/api/sessions', expect.objectContaining({ method: 'GET' }));
   });
 
+  it('reuses a valid signed image URL while polling the same batch', async () => {
+    let signatures = 0;
+    const batch = {
+      assets: [{ id: generationId, status: 'succeeded' }, { id: '40000000-0000-4000-8000-0000000000a2', status: 'processing' }],
+      config: { aspectRatio: '1:1', count: 2, resolution: '2K' },
+      createdAt: '2026-09-16T09:00:00.000Z',
+      id: batchId,
+      model: 'seedream-4.5',
+      prompt: '商品图',
+      provider: 'seedream',
+      sessionId,
+      source: 'direct',
+      status: 'processing',
+    };
+    const fetcher = vi.fn(async (path: RequestInfo | URL) => {
+      if (String(path) === `/api/image/${batchId}`) return json({ batch });
+      if (String(path) === `/api/generations/${generationId}/asset-url`) {
+        signatures += 1;
+        return json({ generationId, expiresAt: new Date(Date.now() + 60_000).toISOString(), url: `https://example.invalid/image.jpg?token=${signatures}` });
+      }
+      throw new Error(`Unexpected request: ${String(path)}`);
+    });
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+
+    const first = await gateway.getGenerationBatch(batchId);
+    const second = await gateway.getGenerationBatch(batchId);
+
+    expect(first.assets[0]?.url).toBe('https://example.invalid/image.jpg?token=1');
+    expect(second.assets[0]?.url).toBe(first.assets[0]?.url);
+    expect(signatures).toBe(1);
+  });
+
   it('uploads references before submitting the fixed idempotent image request', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(json({

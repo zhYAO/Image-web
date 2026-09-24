@@ -20,6 +20,11 @@ export async function requestCreativeTextOptimization(
   signal?.throwIfAborted();
   const mode = process.env.NEXT_PUBLIC_DATA_MODE ?? "mock";
   if (mode === "mock") {
+    if (input.field === 'strategy') {
+      const modules = input.text.split('\n').find(line => line.startsWith('模块：'))?.slice(3).split('、') ?? [];
+      return creativeTextOptimizeResponseSchema.parse({ text: JSON.stringify({ strategy: '主体清晰、构图统一，逐屏说明已确认的商品特点；保持字体和配色一致。', modules: modules.map(name => ({ name, copy: input.productContext?.sellingPoints || input.productContext?.facts || input.productContext?.description || input.productContext?.name || '' })) }), mock: true });
+    }
+    if (input.field === 'listingCopy') return creativeTextOptimizeResponseSchema.parse({ text: JSON.stringify({ title: input.productContext?.name || '', highlights: input.productContext?.sellingPoints || '', description: input.productContext?.description || input.productContext?.facts || '', keywords: input.productContext?.name || '' }), mock: true });
     if (input.billing) {
       const result = await getWorkspaceGateway().optimizeText?.(input);
       if (result) return result;

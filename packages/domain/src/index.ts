@@ -10,4 +10,6 @@ export * from "./commerce";
 export * from "./commerce-templates";
 export * from "./creative-text-contracts";
 export * from "./commerce-visuals";
+export * from "./commerce-workflows";
+export * from "./commerce-batch";
 export * from "./credits";

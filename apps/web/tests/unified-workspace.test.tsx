@@ -38,21 +38,19 @@ describe('UnifiedWorkspace', () => {
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain('NaN');
   });
 
-  it('collapses image model and parameters behind one shared settings summary', async () => {
+  it('separates image models and parameters without exposing quantity', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-
-    const summary = screen.getByRole('button', { name: /图片设置 .* 1:1 2K 2张/ });
-    expect(summary).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: '图片生成设置' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^生成参数/ })).not.toBeInTheDocument();
-
-    fireEvent.click(summary);
-    expect(screen.getByRole('dialog', { name: '图片生成设置' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
+    expect(screen.getByRole('dialog', { name: '选择生成模型' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^生成参数/ }));
+    expect(screen.queryByRole('dialog', { name: '选择生成模型' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '生成参数' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /生成数量/ })).not.toBeInTheDocument();
   });
 
-  it('fills inspiration into the composer and lets the user edit before generation', async () => {
+  it('waits for initialization and shows commerce without submitting a request', async () => {
     const gateway = createTestGateway(CapturingGateway);
     const sessions = await gateway.listSessions();
     let releaseInitialization!: () => void;
@@ -64,9 +62,8 @@ describe('UnifiedWorkspace', () => {
     expect(screen.getByRole('textbox', { name: '创作输入' })).toBeVisible();
     expect(screen.getByRole('region', { name: '会话列表' })).toHaveAttribute('aria-busy', 'true');
     await act(async () => releaseInitialization());
-    fireEvent.click(await screen.findByRole('button', { name: /光影与静物/ }));
-    expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('生成一张晨光下的陶瓷花瓶图片，柔和阴影，留白构图');
-    expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('region', { name: '电商生图' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue('');
     expect(screen.getByRole('button', { name: '创建图片' })).toBeEnabled();
     expect(gateway.lastImageRequest).toBeUndefined();
   });

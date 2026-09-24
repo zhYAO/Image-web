@@ -100,6 +100,8 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     }
   >();
   private providerStatusPromise?: Promise<ReturnType<typeof providerStatusResponseSchema.parse>>;
+  private readonly signedAssetUrls = new Map<string, ReturnType<typeof generationAssetUrlResponseSchema.parse>>();
+  private readonly pendingSignedAssetUrls = new Map<string, Promise<ReturnType<typeof generationAssetUrlResponseSchema.parse>>>();
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
     this.fetcher = options.fetcher ?? fetch.bind(globalThis);
@@ -393,14 +395,31 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   }
 
   private async hydrateBatch(batch: GenerationBatch) {
+    for (const [id, signed] of this.signedAssetUrls) {
+      if (Date.parse(signed.expiresAt) <= Date.now()) this.signedAssetUrls.delete(id);
+    }
     const assets = await Promise.all(
       batch.assets.map(async (asset) => {
         if (asset.status !== "succeeded" || asset.expired) return asset;
         try {
-          const signed = await this.json(
-            `/api/generations/${asset.id}/asset-url`,
-            generationAssetUrlResponseSchema,
-          );
+          const cached = this.signedAssetUrls.get(asset.id);
+          if (cached && Date.parse(cached.expiresAt) - Date.now() > 30_000) {
+            return { ...asset, expiresAt: cached.expiresAt, url: cached.url };
+          }
+          let pending = this.pendingSignedAssetUrls.get(asset.id);
+          if (!pending) {
+            pending = this.json(
+              `/api/generations/${asset.id}/asset-url`,
+              generationAssetUrlResponseSchema,
+            ).then((signed) => {
+              this.signedAssetUrls.set(asset.id, signed);
+              return signed;
+            }).finally(() => {
+              this.pendingSignedAssetUrls.delete(asset.id);
+            });
+            this.pendingSignedAssetUrls.set(asset.id, pending);
+          }
+          const signed = await pending;
           return { ...asset, expiresAt: signed.expiresAt, url: signed.url };
         } catch (error: unknown) {
         if (error instanceof WorkspaceError && error.safe.code === 'ASSET_EXPIRED') {

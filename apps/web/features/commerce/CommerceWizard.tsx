@@ -6,6 +6,13 @@ import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
   COMMERCE_TEMPLATES,
+  COMMERCE_REGIONS,
+  COMMERCE_LANGUAGES,
+  PLATFORM_PRESETS,
+  DETAIL_MODULES,
+  APLUS_SPECS,
+  aPlusAspectRatio,
+  maxCommerceSlots,
   templatesForScene,
   nextCommerceQuestion,
   validateCommercePlan,
@@ -29,6 +36,7 @@ import { loadCommerceDraft, saveCommerceDraft, clearCommerceDraft, type Commerce
 import { submitCommerceOnce } from "./commerce-submission";
 import { isLocalCommerceDraft } from "@/features/workspace/workspace-route";
 import { notifyCreditsChanged } from "@/gateways/mock-credit-ledger";
+import { requestCreativeTextOptimization } from '@/gateways/creative-text-gateway';
 import { CreativeTextField } from "./CreativeTextField";
 import { useWorkspaceStore } from "@/store/workspace-store";
 
@@ -107,6 +115,7 @@ export function CommerceWizard({
       sellingPoints: "",
       platform: isPoster ? "xiaohongshu" : platform,
       contentMode: isPoster ? "content" : "product",
+      cloneMode: scene === 'clone' ? 'style' : undefined,
       placement: isPoster || scene === "social" ? "图文内容" : "商品展示",
       productReferenceIds: [],
       styleReferenceIds: [],
@@ -117,6 +126,30 @@ export function CommerceWizard({
   const [count, setCount] = useState<number>(
     restored?.count ?? seedPlan?.slots.length ?? definition.count,
   );
+  const [categoryCounts, setCategoryCounts] = useState(() => {
+    if (restored?.categoryCounts) return restored.categoryCounts;
+    const previous = restored?.plan ?? seedPlan;
+    const previousCount = previous?.slots.length ?? restored?.count;
+    if (scene !== 'product-set' || previousCount === undefined) return { white: 1, selling: 2, scene: 2, other: 2 };
+    if (previous?.slots.every(slot => slot.category)) return {
+      white: previous.slots.filter(slot => slot.category === 'white').length,
+      selling: previous.slots.filter(slot => slot.category === 'selling').length,
+      scene: previous.slots.filter(slot => slot.category === 'scene').length,
+      other: previous.slots.filter(slot => slot.category === 'other').length,
+    };
+    const white = Math.min(1, previousCount);
+    const selling = Math.min(2, previousCount - white);
+    const sceneCount = Math.min(2, previousCount - white - selling);
+    return { white, selling, scene: sceneCount, other: Math.max(0, previousCount - white - selling - sceneCount) };
+  });
+  const [detailModules, setDetailModules] = useState<string[]>(() => {
+    if (restored?.detailModules) return restored.detailModules;
+    if (seedPlan?.scene !== 'detail') return [...DETAIL_MODULES.slice(0, 6)];
+    const existing = seedPlan.slots.map(slot => slot.module ?? slot.role).filter((module, index, all) => DETAIL_MODULES.includes(module as typeof DETAIL_MODULES[number]) && all.indexOf(module) === index);
+    return existing.length ? existing : [...DETAIL_MODULES.slice(0, Math.min(16, seedPlan.slots.length))];
+  });
+  const [advancedAplus, setAdvancedAplus] = useState(restored?.advancedAplus ?? Boolean(seedPlan?.slots.some(slot => slot.outputSpec === 'desktop' || slot.outputSpec === 'mobile')));
+  const [touchedPresets, setTouchedPresets] = useState(restored?.touchedPresets ?? { region: false, language: false, aspectRatio: false });
   const [templateId, setTemplateId] = useState(
     restored?.templateId ?? seedPlan?.templateId ??
       (templatesForScene(scene).some((item) => item.id === initialTemplateId)
@@ -162,7 +195,7 @@ export function CommerceWizard({
   const creation = useRef(restored?.creation);
   const [recoveringCreate, setRecoveringCreate] = useState(Boolean(restored?.creation));
   const sessionRequest = useRef<string>(restored?.sessionId ?? crypto.randomUUID());
-  const draftSnapshot = (): CommerceDraftState => ({ scene, brief, count, templateId, instruction, lastBuiltInstruction, roles,
+  const draftSnapshot = (): CommerceDraftState => ({ scene, brief, count, categoryCounts, detailModules, advancedAplus, touchedPresets, templateId, instruction, lastBuiltInstruction, roles,
     settings: generationSettings, plan, sessionId: remoteSession.current, creation: creation.current });
   useEffect(() => {
     if (!active) return;
@@ -226,12 +259,12 @@ export function CommerceWizard({
         // A lost create response must replay the original body even after reload.
         return creation.current.plan;
       }
-      if (!contentOnly && !references.some(reference => roleOf(reference) === 'product'))
+      if (!contentOnly && scene !== 'clone' && !references.some(reference => roleOf(reference) === 'product'))
         throw new Error("请上传至少一张清晰的真实商品图。");
       const description = brief.description?.trim() || [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n');
-      const name = brief.name.trim() || description.split(/[\n。！？]/).find(line => line.trim())?.trim().slice(0, 160) || '';
+      const name = brief.name.trim() || description.split(/[\n。！？]/).find(line => line.trim())?.trim().slice(0, 160) || (scene === 'clone' ? '参考图复刻' : '');
       if (!name) throw new Error(contentOnly ? "请填写海报标题。" : "请填写商品描述，包含商品名称或主要特点。");
-      if (scene === 'style-reference' && !references.some(reference => roleOf(reference) === 'style'))
+      if ((scene === 'style-reference' || scene === 'clone') && !references.some(reference => roleOf(reference) === 'style'))
         throw new Error("请添加一张风格参考图。");
       let targetSession = remoteSession.current ?? sessionId;
       if (!previewOnly && isLocalCommerceDraft(targetSession)) {
@@ -271,6 +304,19 @@ export function CommerceWizard({
       return nextPlan;
   };
   const prepare = () => act(async () => { await preparePlan(true); setStep(3); onPreview?.(); });
+  const importReferenceUrl = () => act(async () => {
+    if (!brief.sourceUrl?.trim()) throw new Error('请先填写公开商品链接。');
+    const response = await fetch('/api/commerce/import-url', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: brief.sourceUrl }) });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(`${result?.message || '链接导入失败'} 请保留链接并手动上传参考图。`);
+    }
+    const blob = await response.blob();
+    const file = new File([blob], `imported-reference.${blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'}`, { type: blob.type });
+    const transfer = new DataTransfer(); transfer.items.add(file);
+    setRoles(current => ({ ...current, [`${file.name}:${file.size}:${file.lastModified}`]: 'style' }));
+    onReferenceAdd(transfer.files);
+  });
   const makePlan = (preparedBrief: CommerceBrief) => {
     const generatedExactText = (source: CommerceBrief, role: string) => {
       if (
@@ -286,15 +332,24 @@ export function CommerceWizard({
       const detail = ["材质细节", "商品说明", "细节说明"].includes(role) ? source.facts : role === "核心卖点" ? points.slice(0, 3).join("\n") : points[0];
       return [source.name, detail].filter(Boolean).join("\n");
     };
+    const targetCount = scene === 'product-set' ? Object.values(categoryCounts).reduce((sum, value) => sum + value, 0) : scene === 'detail' ? detailModules.length * (advancedAplus ? 2 : 1) : scene === 'clone' ? preparedBrief.styleReferenceIds.length : count;
+    const slotCategories = (['white', 'selling', 'scene', 'other'] as const).flatMap(category => Array.from({ length: categoryCounts[category] }, () => category));
     const slots = buildCommerceSlots(
       preparedBrief,
       scene,
-      count,
+      targetCount,
       isPoster
         ? { ...generationSettings, aspectRatio: "3:4", resolution: "2K" }
         : generationSettings,
     ).map((slot, index) => {
       const previous = plan?.slots[index];
+      const category = scene === 'product-set' ? slotCategories[index] : undefined;
+      const detailModule = scene === 'detail' ? detailModules[index % detailModules.length] : undefined;
+      const outputSpec: CommerceSlot['outputSpec'] = scene === 'detail' ? (advancedAplus ? (index < detailModules.length ? 'desktop' : 'mobile') : 'standard') : undefined;
+      const target = outputSpec ? APLUS_SPECS[outputSpec] : undefined;
+      const categoryRole = (value: CommerceSlot['category']) => value === 'white' ? '白底商品图' : value === 'selling' ? '核心卖点' : value === 'scene' ? '使用场景' : undefined;
+      const oldDefaultRole = categoryRole(previous?.category) ?? definition.roles[index % definition.roles.length];
+      const nextDefaultRole = categoryRole(category) ?? slot.role;
       const previousGeneratedText = previous
         ? isPoster
           ? buildCommerceSlots(
@@ -308,19 +363,22 @@ export function CommerceWizard({
       return {
           ...slot,
           ...previous,
-          textMode: previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
+          role: scene === 'clone' ? `参考图 ${index + 1}` : detailModule || (category ? previous && previous.role !== oldDefaultRole ? previous.role : nextDefaultRole : scene === 'product-main' && templateId !== 'white-main' ? COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.previewRole ?? slot.role : previous?.role ?? slot.role),
+          category, module: detailModule as CommerceSlot['module'], outputSpec,
+          aspectRatio: outputSpec ? aPlusAspectRatio(outputSpec) : slot.aspectRatio,
+          targetWidth: target?.width, targetHeight: target?.height,
+          layout: category === 'selling' ? (previous?.layout ?? '自动分配') : undefined,
+          textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
           exactText:
             previous && previous.exactText !== previousGeneratedText
               ? previous.exactText
-              : isPoster ? slot.exactText : generatedExactText(preparedBrief, previous?.role ?? slot.role),
+              : detailModule && preparedBrief.moduleCopy?.[detailModule] ? preparedBrief.moduleCopy[detailModule]! : isPoster ? slot.exactText : generatedExactText(preparedBrief, previous?.role ?? slot.role),
           instruction:
             previous && previous.instruction !== lastBuiltInstruction
               ? previous.instruction
               : instruction,
-          referenceIds: [
-            ...preparedBrief.productReferenceIds,
-            ...preparedBrief.styleReferenceIds,
-          ],
+          referenceIds: scene === 'clone' ? [...preparedBrief.productReferenceIds, preparedBrief.styleReferenceIds[index]!]
+            : [...preparedBrief.productReferenceIds, ...preparedBrief.styleReferenceIds].slice(0, 14),
         };
     });
     const nextPlan = { scene, brief: preparedBrief, templateId, slots };
@@ -367,7 +425,27 @@ export function CommerceWizard({
     const nextPlan = await preparePlan();
     await savePlan(nextPlan, generate);
   });
-  const feeSlots = Array.from({ length: count }, (_, index) => plan?.slots[index] ?? generationSettings);
+  const textBilling = () => credits.confirm([{ operation: 'optimize', provider: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', model: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', resolution: '', count: 1 }]);
+  const generateStrategy = () => act(async () => {
+    if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
+    const response = await requestCreativeTextOptimization({ field: 'strategy', text: `为这些模块制定视觉策略与简短文案。\n模块：${detailModules.join('、')}`, productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 4000 });
+    notifyCreditsChanged();
+    const output = JSON.parse(response.text) as { strategy?: unknown; modules?: Array<{ name?: unknown; copy?: unknown }> };
+    if (typeof output.strategy !== 'string' || !Array.isArray(output.modules)) throw new Error('策划结果格式有误，请重试。');
+    const moduleCopy = { ...brief.moduleCopy };
+    for (const item of output.modules) if (typeof item.name === 'string' && typeof item.copy === 'string' && detailModules.includes(item.name)) moduleCopy[item.name] = item.copy.slice(0, 1000);
+    patch({ visualStrategy: output.strategy.slice(0, 2000), moduleCopy });
+  });
+  const generateListingCopy = () => act(async () => {
+    if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
+    const response = await requestCreativeTextOptimization({ field: 'listingCopy', text: '依据 productContext 中已确认的商品资料生成上架文案。', productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 6000 });
+    notifyCreditsChanged();
+    const output = JSON.parse(response.text) as Record<string, unknown>;
+    if (!['title', 'highlights', 'description', 'keywords'].every(key => typeof output[key] === 'string')) throw new Error('上架文案格式有误，请重试。');
+    patch({ listingCopy: { title: String(output.title).slice(0, 300), highlights: String(output.highlights).slice(0, 2000), description: String(output.description).slice(0, 4000), keywords: String(output.keywords).slice(0, 1000) } });
+  });
+  const plannedCount = scene === 'product-set' ? Object.values(categoryCounts).reduce((sum, value) => sum + value, 0) : scene === 'detail' ? detailModules.length * (advancedAplus ? 2 : 1) : scene === 'clone' ? references.filter(reference => roleOf(reference) === 'style').length : count;
+  const feeSlots = Array.from({ length: plannedCount }, (_, index) => plan?.slots[index] ?? generationSettings);
   return (
     <section
       aria-label={`${definition.name}向导`}
@@ -402,7 +480,7 @@ export function CommerceWizard({
                       }}
                     />
                   </label>
-                  {scene === 'style-reference' && <label>风格参考图
+                  {(scene === 'style-reference' || scene === 'clone') && <label>{scene === 'clone' ? '复刻参考图（最多 20 张）' : '风格参考图'}
                     <input aria-label="上传风格参考图" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => {
                       if (event.target.files) {
                         const additions = Object.fromEntries(Array.from(event.target.files).map(file => [`${file.name}:${file.size}:${file.lastModified}`, 'style' as const]));
@@ -412,8 +490,19 @@ export function CommerceWizard({
                       event.target.value = '';
                     }} />
                   </label>}
+                  {scene === 'clone' && <div className={styles.urlImport}><label>公开商品链接<input aria-label="公开商品链接" type="url" placeholder="https://..." value={brief.sourceUrl ?? ''} onChange={event => patch({ sourceUrl: event.target.value || undefined })} /></label>
+                    <button type="button" disabled={busy || !brief.sourceUrl} onClick={() => void importReferenceUrl()}>从链接导入参考图</button>
+                    <p className={styles.note}>若网站限制访问或没有公开图片，链接会保留；可直接上传截图。</p>
+                  </div>}
+                  {scene === 'product-main' && <label>背景参考图（可选）<input aria-label="上传背景参考图" type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={event => {
+                    if (event.target.files) {
+                      const additions = Object.fromEntries(Array.from(event.target.files).map(file => [`${file.name}:${file.size}:${file.lastModified}`, 'style' as const]));
+                      setRoles(current => ({ ...current, ...additions })); onReferenceAdd(event.target.files);
+                    }
+                    event.target.value = '';
+                  }} /></label>}
                   <p className={styles.note}>
-                    合计最多 4 张，每张不超过 10 MB。
+                    商品原图最多 6 张{scene === 'clone' ? '，复刻参考图最多 20 张' : ''}，每张不超过 10 MB。
                   </p>
                   <div className={styles.references}>
                     {references.map((reference, index) => (
@@ -462,6 +551,9 @@ export function CommerceWizard({
                     placeholder="例如：米白色女士衬衫，棉质面料，宽松版型，适合日常通勤。可补充已确认的规格和卖点。"
                     value={brief.description ?? [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n')}
                     onChange={description => patch({ description })} />}
+                  {scene === 'clone' && <label>复刻方式<CommerceSelect aria-label="复刻方式" value={brief.cloneMode ?? 'style'} onChange={value => patch({ cloneMode: value as CommerceBrief['cloneMode'] })}>
+                    <option value="style">参考风格</option><option value="faithful">高度复刻</option>
+                  </CommerceSelect></label>}
                   <details className={styles.advancedOptions} open={contentOnly || undefined}>
                     <summary>高级设置 · 平台、风格、数量与分图</summary>
                   <label>文字优化模型<CommerceSelect aria-label="文字优化模型" disabled={busy || recoveringCreate}
@@ -476,11 +568,13 @@ export function CommerceWizard({
                         disabled={busy || recoveringCreate || isPoster}
                         aria-label="创作平台"
                         value={brief.platform}
-                        onChange={(value) =>
-                          patch({
-                            platform: value as CommerceBrief["platform"],
-                          })
-                        }
+                        onChange={(value) => {
+                          const preset = PLATFORM_PRESETS[value];
+                          patch({ platform: value as CommerceBrief['platform'],
+                            ...(!touchedPresets.region && preset ? { region: preset.region } : {}),
+                            ...(!touchedPresets.language && preset ? { language: preset.language } : {}) });
+                          if (!touchedPresets.aspectRatio && preset) setGenerationSettings(current => ({ ...current, aspectRatio: preset.aspectRatio }));
+                        }}
                       >
                         {COMMERCE_PLATFORMS.map((item) => (
                           <option value={item.id} key={item.id}>
@@ -503,6 +597,14 @@ export function CommerceWizard({
                       </CommerceSelect>
                     </label>
                   </div>
+                  {!isPoster && <div className={styles.twoColumns}>
+                    <label>地区<CommerceSelect aria-label="目标地区" value={brief.region ?? PLATFORM_PRESETS[brief.platform]?.region ?? 'cn'} onChange={value => { setTouchedPresets(current => ({ ...current, region: true })); patch({ region: value as CommerceBrief['region'] }); }}>
+                      {COMMERCE_REGIONS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </CommerceSelect></label>
+                    <label>语言<CommerceSelect aria-label="画面语言" value={brief.language ?? PLATFORM_PRESETS[brief.platform]?.language ?? 'zh-CN'} onChange={value => { setTouchedPresets(current => ({ ...current, language: true })); patch({ language: value as CommerceBrief['language'] }); }}>
+                      {COMMERCE_LANGUAGES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </CommerceSelect></label>
+                  </div>}
                   {contentOnly ? (
                     <CreativeTextField productContext={productContext} field="content" label="海报内容" maxLength={4000} multiline rows={6} value={brief.facts} onChange={(facts) => patch({ facts })} context={brief.name} placeholder="填写要呈现的内容，多张卡片请按段落分行" />
                   ) : (
@@ -550,7 +652,37 @@ export function CommerceWizard({
                         ?.guidance
                     }{" "}
                   </p>
-                  <label>
+                  {scene === 'product-set' && <div className={styles.twoColumns}>
+                    {(['white', 'selling', 'scene', 'other'] as const).map(category => <label key={category}>{({ white: '白底图', selling: '卖点图', scene: '场景图', other: '其他图' })[category]}数量
+                      <CommerceSelect aria-label={`${category}图片数量`} value={categoryCounts[category]} onChange={value => { invalidatePreview(); setCategoryCounts(current => ({ ...current, [category]: Number(value) })); }}>
+                        {Array.from({ length: 21 }, (_, index) => <option key={index} value={index}>{index}</option>)}
+                      </CommerceSelect></label>)}
+                    <p className={styles.note}>共 {plannedCount} 张，最多 20 张。</p>
+                  </div>}
+                  {scene === 'detail' && <div>
+                    <label>输出规格<CommerceSelect aria-label="A+ 输出规格" value={advancedAplus ? 'advanced' : 'standard'} onChange={value => { invalidatePreview(); setAdvancedAplus(value === 'advanced'); }}>
+                      <option value="standard">普通 A+ · 970 × 600</option><option value="advanced">高级 A+ · 桌面 1464 × 600 + 移动 600 × 450</option>
+                    </CommerceSelect></label>
+                    <p className={styles.note}>详情模块（最多 16 个）· 按选择顺序生成</p>
+                    <div className={styles.moduleChoices}>{DETAIL_MODULES.map(module => <label key={module}><input type="checkbox" checked={detailModules.includes(module)} onChange={event => { invalidatePreview(); setDetailModules(current => event.target.checked ? [...current, module] : current.filter(item => item !== module)); }} />{module}</label>)}</div>
+                    <ol className={styles.moduleOrder}>{detailModules.map((module, index) => <li key={module}>{module}
+                      <button type="button" aria-label={`上移${module}`} disabled={index === 0} onClick={() => { invalidatePreview(); setDetailModules(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; return next; }); }}>↑</button>
+                      <button type="button" aria-label={`下移${module}`} disabled={index === detailModules.length - 1} onClick={() => { invalidatePreview(); setDetailModules(current => { const next = [...current]; [next[index], next[index + 1]] = [next[index + 1]!, next[index]!]; return next; }); }}>↓</button>
+                    </li>)}</ol>
+                    <p className={styles.note}>共 {plannedCount} 张，生成前可编辑每个模块的图片角色与文案。</p>
+                    <button type="button" disabled={busy} onClick={() => void generateStrategy()}>AI 生成视觉策略与模块文案（按现有文字积分计费）</button>
+                    <label>视觉策略<textarea aria-label="视觉策略" maxLength={2000} rows={4} value={brief.visualStrategy ?? ''} onChange={event => patch({ visualStrategy: event.target.value })} /></label>
+                    {detailModules.map(module => <label key={module}>{module}文案<textarea aria-label={`${module}模块文案`} maxLength={1000} rows={2} value={brief.moduleCopy?.[module] ?? ''} onChange={event => patch({ moduleCopy: { ...brief.moduleCopy, [module]: event.target.value } })} /></label>)}
+                  </div>}
+                  {scene === 'product-set' && <details className={styles.advancedOptions}><summary>上架文案（可选）</summary>
+                    <button type="button" disabled={busy} onClick={() => void generateListingCopy()}>AI 编写上架文案（按现有文字积分计费）</button>
+                    {(['title', 'highlights', 'description', 'keywords'] as const).map(key => <label key={key}>{({ title: '标题', highlights: '核心卖点', description: '详情描述', keywords: '关键词' })[key]}
+                      <textarea aria-label={`上架文案${key}`} rows={key === 'description' ? 4 : 2} value={brief.listingCopy?.[key] ?? ''} onChange={event => patch({ listingCopy: { title: brief.listingCopy?.title ?? '', highlights: brief.listingCopy?.highlights ?? '', description: brief.listingCopy?.description ?? '', keywords: brief.listingCopy?.keywords ?? '', [key]: event.target.value } })} />
+                    </label>)}
+                    <button type="button" onClick={() => void navigator.clipboard.writeText(Object.values(brief.listingCopy ?? {}).join('\n'))}>复制文案</button>
+                    <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify({ facts: brief.facts, suggested: brief.listingCopy }, null, 2)], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = 'listing-copy.json'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60_000); }}>导出文案</button>
+                  </details>}
+                  {scene !== 'product-set' && scene !== 'detail' && scene !== 'clone' && <label>
                     图片数量
                     <CommerceSelect
                       disabled={busy || recoveringCreate}
@@ -561,11 +693,11 @@ export function CommerceWizard({
                         setCount(Number(value));
                       }}
                     >
-                      {Array.from({ length: 8 }, (_, index) => (
+                      {Array.from({ length: maxCommerceSlots(scene) }, (_, index) => (
                         <option key={index + 1}>{index + 1}</option>
                       ))}
                     </CommerceSelect>
-                  </label>
+                  </label>}
                   <details className={styles.advancedOptions}>
                     <summary>高级设置 · 配色、场景与约束</summary>
                     <CreativeTextField productContext={productContext}
@@ -592,6 +724,9 @@ export function CommerceWizard({
                         aspectRatio: capability.aspectRatios.includes(generationSettings.aspectRatio) ? generationSettings.aspectRatio : capability.aspectRatios[0]!,
                         resolution: capability.resolutions.includes(generationSettings.resolution) ? generationSettings.resolution : capability.resolutions[0]! }; setGenerationSettings(nextSettings); setPlan(current => current && ({ ...current, slots: current.slots.map(slot => ({ ...slot, ...nextSettings })) })); }
                     }}>{capabilities.flatMap(provider => provider.models.map(model => <option key={`${provider.provider}::${model.id}`} value={`${provider.provider}::${model.id}`}>{model.label}</option>))}</CommerceSelect></label>
+                    {scene === 'detail' ? <p className={styles.note}>A+ 会按输出规格选择接近成品的原生比例：桌面 16:9，移动 4:3；导出时可调整横向裁切。</p> : <label>画面比例<CommerceSelect aria-label="电商画面比例" value={generationSettings.aspectRatio} onChange={value => { invalidatePreview(); setTouchedPresets(current => ({ ...current, aspectRatio: true })); setGenerationSettings(current => ({ ...current, aspectRatio: value as CommerceSlot['aspectRatio'] })); }}>
+                      {capabilities.find(item => item.provider === generationSettings.provider)?.models.find(item => item.id === generationSettings.model)?.aspectRatios.map(value => <option key={value}>{value}</option>)}
+                    </CommerceSelect></label>}
                   </details>
               </fieldset>
             </div>
@@ -599,11 +734,12 @@ export function CommerceWizard({
             {recoveringCreate && !busy && <p className={styles.note}>已保留本次方案，点击生成或保存将恢复同一任务。</p>}
             <div className={`${styles.actions} ${styles.wizardControls}`}>
               <div className={styles.generationSummary}><p className={styles.note}>
-                本次生成 {step === 3 ? plan?.slots.length : count}{" "}
+                本次生成 {step === 3 ? plan?.slots.length : plannedCount}{" "}
                 张
               </p>
               <CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} /></div>
-              <button className={styles.primary} disabled={busy || !active} onClick={() => void save(true)}>{busy ? '正在准备…' : `一键生成 ${step === 3 ? plan?.slots.length ?? count : count} 张`}</button>
+              <button className={styles.primary} disabled={busy || !active || plannedCount < 1 || plannedCount > maxCommerceSlots(scene, advancedAplus)} onClick={() => void save(true)}>{busy ? '正在准备…' : `一键生成 ${step === 3 ? plan?.slots.length ?? plannedCount : plannedCount} 张`}</button>
+              {(plannedCount < 1 || plannedCount > maxCommerceSlots(scene, advancedAplus)) && <p role="alert">请选择 1–{maxCommerceSlots(scene, advancedAplus)} 张图片。</p>}
               <button disabled={busy || !active} onClick={() => void prepare()}>调整分图方案</button>
               <button disabled={busy || !active} onClick={() => void save()}>保存草稿</button>
               <button disabled={busy} onClick={() => { clearCommerceDraft(storageKey); onClose(); }}>
@@ -624,7 +760,7 @@ export function CommerceWizard({
                     ? "分图方案"
                     : "效果示例"}
               </span>
-              <span>{count} 张图片</span>
+              <span>{plannedCount} 张图片</span>
             </div>
             {showPlan ? (
               <fieldset disabled={busy || recoveringCreate} className={styles.formBody}>
@@ -651,7 +787,7 @@ export function CommerceWizard({
                   参考这些效果填写商品资料；生成后在这里查看、修改和下载。
                 </p>
                 <div className={styles.structureGrid}>
-                  {Array.from({ length: count }, (_, index) => (
+                  {Array.from({ length: Math.min(plannedCount, 32) }, (_, index) => (
                     <div className={styles.structureCard} key={index}>
                       <span className={styles.structureNumber}>
                         {String(index + 1).padStart(2, "0")}

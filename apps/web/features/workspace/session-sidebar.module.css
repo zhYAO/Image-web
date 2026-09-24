@@ -64,3 +64,17 @@
 @media (forced-colors: active), (prefers-reduced-transparency: reduce) {
   .category { background: var(--z-panel); }
 }
+
+.collapsed { padding: 18px 8px; }
+.collapsed > :first-child { justify-content: center; padding: 0; }
+.collapsed > button, .collapsed > a { width: 100%; padding: 0 !important; justify-content: center !important; }
+.collapsed [role="region"] > div:not([role="status"]) { position: relative; padding: 0; border-radius: 16px; }
+.iconSession { display: grid; place-items: center; position: relative; width: 100%; height: 48px; border: 0; border-radius: 16px; background: transparent; cursor: pointer; }
+.iconSession:hover, .iconSession[aria-current="page"] { background: var(--z-primary-soft); }
+.iconSession:focus-visible, .moreButton:focus-visible { outline: 2px solid var(--z-focus); outline-offset: -2px; }
+.iconBusy { position: absolute; top: 2px; right: 2px; transform: scale(.55); transform-origin: top right; }
+.moreButton { position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--z-border); border-radius: 8px; background: var(--z-panel); color: var(--z-muted); cursor: pointer; opacity: 0; }
+.collapsed [role="region"] > div:hover .moreButton, .collapsed [role="region"] > div:focus-within .moreButton { opacity: 1; }
+.compactActions { display: flex; flex-direction: column; gap: 8px; width: 190px; }
+.filterButton { width: 100%; margin: 14px 0; }
+@media (pointer: coarse) { .moreButton { opacity: 1; } }

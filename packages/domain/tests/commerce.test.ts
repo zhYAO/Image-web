@@ -83,7 +83,7 @@ describe("commerce planning", () => {
     expect(compiled).not.toContain(styleId);
   });
 
-  it("rejects incompatible model options and more than four distinct references", () => {
+  it("rejects incompatible model options and scene-specific limits", () => {
     const slots = buildCommerceSlots(brief, "product-set", 5, settings);
     expect(() =>
       validateCommercePlan(
@@ -93,13 +93,13 @@ describe("commerce planning", () => {
       ),
     ).toThrow();
     expect(() =>
-      buildCommerceSlots(brief, "product-set", 9, settings),
+      buildCommerceSlots(brief, "product-set", 21, settings),
     ).toThrow();
     expect(() =>
       validateCommercePlan(
         {
           ...brief,
-          styleReferenceIds: Array.from({ length: 4 }, () =>
+          styleReferenceIds: Array.from({ length: 9 }, () =>
             crypto.randomUUID(),
           ),
         },
@@ -130,6 +130,24 @@ describe("commerce planning", () => {
         "soft-studio",
       ),
     ).toContain(facts);
+  });
+  it('keeps each of 20 clone references in its own generation input', () => {
+    const references = Array.from({ length: 20 }, () => crypto.randomUUID());
+    const cloneBrief = { ...brief, productReferenceIds: brief.productReferenceIds, styleReferenceIds: references, cloneMode: 'faithful' as const };
+    const slots = buildCommerceSlots(cloneBrief, 'clone', 20, settings);
+    expect(slots).toHaveLength(20);
+    expect(slots.every((slot, index) => slot.referenceIds.length === 2 && slot.referenceIds[1] === references[index])).toBe(true);
+    expect(() => validateCommercePlan(cloneBrief, 'clone', slots)).not.toThrow();
+    expect(() => validateCommercePlan({ ...cloneBrief, styleReferenceIds: [...references, crypto.randomUUID()] }, 'clone', slots)).toThrow();
+  });
+  it('accepts six product images and a 16-module dual-version A+ plan', () => {
+    const detailed = { ...brief, productReferenceIds: Array.from({ length: 6 }, () => crypto.randomUUID()) };
+    const slots = buildCommerceSlots(detailed, 'detail', 32, settings).map((slot, index) => ({ ...slot,
+      outputSpec: index < 16 ? 'desktop' as const : 'mobile' as const,
+      targetWidth: index < 16 ? 1464 : 600, targetHeight: index < 16 ? 600 : 450 }));
+    expect(() => validateCommercePlan(detailed, 'detail', slots)).not.toThrow();
+    expect(() => validateCommercePlan(detailed, 'detail', [{ ...slots[0]!, targetWidth: 970 }])).toThrow('A+ 输出规格与目标像素不一致');
+    expect(() => validateCommercePlan(detailed, 'detail', [...slots, { ...slots[0]!, id: crypto.randomUUID() }])).toThrow();
   });
   it("targets an explicit slot and refuses ambiguous discussion", () => {
     expect(parseCommerceEdit("第三张背景换成米色", 5)).toEqual({

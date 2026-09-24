@@ -25,7 +25,7 @@ import {
 } from '@zimage/domain';
 import { Alert, Button, Drawer, Select, Space } from 'antd';
 import PreviewGroup from 'antd/es/image/PreviewGroup';
-import { Archive, ArrowDown, ChevronRight, Menu } from 'lucide-react';
+import { Archive, ArrowDown, Menu } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
@@ -35,7 +35,7 @@ import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
-import { useWorkspaceStore, type ComposerState } from '@/store/workspace-store';
+import { useWorkspaceStore, snapshotComposer, type ComposerState } from '@/store/workspace-store';
 import { sessionHref, isLocalCommerceDraft, type WorkspaceRoute } from './workspace-route';
 import { mergeSessionActivity } from './session-category';
 import { lastComposerSession } from '@/store/composer-storage';
@@ -108,7 +108,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     forgetComposer,
     aspectRatio, setAspectRatio,
     resolution, setResolution,
-    count, setCount,
+    setCount,
     selectedProvider, setSelectedProvider,
     selectedModelId, setSelectedModelId,
     selectedChatModel, setSelectedChatModel,
@@ -141,10 +141,14 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [modelsAttempt, setModelsAttempt] = useState(0);
   const [deletingSessionId, setDeletingSessionId] = useState<string>();
   const deletionLock = useRef(false);
+  const firstSubmissionLock = useRef(false);
+  const selectionVersion = useRef(0);
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<MessageTimelineItem>();
   const sessionsRef = useRef<Session[]>([]);
   const [activeSessionId, setActiveSessionState] = useState<string>();
   const composerDefaults = useRef<Partial<ComposerState>>({});
   const setActiveSessionId = useCallback((id?: string, inheritCurrent = false) => {
+    selectionVersion.current++;
     activateComposer(id, composerDefaults.current, inheritCurrent);
     setActiveSessionState(id);
   }, [activateComposer]);
@@ -168,6 +172,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [commerceLaunch, setCommerceLaunch] = useState<CommerceLaunch>();
   const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean }>();
   const commerceActive = commerceMode?.sessionId === activeSessionId && Boolean(commerceMode?.active);
+  const maxActiveReferences = commerceActive || route?.kind === 'commerce' ? 26 : MAX_REFERENCES;
   const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean) => {
     setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active ? current : { sessionId, active });
   }, []);
@@ -298,14 +303,14 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       setHealth(nextHealth);
       setModelsError(undefined);
       const available = nextCapabilities.filter(capability => nextHealth.find(item => item.provider === capability.provider)?.status !== 'unavailable');
-      const defaults = normalizeGenerationSelection(available.length ? available : nextCapabilities, { aspectRatio: '1:1', count: 2, resolution: '2K' });
+      const defaults = normalizeGenerationSelection(available.length ? available : nextCapabilities, { aspectRatio: '1:1', count: 1, resolution: '2K' });
       composerDefaults.current = { aspectRatio: defaults.aspectRatio, count: defaults.count, resolution: defaults.resolution,
         selectedProvider: defaults.provider, selectedModelId: defaults.model };
       // Only fill missing defaults. A late response must not overwrite a restored draft or user choice.
       const current = useWorkspaceStore.getState();
       if (!current.selectedProvider || !current.selectedModelId) {
         const initial = normalizeGenerationSelection(available.length ? available : nextCapabilities, {
-          aspectRatio: current.aspectRatio, count: current.count, resolution: current.resolution,
+          aspectRatio: current.aspectRatio, count: 1, resolution: current.resolution,
         });
         setSelectedProvider(initial.provider);
         setSelectedModelId(initial.model);
@@ -373,6 +378,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       onNavigate?.(sessionHref(task.sessionId, task.id, task.runs.length ? 'results' : 'plan'), true);
     }
   };
+  const commerceBatchCreated = (batch: import('@zimage/domain').CreativeBatch, sourceId: string) => {
+    const current = useWorkspaceStore.getState();
+    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside';
+    if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, batch.sessionId);
+    if (stillHere) {
+      setActiveSessionId(batch.sessionId);
+      onNavigate?.(`/sessions/${batch.sessionId}?batch=${batch.id}`, true);
+    }
+  };
 
   useEffect(() => {
     for (const reference of references) {
@@ -393,6 +407,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const pendingBatchEntries = useMemo(() => Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
     runtime.timeline.flatMap((item) => (
       item.type === 'generation' && (item.batch.status === 'pending' || item.batch.status === 'processing')
+        && item.batch.assets.some((asset) =>
+          (asset.status === 'pending' || asset.status === 'processing') && asset.error?.code !== 'CONFLICT'
+        )
         ? [{ batchId: item.batch.id, sessionId }]
         : []
     ))
@@ -423,7 +440,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const imageCreationEnabled = explicitImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
   const activeRuntime = activeSessionId ? runtimes[activeSessionId] : undefined;
-  const activeBusy = Boolean(activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
+  const pendingOnHome = Boolean(pendingFirstMessage && !activeSessionId);
+  const activeBusy = Boolean(pendingOnHome || activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
   const composerDisabled = (initializing && (!route || route.kind === 'session')) || Boolean(activeSessionId && restoringAttachments[activeSessionId])
     || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
   const busySessionIds = useMemo(() => new Set(Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
@@ -479,14 +497,17 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }
   };
 
-  const ensureSession = async (prompt: string) => {
+  const ensureSession = async (prompt: string, sourceVersion: number, sourceComposer: ComposerState) => {
     if (activeSessionId) return activeSessionId;
     const session = await gateway.createSession(prompt.slice(0, 100));
     updateSessions([session, ...sessionsRef.current.filter(item => item.id !== session.id)]);
     updateRuntime(session.id, () => createRuntime('ready'));
-    setActiveSessionId(session.id, true);
-    onNavigate?.(sessionHref(session.id), true);
-    await refreshSessions();
+    useWorkspaceStore.setState(state => ({ composers: { ...state.composers, [session.id]: { ...sourceComposer, draft: '' } } }));
+    if (selectionVersion.current === sourceVersion) {
+      setActiveSessionId(session.id);
+      onNavigate?.(sessionHref(session.id), true);
+    }
+    void refreshSessions().catch(() => undefined);
     return session.id;
   };
 
@@ -571,7 +592,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       billing,
       requestId: crypto.randomUUID(),
       aspectRatio,
-      count,
+      count: 1,
       model: selectedModelId,
       prompt,
       provider: selectedProvider,
@@ -589,8 +610,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     };
     const turn: OptimisticImageTurn = {
       batch: {
-        assets: Array.from({ length: count }, (_, index) => ({ id: `${turnId}-${index}`, status: 'pending' })),
-        config: { aspectRatio, count, resolution },
+        assets: Array.from({ length: 1 }, (_, index) => ({ id: `${turnId}-${index}`, status: 'pending' })),
+        config: { aspectRatio, count: 1, resolution },
         createdAt,
         id: turnId,
         model: selectedModelId ?? 'unknown',
@@ -610,10 +631,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       loadStatus: runtime.loadStatus === 'idle' ? 'ready' : runtime.loadStatus,
       optimisticImages: [...runtime.optimisticImages, turn],
     }));
-    setReferences([]);
+    if (useWorkspaceStore.getState().activeComposerSessionId === sessionId) setReferences([]);
+    else useWorkspaceStore.setState(state => ({ composers: { ...state.composers,
+      ...(state.composers[sessionId] ? { [sessionId]: { ...state.composers[sessionId], references: [] } } : {}) } }));
     void renameIfDefaultTitle(sessionId, prompt);
     void admitImageTurn(sessionId, turnId, turn);
-  }, [admitImageTurn, aspectRatio, count, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
+  }, [admitImageTurn, aspectRatio, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
 
   const runChat = useCallback(async (sessionId: string, request: ChatRequest, user: MessageTimelineItem, knownItemIds: string[]) => {
     const controller = new AbortController();
@@ -723,7 +746,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   const submit = () => {
     const prompt = draft.trim();
-    if (!prompt || activeBusy || composerDisabled) return;
+    if (!prompt || activeBusy || composerDisabled || (!activeSessionId && firstSubmissionLock.current)) return;
     if (commerceRef.current?.edit(prompt)) { setDraft(''); return; }
     // The image switch is explicit generation intent; descriptions need no command prefix.
     const generate = imageCreationEnabled && !isCommerceDiscussion(prompt) && !hasTextOnlyImageIntent(prompt);
@@ -735,7 +758,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }
     let billing: CreditConfirmation | undefined;
     try {
-      billing = credits.confirm(generate ? [imageCreditItem({provider:selectedProvider,model:selectedModelId,resolution,count})] : [{operation:'chat',provider:selectedChatModel,model:selectedChatModel,resolution:'',count:1}]);
+      billing = credits.confirm(generate ? [imageCreditItem({provider:selectedProvider,model:selectedModelId,resolution,count:1})] : [{operation:'chat',provider:selectedChatModel,model:selectedChatModel,resolution:'',count:1}]);
     } catch(error) {
       setFeedback({message:error instanceof Error?error.message:'积分报价暂不可用。'});
       return;
@@ -748,12 +771,23 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       else beginChatTurn(sessionId, prompt, undefined, billing);
     };
     if (activeSessionId) start(activeSessionId);
-    else void ensureSession(prompt).then(start).catch((error: unknown) => {
-      const safe = sanitizeError(error);
-      if (safe.code === 'UNAUTHORIZED') return;
-      setFeedback({ error: safe, message: safe.message });
-      setDraft(prompt);
-    });
+    else {
+      firstSubmissionLock.current = true;
+      const sourceVersion = selectionVersion.current;
+      const sourceComposer = { ...snapshotComposer(useWorkspaceStore.getState()), draft: prompt };
+      setPendingFirstMessage({ id: `pending-user-${crypto.randomUUID()}`, type: 'message', role: 'user',
+        content: prompt, createdAt: new Date().toISOString(), sessionId: '', sequence: 1 });
+      void ensureSession(prompt, sourceVersion, sourceComposer).then(start).catch((error: unknown) => {
+        const safe = sanitizeError(error);
+        if (safe.code === 'UNAUTHORIZED') return;
+        setFeedback({ error: safe, message: safe.message });
+        if (selectionVersion.current === sourceVersion || (!useWorkspaceStore.getState().activeComposerSessionId && !useWorkspaceStore.getState().draft)) setDraft(prompt);
+        else useWorkspaceStore.setState(state => ({ composers: { ...state.composers, '': sourceComposer } }));
+      }).finally(() => {
+        firstSubmissionLock.current = false;
+        setPendingFirstMessage(undefined);
+      });
+    }
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -855,9 +889,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         validationError ??= { code: 'VALIDATION_UPLOAD_SIZE', message: `${file.name} 超过 10 MB。`, retryable: false };
       } else validFiles.push(file);
     }
-    const remaining = Math.max(0, MAX_REFERENCES - references.length);
+    const remaining = Math.max(0, maxActiveReferences - references.length);
     const acceptedFiles = validFiles.slice(0, remaining);
-    if (validFiles.length > remaining) validationError = { code: 'VALIDATION_IMAGE_COUNT', message: '最多可添加 4 张参考图。', retryable: false };
+    if (validFiles.length > remaining) validationError = { code: 'VALIDATION_IMAGE_COUNT', message: `当前最多可添加 ${maxActiveReferences} 张参考图。`, retryable: false };
     const additions = acceptedFiles.map((file): UploadReference => {
       const previewUrl = URL.createObjectURL(file);
       localPreviewUrls.current.add(previewUrl);
@@ -876,7 +910,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const selectModel = (provider: string, model: string) => {
-    const normalized = normalizeGenerationSelection(capabilities, { aspectRatio, count, model, provider, resolution });
+    const normalized = normalizeGenerationSelection(capabilities, { aspectRatio, count: 1, model, provider, resolution });
     setAspectRatio(normalized.aspectRatio);
     setCount(normalized.count);
     setResolution(normalized.resolution);
@@ -884,12 +918,13 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     setSelectedModelId(normalized.model);
   };
 
-  const sidebar = (
+  const sidebar = (collapsed = false) => (
     <SessionSidebar
+      collapsed={collapsed}
       activeSessionId={activeSessionId}
       busySessionIds={busySessionIds}
       deleting={Boolean(deletingSessionId)}
-      onCollapse={() => setSidebarCollapsed(true)}
+      onCollapse={() => collapsed ? setSidebarCollapsed(false) : setSidebarCollapsed(true)}
       commerceDraftIds={commerceDraftIds}
       onCreate={() => void createSession()}
       onDelete={deleteSession}
@@ -918,7 +953,6 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           </label>
           <div><span className={styles.popoverLabel}>比例</span><div className={styles.mobileOptionGrid}>{selectedModel?.aspectRatios.map((ratio) => <Button key={ratio} onClick={() => setAspectRatio(ratio)} type={ratio === aspectRatio ? 'primary' : 'default'}>{ratio}</Button>)}</div></div>
           <div><span className={styles.popoverLabel}>分辨率</span><div className={styles.mobileOptionGrid}>{selectedModel?.resolutions.map((item) => <Button key={item} onClick={() => setResolution(item)} type={item === resolution ? 'primary' : 'default'}>{item}</Button>)}</div></div>
-          <div><span className={styles.popoverLabel}>数量</span><div className={styles.mobileOptionGrid}>{Array.from({ length: Math.min(selectedModel?.maxImages ?? 1, 4) }, (_, index) => index + 1).map((item) => <Button key={item} onClick={() => setCount(item)} type={item === count ? 'primary' : 'default'}>{item}</Button>)}</div></div>
         </>
       )}
     </div>
@@ -928,7 +962,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     <>
     <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
       <aside className={styles.sidebar}>
-        {sidebarCollapsed ? <Button aria-label="展开会话侧栏" className={styles.expandSidebar} icon={<ChevronRight size={18} />} onClick={() => setSidebarCollapsed(false)} type="text" /> : sidebar}
+        {sidebar(sidebarCollapsed)}
       </aside>
       <main className={styles.main}>
         <header className={styles.header}>
@@ -959,10 +993,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
             </div> : <CommerceWorkspace
               ensureSession={ensureCommerceSession}
               onSavedSession={commerceSaved}
+              onBatchCreated={commerceBatchCreated}
               onExitDraft={() => onNavigate?.('/create')}
               ownerKey={ownerKey}
               onDraftSessionsChange={onDraftSessionsChange}
               requestedTaskId={route?.kind === 'session' ? route.taskId : undefined}
+              requestedBatchId={route?.kind === 'session' ? route.batchId : undefined}
               requestedView={route?.kind === 'session' ? route.view : undefined}
               routeDriven={Boolean(route)}
               onViewChange={(id, task, view) => { if (onNavigate && !isLocalCommerceDraft(id)) onNavigate(sessionHref(id, task, view)); }}
@@ -975,7 +1011,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 const current = useWorkspaceStore.getState();
                 if (current.activeComposerSessionId !== sessionId) return false;
                 const merged = [...current.references, ...next.filter((reference) => !current.references.some((item) => reference.id ? item.id === reference.id : item === reference))];
-                if (merged.length > MAX_REFERENCES) return false;
+                if (merged.length > maxActiveReferences) return false;
                 setReferences(merged);
                 return true;
               }}
@@ -986,9 +1022,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 if (tail && hasCommerce && !loading && !activeRuntime?.loadError && !activeRuntime?.streamingText && !activeRuntime?.awaitingFirstDelta && !activeRuntime?.optimisticImages.length) return null;
                 return (
                   <WorkspaceTimeline
-                    awaitingFirstDelta={tail && activeRuntime?.awaitingFirstDelta}
+                    awaitingFirstDelta={pendingOnHome || (tail && activeRuntime?.awaitingFirstDelta)}
                     isChatStreaming={tail && activeRuntime?.isChatStreaming}
-                    items={items}
+                    items={pendingOnHome && pendingFirstMessage ? [pendingFirstMessage] : items}
                     loadError={tail ? activeRuntime?.loadError?.message : undefined}
                     loading={loading}
                     onDownloadBatch={downloadBatch}
@@ -1013,15 +1049,13 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               aspectRatio={aspectRatio}
               busy={activeBusy}
               capabilities={capabilities}
-              count={count}
-              disabled={composerDisabled}
+              disabled={composerDisabled || pendingOnHome}
               submitDisabled={(imageCreationEnabled && (!quota || modelsLoading || Boolean(modelsError) || !selectedModel)) || (credits.present && credits.catalog?.enabled !== false && (!credits.catalog || !credits.wallet || Boolean(credits.error)))}
               draft={draft}
               health={health}
               imageCreationEnabled={imageCreationEnabled}
               onAspectRatioChange={setAspectRatio}
               onChatModelSelect={setSelectedChatModel}
-              onCountChange={setCount}
               onDraftChange={setDraft}
               onImageCreationChange={(enabled) => { setActivePopover(undefined); setExplicitImageToolEnabled(enabled); }}
               onModelSelect={selectModel}
@@ -1042,7 +1076,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         </PreviewGroup>
         </div>
       </main>
-      <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar}</Drawer>
+      <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar()}</Drawer>
       <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</Drawer>
     </div>
     </>

@@ -1,10 +1,10 @@
-import { commerceSceneSchema, type CommerceBrief, type CommerceScene } from '@zimage/domain';
+import { commerceSceneSchema, COMMERCE_PLATFORMS, type CommerceBrief, type CommerceScene } from '@zimage/domain';
 
 export type CommerceView = 'examples' | 'plan' | 'results';
 export type WorkspaceRoute =
   | { kind: 'home' }
   | { kind: 'commerce'; scene: CommerceScene; platform?: CommerceBrief['platform']; template?: string }
-  | { kind: 'session'; sessionId: string; taskId?: string; view?: CommerceView }
+  | { kind: 'session'; sessionId: string; taskId?: string; batchId?: string; view?: CommerceView }
   | { kind: 'invalid' }
   | { kind: 'outside' };
 
@@ -17,7 +17,7 @@ export function workspaceRoute(pathname: string, search = ''): WorkspaceRoute {
     if (!scene.success) return { kind: 'invalid' };
     const platform = query.get('platform');
     return { kind: 'commerce', scene: scene.data,
-      platform: platform === 'taobao' || platform === 'douyin' || platform === 'xiaohongshu' ? platform : undefined,
+      platform: COMMERCE_PLATFORMS.some(item => item.id === platform) ? platform as CommerceBrief['platform'] : undefined,
       template: query.get('template') ?? undefined };
   }
   if (pathname.startsWith('/sessions/')) {
@@ -25,7 +25,7 @@ export function workspaceRoute(pathname: string, search = ''): WorkspaceRoute {
     const sessionId = pathname.split('/')[2];
     if (!sessionId || !/^[a-zA-Z0-9-]+$/.test(sessionId)) return { kind: 'invalid' };
     const view = query.get('view');
-    return { kind: 'session', sessionId, taskId: query.get('task') ?? undefined,
+    return { kind: 'session', sessionId, taskId: query.get('task') ?? undefined, batchId: query.get('batch') ?? undefined,
       view: view === 'examples' || view === 'plan' || view === 'results' ? view : undefined };
   }
   return { kind: 'outside' };

@@ -309,6 +309,59 @@ export type Database = {
           },
         ]
       }
+      creative_batches: {
+        Row: {
+          created_at: string
+          global_params: Json
+          id: string
+          items: Json
+          lease_token: string | null
+          lease_until: string | null
+          request_hash: string
+          request_id: string
+          session_id: string
+          updated_at: string
+          user_id: string
+          workflow: string
+        }
+        Insert: {
+          created_at?: string
+          global_params?: Json
+          id?: string
+          items: Json
+          lease_token?: string | null
+          lease_until?: string | null
+          request_hash: string
+          request_id: string
+          session_id: string
+          updated_at?: string
+          user_id: string
+          workflow: string
+        }
+        Update: {
+          created_at?: string
+          global_params?: Json
+          id?: string
+          items?: Json
+          lease_token?: string | null
+          lease_until?: string | null
+          request_hash?: string
+          request_id?: string
+          session_id?: string
+          updated_at?: string
+          user_id?: string
+          workflow?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_batches_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_batches: {
         Row: {
           config: Json

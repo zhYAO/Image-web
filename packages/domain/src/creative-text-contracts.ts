@@ -11,6 +11,8 @@ export const creativeTextFieldSchema = z.enum([
   "content",
   "exactText",
   "instruction",
+  "strategy",
+  "listingCopy",
 ]);
 export type CreativeTextFieldName = z.infer<typeof creativeTextFieldSchema>;
 export const creativeTextFieldLimits: Record<CreativeTextFieldName, number> = {
@@ -23,6 +25,8 @@ export const creativeTextFieldLimits: Record<CreativeTextFieldName, number> = {
   content: 4000,
   exactText: 1000,
   instruction: 2000,
+  strategy: 4000,
+  listingCopy: 6000,
 };
 export const creativeTextOptimizeRequestSchema = z
   .object({
