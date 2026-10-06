@@ -164,7 +164,7 @@ describe("commerce plan preview", () => {
     expect(screen.getByRole("button", { name: "保存草稿" })).toBeEnabled();
   });
 
-  it.each(COMMERCE_SCENES.filter(scene => scene.id !== 'batch' && scene.id !== 'clone'))("shows selectable per-scene slots for $name", async ({ id, count }) => {
+  it.each(COMMERCE_SCENES.filter(scene => scene.id !== 'batch' && scene.id !== 'clone' && scene.id !== 'apparel-catalog'))("shows selectable per-scene slots for $name", async ({ id, count }) => {
     await renderWizard(id);
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     const preview = await screen.findByRole("complementary", { name: "电商方案预览" });

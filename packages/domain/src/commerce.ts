@@ -5,6 +5,7 @@ import { COMMERCE_SCENES, COMMERCE_TEMPLATES } from "./commerce-templates";
 import { resolveImageModel } from "./model-registry";
 import { APLUS_SPECS, DETAIL_MODULES, SELLING_LAYOUTS, maxCommerceSlots } from './commerce-workflows';
 import type { UploadReference } from "./types";
+import type { ApparelGateway, ApparelTask, ApparelPlan } from './apparel';
 
 export const commerceSceneSchema = z.enum([
   "product-main",
@@ -16,6 +17,7 @@ export const commerceSceneSchema = z.enum([
   "style-reference",
   "model",
   "xhs-poster",
+  "apparel-catalog",
 ]);
 export type CommerceScene = z.infer<typeof commerceSceneSchema>;
 export const commerceSettingsSchema = z.object({
@@ -64,6 +66,7 @@ export const commercePlanSchema = z.object({
   templateId: z.string().min(1),
   slots: z.array(commerceSlotSchema).min(1).max(32),
 }).superRefine((plan, context) => {
+  if (plan.scene === "apparel-catalog") context.addIssue({ code: "custom", path: ["scene"], message: "服装商品图片须使用固定排版契约。" });
   if (plan.slots.length > maxCommerceSlots(plan.scene, plan.slots.some(slot => slot.outputSpec === 'desktop' || slot.outputSpec === 'mobile')))
     context.addIssue({ code: 'custom', path: ['slots'], message: '图片数量超过当前流程上限。' });
 });
@@ -174,6 +177,7 @@ export const commerceCancelSchema = commerceArchiveSchema.extend({
   runId: z.uuid(),
 });
 export interface CommerceGateway {
+  apparel?: ApparelGateway;
   archive(
     taskId: string,
     input: z.infer<typeof commerceArchiveSchema>,
@@ -207,6 +211,8 @@ export interface CommerceGateway {
   ): Promise<z.infer<typeof commerceExportResultSchema>>;
   upload(sessionId: string, reference: UploadReference): Promise<string>;
 }
+export type CreativeCommerceTask = CommerceTask | ApparelTask;
+export type CreativeCommercePlan = CommercePlan | ApparelPlan;
 
 export function nextCommerceQuestion(
   brief: CommerceBrief,
@@ -301,6 +307,8 @@ export function validateCommercePlan(
     } else if (slot.targetWidth || slot.targetHeight) throw new Error('缺少 A+ 输出规格。');
     compileCommerceSlot(brief, slot, templateId);
     const capability = resolveImageModel(slot).capability;
+    if (slot.referenceIds.length > (capability.maxReferences ?? 14))
+      throw new Error('Seedream 5.0 每张最多 10 张参考图，请调整引用后再保存。');
     if (
       !capability.aspectRatios.includes(slot.aspectRatio) ||
       !capability.resolutions.includes(slot.resolution)

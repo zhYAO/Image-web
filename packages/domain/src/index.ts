@@ -13,3 +13,4 @@ export * from "./commerce-visuals";
 export * from "./commerce-workflows";
 export * from "./commerce-batch";
 export * from "./credits";
+export * from "./apparel";

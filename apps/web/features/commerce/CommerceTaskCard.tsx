@@ -444,6 +444,7 @@ export function CommerceTaskCard({
           {task.archived ? `已归档 · ${title}` : title}
         </strong>
       </header>
+      {task.slots.some(slot=>slot.provider==='seedream'&&slot.model==='seedream-4.5') && <p role="note" className={styles.notice}>此方案使用 Seedream 4.5。历史图片与费用保持原样；再次生成前，请修改模型为 Flash 或 Pro 并保存新版本。</p>}
       <p className={styles.note}>
         新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>

@@ -124,9 +124,9 @@ describe("commerce UI", () => {
     window.sessionStorage.clear();
   });
 
-  it("offers five primary scenes, keeps legacy scenes in more creation, and carries launch parameters", () => {
+  it("offers six primary scenes, keeps legacy scenes in more creation, and carries launch parameters", () => {
     render(<CommerceCatalogue />);
-    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(5);
+    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "小红书" }));
     expect(
       screen.getByRole("link", { name: "开始商品套图 →" }),

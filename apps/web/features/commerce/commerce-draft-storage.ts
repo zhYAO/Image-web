@@ -43,6 +43,6 @@ export function saveCommerceDraft(key: string, draft: CommerceDraftState) {
 export function clearCommerceDraft(key?: string) {
   try {
     if (key) sessionStorage.removeItem(prefix + key);
-    else for (const name of Object.keys(sessionStorage)) if (name.startsWith(prefix)) sessionStorage.removeItem(name);
+    else for (const name of Object.keys(sessionStorage)) if (name.startsWith(prefix) || name.startsWith('zimage:apparel-draft:v1:')) sessionStorage.removeItem(name);
   } catch { /* Logout must work when storage is unavailable. */ }
 }

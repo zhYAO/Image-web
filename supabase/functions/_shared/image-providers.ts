@@ -14,6 +14,7 @@ export interface ProviderImageInput {
   resolution: ImageResolution;
   targetWidth?: number;
   targetHeight?: number;
+  legacySeedream?: boolean;
 }
 
 export interface ProviderImageResult {
@@ -35,7 +36,7 @@ export class ImageProviderError extends Error {
 }
 
 const seedreamSizes: Record<ImageResolution, Record<ImageAspectRatio, string>> = {
-  // Seedream 4.5 rejects outputs below 3,686,400 pixels, so logical 1K requests use its minimum 2K geometry.
+  // Keep the published logical 2K geometry across the five supported aspect ratios.
   '1K': {
     '1:1': '2048x2048',
     '3:4': '1728x2304',
@@ -117,11 +118,17 @@ export function decodeGeminiResponse(value: unknown): ProviderImageResult {
 }
 
 export function buildSeedreamRequest(input: ProviderImageInput) {
+  if (input.references.length > (input.legacySeedream ? 14 : 10)) {
+    throw new ImageProviderError('provider_error', 'Seedream 5.0 最多支持 10 张参考图。', false, 'rejected');
+  }
   const targetSize = input.targetWidth && input.targetHeight ? (() => {
     const scale = Math.max(1, Math.sqrt(3_686_400 / (input.targetWidth * input.targetHeight)));
     const width = Math.ceil(input.targetWidth * scale / 16) * 16;
     const height = Math.ceil(input.targetHeight * scale / 16) * 16;
-    return width * height <= 16_777_216 && width / height >= 1 / 16 && width / height <= 16 ? `${width}x${height}` : undefined;
+    if (width * height > (input.legacySeedream ? 16_777_216 : 4_624_220) || width / height < 1 / 16 || width / height > 16) {
+      throw new ImageProviderError('provider_error', 'seedream_invalid_target_size', false, 'rejected');
+    }
+    return `${width}x${height}`;
   })() : undefined;
   return {
     ...(input.references.length ? {
@@ -131,9 +138,8 @@ export function buildSeedreamRequest(input: ProviderImageInput) {
     model: input.model,
     prompt: input.prompt,
     response_format: 'b64_json',
-    sequential_image_generation: 'disabled',
+    ...(input.legacySeedream ? { sequential_image_generation: 'disabled', stream: false } : {}),
     size: targetSize ?? seedreamSizes[input.resolution][input.aspectRatio],
-    stream: false,
     watermark: false,
   };
 }

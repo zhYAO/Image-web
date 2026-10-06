@@ -14,7 +14,7 @@ const brief = {
 };
 const settings = {
   provider: "seedream",
-  model: "seedream-4.5",
+  model: "seedream-5.0-flash",
   aspectRatio: "1:1" as const,
   resolution: "2K" as const,
 };
@@ -25,6 +25,14 @@ const plan = {
   slots: buildCommerceSlots(brief, "product-set", 2, settings),
 };
 describe("trusted commerce service", () => {
+  it("reads a historical 4.5 plan but requires an explicit upgrade before saving a new revision", async () => {
+    const legacy={...plan,slots:plan.slots.map(slot=>({...slot,model:'seedream-4.5'})),id:crypto.randomUUID(),sessionId,revision:1,createdAt:'now',updatedAt:'now',runs:[],selections:[]};
+    const rpc=vi.fn().mockResolvedValueOnce({data:legacy,error:null}).mockResolvedValueOnce({data:null,error:null});
+    expect(await createCommerceService({rpc}).dispatch(userId,'get',legacy.id,{},crypto.randomUUID())).toMatchObject({slots:legacy.slots});
+    await expect(createCommerceService({rpc}).dispatch(userId,'save',legacy.id,{requestId:crypto.randomUUID(),expectedRevision:1,plan:legacy},crypto.randomUUID())).rejects.toThrow(/Flash.*Pro/);
+    expect(rpc.mock.calls).toHaveLength(2);
+  });
+
   it("retains the content poster input and reports an unavailable database capability before any write", async () => {
     const posterBrief = { ...brief, name: '穿搭笔记', facts: '白色连衣裙搭配建议', contentMode: 'content' as const, platform: 'xiaohongshu' as const };
     const poster = { ...plan, scene: 'xhs-poster' as const, brief: posterBrief, templateId: 'xhs-editorial', slots: buildCommerceSlots(posterBrief, 'xhs-poster', 1, settings) };

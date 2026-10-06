@@ -11,6 +11,7 @@ import {
   ListOrdered,
   Plus,
   Sparkles,
+  Shirt,
   UserRound,
 } from "lucide-react";
 import type { CommerceScene } from "@zimage/domain";
@@ -63,6 +64,7 @@ export function CommerceHeader({ onHistory }: { onHistory?: () => void }) {
   );
 }
 const links = [
+  { id: "apparel-catalog", href: "/create/apparel-catalog", title: "服装商品图片", Icon: Shirt },
   { id: undefined, href: "/create", title: "工具目录", Icon: Grid2X2 },
   {
     id: "product-set",

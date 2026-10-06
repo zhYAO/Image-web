@@ -161,20 +161,27 @@ async function downloadReferences(admin: AdminClient, references: QueueReference
   return downloaded;
 }
 
-function providerConfiguration(provider: ClaimedGeneration['provider']) {
+export function providerConfiguration(provider: ClaimedGeneration['provider'], model: string) {
+  const seedreamEnvironment: Record<string, string> = {
+    'seedream-5.0-flash': 'ZIMAGE_SEEDREAM_FLASH_IMAGE_MODEL',
+    'seedream-5.0-pro': 'ZIMAGE_SEEDREAM_PRO_IMAGE_MODEL',
+    'seedream-4.5': 'ZIMAGE_SEEDREAM_IMAGE_MODEL',
+  };
+  if (provider === 'seedream' && !seedreamEnvironment[model]) throw new Error('unsupported_seedream_model');
   return provider === 'gemini'
     ? { apiKey: env('GEMINI_API_KEY'), model: env('ZIMAGE_GEMINI_IMAGE_MODEL') }
-    : { apiKey: env('ARK_API_KEY'), model: env('ZIMAGE_SEEDREAM_IMAGE_MODEL') };
+    : { apiKey: env('ARK_API_KEY'), model: env(seedreamEnvironment[model]!) };
 }
 
 async function callProvider(claim: ClaimedGeneration, references: ProviderReference[], signal?: AbortSignal) {
-  const configuration = providerConfiguration(claim.provider);
+  const configuration = providerConfiguration(claim.provider, claim.model);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
     const input = {
       aspectRatio: claim.params.aspectRatio,
       model: configuration.model,
+      legacySeedream: claim.model === 'seedream-4.5',
       prompt: claim.prompt,
       references,
       targetWidth: claim.params.targetWidth,
@@ -259,7 +266,7 @@ export async function processClaim(
       try {
         const available = await bounded(rpc<boolean>(admin, 'assert_chat_provider_available', { p_provider: claim.provider }));
         if (!available) throw new Error('provider_unavailable');
-        if (dependencies.callProvider === callProvider) providerConfiguration(claim.provider);
+        if (dependencies.callProvider === callProvider) providerConfiguration(claim.provider, claim.model);
         if ((claim.params.referenceIds?.length ?? 0) !== claim.references.length) throw new Error('reference_count_mismatch');
         references = await bounded(downloadReferences(admin, claim.references));
       } catch (error) {

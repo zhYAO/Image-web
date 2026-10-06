@@ -52,9 +52,7 @@ describe('image provider adapters', () => {
       model: 'deployment-model',
       prompt: 'A clean product photograph',
       response_format: 'b64_json',
-      sequential_image_generation: 'disabled',
       size: '1728x2304',
-      stream: false,
       watermark: false,
     });
   });

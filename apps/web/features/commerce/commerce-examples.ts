@@ -1,6 +1,7 @@
 import type { CommerceScene } from "@zimage/domain";
 
 const sceneImages: Record<CommerceScene, string> = {
+  "apparel-catalog": "product-main",
   "product-main": "product-main",
   "product-set": "selling-point",
   detail: "detail-hero",

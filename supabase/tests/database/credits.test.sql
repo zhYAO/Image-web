@@ -4,7 +4,7 @@ select no_plan();
 create function pg_temp.uid(label text default 'owner') returns uuid language sql as $$select md5('credit-test:'||label)::uuid$$;
 insert into auth.users(id,email,email_confirmed_at,is_anonymous) values(pg_temp.uid(),'credits@example.com',now(),false),(pg_temp.uid('other'),'other@example.com',now(),false),(pg_temp.uid('unverified'),'new@example.com',null,false);
 create function pg_temp.call(action text,input jsonb default '{}') returns jsonb language sql as $$select public.credit_dispatch(pg_temp.uid(),action,input)$$;
-create function pg_temp.item(op text default 'image',model text default 'gemini',res text default '2K',n int default 1) returns jsonb language sql as $$select jsonb_build_object('operation',op,'provider',model,'model',case when model='gemini' then 'gemini-3-pro-image' when model='seedream' then 'seedream-4.5' else model end,'resolution',res,'count',n)$$;
+create function pg_temp.item(op text default 'image',model text default 'gemini',res text default '2K',n int default 1) returns jsonb language sql as $$select jsonb_build_object('operation',op,'provider',model,'model',case when model='gemini' then 'gemini-3-pro-image' when model='seedream' then 'seedream-5.0-flash' else model end,'resolution',res,'count',n)$$;
 select is((pg_temp.call('wallet')->>'availableMinor')::int,1000,'welcome grant');
 select is((pg_temp.call('wallet')->>'availableMinor')::int,1000,'welcome replay');
 select throws_ok($$select public.credit_dispatch(pg_temp.uid('unverified'),'wallet')$$,'P0001','unauthorized','unverified denied');
@@ -13,6 +13,7 @@ select ok(not has_table_privilege('authenticated','private.credit_wallets','upda
 select throws_ok($$select pg_temp.call('quote',jsonb_build_object('items',jsonb_build_array(pg_temp.item())))$$,'P0001','credits_disabled','billing disabled initially');
 update private.credit_settings set enabled=true;
 select is((private.credit_quote(jsonb_build_array(pg_temp.item('image','seedream','2K')))->>'totalMinor')::int,30,'Seedream price');
+select is((private.credit_quote(jsonb_build_array(pg_temp.item('image','seedream','2K')||'{"model":"seedream-5.0-pro"}'::jsonb))->>'totalMinor')::int,30,'Seedream Pro 2K price');
 select is((private.credit_quote(jsonb_build_array(pg_temp.item('image','gemini','1K')))->>'totalMinor')::int,60,'Gemini 1K price');
 select is((private.credit_quote(jsonb_build_array(pg_temp.item()))->>'totalMinor')::int,80,'Gemini 2K price');
 select is((private.credit_quote(jsonb_build_array(pg_temp.item('chat','doubao','')))->>'totalMinor')::int,2,'Doubao chat');
@@ -23,7 +24,7 @@ select is((private.credit_quote(jsonb_build_array(pg_temp.item(),pg_temp.item('i
 create temporary table credit_test_state(k text primary key,v jsonb);
 create function pg_temp.keep(k text,v jsonb) returns void language sql as $$insert into credit_test_state values(k,v) on conflict(k) do update set v=excluded.v$$;
 create function pg_temp.state(k text) returns jsonb language sql as $$select v from credit_test_state where credit_test_state.k=$1$$;
-create function pg_temp.text_input(label text default 'text') returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'operation','chat','model','doubao','billing',jsonb_build_object('version','2026-09-15.1','totalMinor',2),'input',jsonb_build_object('message','hello'))$$;
+create function pg_temp.text_input(label text default 'text') returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'operation','chat','model','doubao','billing',jsonb_build_object('version','2026-10-06.1','totalMinor',2),'input',jsonb_build_object('message','hello'))$$;
 select pg_temp.keep('text',pg_temp.call('text_start',pg_temp.text_input()));
 select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'text reservation');
 select is(pg_temp.call('text_start',pg_temp.text_input())->>'id',pg_temp.state('text')->>'id','stable text request');
@@ -53,7 +54,7 @@ select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input
 update private.runtime_flags set enabled=true where flag='generation_enabled';
 update private.provider_runtime_config set enabled=true where provider='gemini';
 delete from private.provider_health_windows where provider='gemini';
-create function pg_temp.image_input(label text default 'images',n int default 2) returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'prompt','Test image','provider','gemini','model','gemini-3-pro-image','config',jsonb_build_object('count',n,'resolution','2K','aspectRatio','1:1','referenceIds','[]'::jsonb,'registryVersion','2026-08-25.1'),'requestHash',md5(label),'correlationId',gen_random_uuid(),'billing',jsonb_build_object('version','2026-09-15.1','totalMinor',80*n))$$;
+create function pg_temp.image_input(label text default 'images',n int default 2) returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'prompt','Test image','provider','gemini','model','gemini-3-pro-image','config',jsonb_build_object('count',n,'resolution','2K','aspectRatio','1:1','referenceIds','[]'::jsonb,'registryVersion','2026-08-25.1'),'requestHash',md5(label),'correlationId',gen_random_uuid(),'billing',jsonb_build_object('version','2026-10-06.1','totalMinor',80*n))$$;
 select pg_temp.keep('images',pg_temp.call('image',pg_temp.image_input()));
 select is((pg_temp.call('wallet')->>'frozenMinor')::int,162,'images freeze per item');
 select is(pg_temp.call('image',pg_temp.image_input())->>'batchId',pg_temp.state('images')->>'batchId','transport retry reuses batch despite correlation ID');
@@ -77,12 +78,12 @@ select lives_ok($$select public.credit_admin(jsonb_build_object('action','grant'
 select is((pg_temp.call('wallet')->>'availableMinor')::int,150,'manual grant once');
 
 -- Mixed-model commerce admission is atomic across all slots.
-create function pg_temp.mixed_plan() returns jsonb language sql as $$select jsonb_build_object('scene','xhs-poster','templateId','xhs-editorial','brief',jsonb_build_object('contentMode','content','name','Testing poster','facts','Body text','sellingPoints','','platform','xiaohongshu','placement','cover','productReferenceIds','[]'::jsonb,'styleReferenceIds','[]'::jsonb),'slots',jsonb_build_array(jsonb_build_object('id',pg_temp.uid('slot1'),'role','Cover','instruction','','exactText','Testing poster','referenceIds','[]'::jsonb,'provider','gemini','model','gemini-3-pro-image','aspectRatio','1:1','resolution','2K'),jsonb_build_object('id',pg_temp.uid('slot2'),'role','Body','instruction','','exactText','Body text','referenceIds','[]'::jsonb,'provider','seedream','model','seedream-4.5','aspectRatio','1:1','resolution','2K')))$$;
+create function pg_temp.mixed_plan() returns jsonb language sql as $$select jsonb_build_object('scene','xhs-poster','templateId','xhs-editorial','brief',jsonb_build_object('contentMode','content','name','Testing poster','facts','Body text','sellingPoints','','platform','xiaohongshu','placement','cover','productReferenceIds','[]'::jsonb,'styleReferenceIds','[]'::jsonb),'slots',jsonb_build_array(jsonb_build_object('id',pg_temp.uid('slot1'),'role','Cover','instruction','','exactText','Testing poster','referenceIds','[]'::jsonb,'provider','gemini','model','gemini-3-pro-image','aspectRatio','1:1','resolution','2K'),jsonb_build_object('id',pg_temp.uid('slot2'),'role','Body','instruction','','exactText','Body text','referenceIds','[]'::jsonb,'provider','seedream','model','seedream-5.0-flash','aspectRatio','1:1','resolution','2K')))$$;
 create function pg_temp.compiled() returns jsonb language sql as $$select jsonb_agg(jsonb_build_object('slotId',slot->>'id','prompt','Compiled poster','hash',md5(slot::text),'provider',slot->>'provider','model',slot->>'model','templateVersion','1.0.0','compilerVersion','commerce-1','config',jsonb_build_object('count',1,'aspectRatio','1:1','resolution','2K','referenceIds','[]'::jsonb,'registryVersion','2026-08-25.1'))) from jsonb_array_elements(pg_temp.mixed_plan()->'slots') slot$$;
 insert into public.sessions(id,user_id,title) values(pg_temp.uid('commerce-session'),pg_temp.uid(),'Poster');
 select pg_temp.keep('commerce',public.commerce_dispatch(pg_temp.uid(),'create',null,jsonb_build_object('requestId',pg_temp.uid('create'),'sessionId',pg_temp.uid('commerce-session'),'plan',pg_temp.mixed_plan()),'create-hash',pg_temp.compiled(),gen_random_uuid()));
 select is((pg_temp.call('wallet')->>'availableMinor')::int,150,'saving content poster costs nothing');
-create function pg_temp.mixed_submit() returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid('mixed-submit'),'taskId',pg_temp.state('commerce')->>'id','revision',1,'slotIds',jsonb_build_array(pg_temp.uid('slot1'),pg_temp.uid('slot2')),'source','direct','requestHash','mixed-hash','correlationId',gen_random_uuid(),'billing',jsonb_build_object('version','2026-09-15.1','totalMinor',110))$$;
+create function pg_temp.mixed_submit() returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid('mixed-submit'),'taskId',pg_temp.state('commerce')->>'id','revision',1,'slotIds',jsonb_build_array(pg_temp.uid('slot1'),pg_temp.uid('slot2')),'source','direct','requestHash','mixed-hash','correlationId',gen_random_uuid(),'billing',jsonb_build_object('version','2026-10-06.1','totalMinor',110))$$;
 update private.provider_runtime_config set enabled=true where provider='seedream';
 update private.credit_wallets set available_minor=100 where user_id=pg_temp.uid();
 select throws_ok($$select pg_temp.call('commerce',pg_temp.mixed_submit())$$,'P0001','insufficient_credits','mixed slots cannot partially enter queue');
@@ -106,7 +107,7 @@ select is((select o.status from private.credit_operations o join public.generati
 select public.credit_admin(jsonb_build_object('action','reconcile','operationId',(select o.id from private.credit_operations o join public.generations g on g.id=o.original_generation_id where g.batch_id=(pg_temp.state('processing-unknown')->>'batchId')::uuid),'outcome','refunded','evidence','Verified upstream rejected this request','actor','test','reason','Manual reconciliation','requestId',pg_temp.uid('reconcile'),'apply',true));
 select is((pg_temp.call('wallet')->>'availableMinor')::int,500,'manual verified rejection restores held image funds');
 -- Operator price version does not mutate prior operations.
-select public.credit_admin(jsonb_build_object('action','price','version','test-v2','prices',(select jsonb_agg(p||jsonb_build_object('unitMinor',(p->>'unitMinor')::int+1)) from private.credit_price_versions,jsonb_array_elements(prices) p where version='2026-09-15.1'),'reason','test price update','actor','test','requestId',pg_temp.uid('price'),'apply',true));
+select public.credit_admin(jsonb_build_object('action','price','version','test-v2','prices',(select jsonb_agg(p||jsonb_build_object('unitMinor',(p->>'unitMinor')::int+1)) from private.credit_price_versions,jsonb_array_elements(prices) p where version='2026-10-06.1'),'reason','test price update','actor','test','requestId',pg_temp.uid('price'),'apply',true));
 select is((private.credit_quote(jsonb_build_array(pg_temp.item('chat','doubao','')))->>'totalMinor')::int,3,'new price used only for new quotes');
 select is((select amount_minor::int from private.credit_operations where business_key='text:'||pg_temp.uid('text') and user_id=pg_temp.uid()),2,'old charge immutable after price change');
 select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('stale-after-price'))$$,'P0001','credit_price_changed','old confirmation rejected after price activation');

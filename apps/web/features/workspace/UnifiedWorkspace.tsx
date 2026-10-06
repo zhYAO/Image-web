@@ -369,12 +369,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     updateSessions([{ ...session, activityTypes: ['commerce'] }, ...sessionsRef.current.filter(item => item.id !== session.id)]);
     return session.id;
   };
-  const commerceSaved = (task: import('@zimage/domain').CommerceTask, sourceId: string) => {
+  const commerceSaved = (task: import('@zimage/domain').CreativeCommerceTask, sourceId: string) => {
     const current = useWorkspaceStore.getState();
     const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside';
     if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, task.sessionId);
     updateSessions([{ ...sessionsRef.current.find(item => item.id === task.sessionId)!, id: task.sessionId,
-      title: sessionsRef.current.find(item => item.id === task.sessionId)?.title ?? task.brief.name,
+      title: sessionsRef.current.find(item => item.id === task.sessionId)?.title ?? ('engine' in task ? task.plan.brief.name : task.brief.name),
       status: 'active', createdAt: task.createdAt, updatedAt: task.updatedAt, activityTypes: ['commerce'] },
       ...sessionsRef.current.filter(item => item.id !== task.sessionId)]);
     if (stillHere) {

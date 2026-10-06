@@ -7,7 +7,7 @@ const batchId = '30000000-0000-4000-8000-000000000001';
 const messageId = '20000000-0000-4000-8000-000000000001';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const request = (): ImageRequest => ({ sessionId, prompt: '商品图', count: 1, aspectRatio: '1:1', resolution: '2K' });
-const batch = { id: batchId, sessionId, source: 'direct', status: 'pending', prompt: '商品图', provider: 'seedream', model: 'seedream-4.5', config: { count: 1, aspectRatio: '1:1', resolution: '2K' }, createdAt: '2026-09-06T00:00:00.000Z', assets: [{ id: messageId, status: 'pending' }] };
+const batch = { id: batchId, sessionId, source: 'direct', status: 'pending', prompt: '商品图', provider: 'seedream', model: 'seedream-5.0-flash', config: { count: 1, aspectRatio: '1:1', resolution: '2K' }, createdAt: '2026-09-06T00:00:00.000Z', assets: [{ id: messageId, status: 'pending' }] };
 
 describe('gateway recovery boundaries', () => {
   it('recovers messages beyond the first timeline page', async () => {

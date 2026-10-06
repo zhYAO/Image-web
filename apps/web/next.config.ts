@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
   env: { ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development' },
   generateBuildId: async () => process.env.ZIMAGE_BUILD_SHA ?? null,
   outputFileTracingRoot: path.join(__dirname, '../..'),
+  outputFileTracingIncludes: { '/api/creative-tasks/**': ['./server/apparel/fonts/**/*'] },
   experimental: {
     // Next 16.3 can panic while restoring the dev cache (TaskGuard has no
     // persistent_task_type). Keep HMR/in-memory caching, skip disk restore.

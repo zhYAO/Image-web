@@ -1,3 +1,6 @@
+import { ApparelWorkspace } from './ApparelWorkspace';
+import { useApparelTasks } from './use-apparel-tasks';
+import { hasApparelDraft } from './apparel-draft-storage';
 import {
   parseCommerceEdit,
   COMMERCE_SCENES,
@@ -8,6 +11,7 @@ import {
   type CommercePlan,
   type UploadReference,
   type CommerceTask,
+  type CreativeCommerceTask,
   type CreativeBatch,
   type TimelineItem,
 } from "@zimage/domain";
@@ -89,7 +93,7 @@ export function CommerceWorkspace({
   launch?: CommerceLaunch;
   ownerKey?: string;
   ensureSession?: (title: string, requestId: string) => Promise<string>;
-  onSavedSession?: (task: CommerceTask, sourceId: string) => void;
+  onSavedSession?: (task: CreativeCommerceTask, sourceId: string) => void;
   onBatchCreated?: (batch: CreativeBatch, sourceId: string) => void;
   onDraftSessionsChange?: (ids: string[]) => void;
   requestedTaskId?: string;
@@ -142,6 +146,7 @@ export function CommerceWorkspace({
         sessionId && Object.values(pendingSubmissions).includes(sessionId),
       ),
     );
+  const apparel = useApparelTasks(gateway?.apparel, isLocalCommerceDraft(sessionId) ? undefined : sessionId);
   const acceptAndRefresh = useCallback((task: CommerceTask) => {
     accept(task);
     void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
@@ -266,7 +271,7 @@ export function CommerceWorkspace({
     void Promise.resolve().then(() => {
       if (cancelled || !sessionId) return;
       const restored = loadCommerceDraft(`${ownerKey}:${sessionId}`);
-      const next = launch?.sessionId === sessionId ? launch : restored ? { sessionId, scene: restored.scene } : undefined;
+      const next = launch?.sessionId === sessionId ? launch : restored ? { sessionId, scene: restored.scene } : hasApparelDraft(`${ownerKey}:${sessionId}`) ? { sessionId, scene: 'apparel-catalog' as const } : undefined;
       if (!next) return;
       setConsumedLaunch(sessionId);
       setDrafts(current => current.some(draft => draft.sessionId === sessionId) ? current : [...current, { ...next, id: crypto.randomUUID() }]);
@@ -366,7 +371,7 @@ export function CommerceWorkspace({
     (item) => item.type !== "generation" || !underlying.has(item.batch.id),
   );
   const hasCommerce = Boolean(
-    tasks.length || requestedBatchId ||
+    tasks.length || apparel.tasks.length || requestedBatchId ||
     drafts.some((draft) => draft.sessionId === sessionId) ||
     (launch && launch.sessionId === sessionId && consumedLaunch !== launch.sessionId),
   );
@@ -389,13 +394,14 @@ export function CommerceWorkspace({
   const requestedTask = requestedTaskId ?? (routeDriven ? undefined : selectedBySession[sessionId ?? ""]);
   const selectedTask =
     tasks.find((task) => task.id === requestedTask) ?? (requestedTaskId && requestedTaskId !== "draft" ? undefined : tasks.at(-1));
+  const selectedApparel = apparel.tasks.find(task => task.id === requestedTask) ?? (!requestedTask && !tasks.length ? apparel.tasks.at(-1) : undefined);
   const showDraft = Boolean(
     currentDraft &&
     (!requestedTask ||
       requestedTask === "draft" ||
-      !tasks.some((task) => task.id === requestedTask)),
+      !tasks.some((task) => task.id === requestedTask) && !selectedApparel),
   );
-  const activeScene = showDraft ? currentDraft?.scene : requestedBatchId ? 'batch' : selectedTask?.scene;
+  const activeScene = showDraft ? currentDraft?.scene : requestedBatchId ? 'batch' : selectedApparel ? 'apparel-catalog' : selectedTask?.scene;
   useEffect(() => { onModeChange?.(sessionId, hasCommerce, activeScene); }, [sessionId, hasCommerce, activeScene, onModeChange]);
   const panelKey = showDraft ? currentDraft!.id : (selectedTask?.id ?? "");
   const panel =
@@ -429,9 +435,23 @@ export function CommerceWorkspace({
       </button>
     </div>
   );
+  const apparelSaved = (task: import('@zimage/domain').ApparelTask, source: string) => {
+    apparel.accept(task);
+    setDrafts(current => current.filter(draft => draft.sessionId !== source));
+    setSelectedBySession(current => ({ ...current, [task.sessionId]: task.id }));
+    onSavedSession?.(task, source);
+    void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
+  };
+  if (activeScene === 'apparel-catalog' && sessionId) return <section className={styles.commerceRoot}>
+    <header className={styles.workbenchHeader}><Link href="/create"><ArrowLeft size={15}/>创作方式</Link><span>服装商品图片</span>
+      {apparel.tasks.length > 0 && <label className={styles.taskHistory}>当前会话<select aria-label="当前会话任务" value={showDraft?'draft':selectedApparel?.id??''} onChange={event=>chooseTask(event.target.value)}>{currentDraft&&<option value="draft">新方案 · 尚未保存</option>}{[...apparel.tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}{[...tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.brief.name} · v{task.revision}</option>)}</select></label>}
+    </header>
+    {apparel.error&&<p role="alert">{apparel.error}<button onClick={()=>void apparel.refresh()}>重试任务载入</button></p>}
+    {apparel.loading ? <p role="status">正在载入服装任务…</p> : <ApparelWorkspace key={`${ownerKey}:${sessionId}:${showDraft?'new':selectedApparel?.id??'new'}`} ownerKey={ownerKey} sessionId={sessionId} task={showDraft?undefined:selectedApparel} gateway={gateway?.apparel} references={wizardProps.references} ensureSession={ensureSession} onReferenceAdd={wizardProps.onReferenceAdd} onReferenceRemove={wizardProps.onReferenceRemove} onReferenceUploaded={wizardProps.onReferenceUploaded} onTask={apparelSaved}/>}
+  </section>;
   return (
     <section className={hasCommerce ? styles.commerceRoot : undefined}>
-      {requestedTaskId && requestedTaskId !== "draft" && !selectedTask && !loading && <p role="alert">任务不存在或不属于此会话，请选择其他任务。</p>}
+      {requestedTaskId && requestedTaskId !== "draft" && !selectedTask && !selectedApparel && !loading && !apparel.loading && <p role="alert">任务不存在或不属于此会话，请选择其他任务。</p>}
       {error && (
         <p className={styles.notice} role="alert">
           电商任务加载失败：{error}
@@ -467,6 +487,7 @@ export function CommerceWorkspace({
                 {currentDraft && (
                   <option value="draft">新方案 · 尚未保存</option>
                 )}
+                {apparel.tasks.map(task => <option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}
                 {[...tasks].reverse().map((task) => (
                   <option value={task.id} key={task.id}>
                     {task.brief.name} · v{task.revision}

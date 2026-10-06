@@ -6,7 +6,7 @@ import {
   checkMockQuote,
 } from "@/gateways/mock-credit-ledger";
 import { creditFailure, readCredits } from "@/server/credits/credit-service";
-import { imageCreditItem } from "@zimage/domain";
+import { imageCreditItem, TRIAL_CREDIT_CATALOG } from "@zimage/domain";
 import { createCommerceService } from "@/server/commerce/commerce-service";
 describe("credit accounting boundaries", () => {
   it("settles partial image failure once and conserves the gift", () => {
@@ -107,7 +107,7 @@ describe("credit accounting boundaries", () => {
                 exactText: "标题",
                 referenceIds: [],
                 provider: "seedream",
-                model: "seedream-4.5",
+                model: "seedream-5.0-flash",
                 aspectRatio: "3:4",
                 resolution: "2K",
               },
@@ -158,7 +158,7 @@ describe("mock billing transactions", () => {
         sessionId: session.id,
         message: "hello",
         chatModel: "doubao",
-        billing: { version: "2026-09-15.1", totalMinor: 2 },
+        billing: { version: TRIAL_CREDIT_CATALOG.version, totalMinor: 2 },
       })
       [Symbol.asyncIterator]();
     const first = stream.next();
@@ -185,7 +185,7 @@ describe("mock billing transactions", () => {
         requestId: crypto.randomUUID(),
         sessionId: crypto.randomUUID(),
         message: "hello",
-        billing: { version: "2026-09-15.1", totalMinor: 2 },
+        billing: { version: TRIAL_CREDIT_CATALOG.version, totalMinor: 2 },
       })
       [Symbol.asyncIterator]();
     await expect(stream.next()).rejects.toThrow();

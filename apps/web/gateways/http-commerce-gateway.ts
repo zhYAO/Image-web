@@ -1,3 +1,4 @@
+import { HttpApparelGateway } from './http-apparel-gateway';
 import {
   commerceTaskSchema,
   commercePromoteResultSchema,
@@ -23,7 +24,10 @@ export class HttpCommerceGateway implements CommerceGateway {
     string,
     Promise<{ url?: string; expired: boolean }>
   >();
-  constructor(private readonly json: JsonRequest) {}
+  readonly apparel: HttpApparelGateway;
+  constructor(private readonly json: JsonRequest, fetcher: typeof fetch = fetch) {
+    this.apparel = new HttpApparelGateway(json, (sessionId, reference) => this.upload(sessionId, reference), fetcher);
+  }
   async list(sessionId: string) {
     return Promise.all(
       (

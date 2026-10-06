@@ -13,7 +13,7 @@ const pg = new EmbeddedPostgres({
   password: "local-test-only",
   persistent: false,
   initdbFlags: ["--locale=C", "--encoding=UTF8"],
-  postgresFlags: ["-h", "127.0.0.1"],
+  postgresFlags: ["-h", "127.0.0.1", "-c", "timezone=UTC"],
   onLog: () => {},
   onError: () => {},
 });
@@ -68,18 +68,18 @@ set search_path=public,extensions;
     if (n === '20260913082732_commerce_xhs_poster.sql') {
       await client.query(`
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=true where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider in ('gemini','seedream');
 insert into auth.users(id,email,email_confirmed_at,is_anonymous) values('${upgradeUser}','upgrade@example.com',now(),false);
 insert into public.sessions(id,user_id,title) values('${upgradeUser}','${upgradeUser}','保留旧方案');
-insert into public.generation_batches(id,user_id,session_id,source,prompt,provider,model,config,idempotency_key,request_hash) values('${upgradeUser}','${upgradeUser}','${upgradeUser}','direct','旧图片','gemini','gemini-3-pro-image','{}','upgrade-fixture','upgrade-fixture');
-insert into public.generations(id,batch_id,provider,model,status,prompt,params,provider_submission_state,error_code) values('${upgradeUser}','${upgradeUser}','gemini','gemini-3-pro-image','failed','旧图片','{}','unknown','provider_reconciliation_required');
+insert into public.generation_batches(id,user_id,session_id,source,prompt,provider,model,config,idempotency_key,request_hash) values('${upgradeUser}','${upgradeUser}','${upgradeUser}','direct','旧图片提示词','seedream','seedream-4.5','{}','upgrade-fixture','upgrade-fixture');
+insert into public.generations(id,batch_id,provider,model,status,prompt,params,provider_submission_state,error_code) values('${upgradeUser}','${upgradeUser}','seedream','seedream-4.5','failed','旧图片提示词','{}','unknown','provider_reconciliation_required');
 insert into public.reference_uploads(id,user_id,session_id,storage_path,original_filename,mime_type,size_bytes,width,height) values('${upgradeUser}','${upgradeUser}','${upgradeUser}','upgrade/reference.png','reference.png','image/png',100,10,10);
 insert into public.commerce_tasks(id,user_id,session_id) values('${upgradeUser}','${upgradeUser}','${upgradeUser}');
-insert into public.commerce_revisions(task_id,revision,plan) values('${upgradeUser}',1,'{"scene":"product-main","brief":{"name":"旧商品"},"slots":[]}');
+insert into public.commerce_revisions(task_id,revision,plan) values('${upgradeUser}',1,'{"scene":"product-main","brief":{"name":"旧商品"},"slots":[{"provider":"seedream","model":"seedream-4.5","prompt":"旧图片提示词"}]}');
 insert into private.quota_ledger(user_id,generation_id,entry_type,amount,business_key) values('${upgradeUser}','${upgradeUser}','reserve',1,'upgrade-fixture');
 select pgmq.send('image_generation','{"generationId":"${upgradeUser}"}');
 update private.runtime_flags set enabled=false where flag='generation_enabled';
-update private.provider_runtime_config set enabled=false where provider='gemini';
+update private.provider_runtime_config set enabled=false where provider in ('gemini','seedream');
 `);
       beforeUpgrade = await snapshot();
     }
@@ -112,6 +112,7 @@ create function public.finish() returns text language sql as $$select 'finished'
     "commerce_xhs_poster.test.sql",
     "session_activity_summary.test.sql",
     "credits.test.sql",
+    "apparel_catalog.test.sql",
   ]) {
     phase = file;
     const sql = fs
@@ -146,7 +147,7 @@ create function public.finish() returns text language sql as $$select 'finished'
       requestId: id,
       operation: "optimize",
       model: "doubao",
-      billing: { version: "2026-09-15.1", totalMinor: 5 },
+      billing: { version: "2026-10-06.1", totalMinor: 5 },
       input: { text: "example" },
     });
     // Exactly one 5-unit operation can fit; the competing connection waits for the account lock.

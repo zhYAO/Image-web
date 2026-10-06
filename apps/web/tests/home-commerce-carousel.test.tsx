@@ -6,7 +6,7 @@ afterEach(() => vi.useRealTimers());
 const names = () =>
   screen.getAllByRole("link").map((link) => link.getAttribute("aria-label"));
 describe("home commerce carousel", () => {
-  it("cycles two groups, pads the last with the beginning and links to scene workflows", () => {
+  it("cycles two groups and links to all six scene workflows", () => {
     render(<HomeCommerceCarousel />);
     expect(names()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     expect(screen.getByRole("link", { name: "商品套图" })).toHaveAttribute(
@@ -14,7 +14,8 @@ describe("home commerce carousel", () => {
       "/create/product-set",
     );
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
-    expect(names()).toEqual(["批量生成", "AI 商品图", "商品套图"]);
+    expect(names()).toEqual(["批量生成", "AI 商品图", "服装商品图片"]);
+    expect(screen.getByRole('link',{name:'服装商品图片'})).toHaveAttribute('href','/create/apparel-catalog');
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
     expect(names()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
