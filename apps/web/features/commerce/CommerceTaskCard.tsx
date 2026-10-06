@@ -12,10 +12,12 @@ import {
   type CommerceTask,
   type CreditConfirmation,
   type ProviderCapability,
+  type UploadReference,
 } from "@zimage/domain";
 import { Image as AntdImage } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
+import { CommerceDetailPreview } from "./CommerceDetailPreview";
 import {
   downloadCommerceFile,
   planOf,
@@ -84,10 +86,12 @@ export function CommerceTaskCard({
   view = "results",
   onSubmitted,
   originalPreviewUrl,
+  previewReferences,
 }: {
   view?: "plan" | "results";
   onSubmitted?: () => void;
   originalPreviewUrl?: string;
+  previewReferences?: UploadReference[];
   autoStart?: boolean;
   task: CommerceTask;
   gateway: CommerceGateway;
@@ -136,6 +140,7 @@ export function CommerceTaskCard({
   const [message, setMessage] = useState<string>();
   const [exportFormat, setExportFormat] = useState<'jpg' | 'png'>('jpg');
   const [exportFocus, setExportFocus] = useState({ x: 0.5, y: 0.5 });
+  const [referenceUrls, setReferenceUrls] = useState<Record<string, string>>({});
   const [originalUrl, setOriginalUrl] = useState(originalPreviewUrl);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -147,6 +152,18 @@ export function CommerceTaskCard({
       .catch(() => undefined);
     return () => { active = false; };
   }, [task.scene, task.brief.productReferenceIds, originalPreviewUrl]);
+  const cloneReferenceKey = task.brief.styleReferenceIds.join(',');
+  useEffect(() => {
+    if (task.scene !== 'clone') return;
+    let cancelled = false;
+    void Promise.all(cloneReferenceKey.split(',').filter(Boolean).map(async id => {
+      const local = previewReferences?.find(reference => reference.id === id)?.previewUrl;
+      if (local) return [id, local] as const;
+      if (process.env.NEXT_PUBLIC_DATA_MODE === 'mock') return undefined;
+      try { const response = await fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' }); const result = response.ok ? await response.json() : null; return typeof result?.url === 'string' ? [id, result.url] as const : undefined; } catch { return undefined; }
+    })).then(entries => { if (!cancelled) setReferenceUrls(Object.fromEntries(entries.filter((item): item is readonly [string, string] => Boolean(item)))); });
+    return () => { cancelled = true; };
+  }, [task.scene, cloneReferenceKey, previewReferences]);
   const storageKey = `zimage-commerce-submit:${task.id}`;
   const [pendingRequest, setPendingRequest] = useState(() =>
     readPending(storageKey),
@@ -430,6 +447,7 @@ export function CommerceTaskCard({
       <p className={styles.note}>
         新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>
+      {task.scene === 'detail' && view === 'results' && <CommerceDetailPreview task={task} />}
       <div className={styles.resultGrid}>
         {task.slots.map((slot, index) => {
           const candidates = task.runs
@@ -452,6 +470,7 @@ export function CommerceTaskCard({
               <h3>
                 第 {index + 1} 张 · {slot.role}
               </h3>
+              {task.scene === 'clone' && view !== 'plan' && <figure className={styles.cloneReference}>{referenceUrls[slot.referenceIds.find(id => task.brief.styleReferenceIds.includes(id)) ?? ''] ? <AntdImage src={referenceUrls[slot.referenceIds.find(id => task.brief.styleReferenceIds.includes(id)) ?? '']} alt={`第 ${index + 1} 张复刻参考图`} /> : <span>参考图 {index + 1} · 预览暂不可用</span>}<figcaption>复刻参考 → 对应结果</figcaption></figure>}
               {view === "plan" ? (
                 <span className={styles.planNumber}>
                   方案 {String(index + 1).padStart(2, "0")}

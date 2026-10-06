@@ -35,7 +35,11 @@ export function validateOptimizedText(
   }
   if (['name', 'facts'].includes(input.field)
     && factualCharacters(input.text) !== factualCharacters(text)) throw new Error('product_facts_changed');
-  const tokens = (value: string) => value.match(/[A-Za-z0-9]+(?:[.,_+%/-][A-Za-z0-9]+)*/g)?.sort() ?? [];
+  // Translated artwork copy may introduce ordinary words in the target language.
+  // Continue protecting numbers and model-like identifiers across translation.
+  const translatedCopy = input.field === 'exactText' && Boolean(input.productContext?.language) && input.productContext?.language !== 'none';
+  const tokens = (value: string) => (value.match(/[A-Za-z0-9]+(?:[.,_+%/-][A-Za-z0-9]+)*/g) ?? [])
+    .filter(token => !translatedCopy || /\d/.test(token) || /^[A-Z]{2,}$/.test(token)).sort();
   const suppliedFacts = [input.text, input.context, input.productContext?.name, input.productContext?.facts,
     input.productContext?.description, input.productContext?.sellingPoints].filter(Boolean).join('\n');
   const preserves = (original: string[], output: string[], supplied: string[]) => {
@@ -80,6 +84,7 @@ export async function optimizeCreativeText(
     "listingCopy：data.text 是商品资料。返回的 text 必须是 JSON 字符串，内部格式为 {\"title\":\"标题\",\"highlights\":\"核心卖点\",\"description\":\"详情描述\",\"keywords\":\"关键词\"}。只使用已确认的商品事实，建议性修辞不得冒充事实。",
     "示例：原文‘棉质衬衫，宽松，米白，通勤’可润色为‘米白色棉质衬衫，宽松版型呈现简洁的日常通勤风格。’；不能加入‘纯棉、抗皱、显瘦’等未提供的属性。",
     "确实无需调整时返回原文，不强行制造变化。只返回当前字段，不把整份商品资料或格式标题堆入短字段。",
+    "productContext.region 是目标销售地区。对于 strategy、listingCopy、exactText，productContext.language 指定成品文案语言并优先于输入语言；模块 name 必须保留请求中的原模块名，strategy 的策划说明保持中文。language=none 时不生成画面文字，但可给出中文策划说明。其他字段保留用户原语言。地区和语言不能作为补造认证、承诺或规格的依据。",
     `输出最多 ${Math.min(input.maxLength ?? 6000, creativeTextFieldLimits[input.field])} 字符。`,
     `data=${JSON.stringify({ field: input.field, text: input.text, context: input.context, productContext: input.productContext, maxLength: input.maxLength })}`,
   ].join("\n");

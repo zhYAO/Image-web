@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { optimizeCreativeText, validateOptimizedText } from '@/server/creative-text/creative-text-service';
 
 describe('field optimization safeguards', () => {
+  it('passes the selected market and language to copy generation and accepts translated words without new specifications', async () => {
+    const input = { field: 'exactText' as const, text: 'X20 陶瓷杯 500ml', productContext: { region: 'us', language: 'en' } };
+    const result = await optimizeCreativeText(input, async function* (prompt) {
+      expect(prompt).toContain('"region":"us"');
+      expect(prompt).toContain('"language":"en"');
+      expect(prompt).toContain('优先于输入语言');
+      yield JSON.stringify({ text: 'X20 ceramic cup 500ml' });
+    });
+    expect(result.text).toBe('X20 ceramic cup 500ml');
+    expect(() => validateOptimizedText(input, 'X30 ceramic cup 600ml')).toThrow();
+  });
   it('rejects changed product facts and invented specs', () => {
     const input = { field: 'facts' as const, text: '小米 X20 500ml', maxLength: 100 };
     expect(() => validateOptimizedText(input, '小米 X20 600ml')).toThrow();

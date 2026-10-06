@@ -26,6 +26,7 @@ import { Image as AntdImage } from "antd";
 import Link from "next/link";
 import { ArrowLeft, Layers3, Plus } from "lucide-react";
 import { TemplatePreview } from "./TemplatePreview";
+import { CommerceExample } from './CommerceEditor';
 import { CommerceBatchWizard } from './CommerceBatchWizard';
 import { templateName } from "./commerce-ui";
 import {
@@ -97,7 +98,7 @@ export function CommerceWorkspace({
   routeDriven?: boolean;
   onViewChange?: (sessionId: string, taskId: string, view?: CommerceView) => void;
   onExitDraft?: () => void;
-  onModeChange?: (sessionId: string | undefined, active: boolean) => void;
+  onModeChange?: (sessionId: string | undefined, active: boolean, scene?: CommerceScene) => void;
   onTaskChanged?: () => void | Promise<unknown>;
   onReferencesAdopt: (
     references: UploadReference[],
@@ -159,6 +160,11 @@ export function CommerceWorkspace({
     }
   };
   const [note, setNote] = useState<string>();
+  const [noteSession, setNoteSession] = useState(sessionId);
+  if (noteSession !== sessionId) {
+    setNoteSession(sessionId);
+    setNote(undefined);
+  }
   const [autoStartTasks, setAutoStartTasks] = useState<Record<string, boolean>>(
     {},
   );
@@ -364,9 +370,7 @@ export function CommerceWorkspace({
     drafts.some((draft) => draft.sessionId === sessionId) ||
     (launch && launch.sessionId === sessionId && consumedLaunch !== launch.sessionId),
   );
-  useEffect(() => {
-    onModeChange?.(sessionId, hasCommerce);
-  }, [hasCommerce, onModeChange, sessionId]);
+
   const saved = (draft: Draft, task: CommerceTask, generate = false) => {
     if (generate)
       setAutoStartTasks((current) => ({ ...current, [task.id]: true }));
@@ -391,6 +395,8 @@ export function CommerceWorkspace({
       requestedTask === "draft" ||
       !tasks.some((task) => task.id === requestedTask)),
   );
+  const activeScene = showDraft ? currentDraft?.scene : requestedBatchId ? 'batch' : selectedTask?.scene;
+  useEffect(() => { onModeChange?.(sessionId, hasCommerce, activeScene); }, [sessionId, hasCommerce, activeScene, onModeChange]);
   const panelKey = showDraft ? currentDraft!.id : (selectedTask?.id ?? "");
   const panel =
     requestedView ?? ((!routeDriven || showDraft) ? panels[panelKey] : undefined) ??
@@ -440,7 +446,7 @@ export function CommerceWorkspace({
           {note}
         </p>
       )}
-      {hasCommerce && !coordinatedLoading && (
+      {hasCommerce && (!showDraft || tasks.length > 0) && !requestedBatchId && !coordinatedLoading && (
         <header className={styles.workbenchHeader}>
           <Link href="/create">
             <ArrowLeft size={15} aria-hidden />
@@ -551,9 +557,9 @@ export function CommerceWorkspace({
                 <>
                   <h2>效果示例</h2>
                   <p className={styles.note}>
-                    当前模板的风格示例；未提供对应样图的角色显示布局说明。
+                    原创构图示例，仅用于展示流程；实际生成使用所选模板和你的商品资料。
                   </p>
-                  <AntdImage.PreviewGroup>
+                  {['product-set', 'detail', 'clone', 'product-main'].includes(selectedTask.scene) ? <CommerceExample scene={selectedTask.scene} /> : <AntdImage.PreviewGroup>
                     <div className={styles.structureGrid}>
                       {selectedTask.slots.map((slot, index) => (
                         <div className={styles.structureCard} key={slot.id}>
@@ -565,7 +571,7 @@ export function CommerceWorkspace({
                         </div>
                       ))}
                     </div>
-                  </AntdImage.PreviewGroup>
+                  </AntdImage.PreviewGroup>}
                 </>
               )}
             </div>
@@ -598,6 +604,7 @@ export function CommerceWorkspace({
                       confirmationRequest={confirmations[task.id]}
                       onSubmissionPendingChange={markSubmissionPending}
                       onPromote={promote}
+                      previewReferences={wizardProps.references}
                       originalPreviewUrl={wizardProps.references.find(reference => reference.id === task.brief.productReferenceIds[0])?.previewUrl}
                     />
                   </AntdImage.PreviewGroup>
@@ -607,7 +614,7 @@ export function CommerceWorkspace({
           </div>
         </section>
       </div>
-      {requestedBatchId && sessionId && !coordinatedLoading && <CommerceBatchWizard gateway={gateway} batchId={requestedBatchId} sessionId={sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} />}
+      {requestedBatchId && sessionId && !coordinatedLoading && <CommerceBatchWizard ownerKey={ownerKey} key={requestedBatchId} gateway={gateway} batchId={requestedBatchId} sessionId={sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} />}
       {drafts.map((draft) => (
         <div
           className={styles.draftWorkbench}
@@ -616,7 +623,7 @@ export function CommerceWorkspace({
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
           }
         >
-          {draft.scene === 'batch' ? <CommerceBatchWizard gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
+          {draft.scene === 'batch' ? <CommerceBatchWizard ownerKey={ownerKey} active={draft.sessionId === sessionId} gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
             <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}

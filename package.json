@@ -6,12 +6,13 @@
     "node": ">=24.19.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @zimage/web dev",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm --filter @zimage/web build",
     "lint": "eslint apps/web packages/domain --max-warnings=0",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:run": "pnpm -r --if-present test:run",
+    "test:dev": "node --test scripts/dev.test.mjs",
     "test:coverage": "pnpm -r --if-present test:coverage",
     "setup:langgraph": "pnpm --filter @zimage/web setup:langgraph"
   },

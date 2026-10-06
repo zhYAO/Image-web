@@ -22,6 +22,15 @@ const brief = {
   styleReferenceIds: [],
 };
 describe("commerce planning", () => {
+  it('honors the selected artwork language while retaining exact copy and legacy defaults', () => {
+    const slot = { ...buildCommerceSlots(brief, 'product-set', 1, settings)[0]!, textMode: 'exact' as const, exactText: 'Ceramic cup' };
+    const english = compileCommerceSlot({ ...brief, region: 'us', language: 'en' }, slot, 'soft-studio');
+    expect(english).toContain('目标语言（en）');
+    expect(english).toContain('仅绘制以下确认文案：Ceramic cup');
+    expect(english).not.toContain('所有文字使用简体中文');
+    expect(compileCommerceSlot(brief, slot, 'soft-studio')).toContain('目标语言（zh-CN）');
+    expect(compileCommerceSlot({ ...brief, language: 'none' }, slot, 'soft-studio')).toContain('文字：不添加营销文字');
+  });
   it('includes the full description and preserves legacy, automatic, exact and no-text copy rules', () => {
     const described = { ...brief, description: '米白色棉质衬衫。宽松版型，适合通勤。' };
     const slot = { ...buildCommerceSlots(brief, 'product-set', 1, settings)[0]!, exactText: '已确认文字' };

@@ -29,14 +29,15 @@ describe('commerce navigation and durable drafts', () => {
     const props = { gateway, onNavigate: vi.fn(), ownerKey: 'owner' };
     const view = render(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     fireEvent.change(await screen.findByLabelText('商品描述', {}, { timeout: 10000 }), { target: { value: '米白色棉质衬衫，宽松版型。' } });
-    fireEvent.click(screen.getByText('高级设置 · 平台、风格、数量与分图'));
+    fireEvent.click(screen.getByText('模型与分辨率'));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '文字优化模型' }));
     fireEvent.click(await screen.findByText('MiniMax', { selector: '.ant-select-item-option-content' }));
     expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'home' }} />);
     await screen.findByRole('textbox', { name: '创作输入' }, { timeout: 10000 });
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-main' }} />);
-    await waitFor(() => expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue(''), { timeout: 10000 });
+    await screen.findByText('上传或拖放图片至此处，开始创作');
+    expect(screen.queryByRole('textbox', { name: '商品描述' })).toBeNull();
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     await waitFor(() => expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('米白色棉质衬衫，宽松版型。'), { timeout: 10000 });
     expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');

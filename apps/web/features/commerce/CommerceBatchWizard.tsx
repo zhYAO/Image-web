@@ -1,7 +1,11 @@
 'use client';
 
+import Link from 'next/link';
+import { batchDraftKey, batchAttachmentKey, loadBatchDraft, saveBatchDraft } from './commerce-batch-storage';
+import { loadAttachments, saveAttachments, clearAttachments } from '@/store/composer-attachments';
+import meitu from './meitu.module.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { APLUS_SPECS, aPlusAspectRatio, COMMERCE_LANGUAGES, COMMERCE_PLATFORMS, COMMERCE_REGIONS, DETAIL_MODULES, PLATFORM_PRESETS, buildCommerceSlots, formatCredits, imageCreditItem, quoteCredits, validateCommercePlan, creativeBatchSchema, type CommerceBrief, type CommerceGateway, type CommercePlan, type CommerceSlot, type CommerceTask, type CreativeBatch, type ProviderCapability, type UploadReference } from '@zimage/domain';
+import { APLUS_SPECS, aPlusAspectRatio, COMMERCE_LANGUAGES, COMMERCE_PLATFORMS, COMMERCE_REGIONS, DETAIL_MODULES, PLATFORM_PRESETS, buildCommerceSlots, formatCredits, imageCreditItem, quoteCredits, validateCommercePlan, creativeBatchSchema, creativeBatchCreateSchema, type CreativeBatchCreate, type CommerceBrief, type CommerceGateway, type CommercePlan, type CommerceSlot, type CommerceTask, type CreativeBatch, type ProviderCapability, type UploadReference } from '@zimage/domain';
 import { CreditFee, useCredits } from '@/features/credits/CreditsProvider';
 import { CommerceSelect } from './CommerceSelect';
 import { downloadCommerceFile } from './commerce-ui';
@@ -22,30 +26,22 @@ const parseBatch = async (response: Response) => {
   if (!response.ok) throw new Error(body?.message || '批量请求失败，请稍后重试。');
   return creativeBatchSchema.parse(body);
 };
-const mockBatchKey = 'zimage:commerce-batches:mock:v1';
-const batchDraftKey = 'zimage:commerce-batch-draft:v1';
 const mockMode = process.env.NEXT_PUBLIC_DATA_MODE === 'mock';
-const readMockBatches = (): CreativeBatch[] => {
-  try { return (JSON.parse(localStorage.getItem(mockBatchKey) ?? '[]') as unknown[]).map(item => creativeBatchSchema.parse(item)); }
+const readMockBatches = (owner: string): CreativeBatch[] => {
+  try { return (JSON.parse(sessionStorage.getItem(`zimage:commerce-batches:mock:v2:${owner}`) ?? '[]') as unknown[]).map(item => creativeBatchSchema.parse(item)); }
   catch { return []; }
 };
-const saveMockBatch = (batch: CreativeBatch) => localStorage.setItem(mockBatchKey, JSON.stringify([batch, ...readMockBatches().filter(item => item.id !== batch.id)]));
-const readBatchDraft = (): { workflow: Workflow; platform: CommerceBrief['platform']; language: NonNullable<CommerceBrief['language']>; region: NonNullable<CommerceBrief['region']>; generation: GenerationSettings; count: number; advanced: boolean; rows: ProductRow[]; touched?: { region: boolean; language: boolean; aspectRatio: boolean } } | undefined => {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const saved = JSON.parse(localStorage.getItem(batchDraftKey) ?? 'null');
-    if (!saved || !Array.isArray(saved.rows)) return undefined;
-    return { ...saved, rows: saved.rows.slice(0, 20).map((row: ProductRow) => ({ ...row, products: [], references: [] })) };
-  } catch { return undefined; }
-};
+const saveMockBatch = (batch: CreativeBatch, owner: string) => sessionStorage.setItem(`zimage:commerce-batches:mock:v2:${owner}`, JSON.stringify([batch, ...readMockBatches(owner).filter(item => item.id !== batch.id)]));
 
-export function CommerceBatchWizard({ gateway, sessionId, ensureSession, settings, capabilities, batchId, onCreated }: {
-  gateway?: CommerceGateway; sessionId: string; ensureSession?: (title: string, requestId: string) => Promise<string>;
+export function CommerceBatchWizard({ gateway, sessionId, ensureSession, settings, capabilities, batchId, onCreated, ownerKey = 'local', active = true }: {
+  ownerKey?: string; active?: boolean; gateway?: CommerceGateway; sessionId: string; ensureSession?: (title: string, requestId: string) => Promise<string>;
   settings: Pick<CommerceSlot, 'provider' | 'model' | 'aspectRatio' | 'resolution'>; capabilities: ProviderCapability[];
   batchId?: string; onCreated?: (batch: CreativeBatch, sourceId: string) => void;
 }) {
   const credits = useCredits();
-  const [restored] = useState(readBatchDraft);
+  const storageKey = batchDraftKey(ownerKey, sessionId);
+  const [restored] = useState(() => loadBatchDraft(storageKey));
+  const [restoring, setRestoring] = useState(Boolean(restored && !batchId));
   const [workflow, setWorkflow] = useState<Workflow>(restored?.workflow ?? 'product-set');
   const [platform, setPlatform] = useState<CommerceBrief['platform']>(restored?.platform ?? 'taobao');
   const [language, setLanguage] = useState(restored?.language ?? 'zh-CN');
@@ -54,24 +50,43 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
   const [count, setCount] = useState(restored?.count ?? 7);
   const [advanced, setAdvanced] = useState(restored?.advanced ?? false);
   const [touched, setTouched] = useState(restored?.touched ?? { region: false, language: false, aspectRatio: false });
-  const [rows, setRows] = useState<ProductRow[]>(() => restored?.rows.length ? restored.rows : [newRow()]);
+  const [rows, setRows] = useState<ProductRow[]>(() => restored?.rows.length ? restored.rows.map(row => ({ ...row, products: [], references: [] })) : [newRow()]);
   const [batch, setBatch] = useState<CreativeBatch>();
   const [tasks, setTasks] = useState<Record<string, CommerceTask>>({});
   const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  const configurationKey = JSON.stringify({ workflow, platform, language, region, generation, count, advanced, rows });
+  const [confirmedConfiguration, setConfirmedConfiguration] = useState<string>();
+  const confirming = confirmedConfiguration === configurationKey;
+  const setConfirming = (value: boolean) => setConfirmedConfiguration(value ? configurationKey : undefined);
   const [error, setError] = useState<string>();
   const inFlight = useRef(false);
   const uploadIds = useRef(new Map<File, string>());
   const submission = useRef<{ requestId: string; sessionRequestId: string }>({ requestId: crypto.randomUUID(), sessionRequestId: crypto.randomUUID() });
-  const recoveryKey = `zimage:commerce-batch:${sessionId}`;
+  const recoveryKey = `${storageKey}:submission`;
+  const [recovery, setRecovery] = useState<CreativeBatchCreate | undefined>(() => { try { const parsed = creativeBatchCreateSchema.safeParse(JSON.parse(sessionStorage.getItem(recoveryKey) ?? 'null')); return parsed.success ? parsed.data : undefined; } catch { return undefined; } });
   const perRowCount = workflow === 'detail' ? DETAIL_MODULES.slice(0, 6).length * (advanced ? 2 : 1) : workflow === 'clone' ? 1 : count;
   const quoteItems = useMemo(() => rows.flatMap(row => Array.from({ length: workflow === 'clone' ? Math.max(1, row.references.length) : workflow === 'detail' ? (row.advanced ?? advanced) ? 12 : 6 : row.count ?? perRowCount }, () => imageCreditItem({ ...(row.generation ?? generation), count: 1 }))), [rows, workflow, advanced, generation, perRowCount]);
   const quote = credits.catalog ? (() => { try { return quoteCredits(credits.catalog!, quoteItems); } catch { return undefined; } })() : undefined;
-  const update = (id: string, patch: Partial<ProductRow>) => setRows(current => current.map(row => row.id === id ? { ...row, ...patch } : row));
+  const update = (id: string, patch: Partial<ProductRow>) => { setConfirming(false); setRows(current => current.map(row => row.id === id ? { ...row, ...patch } : row)); };
   useEffect(() => {
-    if (batchId || batch) return;
-    localStorage.setItem(batchDraftKey, JSON.stringify({ workflow, platform, language, region, generation, count, advanced, touched, rows: rows.map(row => ({ id: row.id, name: row.name, description: row.description, sellingPoints: row.sellingPoints, instruction: row.instruction, platform: row.platform, region: row.region, language: row.language, generation: row.generation, count: row.count, advanced: row.advanced, cloneMode: row.cloneMode })) }));
-  }, [batchId, batch, workflow, platform, language, region, generation, count, advanced, touched, rows]);
+    if (!restored || batchId) return;
+    let cancelled = false;
+    void Promise.all(restored.rows.map(async row => {
+      const [products, references] = await Promise.all([loadAttachments(batchAttachmentKey(storageKey, row.id, 'products'), 6), loadAttachments(batchAttachmentKey(storageKey, row.id, 'references'), 20)]);
+      const files = (refs: UploadReference[] | undefined) => (refs ?? []).flatMap(ref => { if (ref.previewUrl) URL.revokeObjectURL(ref.previewUrl); return ref.file ? [ref.file] : []; });
+      return { ...row, products: files(products), references: files(references) };
+    })).then(next => { if (!cancelled) { setRows(next); setRestoring(false); } });
+    return () => { cancelled = true; };
+  }, [restored, storageKey, batchId]);
+  useEffect(() => {
+    if (batchId || batch || !active || restoring || recovery) return;
+    try { saveBatchDraft(storageKey, { workflow, platform, language, region, generation, count, advanced, touched, rows }); } catch { return; }
+    for (const row of rows) for (const role of ['products', 'references'] as const) void saveAttachments(batchAttachmentKey(storageKey, row.id, role), row[role].map(fileReference), role === 'products' ? 6 : 20);
+  }, [storageKey, active, restoring, recovery, batchId, batch, workflow, platform, language, region, generation, count, advanced, touched, rows]);
+  const clearDraft = () => {
+    sessionStorage.removeItem(storageKey); sessionStorage.removeItem(recoveryKey);
+    for (const row of rows) for (const role of ['products', 'references'] as const) void clearAttachments(batchAttachmentKey(storageKey, row.id, role));
+  };
 
   useEffect(() => {
     if (batchId) return;
@@ -81,7 +96,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     try {
       const previous = JSON.parse(raw) as { requestId: string; sessionId: string };
       if (mockMode) {
-        const found = readMockBatches().find(item => item.requestId === previous.requestId && item.sessionId === previous.sessionId);
+        const found = readMockBatches(ownerKey).find(item => item.requestId === previous.requestId && item.sessionId === previous.sessionId);
         if (found) { sessionStorage.removeItem(recoveryKey); onCreated?.(found, sessionId); }
         return;
       }
@@ -94,7 +109,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
         }).catch(() => undefined);
     } catch { sessionStorage.removeItem(recoveryKey); }
     return () => { active = false; };
-  }, [batchId, recoveryKey, onCreated, sessionId]);
+  }, [batchId, recoveryKey, onCreated, sessionId, ownerKey]);
 
   useEffect(() => {
     if (!batchId) return;
@@ -104,7 +119,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
       if (advancing) return;
       advancing = true;
       try {
-        let current = mockMode ? readMockBatches().find(item => item.id === batchId) : await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { cache: 'no-store' }));
+        let current = mockMode ? readMockBatches(ownerKey).find(item => item.id === batchId) : await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { cache: 'no-store' }));
         if (!current) throw new Error('批量任务不存在。');
         if (stopped) return;
         if (mockMode && gateway) {
@@ -113,12 +128,12 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
             try {
               if (!item.taskId) {
                 const task = await gateway.create({ requestId: item.createRequestId, sessionId: current.sessionId, plan: item.plan });
-                item.taskId = task.id; item.status = 'created'; saveMockBatch(current);
+                item.taskId = task.id; item.status = 'created'; saveMockBatch(current, ownerKey);
               }
               await gateway.submit(item.taskId!, { requestId: item.submitRequestId, revision: 1, slotIds: item.plan.slots.map(slot => slot.id), billing: item.billing, recreate: false, source: 'direct' });
               item.status = 'submitted'; item.error = undefined;
             } catch (cause) { item.error = cause instanceof Error ? cause.message : '子任务提交失败'; item.status = 'failed'; }
-            current = { ...current, items: [...current.items], updatedAt: new Date().toISOString() }; saveMockBatch(current);
+            current = { ...current, items: [...current.items], updatedAt: new Date().toISOString() }; saveMockBatch(current, ownerKey);
           }
         } else if (current.items.some(item => item.status === 'pending' || item.status === 'created'))
           current = await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { method: 'POST' }));
@@ -136,7 +151,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [batchId, gateway]);
+  }, [batchId, gateway, ownerKey]);
 
   const upload = async (targetSession: string, file: File) => {
     const prior = uploadIds.current.get(file); if (prior) return prior;
@@ -174,18 +189,31 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
         const outputSpec: CommerceSlot['outputSpec'] = (row.advanced ?? advanced) ? index < 6 ? 'desktop' : 'mobile' : 'standard';
         return { ...slot, role: detailModule, module: detailModule, outputSpec, aspectRatio: aPlusAspectRatio(outputSpec), targetWidth: APLUS_SPECS[outputSpec].width, targetHeight: APLUS_SPECS[outputSpec].height, instruction: row.instruction };
       }
-      const category: CommerceSlot['category'] = index === 0 ? 'white' : index <= 2 ? 'selling' : index <= 4 ? 'scene' : 'other';
+      const category: CommerceSlot['category'] = index === 0 ? 'white' : index <= 3 ? 'selling' : index <= 5 ? 'scene' : 'other';
       return { ...slot, role: category === 'white' ? '白底商品图' : category === 'selling' ? '核心卖点' : category === 'scene' ? '使用场景' : '商品说明', category, instruction: row.instruction, textMode: category === 'white' || brief.language === 'none' ? 'none' as const : 'auto' as const };
     });
     const plan: CommercePlan = { scene: workflow, brief, templateId: workflow === 'detail' ? 'detail-hero' : 'soft-studio', slots };
     validateCommercePlan(brief, workflow, slots, plan.templateId);
     return plan;
   };
+  const createBatch = async (body: CreativeBatchCreate) => {
+    if (!mockMode) return parseBatch(await fetch('/api/creative-batches', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+    const existing = readMockBatches(ownerKey).find(item => item.requestId === body.requestId);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const next = creativeBatchSchema.parse({ id: crypto.randomUUID(), requestId: body.requestId, sessionId: body.sessionId, workflow: body.workflow, globalParams: body.globalParams, createdAt: now, updatedAt: now,
+      items: body.tasks.map(task => ({ id: crypto.randomUUID(), createRequestId: crypto.randomUUID(), submitRequestId: crypto.randomUUID(), ...task, status: 'pending' })) });
+    saveMockBatch(next, ownerKey); return next;
+  };
   const submit = async () => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(undefined);
     try {
       if (!gateway) throw new Error('电商服务尚未连接。');
+      if (recovery?.tasks) {
+        const resumed = await createBatch(recovery);
+        setBatch(resumed); clearDraft(); onCreated?.(resumed, sessionId); return;
+      }
       if (!rows.length || rows.length > 20) throw new Error('每批添加 1–20 个商品任务。');
       if (new Set(rows.flatMap(row => [...row.products, ...row.references])).size > 64) throw new Error('当前会话最多保留 64 张参考图，请减少图片或分批生成。');
       for (const [index, row] of rows.entries()) {
@@ -206,18 +234,13 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
         if (typeof capacity?.count !== 'number' || typeof capacity.limit !== 'number') throw new Error('无法核对当前会话参考图容量。');
         if (capacity.count + new Set(rows.flatMap(row => [...row.products, ...row.references])).size > capacity.limit) throw new Error(`本次图片加上会话已有参考图超过 ${capacity.limit} 张，请减少图片或新建批次。`);
       }
-      sessionStorage.setItem(recoveryKey, JSON.stringify({ requestId: submission.current.requestId, sessionId: targetSession }));
       const plans = await Promise.all(rows.map(row => makePlan(row, targetSession)));
       const tasks = plans.map((plan, index) => ({ plan, billing: credits.confirm(plan.slots.map(slot => imageCreditItem({ ...slot, count: 1 }))), overrides: { instruction: rows[index]!.instruction, platform: rows[index]!.platform, region: rows[index]!.region, language: rows[index]!.language, generation: rows[index]!.generation, count: rows[index]!.count, advanced: rows[index]!.advanced, cloneMode: rows[index]!.cloneMode } }));
-      const created = mockMode ? (() => {
-        const existing = readMockBatches().find(item => item.requestId === submission.current.requestId);
-        if (existing) return existing;
-        const now = new Date().toISOString();
-        const next = creativeBatchSchema.parse({ id: crypto.randomUUID(), requestId: submission.current.requestId, sessionId: targetSession, workflow, globalParams: { platform, region, language, generation, count, advanced }, createdAt: now, updatedAt: now,
-          items: tasks.map(task => ({ id: crypto.randomUUID(), createRequestId: crypto.randomUUID(), submitRequestId: crypto.randomUUID(), ...task, status: 'pending' })) });
-        saveMockBatch(next); return next;
-      })() : await parseBatch(await fetch('/api/creative-batches', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ requestId: submission.current.requestId, sessionId: targetSession, workflow, globalParams: { platform, region, language, generation, count, advanced }, tasks }) }));
-      setBatch(created); localStorage.removeItem(batchDraftKey); sessionStorage.removeItem(recoveryKey); onCreated?.(created, sessionId);
+      const body = creativeBatchCreateSchema.parse({ requestId: submission.current.requestId, sessionId: targetSession, workflow, globalParams: { platform, region, language, generation, count, advanced }, tasks });
+      sessionStorage.setItem(recoveryKey, JSON.stringify(body));
+      setRecovery(body);
+      const created = await createBatch(body);
+      setBatch(created); clearDraft(); onCreated?.(created, sessionId);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '批量提交失败，请重试。'); }
     finally { inFlight.current = false; setBusy(false); }
   };
@@ -244,8 +267,8 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     </section>;
   }
   const model = capabilities.find(item => item.provider === generation.provider)?.models.find(item => item.id === generation.model);
-  return <section className={styles.batchWorkbench} aria-label="即时批量生成"><h2>批量生成</h2><p>统一参数 → 添加商品 → 逐项覆盖 → 核对费用并提交</p><p className={styles.note}>每批最多 20 个商品任务；当前会话最多保留 64 张参考图，上传仍受每日额度限制。</p>{restored && <p className={styles.note}>已恢复批量参数与文字草稿；请重新选择本地商品图片。</p>}
-    <div className={styles.batchGlobal}>
+  return <div className={meitu.batchBackdrop}><div className={meitu.batchDialog}><header className={meitu.batchHeader}><h2>批量生成</h2><Link href="/create">关闭 ✕</Link></header><div className={meitu.batchContent}><section aria-label="即时批量生成"><h2>批量生成</h2><p>统一参数 → 添加商品 → 逐项覆盖 → 核对费用并提交</p><p className={styles.note}>每批最多 20 个商品任务；当前会话最多保留 64 张参考图，上传仍受每日额度限制。</p>{restored && <p className={styles.note}>已恢复此账号、此标签页的批量草稿。</p>}
+    <fieldset disabled={busy || restoring || Boolean(recovery)} onChange={() => setConfirming(false)}><div className={meitu.segments} aria-label="批量流程切换">{(['product-set', 'detail', 'clone'] as const).map(id => <button type="button" key={id} aria-pressed={workflow === id} onClick={() => { setWorkflow(id); setConfirming(false); }}>{id === 'product-set' ? '商品套图' : id === 'detail' ? 'A+/详情页' : '爆款图复刻'}</button>)}</div><div className={styles.batchGlobal}>
       <label>生成类型<CommerceSelect aria-label="批量生成类型" value={workflow} onChange={value => { setWorkflow(value as Workflow); setError(undefined); }}><option value="product-set">商品套图</option><option value="detail">A+ 详情页</option><option value="clone">爆款图复刻</option></CommerceSelect></label>
       <label>统一平台<CommerceSelect aria-label="批量统一平台" value={platform} onChange={value => { const next = value as CommerceBrief['platform']; setPlatform(next); if (!touched.region) setRegion(PLATFORM_PRESETS[next]?.region ?? region); if (!touched.language) setLanguage(PLATFORM_PRESETS[next]?.language ?? language); if (!touched.aspectRatio) setGeneration(current => ({ ...current, aspectRatio: PLATFORM_PRESETS[next]?.aspectRatio ?? current.aspectRatio })); }}>
         {COMMERCE_PLATFORMS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -260,26 +283,29 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
       {workflow === 'product-set' && <label>每商品图片数量<CommerceSelect aria-label="批量每商品图片数量" value={count} onChange={value => setCount(Number(value))}>{Array.from({ length: 20 }, (_, index) => <option key={index + 1}>{index + 1}</option>)}</CommerceSelect></label>}
       {workflow === 'detail' && <label>输出规格<CommerceSelect aria-label="批量 A+ 输出规格" value={advanced ? 'advanced' : 'standard'} onChange={value => setAdvanced(value === 'advanced')}><option value="standard">普通 A+（6 张）</option><option value="advanced">高级 A+ 桌面＋移动（12 张）</option></CommerceSelect></label>}
     </div>
-    <div className={styles.batchRows}>{rows.map((row, index) => <fieldset key={row.id}><legend>商品任务 {index + 1}</legend>
+    <div className={meitu.batchRows}>{rows.map((row, index) => <fieldset key={row.id}><legend>商品任务 {index + 1}</legend>
       <label>{workflow === 'clone' ? '复刻参考图' : '商品原图'}<input aria-label={`商品 ${index + 1} ${workflow === 'clone' ? '复刻参考图' : '原图'}`} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={event => update(row.id, workflow === 'clone' ? { references: Array.from(event.target.files ?? []) } : { products: Array.from(event.target.files ?? []) })} /></label>
       {workflow === 'clone' && <label>替换商品图（可选）<input aria-label={`商品 ${index + 1} 替换图`} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={event => update(row.id, { products: Array.from(event.target.files ?? []) })} /></label>}
-      <label>商品名称<input aria-label={`商品 ${index + 1} 名称`} value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
-      <label>商品描述<textarea aria-label={`商品 ${index + 1} 描述`} value={row.description} onChange={event => update(row.id, { description: event.target.value })} /></label>
-      <label>卖点<textarea aria-label={`商品 ${index + 1} 卖点`} value={row.sellingPoints} onChange={event => update(row.id, { sellingPoints: event.target.value })} /></label>
+      <div className={meitu.batchFiles}>{(['products', 'references'] as const).map(role => row[role].map((file, fileIndex) => <span key={`${role}:${fileIndex}`}>{file.name}<button type="button" aria-label={`移除商品 ${index + 1} 的 ${file.name}`} onClick={() => update(row.id, { [role]: row[role].filter((_, i) => i !== fileIndex) })}>×</button></span>))}</div>
+      <label>商品名称<input maxLength={160} aria-label={`商品 ${index + 1} 名称`} value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
+      <label>商品描述<textarea maxLength={4000} aria-label={`商品 ${index + 1} 描述`} value={row.description} onChange={event => update(row.id, { description: event.target.value })} /></label>
+      <label>卖点<textarea maxLength={2000} aria-label={`商品 ${index + 1} 卖点`} value={row.sellingPoints} onChange={event => update(row.id, { sellingPoints: event.target.value })} /></label>
       <details><summary>覆盖统一参数</summary><label>平台<CommerceSelect aria-label={`商品 ${index + 1} 平台覆盖`} value={row.platform ?? ''} onChange={value => update(row.id, { platform: value ? value as CommerceBrief['platform'] : undefined })}><option value="">继承统一平台</option>{COMMERCE_PLATFORMS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
         <label>地区<CommerceSelect aria-label={`商品 ${index + 1} 地区覆盖`} value={row.region ?? ''} onChange={value => update(row.id, { region: value ? value as CommerceBrief['region'] : undefined })}><option value="">继承统一地区</option>{COMMERCE_REGIONS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
         <label>语言<CommerceSelect aria-label={`商品 ${index + 1} 语言覆盖`} value={row.language ?? ''} onChange={value => update(row.id, { language: value ? value as CommerceBrief['language'] : undefined })}><option value="">继承统一语言</option>{COMMERCE_LANGUAGES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
         <label>模型<CommerceSelect aria-label={`商品 ${index + 1} 模型覆盖`} value={row.generation ? `${row.generation.provider}::${row.generation.model}` : ''} onChange={value => { const [provider, name] = value.split('::'); const match = capabilities.find(item => item.provider === provider)?.models.find(item => item.id === name); update(row.id, { generation: provider && name && match ? { provider, model: name, resolution: match.resolutions.includes((row.generation ?? generation).resolution) ? (row.generation ?? generation).resolution : match.resolutions[0]!, aspectRatio: match.aspectRatios.includes((row.generation ?? generation).aspectRatio) ? (row.generation ?? generation).aspectRatio : match.aspectRatios[0]! } : undefined }); }}><option value="">继承统一模型</option>{capabilities.flatMap(provider => provider.models.map(model => <option key={model.id} value={`${provider.provider}::${model.id}`}>{model.label}</option>))}</CommerceSelect></label>
         {row.generation && <label>分辨率<CommerceSelect aria-label={`商品 ${index + 1} 分辨率覆盖`} value={row.generation.resolution} onChange={value => update(row.id, { generation: { ...row.generation!, resolution: value as CommerceSlot['resolution'] } })}>{capabilities.find(item => item.provider === row.generation!.provider)?.models.find(item => item.id === row.generation!.model)?.resolutions.map(resolution => <option key={resolution}>{resolution}</option>)}</CommerceSelect></label>}
+        {workflow !== 'detail' && row.generation && <label>画面比例<CommerceSelect aria-label={`商品 ${index + 1} 比例覆盖`} value={row.generation.aspectRatio} onChange={value => update(row.id, { generation: { ...row.generation!, aspectRatio: value as CommerceSlot['aspectRatio'] } })}>{capabilities.find(item => item.provider === row.generation!.provider)?.models.find(item => item.id === row.generation!.model)?.aspectRatios.map(ratio => <option key={ratio}>{ratio}</option>)}</CommerceSelect></label>}
         {workflow === 'product-set' && <label>图片数量<CommerceSelect aria-label={`商品 ${index + 1} 数量覆盖`} value={row.count ?? ''} onChange={value => update(row.id, { count: value ? Number(value) : undefined })}><option value="">继承统一数量</option>{Array.from({ length: 20 }, (_, value) => <option key={value + 1}>{value + 1}</option>)}</CommerceSelect></label>}
         {workflow === 'detail' && <label>A+ 规格<CommerceSelect aria-label={`商品 ${index + 1} A+规格覆盖`} value={row.advanced === undefined ? '' : row.advanced ? 'advanced' : 'standard'} onChange={value => update(row.id, { advanced: value ? value === 'advanced' : undefined })}><option value="">继承统一规格</option><option value="standard">普通 A+</option><option value="advanced">高级 A+</option></CommerceSelect></label>}
         {workflow === 'clone' && <label>复刻方式<CommerceSelect aria-label={`商品 ${index + 1} 复刻方式覆盖`} value={row.cloneMode ?? ''} onChange={value => update(row.id, { cloneMode: value ? value as CommerceBrief['cloneMode'] : undefined })}><option value="">继承参考风格</option><option value="style">参考风格</option><option value="faithful">高度复刻</option></CommerceSelect></label>}
-        <label>额外要求<textarea aria-label={`商品 ${index + 1} 额外要求`} value={row.instruction} onChange={event => update(row.id, { instruction: event.target.value })} /></label>
-      </details><button type="button" disabled={rows.length === 1} onClick={() => setRows(current => current.filter(item => item.id !== row.id))}>移除商品</button>
+        <label>额外要求<textarea maxLength={2000} aria-label={`商品 ${index + 1} 额外要求`} value={row.instruction} onChange={event => update(row.id, { instruction: event.target.value })} /></label>
+      </details><button type="button" disabled={rows.length === 1} onClick={() => { for (const role of ['products', 'references'] as const) void clearAttachments(batchAttachmentKey(storageKey, row.id, role)); setConfirming(false); setRows(current => current.filter(item => item.id !== row.id)); }}>移除商品</button>
     </fieldset>)}</div>
-    <div className={styles.actions}><button type="button" disabled={rows.length >= 20} onClick={() => setRows(current => [...current, newRow()])}>添加商品（最多 20 个）</button>
-      <CreditFee items={quoteItems} /><button type="button" className={styles.primary} disabled={busy || !gateway} onClick={() => void submit()}>{busy ? '正在提交…' : confirming ? `确认提交 ${rows.length} 个商品任务` : `核对 ${rows.length} 个商品任务费用`}</button></div>
+    <button type="button" disabled={rows.length >= 20} onClick={() => { setRows(current => [...current, newRow()]); setConfirming(false); }}>添加商品（最多 20 个）</button></fieldset>
+    <div className={meitu.batchActions}>
+      <CreditFee items={quoteItems} /><button type="button" className={styles.primary} disabled={busy || restoring || !active || !gateway} onClick={() => void submit()}>{busy ? '正在提交…' : restoring ? '正在恢复附件…' : recovery ? '恢复提交同一批次' : confirming ? `确认提交 ${rows.length} 个商品任务` : `核对 ${rows.length} 个商品任务费用`}</button></div>
     {confirming && <div className={styles.batchConfirmation} role="dialog" aria-label="批量费用确认"><strong>确认批量提交</strong><p>{rows.length} 个商品任务 · {quoteItems.length} 张图片 · 预计 {quote ? formatCredits(quote.totalMinor) : '—'} 积分。逐项由现有队列生成，失败按实际结果结算。</p><button type="button" onClick={() => setConfirming(false)}>返回修改</button></div>}
     {error && <p role="alert">{error}</p>}
-  </section>;
+  </section></div></div></div>;
 }

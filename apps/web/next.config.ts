@@ -18,10 +18,14 @@ const nextConfig: NextConfig = {
   env: { ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development' },
   generateBuildId: async () => process.env.ZIMAGE_BUILD_SHA ?? null,
   outputFileTracingRoot: path.join(__dirname, '../..'),
-  experimental:
-    process.env.ZIMAGE_BUILD_CPUS === '1'
+  experimental: {
+    // Next 16.3 can panic while restoring the dev cache (TaskGuard has no
+    // persistent_task_type). Keep HMR/in-memory caching, skip disk restore.
+    turbopackFileSystemCacheForDev: false,
+    ...(process.env.ZIMAGE_BUILD_CPUS === '1'
       ? { cpus: 1, webpackMemoryOptimizations: true, webpackBuildWorker: true }
-      : undefined,
+      : {}),
+  },
   transpilePackages: ['@zimage/domain'],
 };
 

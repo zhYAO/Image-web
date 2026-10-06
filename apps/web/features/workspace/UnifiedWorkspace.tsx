@@ -10,6 +10,7 @@ import {
   MAX_UPLOAD_BYTES,
   sanitizeError,
   type ChatRequest,
+  type CommerceScene,
   type MessageTimelineItem,
   type GenerationBatch,
   type ImageRequest,
@@ -48,6 +49,8 @@ import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
 import styles from './workspace.module.css';
+import meitu from '@/features/commerce/meitu.module.css';
+import { CommerceHeader, CommerceNav } from '@/features/commerce/CommerceChrome';
 import Link from 'next/link';
 
 interface UnifiedWorkspaceProps {
@@ -170,11 +173,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const downloadingBatches = useRef(new Set<string>());
   const commerceRef = useRef<CommerceWorkspaceHandle>(null);
   const [commerceLaunch, setCommerceLaunch] = useState<CommerceLaunch>();
-  const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean }>();
+  const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean; scene?: CommerceScene }>();
   const commerceActive = commerceMode?.sessionId === activeSessionId && Boolean(commerceMode?.active);
+  const commerceShell = commerceActive || route?.kind === 'commerce';
   const maxActiveReferences = commerceActive || route?.kind === 'commerce' ? 26 : MAX_REFERENCES;
-  const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean) => {
-    setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active ? current : { sessionId, active });
+  const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean, scene?: CommerceScene) => {
+    setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active && current?.scene === scene ? current : { sessionId, active, scene });
   }, []);
 
   const sessionListVersion = useRef(0);
@@ -960,12 +964,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   return (
     <>
-    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''}`}>
-      <aside className={styles.sidebar}>
+    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''} ${commerceShell ? `${meitu.theme} ${meitu.shell}` : ''}`}>
+      {commerceShell ? <><CommerceHeader onHistory={() => setSessionDrawerOpen(true)} /><CommerceNav scene={route?.kind === 'commerce' ? route.scene : commerceMode?.scene} /></> : <aside className={styles.sidebar}>
         {sidebar(sidebarCollapsed)}
-      </aside>
+      </aside>}
       <main className={styles.main}>
-        <header className={styles.header}>
+        {!commerceShell && <header className={styles.header}>
           <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
             <CreditBalance /><Link href="/create">电商生图</Link><Link href="/account">账号</Link>
@@ -976,7 +980,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
             )}
             <Button aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} icon={<Archive size={16} />} onClick={() => setFeedback({ message: zhCN.workspace.assetLibraryUnavailable })}>{zhCN.workspace.assetLibrary}</Button>
           </Space>
-        </header>
+        </header>}
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
         {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">

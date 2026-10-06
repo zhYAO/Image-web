@@ -339,7 +339,7 @@ export function compileCommerceSlot(
     ...(brief.visualStrategy ? [`经用户确认的视觉策略：${brief.visualStrategy}。`] : []),
     ...(brief.cloneMode ? [`复刻模式：${brief.cloneMode === 'faithful' ? '高度复刻参考图的构图和氛围，但保留替换商品真实外观' : '参考风格，自由调整构图'}。`] : []),
     `文字：${textMode === 'auto' ? '仅从用户商品描述及已确认事实中提炼适合本张角色的简短标题与要点，不杜撰卖点、数字或承诺。信息不足时减少文字，不补造内容。' : textMode === 'exact' && slot.exactText ? `仅绘制以下确认文案：${slot.exactText}` : "不添加营销文字"}`,
-    "文字排版：指定文案逐字准确，使用清晰的简体中文字体，标题与说明有明显字号层级，四边留足安全距离。不把图片角色名、提示词字段或说明标签画进成品。不生成乱码占位文字。",
+    `文字排版：指定文案逐字准确，使用适合目标语言（${brief.language || "zh-CN"}）的清晰字体；自动文案遵循该语言，无文字模式不绘制文字。标题与说明有明显字号层级，四边留足安全距离。不把图片角色名、提示词字段或说明标签画进成品。不生成乱码占位文字。`,
     content ? "保留原文事实，只绘制本张准确文案。不得编造数据、引用、经历、认证或效果；不把通用内容强行画成商品广告。" : brief.cloneMode && !brief.productReferenceIds.length ? "保留当前参考图中商品的外观和可见标识，不得编造规格、价格、认证或效果。" : "保持商品颜色、外形轮廓、主要结构和可见标识；风格参考不得改变商品。不得编造规格、价格、认证或效果。不得因风格模板覆盖商品事实。",
     "约束优先级：事实与商品外观 > 图片角色的硬性用途 > 模板视觉 > 调整要求。白底商品图保持纯白底无字；其他角色遵循模板配色、字体和留白。",
     `输出：${slot.aspectRatio}，${slot.resolution}${slot.targetWidth && slot.targetHeight ? `；成品裁切为 ${slot.targetWidth}×${slot.targetHeight}，保留安全边距` : ''}。`,
