@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { processCleanup, type CleanupClaim } from '../_shared/cleanup-runner';
+import { parseClaim, processCleanup, type CleanupClaim } from '../_shared/cleanup-runner';
 const claim: CleanupClaim = { attempt: 1, jobId: 'job', targetId: 'user', jobType: 'account_delete',
   claimToken: 'token', objects: [{ bucket: 'generated', path: 'user/session/result.png' }] };
 function fixture() {
@@ -42,5 +42,11 @@ describe('cleanup worker fencing and compensation', () => {
     f.objects.add('user/session/result.png');
     await processCleanup(f.admin, orphan);
     expect(f.objects.size).toBe(0); expect(f.accountExists).toBe(true);
+  });
+  it('accepts apparel tombstone claims and removes delayed layout writes without Auth deletion',async()=>{
+    const f=fixture(),apparel={...claim,jobType:'orphan_apparel' as const};
+    expect(parseClaim(apparel)).toMatchObject({jobType:'orphan_apparel'});
+    await processCleanup(f.admin,apparel);f.objects.add('user/session/result.png');
+    await processCleanup(f.admin,apparel);expect(f.objects.size).toBe(0);expect(f.accountExists).toBe(true);
   });
 });

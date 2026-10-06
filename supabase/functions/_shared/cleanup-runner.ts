@@ -9,7 +9,7 @@ export interface CleanupClaim {
   attempt: number;
   jobId: string;
   claimToken: string;
-  jobType: 'orphan_reference' | 'orphan_result' | 'account_delete' | 'generation_expiry' | 'reference_expiry' | 'apparel_expiry' | 'session_delete';
+  jobType: 'orphan_reference' | 'orphan_result' | 'orphan_apparel' | 'account_delete' | 'generation_expiry' | 'reference_expiry' | 'apparel_expiry' | 'session_delete';
   objects: CleanupObject[];
   targetId: string;
 }
@@ -31,7 +31,7 @@ export function parseClaim(value: unknown): CleanupClaim | null {
     || typeof claim.claimToken !== 'string'
     || typeof claim.targetId !== 'string'
     || !Number.isSafeInteger(claim.attempt)
-    || !['orphan_reference', 'orphan_result', 'account_delete', 'generation_expiry', 'reference_expiry', 'apparel_expiry', 'session_delete'].includes(String(claim.jobType))
+    || !['orphan_reference', 'orphan_result', 'orphan_apparel', 'account_delete', 'generation_expiry', 'reference_expiry', 'apparel_expiry', 'session_delete'].includes(String(claim.jobType))
   ) throw new Error('invalid_cleanup_claim');
   return { ...claim, objects } as CleanupClaim;
 }

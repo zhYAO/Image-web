@@ -2,22 +2,13 @@ import { apparelPlanSchema } from "@zimage/domain";
 import { ApiRouteError } from "@/server/api-error";
 import { executeRoute, assertTrustedOrigin } from "@/server/route-context";
 import { renderApparelPages } from "@/server/apparel/apparel-renderer";
+import { assertLocalApparelMock } from "@/server/apparel/local-mock";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export async function POST(request: Request) {
   return executeRoute(async () => {
     assertTrustedOrigin(request);
-    if (
-      (process.env.NEXT_PUBLIC_DATA_MODE ?? "mock") !== "mock" ||
-      (process.env.VERCEL_ENV ?? process.env.ZIMAGE_DEPLOYMENT_ENV) ===
-        "production"
-    )
-      throw new ApiRouteError({
-        code: "not_found",
-        status: 404,
-        retryable: false,
-        message: "接口不存在。",
-      });
+    assertLocalApparelMock(request);
     if (Number(request.headers.get("content-length") ?? 0) > 261 * 1024 * 1024)
       throw new ApiRouteError({
         code: "bad_request",

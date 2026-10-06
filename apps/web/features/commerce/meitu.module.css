@@ -110,6 +110,12 @@
 .nav a:hover {
   background: #f5f7fb;
 }
+.nav a span {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
 .nav a[aria-current="page"] {
   color: #2275e8;
   background: #edf5ff;

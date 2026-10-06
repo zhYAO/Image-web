@@ -358,4 +358,3 @@ begin
  insert into private.credit_admin_audit(request_id,input) values((p_input->>'requestId')::uuid,p_input);
  return jsonb_build_object('applied',true);
 end $$;
-

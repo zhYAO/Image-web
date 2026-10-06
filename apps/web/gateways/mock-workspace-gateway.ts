@@ -123,10 +123,13 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     this.now = options.now ?? (() => new Date());
     this.delay = options.delay ?? wait;
     this.state = this.load();
+    const persistInitialState = !this.state.credits || this.state.commerce === undefined;
     this.state.credits ??= initialMockCredits();
     // Import the old separate key once; all subsequent writes use the host envelope.
     this.state.commerce ??=
       this.storage.getItem("zimage:commerce:mock:v1") ?? "";
+    // Persist the one-time import before subsequent reads refresh the envelope.
+    if (persistInitialState) this.persist();
     this.commerce = new MockCommerceGateway(
       {
       getItem: () => {

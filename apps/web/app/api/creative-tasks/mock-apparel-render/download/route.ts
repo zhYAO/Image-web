@@ -1,21 +1,12 @@
 import { assertTrustedOrigin, executeRoute } from "@/server/route-context";
 import { zipCommerceStream } from "@/server/commerce/commerce-export";
 import { ApiRouteError } from "@/server/api-error";
+import { assertLocalApparelMock } from "@/server/apparel/local-mock";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   return executeRoute(async () => {
     assertTrustedOrigin(request);
-    if (
-      (process.env.NEXT_PUBLIC_DATA_MODE ?? "mock") !== "mock" ||
-      (process.env.VERCEL_ENV ?? process.env.ZIMAGE_DEPLOYMENT_ENV) ===
-        "production"
-    )
-      throw new ApiRouteError({
-        code: "not_found",
-        status: 404,
-        retryable: false,
-        message: "接口不存在。",
-      });
+    assertLocalApparelMock(request);
     const files = (await request.formData()).getAll("images");
     if (
       files.length < 11 ||

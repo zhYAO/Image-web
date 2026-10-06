@@ -18,6 +18,24 @@ create table public.apparel_assets (
 );
 create index apparel_assets_run_idx on public.apparel_assets(run_id);
 create index apparel_assets_expiry_idx on public.apparel_assets(expires_at);
+-- No cascading FKs: a write may finish after its account/session is deleted.
+create table private.apparel_storage_intents (
+ asset_id uuid primary key, storage_path text not null unique,
+ cleanup_next_at timestamptz not null default clock_timestamp(), cleanup_token uuid,
+ cleanup_until timestamptz, cleanup_attempts integer not null default 0, cleanup_error text
+);
+create index apparel_storage_cleanup_idx on private.apparel_storage_intents(cleanup_next_at);
+alter table private.apparel_storage_intents enable row level security;
+revoke all on private.apparel_storage_intents from public,anon,authenticated,service_role;
+create function private.retain_apparel_storage_intent() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+ insert into private.apparel_storage_intents(asset_id,storage_path) values(new.id,new.storage_path);
+ return new;
+end;
+$$;
+revoke all on function private.retain_apparel_storage_intent() from public,anon,authenticated,service_role;
+create trigger apparel_asset_retain_intent after insert on public.apparel_assets for each row execute function private.retain_apparel_storage_intent();
 create table private.apparel_selections(task_id uuid primary key references public.commerce_tasks on delete cascade, run_id uuid not null references public.apparel_runs on delete cascade);
 alter table public.apparel_runs enable row level security;
 alter table public.apparel_assets enable row level security;
@@ -60,6 +78,63 @@ begin
  if cardinality(refs)<>(select count(distinct id) from unnest(refs) id) or array_position(refs,null) is not null then raise exception 'invalid_apparel_sources'; end if;
 end;
 $$;
+
+-- Wrap the existing reference/generation cleanup unchanged. Retained apparel
+-- paths are checked against Storage metadata on every pass, even after a prior
+-- removal, so delayed writes cannot become permanent orphaned objects.
+alter function public.claim_cleanup_work() rename to claim_cleanup_work_before_apparel;
+alter function public.claim_cleanup_work_before_apparel() set schema private;
+alter function public.cleanup_worker_step(uuid,text,uuid,text,text) rename to cleanup_worker_step_before_apparel;
+alter function public.cleanup_worker_step_before_apparel(uuid,text,uuid,text,text) set schema private;
+revoke all on function private.claim_cleanup_work_before_apparel(),private.cleanup_worker_step_before_apparel(uuid,text,uuid,text,text) from public,anon,authenticated,service_role;
+
+create function private.apparel_intent_live(p_asset_id uuid) returns boolean language sql set search_path='' as $$
+ select exists(select 1 from public.apparel_assets a join public.apparel_runs r on r.id=a.run_id
+  join public.commerce_tasks t on t.id=r.task_id join public.sessions s on s.id=t.session_id
+  join public.account_profiles u on u.user_id=t.user_id
+  where a.id=p_asset_id and a.claim_token=r.claim_token and not a.retired and a.expires_at>clock_timestamp()
+  and s.status='active' and u.status='active'
+  and (r.status='succeeded' or (r.status='processing' and r.lease_until+interval '10 minutes'>clock_timestamp())));
+$$;
+revoke all on function private.apparel_intent_live(uuid) from public,anon,authenticated,service_role;
+
+create function public.claim_cleanup_work() returns jsonb language plpgsql security definer set search_path='' as $$
+declare intent private.apparel_storage_intents%rowtype;
+begin
+ select * into intent from private.apparel_storage_intents i
+  where i.cleanup_next_at<=clock_timestamp() and (i.cleanup_until is null or i.cleanup_until<=clock_timestamp())
+  and not private.apparel_intent_live(i.asset_id)
+  and exists(select 1 from storage.objects o where o.bucket_id='generated' and o.name=i.storage_path)
+  order by i.cleanup_next_at for update skip locked limit 1;
+ if intent.asset_id is null then return private.claim_cleanup_work_before_apparel(); end if;
+ update private.apparel_storage_intents set cleanup_token=gen_random_uuid(),cleanup_until=clock_timestamp()+interval '120 seconds',cleanup_attempts=cleanup_attempts+1
+  where asset_id=intent.asset_id returning * into intent;
+ return jsonb_build_object('jobId',intent.asset_id,'targetId',intent.asset_id,'jobType','orphan_apparel',
+  'claimToken',intent.cleanup_token,'attempt',intent.cleanup_attempts,
+  'objects',jsonb_build_array(jsonb_build_object('bucket','generated','path',intent.storage_path)));
+end;
+$$;
+create function public.cleanup_worker_step(p_job_id uuid,p_job_type text,p_claim_token uuid,p_operation text,p_error_code text default null)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare intent private.apparel_storage_intents%rowtype;
+begin
+ if p_job_type is distinct from 'orphan_apparel' then return private.cleanup_worker_step_before_apparel(p_job_id,p_job_type,p_claim_token,p_operation,p_error_code); end if;
+ select * into intent from private.apparel_storage_intents where asset_id=p_job_id for update;
+ if not found or intent.cleanup_token is null or intent.cleanup_token is distinct from p_claim_token
+  or intent.cleanup_until is null or intent.cleanup_until<=clock_timestamp() or private.apparel_intent_live(p_job_id)
+  then return jsonb_build_object('accepted',false,'dead',false); end if;
+ if p_operation='renew' then update private.apparel_storage_intents set cleanup_until=clock_timestamp()+interval '120 seconds' where asset_id=p_job_id;
+ elsif p_operation in ('complete','fail') then
+  update private.apparel_storage_intents set cleanup_token=null,cleanup_until=null,
+   cleanup_error=case when p_operation='fail' then 'apparel_storage_cleanup_failed' else null end,
+   cleanup_next_at=clock_timestamp()+make_interval(secs=>case when p_operation='complete' then 30 else least(3600,30*power(2,least(intent.cleanup_attempts,7))::integer) end)
+   where asset_id=p_job_id;
+ else raise exception 'invalid_cleanup_operation'; end if;
+ return jsonb_build_object('accepted',true,'dead',false,'attempts',intent.cleanup_attempts);
+end;
+$$;
+revoke all on function public.claim_cleanup_work(),public.cleanup_worker_step(uuid,text,uuid,text,text) from public,anon,authenticated;
+grant execute on function public.claim_cleanup_work(),public.cleanup_worker_step(uuid,text,uuid,text,text) to service_role;
 
 create function public.apparel_dispatch(p_user_id uuid,p_operation text,p_task_id uuid,p_input jsonb,p_request_hash text,p_correlation_id uuid)
 returns jsonb language plpgsql security definer set search_path='' as $$
