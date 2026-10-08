@@ -649,7 +649,7 @@ export function CommerceWorkspace({
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
           }
         >
-          {draft.scene === 'batch' ? <CommerceBatchWizard ownerKey={ownerKey} active={draft.sessionId === sessionId} gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
+          {draft.scene === 'batch' ? <CommerceBatchWizard ownerKey={ownerKey} active={draft.sessionId === sessionId && showDraft && !coordinatedLoading} gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
             <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}
