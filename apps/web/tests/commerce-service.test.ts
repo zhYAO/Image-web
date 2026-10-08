@@ -25,6 +25,16 @@ const plan = {
   slots: buildCommerceSlots(brief, "product-set", 2, settings),
 };
 describe("trusted commerce service", () => {
+  it('applies the submit stop switch to direct service calls', async () => {
+    vi.stubEnv('ZIMAGE_COMMERCE_SUBMIT_ENABLED', 'false');
+    const rpc = vi.fn();
+    try {
+      await expect(createCommerceService({ rpc }).dispatch(userId, 'submit', crypto.randomUUID(), {
+        requestId: crypto.randomUUID(), revision: 1, slotIds: [plan.slots[0]!.id],
+      }, crypto.randomUUID())).rejects.toMatchObject({ status: 503 });
+      expect(rpc).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("reads a historical 4.5 plan but requires an explicit upgrade before saving a new revision", async () => {
     const legacy={...plan,slots:plan.slots.map(slot=>({...slot,model:'seedream-4.5'})),id:crypto.randomUUID(),sessionId,revision:1,createdAt:'now',updatedAt:'now',runs:[],selections:[]};
     const rpc=vi.fn().mockResolvedValueOnce({data:legacy,error:null}).mockResolvedValueOnce({data:null,error:null});

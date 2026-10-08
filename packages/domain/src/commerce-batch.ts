@@ -17,12 +17,14 @@ export const creativeBatchItemSchema = z.object({
   id: z.uuid(), createRequestId: z.uuid(), submitRequestId: z.uuid(),
   plan: commercePlanSchema, billing: creditConfirmationSchema.optional(),
   overrides: z.record(z.string(), z.unknown()),
-  taskId: z.uuid().optional(), status: z.enum(['pending', 'created', 'submitted', 'failed']),
+  taskId: z.uuid().optional(), status: z.enum(['pending', 'created', 'submitted', 'failed', 'needs_review']),
   error: z.string().optional(),
+  attemptCount: z.number().int().nonnegative().optional(),
+  nextAttemptAt: z.string().optional(),
 });
 export const creativeBatchSchema = z.object({
   id: z.uuid(), sessionId: z.uuid(), requestId: z.uuid(), workflow: z.enum(['product-set','detail','clone']),
   globalParams: z.record(z.string(), z.unknown()), items: z.array(creativeBatchItemSchema),
-  createdAt: z.string(), updatedAt: z.string(),
+  createdAt: z.string(), updatedAt: z.string(), nextAttemptAt: z.string().nullable().optional(),
 });
 export type CreativeBatch = z.infer<typeof creativeBatchSchema>;

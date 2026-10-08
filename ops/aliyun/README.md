@@ -55,3 +55,14 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 ### CI 构建内存
 
 正式 HTTP Webpack 构建设置 `NODE_OPTIONS=--max-old-space-size=4096`。首次 Linux runner 运行已证明默认约 2GB V8 堆不足；此设置仅作用于构建 job，不改变生产服务运行内存或在服务器执行构建。
+
+## 批量后台续跑发布顺序
+
+1. 先通过 CI 的数据库测试及类型生成检查，再应用 `20261008152649_creative_batch_worker.sql` 兼容迁移。迁移不会开启新 Cron，也不会自动推进历史批次。
+2. 第一版网站只发布批次服务、进度接口和内部 Worker；保留旧页面。服务器 `/etc/zimage/environment` 设置独立的 `ZIMAGE_BATCH_CRON_SECRET`，Supabase Vault 存储同值 `zimage_batch_cron_secret` 及完整 HTTPS Worker URL `zimage_batch_worker_url`。不要在 GitHub 构建变量或客户端公开密钥。先用内部请求验证 401/200，再调用 `schedule_creative_batch_worker()`；只有到期工作存在时才会发送 HTTP 请求。
+3. 核对 `cron.job_run_details`、`net._http_response`、应用日志和批次检查点，确认租约与固定请求 ID 生效。第二版网站再发布前端减流修改。发布前先核对图片报价；测试账号最多提交两张真实图片，关闭页面后验证后台推进、积分只结算一次。
+4. 发布 15 分钟和 24 小时检查批次请求、Storage 签名与 GET、Cron 和错误日志，按来源区分本地开发与网站流量。异常时先调用 `unschedule_creative_batch_worker()`，再使用现有 GitHub 发布回滚网站；保留兼容迁移与数据。历史待核对批次须依据供应商证据人工处理。
+
+登录后只读健康检查：在可信机器上将测试账号当前会话的完整 Cookie 放入 `ZIMAGE_AUTH_COOKIE` 环境变量，然后执行 `python3 ops/aliyun/authenticated_health.py`。它检查账号、会话列表和积分接口，不创建任务或消耗图片额度；脚本不会输出 Cookie。会话过期会返回失败，需用测试账号重新登录。不要将 Cookie 写入命令历史、工单或仓库。
+
+证书续期演练：先检查 `/etc/letsencrypt/renewal/www.zimage.store.conf` 的 authenticator；若仍为 manual DNS，不应把 `certbot.timer` 视为自动续期成功。备案和公网 HTTP 验证可用后切换为 webroot，运行 `certbot renew --dry-run`，再核对 Nginx reload hook 和公网证书到期日期。`dry-run` 成功与配置记录应写入项目进度；演练前证书自动续期状态仍为待完成。

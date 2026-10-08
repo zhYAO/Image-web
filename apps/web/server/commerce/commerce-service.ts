@@ -228,6 +228,8 @@ export function createCommerceService(client: CommerceRpc) {
                         ? commerceCancelSchema.parse(raw)
                         : {};
       if ("sessionId" in input) z.uuid().parse(input.sessionId);
+      if (operation === 'submit' && process.env.ZIMAGE_COMMERCE_SUBMIT_ENABLED === 'false')
+        throw new ApiRouteError({ code: 'provider_error', status: 503, message: '新的电商生图提交已暂停，已有任务仍可查看和下载。', retryable: true });
       const args = {
         p_user_id: userId,
         p_operation: operation,

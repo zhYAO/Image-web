@@ -414,6 +414,7 @@ export type Database = {
           items: Json
           lease_token: string | null
           lease_until: string | null
+          next_attempt_at: string | null
           request_hash: string
           request_id: string
           session_id: string
@@ -428,6 +429,7 @@ export type Database = {
           items: Json
           lease_token?: string | null
           lease_until?: string | null
+          next_attempt_at?: string | null
           request_hash: string
           request_id: string
           session_id: string
@@ -442,6 +444,7 @@ export type Database = {
           items?: Json
           lease_token?: string | null
           lease_until?: string | null
+          next_attempt_at?: string | null
           request_hash?: string
           request_id?: string
           session_id?: string
@@ -784,9 +787,23 @@ export type Database = {
         Args: { p_provider: string }
         Returns: boolean
       }
+      checkpoint_creative_batch_work: {
+        Args: {
+          p_batch_id: string
+          p_items: Json
+          p_lease_token: string
+          p_next_attempt_at: string
+          p_release?: boolean
+        }
+        Returns: Database["public"]["Tables"]["creative_batches"]["Row"][]
+      }
       claim_account_cleanup_job: { Args: never; Returns: Json }
       claim_cleanup_job: { Args: never; Returns: Json }
       claim_cleanup_work: { Args: never; Returns: Json }
+      claim_creative_batch_work: {
+        Args: { p_batch_id?: string; p_user_id?: string }
+        Returns: Database["public"]["Tables"]["creative_batches"]["Row"][]
+      }
       claim_image_generation: { Args: never; Returns: Json }
       cleanup_worker_step: {
         Args: {
@@ -876,6 +893,10 @@ export type Database = {
         Returns: Json
       }
       get_commerce_capabilities: { Args: never; Returns: Json }
+      get_creative_batch_progress: {
+        Args: { p_batch_id: string; p_user_id: string }
+        Returns: Json
+      }
       get_provider_health: { Args: never; Returns: Json }
       get_user_quota: { Args: { p_user_id: string }; Returns: Json }
       list_sessions_with_activity: {
@@ -971,6 +992,7 @@ export type Database = {
         Returns: boolean
       }
       schedule_cleanup_worker: { Args: never; Returns: number }
+      schedule_creative_batch_worker: { Args: never; Returns: number }
       schedule_generation_worker: { Args: never; Returns: number }
       set_provider_runtime_enabled: {
         Args: { p_enabled: boolean; p_evidence: string; p_provider: string }
@@ -1003,6 +1025,7 @@ export type Database = {
         Returns: Json
       }
       unschedule_cleanup_worker: { Args: never; Returns: boolean }
+      unschedule_creative_batch_worker: { Args: never; Returns: boolean }
       unschedule_generation_worker: { Args: never; Returns: boolean }
     }
     Enums: {
@@ -1141,4 +1164,3 @@ export const Constants = {
     },
   },
 } as const
-

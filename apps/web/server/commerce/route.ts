@@ -32,8 +32,6 @@ export function commerceRoute(
     const admin: SupabaseClient = createSupabaseAdminClient();
     const apparel = new URL(request.url).searchParams.get('engine') === 'apparel-catalog'
       || (typeof input === 'object' && input !== null && 'plan' in input && typeof input.plan === 'object' && input.plan !== null && 'engine' in input.plan && input.plan.engine === 'apparel-catalog');
-    if (!apparel && operation === 'submit' && process.env.ZIMAGE_COMMERCE_SUBMIT_ENABLED === 'false')
-      throw new ApiRouteError({ code: 'provider_error', status: 503, message: '新的电商生图提交已暂停，已有任务仍可查看和下载。', retryable: true });
     if (apparel && (operation === 'archive' || operation === 'cancel'))
       throw new ApiRouteError({ code: 'bad_request', status: 400, message: '服装任务请在会话中管理。', retryable: false });
     const result = await (apparel ? createApparelService(admin) : createCommerceService(admin)).dispatch(
