@@ -17,7 +17,9 @@ describe("apparel HTTP task contract", () => {
     const fetcher = vi.fn(
       async (path: RequestInfo | URL, init?: RequestInit) => {
         void init;
-        return Response.json(String(path).includes("sessionId=") ? [task] : task);
+        return Response.json(
+          String(path).includes("sessionId=") ? [task] : task,
+        );
       },
     );
     const gateway = new HttpWorkspaceGateway({ fetcher }).commerce.apparel;
@@ -74,4 +76,66 @@ describe("apparel HTTP task contract", () => {
       safe: { code: "ASSET_EXPIRED" },
     });
   });
+  it("retains the selected historical run when restoring and exporting a newer plan", async () => {
+    const input = {
+      requestId: apparelIds[0]!,
+      revision: 2,
+      runId: apparelIds[1]!,
+    };
+    const selected = { ...task, revision: 2, selectedRunId: input.runId };
+    const fetcher = vi.fn(async (path: RequestInfo | URL) =>
+      Response.json(
+        String(path).includes("/export?")
+          ? { runId: input.runId, items: [] }
+          : selected,
+      ),
+    );
+    const gateway = new HttpWorkspaceGateway({ fetcher }).commerce.apparel;
+    expect((await gateway.get(task.id)).selectedRunId).toBe(input.runId);
+    expect((await gateway.select(task.id, input)).selectedRunId).toBe(
+      input.runId,
+    );
+    expect((await gateway.export(task.id, input)).runId).toBe(input.runId);
+    expect(
+      await gateway.upload(task.sessionId, {
+        id: apparelIds[3],
+        name: "已上传.jpg",
+        size: 100,
+        mimeType: "image/jpeg",
+        status: "ready",
+      }),
+    ).toBe(apparelIds[3]);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    for (const call of fetcher.mock.calls.slice(1)) {
+      const init = (call as unknown as [RequestInfo, RequestInit])[1];
+      expect(init.method).toBe("POST");
+      expect(
+        new Request(new URL(String(call[0]), "https://www.zimage.store"), init)
+          .credentials,
+      ).toBe("same-origin");
+      expect(JSON.parse(init.body as string)).toEqual(input);
+    }
+  });
+  it.each([
+    [404, "NOT_FOUND", false],
+    [409, "CONFLICT", false],
+    [503, "NETWORK", true],
+  ])(
+    "maps download status %i to a safe error without exposing a non-JSON server body",
+    async (status, code, retryable) => {
+      const fetcher = vi.fn(
+        async () => new Response("private upstream diagnostic", { status }),
+      );
+      const gateway = new HttpWorkspaceGateway({ fetcher }).commerce.apparel;
+      await expect(
+        gateway.download(task.id, {
+          requestId: apparelIds[0]!,
+          revision: 1,
+          runId: apparelIds[1]!,
+        }),
+      ).rejects.toMatchObject({
+        safe: { code, retryable, message: "下载失败，请稍后重试。" },
+      });
+    },
+  );
 });

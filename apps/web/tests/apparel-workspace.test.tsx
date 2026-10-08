@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, cleanup } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  cleanup,
+  waitFor,
+} from "@testing-library/react";
 import { ApparelWorkspace } from "@/features/commerce/ApparelWorkspace";
 import { apparelTaskSchema, type ApparelGateway } from "@zimage/domain";
 import { apparelFixture, apparelIds } from "./apparel-fixtures";
@@ -15,6 +21,7 @@ const props = {
 describe("apparel form in the shared commerce workspace", () => {
   beforeEach(() => {
     cleanup();
+    vi.clearAllMocks();
     sessionStorage.clear();
   });
   it("uses upload/form inputs, preserves fields on refresh and isolates accounts", () => {
@@ -77,5 +84,101 @@ describe("apparel form in the shared commerce workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "加载最新方案" }));
     expect(screen.getByLabelText("颜色")).toHaveValue("最新白色");
     expect(screen.getByRole("button", { name: "保存为新版本" })).toBeEnabled();
+  });
+  it("retries a lost save response with the same frozen plan without uploading sources again", async () => {
+    const task = apparelTaskSchema.parse({
+      id: apparelIds[7],
+      sessionId: apparelIds[7],
+      engine: "apparel-catalog",
+      revision: 1,
+      plan: apparelFixture,
+      createdAt: "now",
+      updatedAt: "now",
+      runs: [],
+    });
+    const upload = vi.fn(
+      async (_session: string, ref: { id?: string }) => ref.id!,
+    );
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("响应丢失"))
+      .mockImplementationOnce(async (_id, input) => ({
+        ...task,
+        revision: 2,
+        plan: input.plan,
+      }));
+    const onTask = vi.fn();
+    render(
+      <ApparelWorkspace
+        {...props}
+        sessionId={task.sessionId}
+        task={task}
+        gateway={{ upload, save } as unknown as ApparelGateway}
+        onTask={onTask}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("衣长"), {
+      target: { value: "68" },
+    });
+    fireEvent.change(screen.getByLabelText("Design"), {
+      target: { value: "新的设计说明" },
+    });
+    fireEvent.change(screen.getByLabelText("面料裁切左"), {
+      target: { value: "0.22" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存为新版本" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("响应丢失");
+    expect(onTask).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("衣长")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "继续保存同一请求" }));
+    await waitFor(() => expect(onTask).toHaveBeenCalledTimes(1));
+    expect(upload).toHaveBeenCalledTimes(7);
+    expect(save.mock.calls[1]).toEqual(save.mock.calls[0]);
+    expect(save.mock.calls[1]![1]).toMatchObject({
+      expectedRevision: 1,
+      plan: {
+        brief: { measurements: { length: "68" }, design: "新的设计说明" },
+        fabricCrop: [0.22, 0.2, 0.76, 0.57],
+      },
+    });
+    expect(screen.getByLabelText("衣长")).toBeEnabled();
+  });
+  it("keeps the render request identity after failure and disables rendering unsaved edits", async () => {
+    const task = apparelTaskSchema.parse({
+      id: apparelIds[7],
+      sessionId: apparelIds[7],
+      engine: "apparel-catalog",
+      revision: 1,
+      plan: apparelFixture,
+      createdAt: "now",
+      updatedAt: "now",
+      runs: [],
+    });
+    const submit = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("排版暂不可用"))
+      .mockResolvedValueOnce(task);
+    const onTask = vi.fn();
+    render(
+      <ApparelWorkspace
+        {...props}
+        sessionId={task.sessionId}
+        task={task}
+        gateway={{ submit } as unknown as ApparelGateway}
+        onTask={onTask}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "开始整套排版" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("排版暂不可用");
+    fireEvent.click(screen.getByRole("button", { name: "开始整套排版" }));
+    await waitFor(() =>
+      expect(onTask).toHaveBeenCalledWith(task, task.sessionId),
+    );
+    expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0]);
+    fireEvent.change(screen.getByLabelText("颜色"), {
+      target: { value: "编辑后的白色" },
+    });
+    expect(screen.getByRole("button", { name: "开始整套排版" })).toBeDisabled();
+    expect(submit).toHaveBeenCalledTimes(2);
   });
 });
