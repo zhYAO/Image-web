@@ -4,6 +4,7 @@ import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 export function useApparelTasks(
   gateway: ApparelGateway | undefined,
   sessionId: string | undefined,
+  pollTarget: string | false = 'all',
 ) {
   const [state, setState] = useState<{
     sessionId?: string;
@@ -53,14 +54,15 @@ export function useApparelTasks(
     inFlight.current.set(sessionId, request);
     try { await request; } finally { if (inFlight.current.get(sessionId) === request) inFlight.current.delete(sessionId); }
   }, [gateway, sessionId]);
-  const activeSinceKey = (state.sessionId === sessionId ? state.tasks : []).flatMap(task =>
+  const sessionTasks = state.sessionId === sessionId ? state.tasks : [];
+  const polledTasks = pollTarget === false ? [] : pollTarget === 'all' ? sessionTasks :
+    pollTarget === 'latest' ? sessionTasks.slice(-1) : sessionTasks.filter(task => task.id === pollTarget);
+  const activeSinceKey = polledTasks.flatMap(task =>
     task.runs.filter(run => run.status === 'processing').map(run => run.createdAt)).join('|');
   useEffect(() => {
-    const invalidate = () => {
-      epoch.current++;
-    };
-    invalidate();
     void refresh();
+  }, [refresh]);
+  useEffect(() => {
     let stopped = false;
     let timer: number | undefined;
     const schedule = () => {
@@ -76,7 +78,6 @@ export function useApparelTasks(
     schedule();
     return () => {
       stopped = true;
-      invalidate();
       if (timer !== undefined) clearTimeout(timer);
     };
   }, [refresh, activeSinceKey]);

@@ -138,23 +138,30 @@ export function CommerceWorkspace({
       }),
     [],
   );
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [selectedBySession, setSelectedBySession] = useState<Record<string, string>>({});
+  const requestedForPolling = requestedTaskId ?? (routeDriven ? undefined : selectedBySession[sessionId ?? ""]);
+  const draftForPolling = drafts.some(draft => draft.sessionId === sessionId);
+  const pollTarget = requestedBatchId || (draftForPolling && (!requestedForPolling || requestedForPolling === 'draft'))
+    ? false : requestedForPolling ?? 'latest';
   const { tasks, cachedTasks, accept, error, loading, refresh } =
     useCommerceTasks(
       gateway,
       isLocalCommerceDraft(sessionId) ? undefined : sessionId,
       Boolean(
-        sessionId && Object.values(pendingSubmissions).includes(sessionId),
+        sessionId && pollTarget && Object.entries(pendingSubmissions).some(([id, pendingSession]) =>
+          pendingSession === sessionId && (pollTarget === 'latest' || id === pollTarget)),
       ),
+      pollTarget,
     );
-  const apparel = useApparelTasks(gateway?.apparel, isLocalCommerceDraft(sessionId) ? undefined : sessionId);
+  const apparelPollTarget = pollTarget === false ? false : requestedForPolling
+    ? tasks.some(task => task.id === requestedForPolling) ? false : requestedForPolling
+    : tasks.length ? false : 'latest';
+  const apparel = useApparelTasks(gateway?.apparel, isLocalCommerceDraft(sessionId) ? undefined : sessionId, apparelPollTarget);
   const acceptAndRefresh = useCallback((task: CommerceTask) => {
     accept(task);
     void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
   }, [accept, onTaskChanged]);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [selectedBySession, setSelectedBySession] = useState<
-    Record<string, string>
-  >({});
   const [panels, setPanels] = useState<
     Record<string, "examples" | "plan" | "results">
   >({});
@@ -614,7 +621,7 @@ export function CommerceWorkspace({
                   <AntdImage.PreviewGroup>
                     <CommerceTaskCard
                       task={task}
-                      active={task.sessionId === sessionId && task.id === selectedTask?.id && panel === 'results' && !coordinatedLoading}
+                      active={hasCommerce && !showDraft && !requestedBatchId && task.sessionId === sessionId && task.id === selectedTask?.id && panel === 'results' && !coordinatedLoading}
                       view={panel === "plan" ? "plan" : "results"}
                       autoStart={autoStartTasks[task.id]}
                       gateway={gateway}

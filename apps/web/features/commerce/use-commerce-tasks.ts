@@ -7,6 +7,7 @@ export function useCommerceTasks(
   gateway: CommerceGateway | undefined,
   sessionId: string | undefined,
   hasPendingSubmission = false,
+  pollTarget: string | false = 'all',
 ) {
   const [bySession, setBySession] = useState<Record<string, CommerceTask[]>>(
     {},
@@ -63,10 +64,12 @@ export function useCommerceTasks(
   const tasks = sessionId ? (bySession[sessionId] ?? []) : [];
   const pendingSince = useMemo(() => hasPendingSubmission ? new Date().toISOString() : undefined,
     [hasPendingSubmission]);
+  const polledTasks = pollTarget === false ? [] : pollTarget === 'all' ? tasks :
+    pollTarget === 'latest' ? tasks.slice(-1) : tasks.filter(task => task.id === pollTarget);
   const activeSinceKey = [
-    ...tasks.flatMap(task => task.runs.filter(run => run.items.some(item =>
+    ...polledTasks.flatMap(task => task.runs.filter(run => run.items.some(item =>
       unsettledCommerceItem(item) && !commerceItemNeedsReview(item))).map(run => run.createdAt)),
-    ...(pendingSince ? [pendingSince] : []),
+    ...(pendingSince && pollTarget !== false ? [pendingSince] : []),
   ].join('|');
   useEffect(() => {
     void refresh().catch(() => undefined);

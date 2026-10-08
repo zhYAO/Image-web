@@ -181,4 +181,17 @@ describe("commerce task polling", () => {
     await advance(5000);
     expect(list).toHaveBeenCalledTimes(2);
   });
+  it('does not poll a hidden task and resumes when it becomes selected', async () => {
+    const gateway = createTestGateway().commerce;
+    const active = task(true);
+    const list = vi.spyOn(gateway, 'list').mockResolvedValue([active]);
+    const view = renderHook(({ target }) => useCommerceTasks(gateway, 'session', false, target),
+      { initialProps: { target: false as string | false } });
+    await flush();
+    await advance(5000);
+    expect(list).toHaveBeenCalledTimes(1);
+    view.rerender({ target: active.id });
+    await advance(5000);
+    expect(list).toHaveBeenCalledTimes(2);
+  });
 });
