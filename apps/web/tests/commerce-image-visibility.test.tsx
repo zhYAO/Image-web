@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { buildCommerceSlots, IMAGE_PROVIDER_CAPABILITIES, type CommerceTask } from '@zimage/domain';
 import { afterEach, expect, it, vi } from 'vitest';
 import { CommerceTaskCard } from '@/features/commerce/CommerceTaskCard';
@@ -38,6 +38,9 @@ it('does not sign a hidden result and signs it only when its result enters the v
   expect(assetUrl).not.toHaveBeenCalled();
   await act(async () => { onIntersect([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver); });
   expect(assetUrl).toHaveBeenCalledTimes(1);
+  const image = screen.getByAltText('杯子 第 1 张当前选图');
+  await act(async () => { fireEvent.error(image); fireEvent.error(image); await Promise.resolve(); });
+  expect(assetUrl).toHaveBeenCalledTimes(2);
 });
 
 it('signs only the reference belonging to a visible clone result', async () => {

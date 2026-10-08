@@ -167,6 +167,7 @@ export function CommerceTaskCard({
   const [originalUrl, setOriginalUrl] = useState(originalPreviewUrl);
   const originalRetried = useRef(false);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const imageRetried = useRef(new Set<string>());
   const [visibleImageIds, setVisibleImageIds] = useState<string[]>([]);
   const markVisible = useCallback((id: string) => setVisibleImageIds(current =>
     current.includes(id) ? current : [...current, id]), []);
@@ -192,7 +193,8 @@ export function CommerceTaskCard({
   const displayTask = useMemo(() => ({ ...task, runs: task.runs.map(run => ({ ...run,
     items: run.items.map(item => ({ ...item, url: signedUrls[item.generationId] ?? item.url })) })) }), [task, signedUrls]);
   const refreshImage = (id: string) => {
-    if (!gateway.assetUrl) return;
+    if (!gateway.assetUrl || imageRetried.current.has(id)) return;
+    imageRetried.current.add(id);
     void gateway.assetUrl(id, true).then(result => {
       if (result.url) setSignedUrls(current => ({ ...current, [id]: result.url! }));
     }).catch(() => undefined);
