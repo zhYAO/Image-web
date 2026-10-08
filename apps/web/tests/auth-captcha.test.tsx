@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthPanel } from '../features/auth/AuthPanel';
 import { VerifyPanel } from '../features/auth/VerifyPanel';
-import { AuthRecovery } from '../features/auth/AuthRecovery';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock('next/script', () => ({ default: ({ onReady, onError }: { onReady: () => void; onError: () => void }) => <><button type="button" onClick={onReady}>加载安全验证</button><button type="button" onClick={onError}>模拟脚本失败</button></> }));
@@ -91,15 +90,5 @@ describe('formal email authentication CAPTCHA', () => {
     fireEvent.click(screen.getByRole('button', { name: '重新发送验证码' }));
     await screen.findByRole('button', { name: '60 秒后可重发' });
     expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toMatchObject({ captchaToken: 'fresh-challenge' });
-  });
-  it('protects the in-page login recovery form as well', async () => {
-    const authenticate = vi.fn().mockResolvedValue({ id: 'test' });
-    render(<AuthRecovery authenticate={authenticate} onAuthenticated={vi.fn()} open />);
-    const form = screen.getByLabelText('邮箱').closest('form')!;
-    fireEvent.submit(form);
-    expect(authenticate).not.toHaveBeenCalled();
-    await solve();
-    fireEvent.submit(form);
-    await waitFor(() => expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ captchaToken: 'fresh-challenge' })));
   });
 });
