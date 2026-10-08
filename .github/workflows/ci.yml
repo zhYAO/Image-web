@@ -36,8 +36,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      # Bound CI to two DOM workers; keep the developer default of one worker.
-      - run: pnpm test:coverage --maxWorkers=2
+      # Keep real AntD DOM suites sequential on shared runners. Coverage adds
+      # substantial overhead; performance SLAs are checked by the budget suite.
+      - run: |
+          pnpm --filter @zimage/domain test:coverage
+          pnpm --filter @zimage/web exec vitest run --coverage --maxWorkers=1 --testTimeout=120000
       - run: pnpm --filter @zimage/web test:acceptance-budget
       - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
       - run: pnpm exec vitest run supabase/functions/generation-worker/image-providers.test.ts

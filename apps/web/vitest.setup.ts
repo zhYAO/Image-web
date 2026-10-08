@@ -5,8 +5,9 @@ import { afterEach } from 'vitest';
 afterEach(() => cleanup());
 
 // Real Ant Design + deferred editor chunks can exceed RTL's 1s default under
-// coverage. This is a readiness deadline, not the separately measured load SLA.
-configure({ asyncUtilTimeout: 10000 });
+// coverage on shared CI runners. This readiness deadline is separate from the
+// load SLA; retain the existing 10s deadline for local tests.
+configure({ asyncUtilTimeout: process.env.CI ? 30000 : 10000 });
 
 // Node 26 exposes an unavailable experimental localStorage as `undefined` when
 // no --localstorage-file is supplied. Vitest then keeps that Node global instead
