@@ -1,4 +1,6 @@
 begin;
+-- Simulate Storage API deletion only inside this rolled-back test transaction.
+set local storage.allow_delete_query = 'true';
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 create function pg_temp.aid(label text) returns uuid language sql immutable as $$select md5('apparel:'||label)::uuid$$;
