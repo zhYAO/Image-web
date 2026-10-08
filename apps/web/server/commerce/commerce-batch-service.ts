@@ -50,7 +50,7 @@ const batchProgressSchema = z.object({
     status: z.enum(['pending', 'created', 'submitted', 'failed', 'needs_review']),
     error: z.string().nullable().optional(), total: z.number().int().nonnegative(),
     succeeded: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
-    processing: z.number().int().nonnegative(),
+    processing: z.number().int().nonnegative(), review: z.number().int().nonnegative(),
   })),
 });
 export async function getCreativeBatchProgress(admin: SupabaseClient, userId: string, batchId: string) {

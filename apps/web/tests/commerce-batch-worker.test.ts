@@ -35,11 +35,20 @@ describe('claimed creative batch', () => {
     const row = makeRow();
     const admin = { rpc: vi.fn(async () => ({ data: { id: row.id, createdAt: row.created_at,
       updatedAt: row.updated_at, items: [{ id: row.items[0]!.id, status: 'submitted',
-        total: 1, succeeded: 1, failed: 0, processing: 0 }] }, error: null })) };
+        total: 1, succeeded: 1, failed: 0, processing: 0, review: 0 }] }, error: null })) };
     const progress = await getCreativeBatchProgress(admin as never, row.user_id, row.id);
     expect(progress.terminal).toBe(true);
     expect(JSON.stringify(progress)).not.toContain('url');
     expect(admin.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('stops polling a submitted image awaiting provider reconciliation', async () => {
+    const row = makeRow();
+    const admin = { rpc: vi.fn(async () => ({ data: { id: row.id, createdAt: row.created_at,
+      updatedAt: row.updated_at, items: [{ id: row.items[0]!.id, status: 'submitted',
+        total: 1, succeeded: 0, failed: 0, processing: 0, review: 1 }] }, error: null })) };
+    const progress = await getCreativeBatchProgress(admin as never, row.user_id, row.id);
+    expect(progress.terminal).toBe(true);
+    expect(progress.items[0]).toMatchObject({ review: 1, processing: 0 });
   });
   it('checkpoints the created task before submitting and closes the due work', async () => {
     const row = makeRow();

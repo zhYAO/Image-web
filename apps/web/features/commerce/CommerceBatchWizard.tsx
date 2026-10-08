@@ -33,7 +33,7 @@ const batchProgressSchema = z.object({
   items: z.array(z.object({ id: z.uuid(), taskId: z.uuid().nullable().optional(),
     status: z.enum(['pending', 'created', 'submitted', 'failed', 'needs_review']),
     error: z.string().nullable().optional(), total: z.number(), succeeded: z.number(),
-    failed: z.number(), processing: z.number() })),
+    failed: z.number(), processing: z.number(), review: z.number() })),
 });
 type BatchProgress = z.infer<typeof batchProgressSchema>;
 const mockMode = process.env.NEXT_PUBLIC_DATA_MODE === 'mock';
@@ -285,10 +285,12 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
 
   if (batchId || batch) {
     const current = batch;
+    const reviewCount = current?.items.filter(item => item.status === 'needs_review').length ?? 0;
+    const pendingReview = reviewCount + (progress?.items.reduce((total, item) => total + item.review, 0) ?? 0);
     return <section className={styles.batchWorkbench} aria-label="批量任务进度"><h2>批量生成进度</h2>
       {error && <p role="alert">{error}</p>}
       {!current ? <p role="status">正在恢复批量任务…</p> : <>
-        <p role="status">已提交 {current.items.filter(item => item.status === 'submitted').length}/{current.items.length} 个商品任务；失败 {current.items.filter(item => item.status === 'failed').length} 个；待核对 {current.items.filter(item => item.status === 'needs_review').length} 个。图片继续由现有队列生成。</p>
+        <p role="status">已提交 {current.items.filter(item => item.status === 'submitted').length}/{current.items.length} 个商品任务；失败 {current.items.filter(item => item.status === 'failed').length} 个；待核对 {pendingReview} 个。{progress?.terminal ? pendingReview ? '待核对结果请勿重复提交。' : '批量处理已完成。' : '图片继续由现有队列生成。'}</p>
         <button type="button" onClick={() => void refreshBatchRef.current()}>手动刷新进度</button>
         {!mockMode && nextPollingDelay(current.createdAt, 'commerce') === null && !progress?.terminal && <p>自动刷新已停止，后台仍会继续处理。可点击手动刷新进度。</p>}
         <ol>{current.items.map((item, index) => {
@@ -297,7 +299,8 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
           const state = progress?.items.find(entry => entry.id === item.id);
           const completed = state?.succeeded ?? images.filter(image => image.status === 'succeeded').length;
           const failed = state?.failed ?? images.filter(image => image.status === 'failed').length;
-          return <li key={item.id}><strong>{index + 1}. {item.plan.brief.name}</strong> · {item.status === 'submitted' ? `图片 ${completed}/${state?.total || item.plan.slots.length} 完成${failed ? `，${failed} 失败` : ''}` : item.status === 'needs_review' ? '待核对' : item.status === 'failed' ? '提交失败' : '等待提交'}
+          const review = state?.review ?? 0;
+          return <li key={item.id}><strong>{index + 1}. {item.plan.brief.name}</strong> · {item.status === 'submitted' ? `图片 ${completed}/${state?.total || item.plan.slots.length} 完成${failed ? `，${failed} 失败` : ''}${review ? `，${review} 待核对` : ''}` : item.status === 'needs_review' ? '待核对' : item.status === 'failed' ? '提交失败' : '等待提交'}
             {item.error && <span role="alert"> · {item.error}</span>}
             {item.taskId && <a href={sessionHref(current.sessionId, item.taskId, 'results')}>查看任务与重试</a>}
             {completed > 0 && item.taskId && gateway && <button onClick={() => void gateway.get(item.taskId!).then(fresh => downloadCommerceFile(gateway, fresh, fresh.selections.map(selection => selection.slotId), 'zip', 'jpg')).catch(cause => setError(cause.message))}>下载该商品 ZIP</button>}

@@ -20,8 +20,9 @@ it('reads twenty child counts with one progress request and no child GET or brow
   const batch = { id: batchId, sessionId, requestId: crypto.randomUUID(), workflow: 'product-set',
     globalParams: {}, items, createdAt, updatedAt: createdAt };
   const progress = { id: batchId, createdAt, updatedAt: createdAt, terminal: true,
-    items: items.map(item => ({ id: item.id, taskId: item.taskId, status: 'submitted',
-      total: 1, succeeded: 1, failed: 0, processing: 0 })) };
+    items: items.map((item, index) => ({ id: item.id, taskId: item.taskId, status: 'submitted',
+      total: 1, succeeded: index === 0 ? 0 : 1, failed: 0, processing: 0,
+      review: index === 0 ? 1 : 0 })) };
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') throw new Error('unexpected browser advance');
     return Response.json(url.endsWith('/progress') ? progress : batch);
@@ -32,6 +33,7 @@ it('reads twenty child counts with one progress request and no child GET or brow
   render(<CommerceBatchWizard ownerKey="owner" batchId={batchId} sessionId={sessionId}
     gateway={gateway} settings={settings} capabilities={IMAGE_PROVIDER_CAPABILITIES} />);
   await screen.findByText(/已提交 20\/20 个商品任务/);
+  expect(screen.getByText(/待核对 1 个/)).toBeTruthy();
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(get).not.toHaveBeenCalled();
   expect(fetcher.mock.calls.every(([, init]) => !init?.method || init.method === 'GET')).toBe(true);
@@ -50,7 +52,7 @@ it('clears a transient progress error after the next successful read', async () 
   const batch = { id: batchId, sessionId, requestId: crypto.randomUUID(), workflow: 'product-set',
     globalParams: {}, items: [item], createdAt, updatedAt: createdAt };
   const progress = { id: batchId, createdAt, updatedAt: createdAt, terminal: true,
-    items: [{ id: item.id, taskId, status: 'submitted', total: 1, succeeded: 1, failed: 0, processing: 0 }] };
+    items: [{ id: item.id, taskId, status: 'submitted', total: 1, succeeded: 1, failed: 0, processing: 0, review: 0 }] };
   let reads = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (!url.endsWith('/progress')) return Response.json(batch);
