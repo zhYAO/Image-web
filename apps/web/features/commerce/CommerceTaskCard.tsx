@@ -163,6 +163,7 @@ export function CommerceTaskCard({
   const [exportFormat, setExportFormat] = useState<'jpg' | 'png'>('jpg');
   const [exportFocus, setExportFocus] = useState({ x: 0.5, y: 0.5 });
   const [referenceUrls, setReferenceUrls] = useState<Record<string, string>>({});
+  const referenceRetried = useRef(new Set<string>());
   const [originalUrl, setOriginalUrl] = useState(originalPreviewUrl);
   const originalRetried = useRef(false);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -211,6 +212,19 @@ export function CommerceTaskCard({
     return selected && visibleImageIds.includes(selected.generationId)
       ? slot.referenceIds.filter(id => task.brief.styleReferenceIds.includes(id)) : [];
   }).join(',');
+  const renewReference = (id: string, afterFailure = false) => {
+    if (!id || process.env.NEXT_PUBLIC_DATA_MODE === 'mock' ||
+      previewReferences?.some(reference => reference.id === id && reference.previewUrl)) return;
+    if (afterFailure) {
+      if (referenceRetried.current.has(id)) return;
+      referenceRetried.current.add(id);
+    }
+    void fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (typeof result?.url === 'string') setReferenceUrls(current => ({ ...current, [id]: result.url }));
+      }).catch(() => undefined);
+  };
   useEffect(() => {
     if (!active || !cloneReferenceKey || task.scene !== 'clone') return;
     let cancelled = false;
@@ -530,13 +544,19 @@ export function CommerceTaskCard({
           );
           const imageUrl = image && (signedUrls[image.generationId] ?? image.url);
           const running = latest[index];
+          const cloneReferenceId = task.scene === 'clone'
+            ? slot.referenceIds.find(id => task.brief.styleReferenceIds.includes(id)) : undefined;
+          const cloneReferenceUrl = cloneReferenceId ? referenceUrls[cloneReferenceId] : undefined;
           return (
             <VisibleCommerceSlot className={styles.result} key={slot.id} id={image?.generationId}
               active={active && view === 'results'} onVisible={markVisible}>
               <h3>
                 第 {index + 1} 张 · {slot.role}
               </h3>
-              {task.scene === 'clone' && view !== 'plan' && <figure className={styles.cloneReference}>{referenceUrls[slot.referenceIds.find(id => task.brief.styleReferenceIds.includes(id)) ?? ''] ? <AntdImage src={referenceUrls[slot.referenceIds.find(id => task.brief.styleReferenceIds.includes(id)) ?? '']} alt={`第 ${index + 1} 张复刻参考图`} /> : <span>参考图 {index + 1} · 预览暂不可用</span>}<figcaption>复刻参考 → 对应结果</figcaption></figure>}
+              {task.scene === 'clone' && view !== 'plan' && <figure className={styles.cloneReference}>{cloneReferenceUrl ? <AntdImage src={cloneReferenceUrl}
+                onError={() => cloneReferenceId && renewReference(cloneReferenceId, true)}
+                onClick={() => cloneReferenceId && renewReference(cloneReferenceId)}
+                alt={`第 ${index + 1} 张复刻参考图`} /> : <span>参考图 {index + 1} · 预览暂不可用</span>}<figcaption>复刻参考 → 对应结果</figcaption></figure>}
               {view === "plan" ? (
                 <span className={styles.planNumber}>
                   方案 {String(index + 1).padStart(2, "0")}
