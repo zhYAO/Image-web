@@ -1,3 +1,4 @@
+import { MockApparelGateway } from './mock-apparel-gateway';
 import { checkMockQuote } from "./mock-credit-ledger";
 import {
   imageCreditItem,
@@ -49,11 +50,12 @@ const conflict = (message = "方案已变化，请刷新后再确认。") =>
   new WorkspaceError({ code: "CONFLICT", message, retryable: false });
 const copy = <T>(value: T): T => structuredClone(value);
 export class MockCommerceGateway implements CommerceGateway {
+  readonly apparel: MockApparelGateway;
   private pending: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly storage: StorageLike,
     private readonly host: Host,
-  ) {}
+  ) { this.apparel = new MockApparelGateway(storage, () => host.listSessions(), work => this.serial(work), (sid, ref) => this.upload(sid, ref)); }
   private load(): State {
     const raw = this.storage.getItem(KEY);
     if (!raw) return { tasks: {}, requests: {}, references: {} };

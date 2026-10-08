@@ -40,6 +40,7 @@ interface CommerceRpc {
   }>;
 }
 function failure(message: string) {
+  if (/seedream_upgrade_required/.test(message)) return new ApiRouteError({code:'bad_request',status:400,retryable:false,message:'Seedream 4.5 已停止新生成，请选择 Flash 或 Pro 并保存新版本。'});
   if (/invalid_commerce_plan|PGRST202|commerce_not_ready/.test(message))
     return new ApiRouteError({
       code: "service_not_ready",
@@ -146,14 +147,18 @@ async function compile(plan: CommercePlan) {
       let capability;
       try {
         capability = resolveImageModel(slot).capability;
-      } catch {
+      } catch (error) {
+        if (slot.provider === 'seedream' && slot.model === 'seedream-4.5') throw failure('seedream_upgrade_required');
+        void error;
         throw failure("invalid_model");
       }
       if (
         !capability.aspectRatios.includes(slot.aspectRatio) ||
-        !capability.resolutions.includes(slot.resolution)
+        !capability.resolutions.includes(slot.resolution) ||
+        slot.referenceIds.length > (capability.maxReferences ?? 14)
       )
-        throw failure("invalid_model_settings");
+        throw new ApiRouteError({ code: 'bad_request', status: 400, retryable: false,
+          message: `所选模型不支持当前比例、分辨率或参考图数量；Seedream 5.0 每张最多 10 张参考图。` });
       let prompt: string;
       try {
         prompt = compileCommerceSlot(plan.brief, slot, plan.templateId);

@@ -28,7 +28,7 @@ node scripts/credits-admin.mjs --env .env.local --file operation.json --apply
 
 - `audit`：指定 `userId`，只读比较钱包与流水计算的可用/冻结/消费总额，并列出待处理操作；不会修正余额。
 - `activate`：`enabled` 布尔值。
-- `price`：全新 `version` 和完整七项 `prices`，格式与 `/api/credits/pricing` 一致；只允许现有组合、正整数价格。旧版本和旧操作金额保持不变。
+- `price`：全新 `version` 和当前目录的完整 `prices`，格式与 `/api/credits/pricing` 一致；数量与组合按当前目录校验，价格为正整数。2026-10-06 目录为八项，Seedream Flash／Pro 2K 均为 0.30/张；旧版本和旧操作金额保持不变。
 - `reconcile`：`operationId`、`outcome`（`succeeded` 或 `refunded`）、至少十字符 `evidence`，说明上游最终结果的核对依据。并发重试的前置失败只会取消尚未被领取的请求，不能退款其他重试已开始的调用。已有持久化文本结果会走恢复完成，不允许用手工退款绕过成功结果。文字结果尚未保存时，成功对账必须附 `result`（聊天为 content，优化为 text），先保存再结算。
 
 ## 接口

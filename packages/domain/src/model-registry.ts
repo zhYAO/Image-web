@@ -1,7 +1,7 @@
 import { OFFICIAL_SKILLS } from './official-skills';
 import type { ProviderCapability } from './types';
 
-export const MODEL_REGISTRY_VERSION = '2026-08-25.1';
+export const MODEL_REGISTRY_VERSION = '2026-10-06.1';
 
 export const CHAT_PROVIDER_MODELS = [
   { id: 'doubao', label: '豆包', provider: 'doubao' },
@@ -20,13 +20,14 @@ export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
     provider: 'gemini',
   },
   {
-    models: [{
+    models: ['flash', 'pro'].map<ProviderCapability['models'][number]>((tier) => ({
       aspectRatios: ['1:1', '3:4', '4:3', '9:16', '16:9'],
-      id: 'seedream-4.5',
-      label: 'Seedream 4.5',
+      id: `seedream-5.0-${tier}`,
+      label: `Seedream 5.0 ${tier === 'flash' ? 'Flash' : 'Pro'}`,
       maxImages: 4,
+      maxReferences: 10,
       resolutions: ['2K'],
-    }],
+    })),
     provider: 'seedream',
   },
 ];
@@ -35,6 +36,9 @@ export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
 export { OFFICIAL_SKILLS as PHASE1_SKILLS } from './official-skills';
 
 export function resolveImageModel(input: { model?: string; provider?: string }) {
+  if (input.provider === 'seedream' && input.model === 'seedream-4.5') {
+    throw new Error('Seedream 4.5 已停止新生成，请选择 Flash 或 Pro 并保存新版本。');
+  }
   const provider = input.provider ?? IMAGE_PROVIDER_CAPABILITIES[0]?.provider;
   const capability = IMAGE_PROVIDER_CAPABILITIES.find((candidate) => candidate.provider === provider);
   const model = input.model ?? capability?.models[0]?.id;

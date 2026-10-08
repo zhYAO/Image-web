@@ -144,6 +144,7 @@ export function CommercePlanFields({
                     aspectRatio: selected && !selected.aspectRatios.includes(slot.aspectRatio) ? selected.aspectRatios[0] : slot.aspectRatio });
                 }}
               >
+                {!model && <option value={`${slot.provider}::${slot.model}`} disabled>{slot.model}（历史模型，请重新选择）</option>}
                 {capabilities.flatMap((provider) =>
                   provider.models.map((model) => (
                     <option

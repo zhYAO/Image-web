@@ -42,8 +42,8 @@ function enqueue<T>(work: (store: IDBObjectStore, tab: string) => Promise<T> | T
   return next;
 }
 
-export function saveAttachments(sessionId: string, references: UploadReference[]) {
-  const files = references.filter((ref) => ref.file instanceof File).slice(0, 4)
+export function saveAttachments(sessionId: string, references: UploadReference[], limit = 4) {
+  const files = references.filter((ref) => ref.file instanceof File).slice(0, Math.min(26, Math.max(1, limit)))
     .map((ref) => ({ file: ref.file!, id: ref.id }));
   return enqueue((store, tab) => {
     const key = `${tab}:${sessionId}`;
@@ -59,7 +59,7 @@ export function saveAttachments(sessionId: string, references: UploadReference[]
   });
 }
 
-export function loadAttachments(sessionId: string): Promise<UploadReference[] | undefined> {
+export function loadAttachments(sessionId: string, limit = 4): Promise<UploadReference[] | undefined> {
   return enqueue((store, tab) => new Promise<UploadReference[]>((resolve, reject) => {
     const request = store.get(`${tab}:${sessionId}`);
     request.onerror = () => reject(request.error);
@@ -70,7 +70,7 @@ export function loadAttachments(sessionId: string): Promise<UploadReference[] | 
         if (value) store.delete(value.key);
         resolve([]); return;
       }
-      resolve(value.references.slice(0, 4).flatMap((reference) => {
+      resolve(value.references.slice(0, Math.min(26, Math.max(1, limit))).flatMap((reference) => {
         const file = reference?.file;
         if (!(file instanceof File) || file.size > 10 * 1024 * 1024
           || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return [];

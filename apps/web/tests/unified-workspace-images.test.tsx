@@ -18,7 +18,7 @@ describe('UnifiedWorkspace', () => {
           source: 'direct' as const,
           prompt: '商品图',
           provider: 'seedream',
-          model: 'seedream-4.5',
+          model: 'seedream-5.0-flash',
           config: { aspectRatio: '1:1' as const, count: 2, resolution: '2K' as const },
           createdAt: '2026-09-16T09:00:00.000Z',
         };
@@ -180,7 +180,7 @@ describe('UnifiedWorkspace', () => {
     const pending = await gateway.submitImage({
       aspectRatio: '1:1',
       count: 1,
-      model: 'seedream-4.5',
+      model: 'seedream-5.0-flash',
       prompt: '失败图片',
       provider: 'seedream',
       resolution: '2K',

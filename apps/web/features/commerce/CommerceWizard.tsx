@@ -1,5 +1,6 @@
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
+import { CommerceEditor } from "./CommerceEditor";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   buildCommerceSlots,
@@ -11,6 +12,7 @@ import {
   PLATFORM_PRESETS,
   DETAIL_MODULES,
   APLUS_SPECS,
+  SELLING_LAYOUTS,
   aPlusAspectRatio,
   maxCommerceSlots,
   templatesForScene,
@@ -114,6 +116,7 @@ export function CommerceWizard({
       facts: "",
       sellingPoints: "",
       platform: isPoster ? "xiaohongshu" : platform,
+      region: "cn", language: "zh-CN",
       contentMode: isPoster ? "content" : "product",
       cloneMode: scene === 'clone' ? 'style' : undefined,
       placement: isPoster || scene === "social" ? "图文内容" : "商品展示",
@@ -130,7 +133,7 @@ export function CommerceWizard({
     if (restored?.categoryCounts) return restored.categoryCounts;
     const previous = restored?.plan ?? seedPlan;
     const previousCount = previous?.slots.length ?? restored?.count;
-    if (scene !== 'product-set' || previousCount === undefined) return { white: 1, selling: 2, scene: 2, other: 2 };
+    if (scene !== 'product-set' || previousCount === undefined) return { white: 1, selling: 3, scene: 2, other: 1 };
     if (previous?.slots.every(slot => slot.category)) return {
       white: previous.slots.filter(slot => slot.category === 'white').length,
       selling: previous.slots.filter(slot => slot.category === 'selling').length,
@@ -148,6 +151,11 @@ export function CommerceWizard({
     const existing = seedPlan.slots.map(slot => slot.module ?? slot.role).filter((module, index, all) => DETAIL_MODULES.includes(module as typeof DETAIL_MODULES[number]) && all.indexOf(module) === index);
     return existing.length ? existing : [...DETAIL_MODULES.slice(0, Math.min(16, seedPlan.slots.length))];
   });
+  const [referenceInstructions, setReferenceInstructions] = useState<Record<string, string>>(restored?.referenceInstructions ?? {});
+  const [referenceSource, setReferenceSource] = useState<'files' | 'url'>(restored?.referenceSource ?? 'files');
+  const [sceneTab, setSceneTab] = useState<'templates' | 'custom' | 'reference'>(restored?.sceneTab ?? 'templates');
+  const [editorStage, setEditorStage] = useState<'configure' | 'review'>(restored?.editorStage ?? 'configure');
+  const [sellingLayouts, setSellingLayouts] = useState<typeof SELLING_LAYOUTS[number][]>(restored?.sellingLayouts ?? seedPlan?.slots.filter(slot => slot.category === 'selling').map(slot => slot.layout ?? '自动分配') ?? []);
   const [advancedAplus, setAdvancedAplus] = useState(restored?.advancedAplus ?? Boolean(seedPlan?.slots.some(slot => slot.outputSpec === 'desktop' || slot.outputSpec === 'mobile')));
   const [touchedPresets, setTouchedPresets] = useState(restored?.touchedPresets ?? { region: false, language: false, aspectRatio: false });
   const [templateId, setTemplateId] = useState(
@@ -159,6 +167,7 @@ export function CommerceWizard({
   const productContext = {
     name: brief.name, facts: brief.facts, description: brief.description,
     sellingPoints: brief.sellingPoints, platform: brief.platform, scene,
+    region: brief.region ?? PLATFORM_PRESETS[brief.platform]?.region, language: brief.language ?? PLATFORM_PRESETS[brief.platform]?.language,
     designStyle: COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.guidance,
   };
   const [instruction, setInstruction] = useState(
@@ -187,7 +196,7 @@ export function CommerceWizard({
     if (step === 3) setStep(1);
   }
 
-  const uploadIds = useRef(new Map<UploadReference, string>());
+  const uploadIds = useRef(new Map<string, string>());
   const createRequest = useRef<{ key: string; requestId: string } | undefined>(
     undefined,
   );
@@ -195,7 +204,7 @@ export function CommerceWizard({
   const creation = useRef(restored?.creation);
   const [recoveringCreate, setRecoveringCreate] = useState(Boolean(restored?.creation));
   const sessionRequest = useRef<string>(restored?.sessionId ?? crypto.randomUUID());
-  const draftSnapshot = (): CommerceDraftState => ({ scene, brief, count, categoryCounts, detailModules, advancedAplus, touchedPresets, templateId, instruction, lastBuiltInstruction, roles,
+  const draftSnapshot = (): CommerceDraftState => ({ scene, editorStage, sellingLayouts, referenceInstructions, referenceSource, sceneTab, brief, count, categoryCounts, detailModules, advancedAplus, touchedPresets, templateId, instruction, lastBuiltInstruction, roles,
     settings: generationSettings, plan, sessionId: remoteSession.current, creation: creation.current });
   useEffect(() => {
     if (!active) return;
@@ -282,13 +291,19 @@ export function CommerceWizard({
       const styleReferenceIds: string[] = [];
       for (const reference of references) {
         if (reference.status !== 'ready') throw new Error('请等待参考图上传完成，或移除失败图片后重试。');
-        let id = reference.id ?? uploadIds.current.get(reference);
+        const referenceIdentity = referenceKey(reference);
+        // A fresh local draft can retain File bytes from a just-saved session.
+        // Only IDs already bound to this draft's brief may cross a reload.
+        const staleLocalId = isLocalCommerceDraft(sessionId) && reference.file && reference.id
+          && ![...brief.productReferenceIds, ...brief.styleReferenceIds].includes(reference.id);
+        let id = uploadIds.current.get(referenceIdentity) ?? (staleLocalId ? undefined : reference.id);
         if (!id && previewOnly) id = crypto.randomUUID();
         if (!id) {
-          const { previewUrl: _preview, ...upload } = reference;
+          const { previewUrl: _preview, id: _previousId, ...upload } = reference;
           void _preview;
+          void _previousId;
           id = await gateway.upload(targetSession, upload);
-          uploadIds.current.set(reference, id);
+          uploadIds.current.set(referenceIdentity, id);
           onReferenceUploaded(reference, id, sessionId);
         }
         (roleOf(reference) === 'style' ? styleReferenceIds : productReferenceIds).push(id);
@@ -305,6 +320,7 @@ export function CommerceWizard({
   };
   const prepare = () => act(async () => { await preparePlan(true); setStep(3); onPreview?.(); });
   const importReferenceUrl = () => act(async () => {
+    if (references.filter(ref => roleOf(ref) === 'style').length >= 20) throw new Error('最多添加 20 张复刻参考图。');
     if (!brief.sourceUrl?.trim()) throw new Error('请先填写公开商品链接。');
     const response = await fetch('/api/commerce/import-url', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: brief.sourceUrl }) });
     if (!response.ok) {
@@ -342,10 +358,11 @@ export function CommerceWizard({
         ? { ...generationSettings, aspectRatio: "3:4", resolution: "2K" }
         : generationSettings,
     ).map((slot, index) => {
-      const previous = plan?.slots[index];
+
       const category = scene === 'product-set' ? slotCategories[index] : undefined;
       const detailModule = scene === 'detail' ? detailModules[index % detailModules.length] : undefined;
       const outputSpec: CommerceSlot['outputSpec'] = scene === 'detail' ? (advancedAplus ? (index < detailModules.length ? 'desktop' : 'mobile') : 'standard') : undefined;
+      const previous = scene === 'detail' ? plan?.slots.find(item => (item.module ?? item.role) === detailModule && (item.outputSpec ?? 'standard') === outputSpec) : scene === 'clone' ? plan?.slots.find(item => item.referenceIds.includes(preparedBrief.styleReferenceIds[index]!)) : plan?.slots[index];
       const target = outputSpec ? APLUS_SPECS[outputSpec] : undefined;
       const categoryRole = (value: CommerceSlot['category']) => value === 'white' ? '白底商品图' : value === 'selling' ? '核心卖点' : value === 'scene' ? '使用场景' : undefined;
       const oldDefaultRole = categoryRole(previous?.category) ?? definition.roles[index % definition.roles.length];
@@ -367,14 +384,18 @@ export function CommerceWizard({
           category, module: detailModule as CommerceSlot['module'], outputSpec,
           aspectRatio: outputSpec ? aPlusAspectRatio(outputSpec) : slot.aspectRatio,
           targetWidth: target?.width, targetHeight: target?.height,
-          layout: category === 'selling' ? (previous?.layout ?? '自动分配') : undefined,
-          textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
+          layout: category === 'selling' ? (sellingLayouts[index - categoryCounts.white] ?? previous?.layout ?? '自动分配') as typeof SELLING_LAYOUTS[number] : undefined,
+          textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : detailModule && preparedBrief.moduleCopy?.[detailModule] !== undefined ? (preparedBrief.moduleCopy[detailModule] ? 'exact' as const : 'none' as const) : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
           exactText:
-            previous && previous.exactText !== previousGeneratedText
+            detailModule && preparedBrief.moduleCopy?.[detailModule] !== plan?.brief.moduleCopy?.[detailModule]
+              ? preparedBrief.moduleCopy?.[detailModule] ?? ''
+              : previous && previous.exactText !== previousGeneratedText
               ? previous.exactText
               : detailModule && preparedBrief.moduleCopy?.[detailModule] ? preparedBrief.moduleCopy[detailModule]! : isPoster ? slot.exactText : generatedExactText(preparedBrief, previous?.role ?? slot.role),
           instruction:
-            previous && previous.instruction !== lastBuiltInstruction
+            scene === 'clone' && referenceInstructions[referenceKey(references.filter(ref => roleOf(ref) === 'style')[index]!)] !== undefined
+              ? [instruction, referenceInstructions[referenceKey(references.filter(ref => roleOf(ref) === 'style')[index]!)]].filter(Boolean).join('\n').slice(0, 2000)
+              : previous && previous.instruction !== lastBuiltInstruction
               ? previous.instruction
               : instruction,
           referenceIds: scene === 'clone' ? [...preparedBrief.productReferenceIds, preparedBrief.styleReferenceIds[index]!]
@@ -446,6 +467,42 @@ export function CommerceWizard({
   });
   const plannedCount = scene === 'product-set' ? Object.values(categoryCounts).reduce((sum, value) => sum + value, 0) : scene === 'detail' ? detailModules.length * (advancedAplus ? 2 : 1) : scene === 'clone' ? references.filter(reference => roleOf(reference) === 'style').length : count;
   const feeSlots = Array.from({ length: plannedCount }, (_, index) => plan?.slots[index] ?? generationSettings);
+  if (['product-set', 'detail', 'clone', 'product-main'].includes(scene)) return <CommerceEditor
+    referenceSource={referenceSource} setReferenceSource={setReferenceSource} sceneTab={sceneTab} setSceneTab={setSceneTab}
+    referenceInstruction={ref => referenceInstructions[referenceKey(ref)] ?? ''} setReferenceInstruction={(ref, value) => { invalidatePreview(); setReferenceInstructions(current => ({ ...current, [referenceKey(ref)]: value })); }}
+    scene={scene} brief={brief} patch={patch} references={references} roleOf={roleOf}
+    addFiles={(files, role) => {
+      const incoming = Array.from(files);
+      const max = role === 'style' && scene === 'clone' ? 20 : 6;
+      if (incoming.some(file => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024)) { setError('请选择每张不超过 10 MB 的 PNG、JPG 或 WebP 图片。'); return; }
+      if (references.filter(ref => roleOf(ref) === role).length + incoming.length > max) { setError(`此类图片最多 ${max} 张。`); return; }
+      invalidatePreview(); setError(undefined);
+      setRoles(current => ({ ...current, ...Object.fromEntries(incoming.map(file => [`${file.name}:${file.size}:${file.lastModified}`, role])) }));
+      onReferenceAdd(files);
+    }} remove={onReferenceRemove} settings={generationSettings} capabilities={capabilities}
+    changeSettings={value => {
+      invalidatePreview();
+      const next = { ...generationSettings, ...value };
+      const model = capabilities.find(c => c.provider === next.provider)?.models.find(m => m.id === next.model);
+      if (model && !model.aspectRatios.includes(next.aspectRatio)) next.aspectRatio = model.aspectRatios[0]!;
+      if (model && !model.resolutions.includes(next.resolution)) next.resolution = model.resolutions[0]!;
+      if (value.aspectRatio) setTouchedPresets(current => ({ ...current, aspectRatio: true }));
+      setGenerationSettings(next); setPlan(current => current ? { ...current, slots: current.slots.map(slot => ({ ...slot, ...next })) } : current);
+    }}
+    setPlatform={value => { const preset = PLATFORM_PRESETS[value]; patch({ platform: value as CommerceBrief['platform'], ...(!touchedPresets.region && preset ? { region: preset.region } : {}), ...(!touchedPresets.language && preset ? { language: preset.language } : {}) }); if (!touchedPresets.aspectRatio && preset) setGenerationSettings(current => ({ ...current, aspectRatio: preset.aspectRatio })); }}
+    setRegion={value => { setTouchedPresets(current => ({ ...current, region: true })); patch({ region: value as CommerceBrief['region'] }); }}
+    setLanguage={value => { setTouchedPresets(current => ({ ...current, language: true })); patch({ language: value as CommerceBrief['language'] }); }}
+    templateId={templateId} setTemplate={value => { invalidatePreview(); setTemplateId(value); }} count={count} setCount={value => { invalidatePreview(); setCount(value); }}
+    counts={categoryCounts} setCounts={value => { invalidatePreview(); setCategoryCounts(value); }} layouts={sellingLayouts} setLayouts={value => { invalidatePreview(); setSellingLayouts(value as typeof SELLING_LAYOUTS[number][]); }}
+    modules={detailModules} setModules={value => { invalidatePreview(); setDetailModules(value); }} advanced={advancedAplus} setAdvanced={value => { invalidatePreview(); setAdvancedAplus(value); }}
+    stage={editorStage} setStage={setEditorStage} instruction={instruction} setInstruction={value => { invalidatePreview(); setInstruction(value); }}
+    plan={plan} setPlan={setPlan} showPlan={Boolean(showPlan)} selectedSlotId={selectedSlotId} selectSlot={setSelectedSlotId}
+    prepare={prepare} save={save} close={onClose} importUrl={importReferenceUrl} generateStrategy={generateStrategy} generateListing={generateListingCopy}
+    textFee={<CreditFee items={[{ operation: 'optimize', provider: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', model: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', resolution: '', count: 1 }]} />}
+    fee={<CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} />}
+    productContext={productContext} chatModel={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} setChatModel={setSelectedChatModel}
+    busy={busy} recovering={recoveringCreate} active={active} error={error} total={plannedCount}
+  />;
   return (
     <section
       aria-label={`${definition.name}向导`}

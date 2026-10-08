@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { commerceExportSchema, type CommerceTask } from '@zimage/domain';
+import { commerceExportSchema, apparelExportSchema, apparelExportResultSchema, type CommerceTask } from '@zimage/domain';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { assertTrustedOrigin, executeRoute, readJson, requireVerifiedUserId } from '@/server/route-context';
 import { createCommerceService } from '@/server/commerce/commerce-service';
-import { renderCommerceImage, stitchCommerceImages, zipCommerceImages, type ExportImage } from '@/server/commerce/commerce-export';
+import { renderCommerceImage, stitchCommerceImages, zipCommerceImages, zipCommerceStream, type ExportImage } from '@/server/commerce/commerce-export';
+import { createApparelService } from '@/server/apparel/apparel-service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -20,8 +21,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     assertTrustedOrigin(request);
     const userId = await requireVerifiedUserId(await createSupabaseServerClient());
     const { id } = await context.params;
-    const input = requestSchema.parse(await readJson(request));
+    const raw = await readJson(request);
     const admin: SupabaseClient = createSupabaseAdminClient();
+    if (new URL(request.url).searchParams.get('engine') === 'apparel-catalog') {
+      const input = apparelExportSchema.parse(raw), service = createApparelService(admin);
+      const manifest = apparelExportResultSchema.parse(await service.dispatch(userId,'export',id,input,correlationId));
+      async function* files() {
+        for (const item of manifest.items) {
+          const asset = await service.asset(userId,id,item.id,correlationId);
+          yield { name: item.name, bytes: asset.bytes };
+        }
+      }
+      return new Response(zipCommerceStream(files()), { headers: { 'content-type':'application/zip','content-disposition':'attachment; filename="apparel-catalog.zip"','cache-control':'private, no-store' } });
+    }
+    const input = requestSchema.parse(raw);
     const service = createCommerceService(admin);
     const task = await service.dispatch(userId, 'get', id, {}, correlationId) as CommerceTask;
     const manifest = await service.dispatch(userId, 'export', id, input, correlationId) as { items: Array<{ slotId: string; generationId: string }> };

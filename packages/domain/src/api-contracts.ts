@@ -184,6 +184,7 @@ export const providerCapabilitySchema = z.strictObject({
     id: providerIdentifierSchema,
     label: z.string().min(1).max(200),
     maxImages: z.number().int().min(1).max(4),
+    maxReferences: z.number().int().min(1).max(14).optional(),
     resolutions: z.array(z.enum(['1K', '2K'])),
   }),
     )

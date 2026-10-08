@@ -124,9 +124,9 @@ describe("commerce UI", () => {
     window.sessionStorage.clear();
   });
 
-  it("offers five primary scenes, keeps legacy scenes in more creation, and carries launch parameters", () => {
+  it("offers six primary scenes, keeps legacy scenes in more creation, and carries launch parameters", () => {
     render(<CommerceCatalogue />);
-    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(5);
+    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(6);
     fireEvent.click(screen.getByRole("button", { name: "小红书" }));
     expect(
       screen.getByRole("link", { name: "开始商品套图 →" }),
@@ -196,11 +196,9 @@ describe("commerce UI", () => {
     const submit = vi.spyOn(gateway.commerce, "submit");
     render(<UnifiedWorkspace gateway={gateway} />);
     const wizard = await screen.findByRole("region", { name: "AI 商品图向导" });
-    fireEvent.click(within(wizard).getByRole("button", { name: "调整分图方案" }));
-    expect(await within(wizard).findByRole("alert")).toHaveTextContent(
-      "请上传至少一张清晰的真实商品图",
-    );
-    expect(within(wizard).getAllByRole("alert")).toHaveLength(1);
+    expect(within(wizard).getByText('上传或拖放图片至此处，开始创作')).toBeVisible();
+    expect(within(wizard).getAllByLabelText('上传电商参考图').some(input => !input.closest('fieldset'))).toBe(true);
+    expect(within(wizard).queryByRole('button', { name: /一键生成/ })).toBeNull();
     expect(gateway.lastImageRequest).toBeUndefined();
     expect(gateway.lastChatRequest).toBeUndefined();
     expect(submit).not.toHaveBeenCalled();
@@ -723,9 +721,9 @@ describe("commerce UI", () => {
     const task = await createPlan(gateway, 5);
     const submit = vi.spyOn(gateway.commerce, "submit");
     render(<UnifiedWorkspace gateway={gateway} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "测试商品套图" }),
-    );
+    await screen.findByTestId("commerce-task");
+    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
+    fireEvent.click(await screen.findByRole("button", { name: "测试商品套图" }));
     await screen.findByTestId("commerce-task");
     // Task loading notifies the parent composer mode through an effect.
     await waitFor(() => expect(
@@ -742,6 +740,7 @@ describe("commerce UI", () => {
       revision: task.revision,
       slotIds: task.slots.map((slot) => slot.id),
     });
+    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(screen.getByRole("button", { name: "新对话" }));
     await screen.findByRole("textbox", { name: "创作输入" });
     fireEvent.click(screen.getByRole("button", { name: "创建图片" }));
@@ -835,19 +834,21 @@ describe("commerce UI", () => {
     await gateway.createSession("另一个会话");
     await createPlan(gateway, 3);
     render(<UnifiedWorkspace gateway={gateway} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "测试商品套图" }),
-    );
+    await screen.findByTestId("commerce-task");
+    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
+    fireEvent.click(await screen.findByRole("button", { name: "测试商品套图" }));
     await screen.findByTestId("commerce-task");
     fireEvent.click(screen.getByRole("button", { name: "修改第 3 张" }));
     fireEvent.change(screen.getByLabelText("第 3 张文案"), {
       target: { value: "未保存的准确文案" },
     });
+    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(screen.getByRole("button", { name: "另一个会话" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "修改分图方案" })).toBeNull(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "测试商品套图" }));
+    // Target the visible ordinary sidebar; jsdom does not apply the closed drawer CSS.
+    fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "测试商品套图" }));
     await screen.findByRole("dialog", { name: "修改分图方案" });
     expect(screen.getByLabelText("第 3 张文案")).toHaveValue(
       "未保存的准确文案",
@@ -991,8 +992,8 @@ describe("commerce UI", () => {
     fireEvent.change(screen.getByLabelText("整套创作要求"), {
       target: { value: "暖色背景" },
     });
-    await chooseCommerceOption(screen.getByLabelText("scene图片数量"), "1");
-    await chooseCommerceOption(screen.getByLabelText("other图片数量"), "0");
+    fireEvent.change(screen.getByLabelText("scene图片数量"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("other图片数量"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     await screen.findByRole("button", { name: "保存草稿" });
     for (const index of [1, 2, 4]) {

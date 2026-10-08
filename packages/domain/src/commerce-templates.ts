@@ -1,6 +1,7 @@
 import { VISUAL_DIRECTIONS } from "./commerce-visuals";
-export const COMMERCE_PRIMARY_SCENE_IDS = ['product-set', 'detail', 'clone', 'batch', 'product-main'] as const;
+export const COMMERCE_PRIMARY_SCENE_IDS = ['product-set', 'detail', 'clone', 'batch', 'product-main', 'apparel-catalog'] as const;
 export const COMMERCE_SCENES = [
+  { id: "apparel-catalog", name: "服装商品图片", description: "上传五张主图、展示照片与 Logo，按固定版式排出完整商品图。", count: 11, roles: ["服装固定排版"] },
   {
     id: "product-main",
     name: "AI 商品图",

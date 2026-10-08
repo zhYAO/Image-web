@@ -13,7 +13,7 @@ describe('Supabase timeline mapping', () => {
     const input = {
       assets, config: { aspectRatio: '4:3', count: 3, resolution: '2K' },
       created_at: '2026-09-16T00:00:00.000Z', id: '30000000-0000-4000-8000-000000000001',
-      session_id: '10000000-0000-4000-8000-000000000001', model: 'seedream-4.5',
+      session_id: '10000000-0000-4000-8000-000000000001', model: 'seedream-5.0-flash',
       provider: 'seedream', prompt: 'test batch', source: 'direct', status: 'processing',
     };
     const mapped = mapGenerationBatchRow(input);

@@ -123,13 +123,22 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     this.now = options.now ?? (() => new Date());
     this.delay = options.delay ?? wait;
     this.state = this.load();
+    const persistInitialState = !this.state.credits || this.state.commerce === undefined;
     this.state.credits ??= initialMockCredits();
     // Import the old separate key once; all subsequent writes use the host envelope.
     this.state.commerce ??=
       this.storage.getItem("zimage:commerce:mock:v1") ?? "";
+    // Persist the one-time import before subsequent reads refresh the envelope.
+    if (persistInitialState) this.persist();
     this.commerce = new MockCommerceGateway(
       {
-      getItem: () => this.state.commerce || null,
+      getItem: () => {
+        if (!this.suppressPersistence) {
+          this.state = this.load();
+          this.state.credits ??= initialMockCredits();
+        }
+        return this.state.commerce || null;
+      },
       setItem: (_key, value) => { this.state.commerce = value; this.persist(); },
     },
       {
@@ -154,6 +163,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     const commerce = this.state.commerce
       ? (JSON.parse(this.state.commerce) as {
           tasks?: Record<string, CommerceTask>;
+          apparel?: { tasks: Record<string, {sessionId:string}> };
         })
       : {};
     const tasks = Object.values(commerce.tasks ?? {});
@@ -170,6 +180,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     for (const batch of Object.values(this.state.batches)) {
       if (!childIds.has(batch.id)) add(batch.sessionId, 'image');
     }
+    for (const task of Object.values(commerce.apparel?.tasks ?? {})) add(task.sessionId, 'commerce');
     for (const task of tasks)
       add(
         task.sessionId,
@@ -471,6 +482,10 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
   }
 
   private async commerceTransaction<T>(work: () => Promise<T>): Promise<T> {
+    // Another tab may have recovered an expired apparel lease while this tab
+    // awaited rendering. Read the committed envelope before fencing writes.
+    this.state = this.load();
+    this.state.credits ??= initialMockCredits();
     const before = clone(this.state);
     this.suppressPersistence = true;
     this.transactionDirty = false;

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HttpWorkspaceGateway } from "@/gateways/http-workspace-gateway";
 const settings = {
   provider: "seedream",
-  model: "seedream-4.5",
+  model: "seedream-5.0-flash",
   aspectRatio: "1:1" as const,
   resolution: "2K" as const,
 };

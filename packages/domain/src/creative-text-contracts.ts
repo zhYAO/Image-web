@@ -42,6 +42,8 @@ export const creativeTextOptimizeRequestSchema = z
       description: z.string().max(4000).optional(),
       sellingPoints: z.string().max(2000).optional(),
       platform: z.string().max(80).optional(),
+      region: z.string().max(80).optional(),
+      language: z.string().max(80).optional(),
       scene: z.string().max(80).optional(),
       designStyle: z.string().max(2000).optional(),
       imageRole: z.string().max(80).optional(),

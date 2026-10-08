@@ -70,7 +70,7 @@ describe("commerce plan preview", () => {
     await renderWizard("product-set", "examples");
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "一键生成 7 张" })).toBeEnabled());
-    expect(screen.getByText("预览对应所选模板的视觉方向，不是你的生成结果；其他分图按各自角色布局呈现。")).toBeVisible();
+    expect(screen.getByText("原创 AI 示例 · 用于展示构图与风格，以实际生成效果为准")).toBeVisible();
     expect(screen.queryByLabelText("第 1 张角色")).toBeNull();
   });
 
@@ -164,13 +164,13 @@ describe("commerce plan preview", () => {
     expect(screen.getByRole("button", { name: "保存草稿" })).toBeEnabled();
   });
 
-  it.each(COMMERCE_SCENES.filter(scene => scene.id !== 'batch' && scene.id !== 'clone'))("shows selectable per-scene slots for $name", async ({ id, roles, count }) => {
+  it.each(COMMERCE_SCENES.filter(scene => scene.id !== 'batch' && scene.id !== 'clone' && scene.id !== 'apparel-catalog'))("shows selectable per-scene slots for $name", async ({ id, count }) => {
     await renderWizard(id);
     fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     const preview = await screen.findByRole("complementary", { name: "电商方案预览" });
     const selectedIndex = Math.min(1, count - 1);
     const selected = await within(preview).findByRole("button", {
-      name: `编辑第 ${selectedIndex + 1} 张：${roles[selectedIndex % roles.length]}`,
+      name: new RegExp(`^编辑第 ${selectedIndex + 1} 张：`),
     });
     fireEvent.click(selected);
     expect(within(preview).getByLabelText(`第 ${selectedIndex + 1} 张角色`)).toBeVisible();

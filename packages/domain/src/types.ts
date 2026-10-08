@@ -144,6 +144,7 @@ export interface ProviderCapability {
     aspectRatios: AspectRatio[];
     resolutions: ImageResolution[];
     maxImages: number;
+    maxReferences?: number;
   }>;
 }
 

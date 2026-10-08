@@ -1999,3 +1999,17 @@ button.primary:active:not(:disabled) {
 .originalCompare figcaption { color: #6d6678; font-size: 12px; padding: 5px 0; }
 .urlImport { display: grid; gap: 8px; }
 .urlImport input { width: 100%; min-width: 0; border: 1px solid #dcd5e8; border-radius: 10px; padding: 8px; font: inherit; }
+.cloneReference { margin:0 0 12px; padding:10px; background:var(--z-primary-soft); border-radius:8px; }
+.cloneReference img { max-height:160px; object-fit:contain; }
+.cloneReference figcaption { color:var(--z-muted); font-size:12px; margin-top:6px; }
+.detailPreview { padding:16px; margin:16px 0; background:var(--z-primary-soft); border-radius:10px; }
+.detailPreview summary { cursor:pointer; font-weight:600; }
+.detailPreview > p { color:var(--z-muted); font-size:12px; }
+.detailPreviewColumns { display:flex; gap:24px; align-items:flex-start; overflow:auto; max-height:620px; }
+.detailPreviewColumns > section { width:360px; flex:0 0 360px; }
+.detailPreviewColumns h3 { font-size:14px; }
+.detailPreviewColumns ol { list-style:none; padding:0; margin:0; }
+.detailPreviewColumns li { margin:0; background:#fff; }
+.detailPreviewColumns li > span { display:block; padding:6px 10px; font-size:12px; }
+.detailPreviewColumns :global(.ant-image) { width:100%; display:block; }
+.detailPreviewPlaceholder { display:grid; place-items:center; min-height:140px; color:var(--z-muted); background:#f2f4f7; }

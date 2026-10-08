@@ -112,7 +112,7 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
     const composers = { ...state.composers, [to]: source };
     delete composers[from];
     saveComposer(to, source);
-    void saveAttachments(to, source.references);
+    void saveAttachments(to, source.references, 26);
     clearComposer(from);
     forgottenAttachments.add(from);
     void clearAttachments(from);
@@ -148,15 +148,15 @@ useWorkspaceStore.subscribe((state, previous) => {
   const sessionId = state.activeComposerSessionId;
   if (!sessionId) return;
   if (sessionId === previous.activeComposerSessionId) {
-    if (state.references !== previous.references) void saveAttachments(sessionId, state.references);
+    if (state.references !== previous.references) void saveAttachments(sessionId, state.references, 26);
     return;
   }
-  if (state.references.length) { void saveAttachments(sessionId, state.references); return; }
+  if (state.references.length) { void saveAttachments(sessionId, state.references, 26); return; }
   if (state.composers[sessionId] || forgottenAttachments.has(sessionId)) return;
   const initialReferences = state.references;
   const epoch = attachmentEpoch;
   useWorkspaceStore.setState({ restoringAttachments: { ...state.restoringAttachments, [sessionId]: true } });
-  void loadAttachments(sessionId).then((references) => {
+  void loadAttachments(sessionId, 26).then((references) => {
     if (!references?.length) return;
     const current = useWorkspaceStore.getState();
     const active = current.activeComposerSessionId === sessionId;

@@ -106,7 +106,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
     this.fetcher = options.fetcher ?? fetch.bind(globalThis);
     this.commerce = new HttpCommerceGateway((path, schema, init) =>
-      this.json(path, schema, init),
+      this.json(path, schema, init), this.fetcher,
     );
   }
 

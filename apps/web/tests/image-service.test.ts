@@ -55,7 +55,7 @@ describe('image submission service', () => {
     const service = createImageService({ submit } as GenerationSubmissionStore);
 
     await expect(service.prepare(userId, {
-      model: 'seedream-4.5',
+      model: 'seedream-5.0-flash',
       params: { aspectRatio: '1:1', count: 1, resolution: '1K' },
       prompt: 'invalid pair',
       provider: 'gemini',

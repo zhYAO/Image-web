@@ -18,11 +18,11 @@ describe('versioned Phase 1 model and skill registry', () => {
   });
 
   it('fails closed for an unsupported provider/model pair', () => {
-    expect(() => resolveImageModel({ model: 'seedream-4.5', provider: 'gemini' })).toThrow(/不支持/);
+    expect(() => resolveImageModel({ model: 'seedream-5.0-flash', provider: 'gemini' })).toThrow(/不支持/);
   });
 
-  it('only advertises Seedream resolutions accepted by the configured 4.5 model', () => {
-    expect(resolveImageModel({ model: 'seedream-4.5', provider: 'seedream' }).capability.resolutions)
+  it('only advertises Seedream resolutions accepted by the configured 5.0 models', () => {
+    expect(resolveImageModel({ model: 'seedream-5.0-flash', provider: 'seedream' }).capability.resolutions)
       .toEqual(['2K']);
   });
 
