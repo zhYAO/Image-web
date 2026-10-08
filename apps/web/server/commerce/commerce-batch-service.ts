@@ -131,12 +131,14 @@ export async function processClaimedCreativeBatch(
       item.status = 'submitted'; item.error = undefined; item.nextAttemptAt = undefined;
     } catch (cause) {
       let found = false;
+      let checked = false;
       try {
         const task = await dispatch(row.user_id, 'get', item.taskId, {}, correlationId) as { runs: Array<{ requestId: string }> };
+        checked = true;
         found = task.runs.some(run => run.requestId === item.submitRequestId);
       } catch { /* A failed read cannot establish that a charge was not made. */ }
       if (found) { item.status = 'submitted'; item.error = undefined; item.nextAttemptAt = undefined; }
-      else retry(cause, !(cause instanceof ApiRouteError));
+      else retry(cause, !checked);
     }
   } catch (cause) { retry(cause, false); }
   return checkpoint(true);

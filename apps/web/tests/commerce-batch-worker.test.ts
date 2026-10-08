@@ -54,7 +54,7 @@ describe('claimed creative batch', () => {
     expect(checkpoints.at(-1)!.release).toBe(true);
   });
 
-  it('quarantines an uncertain submission after checking its stable request id', async () => {
+  it('retries a network failure after a successful read confirms no matching run', async () => {
     const row = makeRow();
     row.items[0]!.status = 'created';
     Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
@@ -62,6 +62,22 @@ describe('claimed creative batch', () => {
     const dispatch = vi.fn(async (_user: string, operation: string) => {
       if (operation === 'submit') throw new TypeError('connection lost');
       return { runs: [] };
+    });
+    await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
+    expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'created', attemptCount: 1,
+      nextAttemptAt: expect.any(String) });
+    expect(Date.parse(checkpoints.at(-1)!.next!) - Date.now()).toBeGreaterThan(20_000);
+  });
+  it('quarantines a submission when its reconciliation read also fails', async () => {
+    const row = makeRow();
+    row.items[0]!.status = 'created';
+    Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
+    const { admin, checkpoints } = fakeStore(row);
+    const dispatch = vi.fn(async (_user: string, operation: string) => {
+      if (operation === 'submit') throw new ApiRouteError({ code: 'service_not_ready', status: 503,
+        retryable: true, message: 'temporary' });
+      throw new TypeError('cannot read run');
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
     expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
@@ -81,6 +97,20 @@ describe('claimed creative batch', () => {
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
     expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
     expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'submitted' });
+    expect(checkpoints.at(-1)!.next).toBeNull();
+  });
+  it('does not replay a 409 without a matching request id', async () => {
+    const row = makeRow();
+    row.items[0]!.status = 'created';
+    Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
+    const { admin, checkpoints } = fakeStore(row);
+    const dispatch = vi.fn(async (_user: string, operation: string) => {
+      if (operation === 'submit') throw new ApiRouteError({ code: 'conflict', status: 409,
+        retryable: false, message: 'conflict' });
+      return { runs: [] };
+    });
+    await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
+    expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'needs_review' });
     expect(checkpoints.at(-1)!.next).toBeNull();
   });
   it('processes at most twenty child items in one worker invocation', async () => {
