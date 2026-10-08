@@ -498,6 +498,9 @@ export function CommerceWorkspace({
               </select>
             </label>
           )}
+          {selectedTask && !showDraft && <button type="button" onClick={() => void refresh().catch(() => undefined)}>
+            手动刷新任务
+          </button>}
         </header>
       )}
       {/* Each task stays mounted across history switches so pending submissions and edits keep their identity. */}

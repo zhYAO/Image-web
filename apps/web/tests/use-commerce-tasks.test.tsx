@@ -170,4 +170,15 @@ describe("commerce task polling", () => {
     await advance(5000);
     expect(list).toHaveBeenCalledTimes(1);
   });
+  it('polls a fresh run on a saved task older than one hour', async () => {
+    const gateway = createTestGateway().commerce;
+    const active = task(true);
+    active.createdAt = '2026-09-07T00:00:00Z';
+    active.runs[0]!.createdAt = '2026-09-08T00:00:00Z';
+    const list = vi.spyOn(gateway, 'list').mockResolvedValue([active]);
+    renderHook(() => useCommerceTasks(gateway, 'session'));
+    await flush();
+    await advance(5000);
+    expect(list).toHaveBeenCalledTimes(2);
+  });
 });

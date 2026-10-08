@@ -178,6 +178,7 @@ export const commerceCancelSchema = commerceArchiveSchema.extend({
 });
 export interface CommerceGateway {
   assetUrl?(generationId: string, refresh?: boolean): Promise<{ url?: string; expired: boolean }>;
+  referenceUrl?(referenceId: string, refresh?: boolean): Promise<{ url?: string; expired: boolean }>;
   apparel?: ApparelGateway;
   archive(
     taskId: string,

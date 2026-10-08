@@ -23,6 +23,8 @@ export class HttpCommerceGateway implements CommerceGateway {
     string,
     Promise<{ url?: string; expired: boolean }>
   >();
+  private readonly referenceCache = new Map<string, { url: string; validUntil: number }>();
+  private readonly referenceRequests = new Map<string, Promise<{ url?: string; expired: boolean }>>();
   private assetEpoch = 0;
   readonly apparel: HttpApparelGateway;
   constructor(private readonly json: JsonRequest, fetcher: typeof fetch = fetch) {
@@ -79,7 +81,36 @@ export class HttpCommerceGateway implements CommerceGateway {
       );
   }
   assetUrl(generationId: string, refresh = false) { return this.asset(generationId, !refresh); }
-  clearAssetCache() { this.assetEpoch++; this.assetCache.clear(); this.assetRequests.clear(); }
+  async referenceUrl(referenceId: string, refresh = false): Promise<{ url?: string; expired: boolean }> {
+    if (!refresh) {
+      const cached = this.referenceCache.get(referenceId);
+      if (cached && cached.validUntil > Date.now()) return { url: cached.url, expired: false };
+    }
+    const pending = this.referenceRequests.get(referenceId);
+    if (pending) return pending;
+    const epoch = this.assetEpoch;
+    const request = this.json(`/api/references/${referenceId}/asset-url`,
+      z.object({ url: z.url(), expiresAt: z.string() }))
+      .then(result => {
+        if (epoch !== this.assetEpoch) throw new Error('Asset owner changed');
+        this.referenceCache.set(referenceId, { url: result.url,
+          validUntil: Date.parse(result.expiresAt) - 30_000 });
+        if (this.referenceCache.size > 512) this.referenceCache.delete(this.referenceCache.keys().next().value!);
+        return { url: result.url, expired: false };
+      }).catch(error => {
+        if (error instanceof WorkspaceError && error.safe.code === 'ASSET_EXPIRED') return { expired: true };
+        throw error;
+      }).finally(() => {
+        if (this.referenceRequests.get(referenceId) === request) this.referenceRequests.delete(referenceId);
+      });
+    this.referenceRequests.set(referenceId, request);
+    return request;
+  }
+  clearAssetCache() {
+    this.assetEpoch++;
+    this.assetCache.clear(); this.assetRequests.clear();
+    this.referenceCache.clear(); this.referenceRequests.clear();
+  }
   async export(
     taskId: string,
     input: Parameters<CommerceGateway["export"]>[1],
@@ -158,10 +189,7 @@ export class HttpCommerceGateway implements CommerceGateway {
       if (epoch !== this.assetEpoch) throw new Error('Asset owner changed');
       this.assetCache.set(generationId, {
         url: result.url,
-        validUntil: Math.min(
-          Date.parse(result.expiresAt) - 30_000,
-          Date.now() + 60_000,
-        ),
+        validUntil: Date.parse(result.expiresAt) - 30_000,
       });
       if (this.assetCache.size > 512)
         this.assetCache.delete(this.assetCache.keys().next().value!);

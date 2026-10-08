@@ -163,6 +163,23 @@ describe("HTTP commerce contract", () => {
       { url: 'https://example.com/image.png', expired: false },
     ]);
   });
+  it('shares and caches signed original references until the account changes', async () => {
+    const referenceId = crypto.randomUUID();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({
+      url: 'https://example.com/original.png', expiresAt: new Date(Date.now() + 300_000).toISOString(),
+    }));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+    const result = await Promise.all([
+      gateway.commerce.referenceUrl?.(referenceId), gateway.commerce.referenceUrl?.(referenceId),
+    ]);
+    expect(result[0]?.url).toBe('https://example.com/original.png');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await gateway.commerce.referenceUrl?.(referenceId);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    gateway.clearAssetCaches();
+    await gateway.commerce.referenceUrl?.(referenceId);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it("uploads through the existing protected upload API without sending object URLs", async () => {
     const id = crypto.randomUUID();
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(

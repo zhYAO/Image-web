@@ -1,5 +1,5 @@
 import type { CommerceGateway, CommerceTask } from "@zimage/domain";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { unsettledCommerceItem, commerceItemNeedsReview } from "./commerce-ui";
 import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 
@@ -61,17 +61,12 @@ export function useCommerceTasks(
     return request;
   }, [gateway, sessionId]);
   const tasks = sessionId ? (bySession[sessionId] ?? []) : [];
-  const activeTasks = tasks.filter((task) =>
-      task.runs.some((run) =>
-        run.items.some(
-          (item) =>
-            unsettledCommerceItem(item) && !commerceItemNeedsReview(item),
-        ),
-      ),
-    );
+  const pendingSince = useMemo(() => hasPendingSubmission ? new Date().toISOString() : undefined,
+    [hasPendingSubmission]);
   const activeSinceKey = [
-    ...activeTasks.map(task => task.createdAt),
-    ...(hasPendingSubmission ? tasks.map(task => task.createdAt) : []),
+    ...tasks.flatMap(task => task.runs.filter(run => run.items.some(item =>
+      unsettledCommerceItem(item) && !commerceItemNeedsReview(item))).map(run => run.createdAt)),
+    ...(pendingSince ? [pendingSince] : []),
   ].join('|');
   useEffect(() => {
     void refresh().catch(() => undefined);

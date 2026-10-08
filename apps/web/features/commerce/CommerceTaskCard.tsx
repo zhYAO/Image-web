@@ -198,15 +198,20 @@ export function CommerceTaskCard({
     }).catch(() => undefined);
   };
   const productReferenceId = task.brief.productReferenceIds[0];
+  const getReferenceUrl = useCallback(async (id: string, refresh = false) => {
+    if (gateway.referenceUrl) return (await gateway.referenceUrl(id, refresh)).url;
+    const response = await fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' });
+    const result = response.ok ? await response.json() : null;
+    return typeof result?.url === 'string' ? result.url as string : undefined;
+  }, [gateway]);
   useEffect(() => {
     if (!active || !visibleImageIds.length || task.scene !== 'product-main' || originalPreviewUrl || originalUrl || !productReferenceId) return;
     let alive = true;
-    void fetch(`/api/references/${productReferenceId}/asset-url`, { cache: 'no-store' })
-      .then(response => response.ok ? response.json() : null)
-      .then(result => { if (alive && typeof result?.url === 'string') setOriginalUrl(result.url); })
+    void getReferenceUrl(productReferenceId, originalRetried.current)
+      .then(url => { if (alive && url) setOriginalUrl(url); })
       .catch(() => undefined);
     return () => { alive = false; };
-  }, [active, visibleImageIds.length, task.scene, productReferenceId, originalPreviewUrl, originalUrl]);
+  }, [active, visibleImageIds.length, task.scene, productReferenceId, originalPreviewUrl, originalUrl, getReferenceUrl]);
   const cloneReferenceKey = task.slots.flatMap(slot => {
     const selected = task.selections.find(selection => selection.slotId === slot.id);
     return selected && visibleImageIds.includes(selected.generationId)
@@ -219,10 +224,9 @@ export function CommerceTaskCard({
       if (referenceRetried.current.has(id)) return;
       referenceRetried.current.add(id);
     }
-    void fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' })
-      .then(response => response.ok ? response.json() : null)
-      .then(result => {
-        if (typeof result?.url === 'string') setReferenceUrls(current => ({ ...current, [id]: result.url }));
+    void getReferenceUrl(id, true)
+      .then(url => {
+        if (url) setReferenceUrls(current => ({ ...current, [id]: url }));
       }).catch(() => undefined);
   };
   useEffect(() => {
@@ -233,13 +237,13 @@ export function CommerceTaskCard({
       if (local) return [id, local] as const;
       if (referenceUrls[id]) return [id, referenceUrls[id]] as const;
       if (process.env.NEXT_PUBLIC_DATA_MODE === 'mock') return undefined;
-      try { const response = await fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' }); const result = response.ok ? await response.json() : null; return typeof result?.url === 'string' ? [id, result.url] as const : undefined; } catch { return undefined; }
+      try { const url = await getReferenceUrl(id); return url ? [id, url] as const : undefined; } catch { return undefined; }
     })).then(entries => { if (!cancelled) setReferenceUrls(current => {
       const next = Object.fromEntries(entries.filter((item): item is readonly [string, string] => Boolean(item)));
       return Object.keys(next).length === Object.keys(current).length && Object.entries(next).every(([id, url]) => current[id] === url) ? current : next;
     }); });
     return () => { cancelled = true; };
-  }, [active, task.scene, cloneReferenceKey, previewReferences, referenceUrls]);
+  }, [active, task.scene, cloneReferenceKey, previewReferences, referenceUrls, getReferenceUrl]);
   const storageKey = `zimage-commerce-submit:${task.id}`;
   const [pendingRequest, setPendingRequest] = useState(() =>
     readPending(storageKey),

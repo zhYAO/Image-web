@@ -408,6 +408,8 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
         .then(signed => {
           if (epoch !== this.assetEpoch) throw new Error('Asset owner changed');
           this.signedAssetUrls.set(generationId, signed);
+          if (this.signedAssetUrls.size > 512)
+            this.signedAssetUrls.delete(this.signedAssetUrls.keys().next().value!);
           return signed;
         })
         .finally(() => { if (this.pendingSignedAssetUrls.get(generationId) === pending) this.pendingSignedAssetUrls.delete(generationId); });
