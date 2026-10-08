@@ -118,7 +118,9 @@ describe('claimed creative batch', () => {
     row.items[0]!.status = 'created';
     Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
     const { admin, checkpoints } = fakeStore(row);
-    const dispatch = vi.fn(async (_user: string, _operation: string) => {
+    const dispatch = vi.fn(async (user: string, operation: string) => {
+      expect(user).toBe(row.user_id);
+      expect(operation).toBe('get');
       throw new TypeError('cannot read run');
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);

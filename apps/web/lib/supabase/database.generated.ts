@@ -795,14 +795,54 @@ export type Database = {
           p_next_attempt_at: string
           p_release?: boolean
         }
-        Returns: Database["public"]["Tables"]["creative_batches"]["Row"][]
+        Returns: {
+          created_at: string
+          global_params: Json
+          id: string
+          items: Json
+          lease_token: string | null
+          lease_until: string | null
+          next_attempt_at: string | null
+          request_hash: string
+          request_id: string
+          session_id: string
+          updated_at: string
+          user_id: string
+          workflow: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "creative_batches"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       claim_account_cleanup_job: { Args: never; Returns: Json }
       claim_cleanup_job: { Args: never; Returns: Json }
       claim_cleanup_work: { Args: never; Returns: Json }
       claim_creative_batch_work: {
         Args: { p_batch_id?: string; p_user_id?: string }
-        Returns: Database["public"]["Tables"]["creative_batches"]["Row"][]
+        Returns: {
+          created_at: string
+          global_params: Json
+          id: string
+          items: Json
+          lease_token: string | null
+          lease_until: string | null
+          next_attempt_at: string | null
+          request_hash: string
+          request_id: string
+          session_id: string
+          updated_at: string
+          user_id: string
+          workflow: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "creative_batches"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       claim_image_generation: { Args: never; Returns: Json }
       cleanup_worker_step: {
@@ -1164,3 +1204,4 @@ export const Constants = {
     },
   },
 } as const
+
