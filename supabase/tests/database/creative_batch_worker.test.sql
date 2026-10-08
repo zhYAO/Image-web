@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(13);
 
 select is(private.wake_creative_batch_worker(), null::bigint,
   'idle cron does not enqueue an HTTP request');
@@ -63,6 +63,17 @@ select is((select count(*)::int from public.claim_creative_batch_work(
 select is(public.get_creative_batch_progress(
     (select batch_id from batch_fixture), gen_random_uuid()), null::jsonb,
   'progress denies a different owner');
+select set_config('test.batch_id', (select batch_id::text from batch_fixture), true);
+select set_config('test.owner_id', (select owner_id::text from batch_fixture), true);
+set local role service_role;
+select set_config('test.progress_ok',
+  coalesce((public.get_creative_batch_progress(
+    current_setting('test.batch_id')::uuid,
+    current_setting('test.owner_id')::uuid)->>'id')::uuid =
+      current_setting('test.batch_id')::uuid, false)::text, true);
+reset role;
+select is(current_setting('test.progress_ok'), 'true',
+  'service role can read the owner-scoped aggregate without commerce table grants');
 
 select * from finish();
 rollback;

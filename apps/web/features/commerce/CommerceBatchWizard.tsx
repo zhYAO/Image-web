@@ -166,6 +166,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
           initial = current;
         }
         if (stopped) return;
+        setError(undefined);
         setBatch(current);
         if (mockMode && gateway) {
           const loaded = await Promise.all(current.items.filter(item => item.taskId).map(async item => {
