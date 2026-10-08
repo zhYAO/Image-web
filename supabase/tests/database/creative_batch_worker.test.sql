@@ -1,6 +1,9 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(12);
+
+select is(private.wake_creative_batch_worker(), null::bigint,
+  'idle cron does not enqueue an HTTP request');
 
 select ok(not has_function_privilege('authenticated',
   'public.claim_creative_batch_work(uuid,uuid)', 'execute'),
