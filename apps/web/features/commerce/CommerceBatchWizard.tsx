@@ -11,6 +11,8 @@ import { CommerceSelect } from './CommerceSelect';
 import { downloadCommerceFile } from './commerce-ui';
 import { sessionHref } from '@/features/workspace/workspace-route';
 import styles from './commerce.module.css';
+import { nextPollingDelay } from '@/features/workspace/bounded-polling';
+import { z } from 'zod';
 
 type Workflow = 'product-set' | 'detail' | 'clone';
 type GenerationSettings = Pick<CommerceSlot, 'provider' | 'model' | 'aspectRatio' | 'resolution'>;
@@ -26,6 +28,14 @@ const parseBatch = async (response: Response) => {
   if (!response.ok) throw new Error(body?.message || '批量请求失败，请稍后重试。');
   return creativeBatchSchema.parse(body);
 };
+const batchProgressSchema = z.object({
+  id: z.uuid(), createdAt: z.string(), updatedAt: z.string(), terminal: z.boolean(),
+  items: z.array(z.object({ id: z.uuid(), taskId: z.uuid().nullable().optional(),
+    status: z.enum(['pending', 'created', 'submitted', 'failed', 'needs_review']),
+    error: z.string().nullable().optional(), total: z.number(), succeeded: z.number(),
+    failed: z.number(), processing: z.number() })),
+});
+type BatchProgress = z.infer<typeof batchProgressSchema>;
 const mockMode = process.env.NEXT_PUBLIC_DATA_MODE === 'mock';
 const readMockBatches = (owner: string): CreativeBatch[] => {
   try { return (JSON.parse(sessionStorage.getItem(`zimage:commerce-batches:mock:v2:${owner}`) ?? '[]') as unknown[]).map(item => creativeBatchSchema.parse(item)); }
@@ -52,6 +62,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
   const [touched, setTouched] = useState(restored?.touched ?? { region: false, language: false, aspectRatio: false });
   const [rows, setRows] = useState<ProductRow[]>(() => restored?.rows.length ? restored.rows.map(row => ({ ...row, products: [], references: [] })) : [newRow()]);
   const [batch, setBatch] = useState<CreativeBatch>();
+  const [progress, setProgress] = useState<BatchProgress>();
   const [tasks, setTasks] = useState<Record<string, CommerceTask>>({});
   const [busy, setBusy] = useState(false);
   const configurationKey = JSON.stringify({ workflow, platform, language, region, generation, count, advanced, rows });
@@ -60,6 +71,7 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
   const setConfirming = (value: boolean) => setConfirmedConfiguration(value ? configurationKey : undefined);
   const [error, setError] = useState<string>();
   const inFlight = useRef(false);
+  const refreshBatchRef = useRef<() => Promise<void>>(async () => undefined);
   const uploadIds = useRef(new Map<File, string>());
   const submission = useRef<{ requestId: string; sessionRequestId: string }>({ requestId: crypto.randomUUID(), sessionRequestId: crypto.randomUUID() });
   const recoveryKey = `${storageKey}:submission`;
@@ -115,13 +127,18 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     if (!batchId) return;
     let stopped = false;
     let advancing = false;
+    let timer: number | undefined;
+    let initial: CreativeBatch | undefined;
+    let terminal = false;
     const refresh = async () => {
       if (advancing) return;
       advancing = true;
       try {
-        let current = mockMode ? readMockBatches(ownerKey).find(item => item.id === batchId) : await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { cache: 'no-store' }));
+        let current = mockMode ? readMockBatches(ownerKey).find(item => item.id === batchId) :
+          initial ?? await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { cache: 'no-store' }));
         if (!current) throw new Error('批量任务不存在。');
         if (stopped) return;
+        initial = current;
         if (mockMode && gateway) {
           const item = current.items.find(entry => entry.status === 'pending' || entry.status === 'created');
           if (item) {
@@ -135,11 +152,22 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
             } catch (cause) { item.error = cause instanceof Error ? cause.message : '子任务提交失败'; item.status = 'failed'; }
             current = { ...current, items: [...current.items], updatedAt: new Date().toISOString() }; saveMockBatch(current, ownerKey);
           }
-        } else if (current.items.some(item => item.status === 'pending' || item.status === 'created'))
-          current = await parseBatch(await fetch(`/api/creative-batches/${batchId}`, { method: 'POST' }));
+        } else if (!mockMode) {
+          const response = await fetch(`/api/creative-batches/${batchId}/progress`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('批量进度暂时无法读取。');
+          const next = batchProgressSchema.parse(await response.json());
+          terminal = next.terminal;
+          setProgress(next);
+          current = { ...current, items: current.items.map(item => {
+            const state = next.items.find(entry => entry.id === item.id);
+            return state ? { ...item, status: state.status, taskId: state.taskId ?? item.taskId,
+              error: state.error ?? undefined } : item;
+          }), updatedAt: next.updatedAt };
+          initial = current;
+        }
         if (stopped) return;
         setBatch(current);
-        if (gateway) {
+        if (mockMode && gateway) {
           const loaded = await Promise.all(current.items.filter(item => item.taskId).map(async item => {
             try { return [item.id, await gateway.get(item.taskId!)] as const; } catch { return undefined; }
           }));
@@ -148,10 +176,19 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
       } catch (cause) { if (!stopped) setError(cause instanceof Error ? cause.message : '无法恢复批量任务。'); }
       finally { advancing = false; }
     };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, [batchId, gateway, ownerKey]);
+    refreshBatchRef.current = refresh;
+    const schedule = () => {
+      const delay = initial ? nextPollingDelay(initial.createdAt, 'commerce') : 5000;
+      if (delay === null || terminal || stopped) return;
+      timer = window.setTimeout(async () => {
+        if (active && (mockMode || !initial || nextPollingDelay(initial.createdAt, 'commerce') !== null)
+          && document.visibilityState !== 'hidden') await refresh();
+        schedule();
+      }, mockMode ? 5000 : delay);
+    };
+    void refresh().then(schedule);
+    return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [batchId, gateway, ownerKey, active]);
 
   const upload = async (targetSession: string, file: File) => {
     const prior = uploadIds.current.get(file); if (prior) return prior;
@@ -250,19 +287,22 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     return <section className={styles.batchWorkbench} aria-label="批量任务进度"><h2>批量生成进度</h2>
       {error && <p role="alert">{error}</p>}
       {!current ? <p role="status">正在恢复批量任务…</p> : <>
-        <p role="status">已提交 {current.items.filter(item => item.status === 'submitted').length}/{current.items.length} 个商品任务；失败 {current.items.filter(item => item.status === 'failed').length} 个。图片继续由现有队列生成。</p>
+        <p role="status">已提交 {current.items.filter(item => item.status === 'submitted').length}/{current.items.length} 个商品任务；失败 {current.items.filter(item => item.status === 'failed').length} 个；待核对 {current.items.filter(item => item.status === 'needs_review').length} 个。图片继续由现有队列生成。</p>
+        <button type="button" onClick={() => void refreshBatchRef.current()}>手动刷新进度</button>
+        {!mockMode && nextPollingDelay(current.createdAt, 'commerce') === null && !progress?.terminal && <p>自动刷新已停止，后台仍会继续处理。可点击手动刷新进度。</p>}
         <ol>{current.items.map((item, index) => {
           const task = tasks[item.id];
           const images = task?.runs.flatMap(run => run.items) ?? [];
-          const completed = images.filter(image => image.status === 'succeeded').length;
-          const failed = images.filter(image => image.status === 'failed').length;
-          return <li key={item.id}><strong>{index + 1}. {item.plan.brief.name}</strong> · {item.status === 'submitted' ? `图片 ${completed}/${item.plan.slots.length} 完成${failed ? `，${failed} 失败` : ''}` : item.status === 'failed' ? '提交失败' : '等待提交'}
+          const state = progress?.items.find(entry => entry.id === item.id);
+          const completed = state?.succeeded ?? images.filter(image => image.status === 'succeeded').length;
+          const failed = state?.failed ?? images.filter(image => image.status === 'failed').length;
+          return <li key={item.id}><strong>{index + 1}. {item.plan.brief.name}</strong> · {item.status === 'submitted' ? `图片 ${completed}/${state?.total || item.plan.slots.length} 完成${failed ? `，${failed} 失败` : ''}` : item.status === 'needs_review' ? '待核对' : item.status === 'failed' ? '提交失败' : '等待提交'}
             {item.error && <span role="alert"> · {item.error}</span>}
             {item.taskId && <a href={sessionHref(current.sessionId, item.taskId, 'results')}>查看任务与重试</a>}
-            {task && completed > 0 && gateway && <button onClick={() => void downloadCommerceFile(gateway, task, task.selections.map(selection => selection.slotId), 'zip', 'jpg').catch(cause => setError(cause.message))}>下载该商品 ZIP</button>}
+            {completed > 0 && item.taskId && gateway && <button onClick={() => void gateway.get(item.taskId!).then(fresh => downloadCommerceFile(gateway, fresh, fresh.selections.map(selection => selection.slotId), 'zip', 'jpg')).catch(cause => setError(cause.message))}>下载该商品 ZIP</button>}
           </li>;
         })}</ol>
-        <button disabled={!current.items.some(item => tasks[item.id]?.selections.length)} onClick={() => void downloadBatch(current.id)}>{mockMode ? '逐商品下载模拟结果' : '批量下载已完成商品 ZIP'}</button>
+        <button disabled={mockMode ? !current.items.some(item => tasks[item.id]?.selections.length) : !progress?.items.some(item => item.succeeded > 0)} onClick={() => void downloadBatch(current.id)}>{mockMode ? '逐商品下载模拟结果' : '批量下载已完成商品 ZIP'}</button>
       </>}
     </section>;
   }

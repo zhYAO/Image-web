@@ -443,6 +443,7 @@ export function CommerceWorkspace({
     void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
   };
   if (activeScene === 'apparel-catalog' && sessionId) return <section className={styles.commerceRoot}>
+      <button type="button" onClick={() => void apparel.refresh()}>手动刷新任务</button>
     <header className={styles.workbenchHeader}><Link href="/create"><ArrowLeft size={15}/>创作方式</Link><span>服装商品图片</span>
       {apparel.tasks.length > 0 && <label className={styles.taskHistory}>当前会话<select aria-label="当前会话任务" value={showDraft?'draft':selectedApparel?.id??''} onChange={event=>chooseTask(event.target.value)}>{currentDraft&&<option value="draft">新方案 · 尚未保存</option>}{[...apparel.tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}{[...tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.brief.name} · v{task.revision}</option>)}</select></label>}
     </header>
@@ -610,6 +611,7 @@ export function CommerceWorkspace({
                   <AntdImage.PreviewGroup>
                     <CommerceTaskCard
                       task={task}
+                      active={task.sessionId === sessionId && task.id === selectedTask?.id && panel === 'results' && !coordinatedLoading}
                       view={panel === "plan" ? "plan" : "results"}
                       autoStart={autoStartTasks[task.id]}
                       gateway={gateway}

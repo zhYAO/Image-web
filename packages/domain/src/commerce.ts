@@ -177,6 +177,7 @@ export const commerceCancelSchema = commerceArchiveSchema.extend({
   runId: z.uuid(),
 });
 export interface CommerceGateway {
+  assetUrl?(generationId: string, refresh?: boolean): Promise<{ url?: string; expired: boolean }>;
   apparel?: ApparelGateway;
   archive(
     taskId: string,

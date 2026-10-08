@@ -140,7 +140,7 @@ export function unsettledCommerceItem(item: CommerceItem | undefined) {
 export function commerceItemNeedsReview(item: CommerceItem | undefined) {
   return Boolean(
     item &&
-    /provider_result_unknown|provider_reconciliation_required|result_unknown/i.test(
+    /provider_result_unknown|provider_reconciliation_required|result_unknown|result_storage_failed|storage_pending/i.test(
       item.error ?? "",
     ),
   );

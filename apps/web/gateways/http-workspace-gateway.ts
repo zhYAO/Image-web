@@ -102,6 +102,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   private providerStatusPromise?: Promise<ReturnType<typeof providerStatusResponseSchema.parse>>;
   private readonly signedAssetUrls = new Map<string, ReturnType<typeof generationAssetUrlResponseSchema.parse>>();
   private readonly pendingSignedAssetUrls = new Map<string, Promise<ReturnType<typeof generationAssetUrlResponseSchema.parse>>>();
+  private assetEpoch = 0;
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
     this.fetcher = options.fetcher ?? fetch.bind(globalThis);
@@ -158,13 +159,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
       }
       after = response.nextCursor;
     } while (after !== undefined);
-    return Promise.all(
-      [...items.values()]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map(async (item) =>
-          item.type === 'generation' ? { ...item, batch: await this.hydrateBatch(item.batch) } : item,
-        ),
-    );
+    return [...items.values()].sort((a, b) => a.sequence - b.sequence);
   }
 
   async *streamChat(
@@ -325,7 +320,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
       `/api/image/${batchId}`,
       generationBatchResponseSchema,
     );
-    return this.hydrateBatch(response.batch);
+    return response.batch;
   }
 
   async recreateGeneration(request: RecreateRequest): Promise<GenerationBatch> {
@@ -394,42 +389,35 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     return (await this.getProviderStatus()).health;
   }
 
-  private async hydrateBatch(batch: GenerationBatch) {
-    for (const [id, signed] of this.signedAssetUrls) {
-      if (Date.parse(signed.expiresAt) <= Date.now()) this.signedAssetUrls.delete(id);
+  clearAssetCaches() {
+    this.assetEpoch++;
+    this.signedAssetUrls.clear();
+    this.pendingSignedAssetUrls.clear();
+    this.commerce.clearAssetCache();
+  }
+
+  async getGenerationAssetUrl(generationId: string, refresh = false) {
+    if (!refresh) {
+      const cached = this.signedAssetUrls.get(generationId);
+      if (cached && Date.parse(cached.expiresAt) - Date.now() > 30_000) return cached.url;
     }
-    const assets = await Promise.all(
-      batch.assets.map(async (asset) => {
-        if (asset.status !== "succeeded" || asset.expired) return asset;
-        try {
-          const cached = this.signedAssetUrls.get(asset.id);
-          if (cached && Date.parse(cached.expiresAt) - Date.now() > 30_000) {
-            return { ...asset, expiresAt: cached.expiresAt, url: cached.url };
-          }
-          let pending = this.pendingSignedAssetUrls.get(asset.id);
-          if (!pending) {
-            pending = this.json(
-              `/api/generations/${asset.id}/asset-url`,
-              generationAssetUrlResponseSchema,
-            ).then((signed) => {
-              this.signedAssetUrls.set(asset.id, signed);
-              return signed;
-            }).finally(() => {
-              this.pendingSignedAssetUrls.delete(asset.id);
-            });
-            this.pendingSignedAssetUrls.set(asset.id, pending);
-          }
-          const signed = await pending;
-          return { ...asset, expiresAt: signed.expiresAt, url: signed.url };
-        } catch (error: unknown) {
-        if (error instanceof WorkspaceError && error.safe.code === 'ASSET_EXPIRED') {
-          return { ...asset, expired: true, url: undefined };
-        }
-        return asset;
-      }
-      }),
-    );
-    return { ...batch, assets };
+    let pending = this.pendingSignedAssetUrls.get(generationId);
+    if (!pending) {
+      const epoch = this.assetEpoch;
+      pending = this.json(`/api/generations/${generationId}/asset-url`, generationAssetUrlResponseSchema)
+        .then(signed => {
+          if (epoch !== this.assetEpoch) throw new Error('Asset owner changed');
+          this.signedAssetUrls.set(generationId, signed);
+          return signed;
+        })
+        .finally(() => { if (this.pendingSignedAssetUrls.get(generationId) === pending) this.pendingSignedAssetUrls.delete(generationId); });
+      this.pendingSignedAssetUrls.set(generationId, pending);
+    }
+    try { return (await pending).url; }
+    catch (error) {
+      if (error instanceof WorkspaceError && error.safe.code === 'ASSET_EXPIRED') return undefined;
+      throw error;
+    }
   }
 
   private getProviderStatus() {

@@ -91,7 +91,7 @@ describe('HttpWorkspaceGateway', () => {
     expect(fetcher).toHaveBeenCalledWith('/api/sessions', expect.objectContaining({ method: 'GET' }));
   });
 
-  it('reuses a valid signed image URL while polling the same batch', async () => {
+  it('keeps batch status reads unsigned and signs an opened image once', async () => {
     let signatures = 0;
     const batch = {
       assets: [{ id: generationId, status: 'succeeded' }, { id: '40000000-0000-4000-8000-0000000000a2', status: 'processing' }],
@@ -118,9 +118,28 @@ describe('HttpWorkspaceGateway', () => {
     const first = await gateway.getGenerationBatch(batchId);
     const second = await gateway.getGenerationBatch(batchId);
 
-    expect(first.assets[0]?.url).toBe('https://example.invalid/image.jpg?token=1');
-    expect(second.assets[0]?.url).toBe(first.assets[0]?.url);
+    expect(first.assets[0]?.url).toBeUndefined();
+    expect(second.assets[0]?.url).toBeUndefined();
+    expect(signatures).toBe(0);
+    expect(await gateway.getGenerationAssetUrl?.(generationId)).toBe('https://example.invalid/image.jpg?token=1');
+    expect(await gateway.getGenerationAssetUrl?.(generationId)).toBe('https://example.invalid/image.jpg?token=1');
     expect(signatures).toBe(1);
+  });
+
+  it('does not reuse a signature resolved after the account cache is cleared', async () => {
+    let resolveFirst!: (value: Response) => void;
+    const fetcher = vi.fn<typeof fetch>()
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce(json({ generationId, expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        url: 'https://example.invalid/new-owner.jpg' }));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+    const old = gateway.getGenerationAssetUrl(generationId);
+    gateway.clearAssetCaches();
+    resolveFirst(json({ generationId, expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      url: 'https://example.invalid/old-owner.jpg' }));
+    await expect(old).rejects.toThrow('Asset owner changed');
+    expect(await gateway.getGenerationAssetUrl(generationId)).toBe('https://example.invalid/new-owner.jpg');
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it('uploads references before submitting the fixed idempotent image request', async () => {

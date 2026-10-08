@@ -86,7 +86,7 @@ describe("HTTP commerce contract", () => {
     });
     expect(result.items).toEqual([{ slotId, generationId, expired: true }]);
   });
-  it("reuses short-lived preview signatures while export refreshes authorization", async () => {
+  it("leaves status reads unsigned and signs only an explicitly opened image", async () => {
     const generationId = crypto.randomUUID(),
       slotId = task.slots[0]!.id;
     const completed = {
@@ -133,7 +133,10 @@ describe("HTTP commerce contract", () => {
       fetcher.mock.calls.filter(([path]) =>
         String(path).endsWith("/asset-url"),
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
+    await gateway.commerce.assetUrl?.(generationId);
+    await gateway.commerce.assetUrl?.(generationId);
+    expect(fetcher.mock.calls.filter(([path]) => String(path).endsWith('/asset-url'))).toHaveLength(1);
     await gateway.commerce.export(task.id, {
       requestId: crypto.randomUUID(),
       revision: 1,
@@ -144,6 +147,21 @@ describe("HTTP commerce contract", () => {
         String(path).endsWith("/asset-url"),
       ),
     ).toHaveLength(2);
+  });
+  it('joins concurrent explicit renewals for the same image', async () => {
+    const generationId = crypto.randomUUID();
+    let resolve!: (value: Response) => void;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(done => { resolve = done; }));
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+    const first = gateway.commerce.assetUrl?.(generationId, true);
+    const second = gateway.commerce.assetUrl?.(generationId, true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    resolve(Response.json({ generationId, url: 'https://example.com/image.png',
+      expiresAt: new Date(Date.now() + 300_000).toISOString() }));
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { url: 'https://example.com/image.png', expired: false },
+      { url: 'https://example.com/image.png', expired: false },
+    ]);
   });
   it("uploads through the existing protected upload API without sending object URLs", async () => {
     const id = crypto.randomUUID();

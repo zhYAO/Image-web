@@ -50,6 +50,7 @@ export interface WorkspaceGateway {
   ): AsyncIterable<ChatEvent>;
   submitImage(request: ImageRequest): Promise<GenerationBatch>;
   getGenerationBatch(batchId: string): Promise<GenerationBatch>;
+  getGenerationAssetUrl?(generationId: string, refresh?: boolean): Promise<string | undefined>;
   recreateGeneration(request: RecreateRequest): Promise<GenerationBatch>;
   getSkills(): Promise<Skill[]>;
   getQuota(): Promise<Quota>;

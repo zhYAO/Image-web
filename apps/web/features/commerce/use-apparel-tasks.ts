@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApparelTask, ApparelGateway } from "@zimage/domain";
+import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 export function useApparelTasks(
   gateway: ApparelGateway | undefined,
   sessionId: string | undefined,
@@ -11,6 +12,7 @@ export function useApparelTasks(
     error?: string;
   }>({ tasks: [], loading: Boolean(gateway && sessionId) });
   const epoch = useRef(0);
+  const inFlight = useRef(new Map<string, Promise<void>>());
   const accept = useCallback((task: ApparelTask) => {
     epoch.current++;
     setState((current) => ({
@@ -26,6 +28,9 @@ export function useApparelTasks(
   }, []);
   const refresh = useCallback(async () => {
     if (!gateway || !sessionId) return;
+    const pending = inFlight.current.get(sessionId);
+    if (pending) return pending;
+    const request = (async () => {
     const version = ++epoch.current;
     try {
       const tasks = await gateway.list(sessionId);
@@ -44,21 +49,37 @@ export function useApparelTasks(
           error: error instanceof Error ? error.message : "服装任务加载失败。",
         }));
     }
+    })();
+    inFlight.current.set(sessionId, request);
+    try { await request; } finally { if (inFlight.current.get(sessionId) === request) inFlight.current.delete(sessionId); }
   }, [gateway, sessionId]);
+  const activeSinceKey = (state.sessionId === sessionId ? state.tasks : []).flatMap(task =>
+    task.runs.filter(run => run.status === 'processing').map(run => run.createdAt)).join('|');
   useEffect(() => {
     const invalidate = () => {
       epoch.current++;
     };
     invalidate();
     void refresh();
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "hidden") void refresh();
-    }, 5000);
-    return () => {
-      invalidate();
-      clearInterval(timer);
+    let stopped = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      const delays = activeSinceKey.split('|').filter(Boolean).map(createdAt => nextPollingDelay(createdAt, 'commerce'))
+        .filter((value): value is number => value !== null);
+      if (!delays.length || stopped) return;
+      timer = window.setTimeout(async () => {
+        if (activeSinceKey.split('|').filter(Boolean).some(createdAt => nextPollingDelay(createdAt, 'commerce') !== null)
+          && document.visibilityState !== 'hidden') await refresh();
+        schedule();
+      }, Math.min(...delays));
     };
-  }, [refresh]);
+    schedule();
+    return () => {
+      stopped = true;
+      invalidate();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [refresh, activeSinceKey]);
   return {
     tasks: state.sessionId === sessionId ? state.tasks : [],
     loading: Boolean(

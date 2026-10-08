@@ -104,7 +104,7 @@ function OwnerCreditsProvider({ children }: { children: ReactNode }) {
     window.addEventListener("zimage:credits-changed", changed);
     window.addEventListener("focus", visible);
     document.addEventListener('visibilitychange', visible);
-    const timer = window.setInterval(visible, 15000);
+    const timer = window.setInterval(visible, 300_000);
     return () => {
       active = false;
       window.clearInterval(timer);

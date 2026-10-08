@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useWorkspaceStore } from '@/store/workspace-store';
 import { clearCommerceDraft } from '@/features/commerce/commerce-draft-storage';
+import { clearWorkspaceAssetCaches } from '@/gateways';
 import { z } from 'zod';
 
 type AuthStatus = "checking" | "authorized" | "guest" | "error";
@@ -43,6 +44,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
           const identity = z.uuid().safeParse(account.id);
           const nextOwner = identity.success ? identity.data : undefined;
           if (verifiedOwner.current && verifiedOwner.current !== nextOwner && (response.ok || response.status === 401)) {
+            clearWorkspaceAssetCaches();
             useWorkspaceStore.getState().reset();
             clearCommerceDraft();
           }
@@ -70,6 +72,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
     const expired = () => {
+      clearWorkspaceAssetCaches();
       epoch.current++;
       inFlight.current?.abort();
       inFlight.current = null;
@@ -80,6 +83,7 @@ export function AuthStatusProvider({ children }: { children: ReactNode }) {
       setStatus("guest");
     };
     const changed = (event: Event) => {
+      clearWorkspaceAssetCaches();
       epoch.current++;
       inFlight.current?.abort();
       inFlight.current = null;

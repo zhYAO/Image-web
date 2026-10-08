@@ -7,7 +7,6 @@ import {
   referenceUploadResponseSchema,
   WorkspaceError,
   type CommerceGateway,
-  type CommerceTask,
 } from "@zimage/domain";
 import { z, type ZodType } from "zod";
 type JsonRequest = <T>(
@@ -24,40 +23,29 @@ export class HttpCommerceGateway implements CommerceGateway {
     string,
     Promise<{ url?: string; expired: boolean }>
   >();
+  private assetEpoch = 0;
   readonly apparel: HttpApparelGateway;
   constructor(private readonly json: JsonRequest, fetcher: typeof fetch = fetch) {
     this.apparel = new HttpApparelGateway(json, (sessionId, reference) => this.upload(sessionId, reference), fetcher);
   }
   async list(sessionId: string) {
-    return Promise.all(
-      (
-        await this.json(
-          `/api/creative-tasks?sessionId=${encodeURIComponent(sessionId)}`,
-          z.array(commerceTaskSchema),
-        )
-      ).map((task) => this.hydrate(task)),
-    );
+    return this.json(`/api/creative-tasks?sessionId=${encodeURIComponent(sessionId)}`,
+      z.array(commerceTaskSchema));
   }
   async get(taskId: string) {
-    return this.hydrate(
-      await this.json(`/api/creative-tasks/${taskId}`, commerceTaskSchema),
-    );
+    return this.json(`/api/creative-tasks/${taskId}`, commerceTaskSchema);
   }
   async create(input: Parameters<CommerceGateway["create"]>[0]) {
-    return this.hydrate(
-      await this.json("/api/creative-tasks", commerceTaskSchema, {
+    return this.json("/api/creative-tasks", commerceTaskSchema, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
-    );
+      });
   }
   async save(taskId: string, input: Parameters<CommerceGateway["save"]>[1]) {
-    return this.hydrate(
-      await this.json(`/api/creative-tasks/${taskId}`, commerceTaskSchema, {
+    return this.json(`/api/creative-tasks/${taskId}`, commerceTaskSchema, {
         method: "PATCH",
         body: JSON.stringify(input),
-      }),
-    );
+      });
   }
   async submit(
     taskId: string,
@@ -84,14 +72,14 @@ export class HttpCommerceGateway implements CommerceGateway {
     return this.mutate(taskId, "cancel", input);
   }
   private async mutate(taskId: string, operation: string, input: unknown) {
-    return this.hydrate(
-      await this.json(
+    return this.json(
         `/api/creative-tasks/${taskId}/${operation}`,
         commerceTaskSchema,
         { method: "POST", body: JSON.stringify(input) },
-      ),
-    );
+      );
   }
+  assetUrl(generationId: string, refresh = false) { return this.asset(generationId, !refresh); }
+  clearAssetCache() { this.assetEpoch++; this.assetCache.clear(); this.assetRequests.clear(); }
   async export(
     taskId: string,
     input: Parameters<CommerceGateway["export"]>[1],
@@ -150,21 +138,24 @@ export class HttpCommerceGateway implements CommerceGateway {
       const cached = this.assetCache.get(generationId);
       if (cached && cached.validUntil > Date.now())
         return { url: cached.url, expired: false };
-      const pending = this.assetRequests.get(generationId);
-      if (pending) return pending;
-      const request = this.asset(generationId);
-      this.assetRequests.set(generationId, request);
-      try {
-        return await request;
-      } finally {
-        this.assetRequests.delete(generationId);
-      }
     }
+    const pending = this.assetRequests.get(generationId);
+    if (pending) return pending;
+    const request = this.fetchAsset(generationId);
+    this.assetRequests.set(generationId, request);
+    try { return await request; }
+    finally {
+      if (this.assetRequests.get(generationId) === request) this.assetRequests.delete(generationId);
+    }
+  }
+  private async fetchAsset(generationId: string): Promise<{ url?: string; expired: boolean }> {
     try {
+      const epoch = this.assetEpoch;
       const result = await this.json(
         `/api/generations/${generationId}/asset-url`,
         generationAssetUrlResponseSchema,
       );
+      if (epoch !== this.assetEpoch) throw new Error('Asset owner changed');
       this.assetCache.set(generationId, {
         url: result.url,
         validUntil: Math.min(
@@ -184,28 +175,5 @@ export class HttpCommerceGateway implements CommerceGateway {
         return { expired: true };
       throw error;
     }
-  }
-  private async hydrate(task: CommerceTask): Promise<CommerceTask> {
-    return {
-      ...task,
-      runs: await Promise.all(
-        task.runs.map(async (run) => ({
-          ...run,
-          items: await Promise.all(
-            run.items.map(async (item) => {
-              if (item.status !== "succeeded" || item.expired) return item;
-              try {
-                return {
-                  ...item,
-                  ...(await this.asset(item.generationId, true)),
-                };
-              } catch {
-                return item;
-              }
-            }),
-          ),
-        })),
-      ),
-    };
   }
 }

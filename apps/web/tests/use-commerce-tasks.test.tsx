@@ -73,13 +73,13 @@ async function advance(ms: number) {
 }
 
 describe("commerce task polling", () => {
-  beforeEach(() => vi.useFakeTimers());
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-08T00:00:00Z')); });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("loads twenty terminal tasks with one list and no get, backs off, and discovers changes on focus/manual refresh", async () => {
+  it("loads twenty terminal tasks once without automatic polling and refreshes manually", async () => {
     const gateway = createTestGateway().commerce;
     const tasks = Array.from({ length: 20 }, () => task());
     const list = vi.spyOn(gateway, "list").mockResolvedValue(tasks);
@@ -92,25 +92,25 @@ describe("commerce task polling", () => {
     await advance(15_000);
     expect(list).toHaveBeenCalledTimes(1);
     await advance(15_000);
-    expect(list).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenCalledTimes(1);
     list.mockResolvedValue([...tasks, task()]);
     act(() => window.dispatchEvent(new Event("focus")));
     await flush();
-    expect(result.current.tasks).toHaveLength(21);
+    expect(result.current.tasks).toHaveLength(20);
     await act(async () => {
       await result.current.refresh();
     });
-    expect(list).toHaveBeenCalledTimes(4);
+    expect(list).toHaveBeenCalledTimes(2);
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("polls active results quickly, pauses while hidden, refreshes on return and slows after completion", async () => {
+  it("polls active results every five seconds, pauses hidden, and stops after completion", async () => {
     const gateway = createTestGateway().commerce;
     const active = task(true);
     const list = vi.spyOn(gateway, "list").mockResolvedValue([active]);
     renderHook(() => useCommerceTasks(gateway, "session"));
     await flush();
-    await advance(1500);
+    await advance(5000);
     expect(list).toHaveBeenCalledTimes(2);
     const visibility = vi
       .spyOn(document, "visibilityState", "get")
@@ -122,13 +122,13 @@ describe("commerce task polling", () => {
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     await flush();
     expect(list).toHaveBeenCalledTimes(3);
-    await advance(1500);
+    await advance(5000);
     expect(list).toHaveBeenCalledTimes(3);
     await advance(28_500);
-    expect(list).toHaveBeenCalledTimes(4);
+    expect(list).toHaveBeenCalledTimes(3);
   });
 
-  it("polls unknown submissions quickly and does not overwrite a mutation with an older in-flight list", async () => {
+  it("polls pending submissions every five seconds and does not overwrite a newer mutation", async () => {
     const gateway = createTestGateway().commerce;
     const original = task();
     const list = vi.spyOn(gateway, "list").mockResolvedValue([original]);
@@ -137,7 +137,7 @@ describe("commerce task polling", () => {
       { initialProps: { unknown: true } },
     );
     await flush();
-    await advance(1500);
+    await advance(5000);
     expect(list).toHaveBeenCalledTimes(2);
     let resolve!: (tasks: CommerceTask[]) => void;
     list.mockImplementationOnce(
@@ -157,7 +157,17 @@ describe("commerce task polling", () => {
     });
     expect(result.current.tasks[0]?.revision).toBe(2);
     rerender({ unknown: false });
-    await advance(1500);
+    await advance(5000);
     expect(list).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not make an automatic request after the task reaches one hour', async () => {
+    const gateway = createTestGateway().commerce;
+    const list = vi.spyOn(gateway, 'list').mockResolvedValue([task(true)]);
+    renderHook(() => useCommerceTasks(gateway, 'session'));
+    await flush();
+    vi.setSystemTime(new Date('2026-09-08T01:00:00Z'));
+    await advance(5000);
+    expect(list).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,7 @@
 import type { CommerceGateway, CommerceTask } from "@zimage/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { unsettledCommerceItem, commerceItemNeedsReview } from "./commerce-ui";
+import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 
 export function useCommerceTasks(
   gateway: CommerceGateway | undefined,
@@ -60,9 +61,7 @@ export function useCommerceTasks(
     return request;
   }, [gateway, sessionId]);
   const tasks = sessionId ? (bySession[sessionId] ?? []) : [];
-  const active =
-    hasPendingSubmission ||
-    tasks.some((task) =>
+  const activeTasks = tasks.filter((task) =>
       task.runs.some((run) =>
         run.items.some(
           (item) =>
@@ -70,24 +69,41 @@ export function useCommerceTasks(
         ),
       ),
     );
+  const activeSinceKey = [
+    ...activeTasks.map(task => task.createdAt),
+    ...(hasPendingSubmission ? tasks.map(task => task.createdAt) : []),
+  ].join('|');
   useEffect(() => {
     void refresh().catch(() => undefined);
   }, [refresh]);
   useEffect(() => {
     if (!gateway || !sessionId) return;
+    let stopped = false;
+    let timer: number | undefined;
+    const dueDelay = () => Math.min(...activeSinceKey.split('|').filter(Boolean).map(createdAt => nextPollingDelay(createdAt, 'commerce'))
+      .filter((value): value is number => value !== null));
     const pollVisible = () => {
-      if (document.visibilityState !== "hidden")
+      if (document.visibilityState !== 'hidden' && Number.isFinite(dueDelay()))
         void refresh().catch(() => undefined);
     };
-    const timer = window.setInterval(pollVisible, active ? 1500 : 30_000);
+    const schedule = () => {
+      const delay = dueDelay();
+      if (!Number.isFinite(delay) || stopped) return;
+      timer = window.setTimeout(async () => {
+        if (Number.isFinite(dueDelay()) && document.visibilityState !== 'hidden') await refresh().catch(() => undefined);
+        schedule();
+      }, delay);
+    };
+    schedule();
     window.addEventListener("focus", pollVisible);
     document.addEventListener("visibilitychange", pollVisible);
     return () => {
-      window.clearInterval(timer);
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
       window.removeEventListener("focus", pollVisible);
       document.removeEventListener("visibilitychange", pollVisible);
     };
-  }, [gateway, sessionId, active, refresh]);
+  }, [gateway, sessionId, activeSinceKey, refresh]);
   return {
     tasks,
     cachedTasks: Object.values(bySession).flat(),

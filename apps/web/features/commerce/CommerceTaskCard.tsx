@@ -15,7 +15,7 @@ import {
   type UploadReference,
 } from "@zimage/domain";
 import { Image as AntdImage } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import { CommerceDetailPreview } from "./CommerceDetailPreview";
 import {
@@ -31,6 +31,26 @@ export interface CommerceEditRequest {
   id: string;
   indexes: number[];
   instruction: string;
+}
+
+function VisibleCommerceSlot({ id, active, onVisible, children, className }: {
+  id?: string; active: boolean; onVisible: (id: string) => void;
+  children: ReactNode; className?: string;
+}) {
+  const element = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!active || !id) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      const timer = window.setTimeout(() => onVisible(id), 0);
+      return () => window.clearTimeout(timer);
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { onVisible(id); observer.disconnect(); }
+    });
+    if (element.current) observer.observe(element.current);
+    return () => observer.disconnect();
+  }, [id, active, onVisible]);
+  return <section ref={element} className={className}>{children}</section>;
 }
 
 export interface CommerceConfirmationRequest {
@@ -87,7 +107,9 @@ export function CommerceTaskCard({
   onSubmitted,
   originalPreviewUrl,
   previewReferences,
+  active = true,
 }: {
+  active?: boolean;
   view?: "plan" | "results";
   onSubmitted?: () => void;
   originalPreviewUrl?: string;
@@ -142,28 +164,68 @@ export function CommerceTaskCard({
   const [exportFocus, setExportFocus] = useState({ x: 0.5, y: 0.5 });
   const [referenceUrls, setReferenceUrls] = useState<Record<string, string>>({});
   const [originalUrl, setOriginalUrl] = useState(originalPreviewUrl);
+  const originalRetried = useRef(false);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [visibleImageIds, setVisibleImageIds] = useState<string[]>([]);
+  const markVisible = useCallback((id: string) => setVisibleImageIds(current =>
+    current.includes(id) ? current : [...current, id]), []);
+  const allSelectedImageIds = task.selections.map(selection => selection.generationId).join(',');
+  const markDetailVisible = useCallback(() => setVisibleImageIds(current => {
+    const next = allSelectedImageIds.split(',').filter(id => id && !current.includes(id));
+    return next.length ? [...current, ...next] : current;
+  }), [allSelectedImageIds]);
   const [busy, setBusy] = useState(false);
+  const selectedImageIds = task.selections.map(selection => selection.generationId)
+    .filter(id => visibleImageIds.includes(id)).join(',');
   useEffect(() => {
-    if (task.scene !== 'product-main' || originalPreviewUrl || !task.brief.productReferenceIds[0]) return;
-    let active = true;
-    void fetch(`/api/references/${task.brief.productReferenceIds[0]}/asset-url`, { cache: 'no-store' })
+    if (!active || view !== 'results' || !gateway.assetUrl) return;
+    let cancelled = false;
+    for (const id of selectedImageIds.split(',').filter(Boolean)) {
+      if (signedUrls[id]) continue;
+      void gateway.assetUrl(id).then(result => {
+        if (!cancelled && result.url) setSignedUrls(current => current[id] ? current : { ...current, [id]: result.url! });
+      }).catch(() => undefined);
+    }
+    return () => { cancelled = true; };
+  }, [active, view, gateway, selectedImageIds, signedUrls]);
+  const displayTask = useMemo(() => ({ ...task, runs: task.runs.map(run => ({ ...run,
+    items: run.items.map(item => ({ ...item, url: signedUrls[item.generationId] ?? item.url })) })) }), [task, signedUrls]);
+  const refreshImage = (id: string) => {
+    if (!gateway.assetUrl) return;
+    void gateway.assetUrl(id, true).then(result => {
+      if (result.url) setSignedUrls(current => ({ ...current, [id]: result.url! }));
+    }).catch(() => undefined);
+  };
+  const productReferenceId = task.brief.productReferenceIds[0];
+  useEffect(() => {
+    if (!active || !visibleImageIds.length || task.scene !== 'product-main' || originalPreviewUrl || originalUrl || !productReferenceId) return;
+    let alive = true;
+    void fetch(`/api/references/${productReferenceId}/asset-url`, { cache: 'no-store' })
       .then(response => response.ok ? response.json() : null)
-      .then(result => { if (active && typeof result?.url === 'string') setOriginalUrl(result.url); })
+      .then(result => { if (alive && typeof result?.url === 'string') setOriginalUrl(result.url); })
       .catch(() => undefined);
-    return () => { active = false; };
-  }, [task.scene, task.brief.productReferenceIds, originalPreviewUrl]);
-  const cloneReferenceKey = task.brief.styleReferenceIds.join(',');
+    return () => { alive = false; };
+  }, [active, visibleImageIds.length, task.scene, productReferenceId, originalPreviewUrl, originalUrl]);
+  const cloneReferenceKey = task.slots.flatMap(slot => {
+    const selected = task.selections.find(selection => selection.slotId === slot.id);
+    return selected && visibleImageIds.includes(selected.generationId)
+      ? slot.referenceIds.filter(id => task.brief.styleReferenceIds.includes(id)) : [];
+  }).join(',');
   useEffect(() => {
-    if (task.scene !== 'clone') return;
+    if (!active || !cloneReferenceKey || task.scene !== 'clone') return;
     let cancelled = false;
     void Promise.all(cloneReferenceKey.split(',').filter(Boolean).map(async id => {
       const local = previewReferences?.find(reference => reference.id === id)?.previewUrl;
       if (local) return [id, local] as const;
+      if (referenceUrls[id]) return [id, referenceUrls[id]] as const;
       if (process.env.NEXT_PUBLIC_DATA_MODE === 'mock') return undefined;
       try { const response = await fetch(`/api/references/${id}/asset-url`, { cache: 'no-store' }); const result = response.ok ? await response.json() : null; return typeof result?.url === 'string' ? [id, result.url] as const : undefined; } catch { return undefined; }
-    })).then(entries => { if (!cancelled) setReferenceUrls(Object.fromEntries(entries.filter((item): item is readonly [string, string] => Boolean(item)))); });
+    })).then(entries => { if (!cancelled) setReferenceUrls(current => {
+      const next = Object.fromEntries(entries.filter((item): item is readonly [string, string] => Boolean(item)));
+      return Object.keys(next).length === Object.keys(current).length && Object.entries(next).every(([id, url]) => current[id] === url) ? current : next;
+    }); });
     return () => { cancelled = true; };
-  }, [task.scene, cloneReferenceKey, previewReferences]);
+  }, [active, task.scene, cloneReferenceKey, previewReferences, referenceUrls]);
   const storageKey = `zimage-commerce-submit:${task.id}`;
   const [pendingRequest, setPendingRequest] = useState(() =>
     readPending(storageKey),
@@ -448,7 +510,8 @@ export function CommerceTaskCard({
       <p className={styles.note}>
         新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>
-      {task.scene === 'detail' && view === 'results' && <CommerceDetailPreview task={task} />}
+      {task.scene === 'detail' && view === 'results' && <VisibleCommerceSlot className="" id="detail-preview"
+        active={active} onVisible={markDetailVisible}><CommerceDetailPreview task={displayTask} /></VisibleCommerceSlot>}
       <div className={styles.resultGrid}>
         {task.slots.map((slot, index) => {
           const candidates = task.runs
@@ -465,9 +528,11 @@ export function CommerceTaskCard({
           const image = candidates.find(
             (item) => item.generationId === selection?.generationId,
           );
+          const imageUrl = image && (signedUrls[image.generationId] ?? image.url);
           const running = latest[index];
           return (
-            <section className={styles.result} key={slot.id}>
+            <VisibleCommerceSlot className={styles.result} key={slot.id} id={image?.generationId}
+              active={active && view === 'results'} onVisible={markVisible}>
               <h3>
                 第 {index + 1} 张 · {slot.role}
               </h3>
@@ -476,10 +541,14 @@ export function CommerceTaskCard({
                 <span className={styles.planNumber}>
                   方案 {String(index + 1).padStart(2, "0")}
                 </span>
-              ) : image?.url && !image.expired ? (
+              ) : imageUrl && !image?.expired ? (
                 <div className={task.scene === 'product-main' && originalUrl ? styles.originalCompare : undefined}>
-                  {task.scene === 'product-main' && originalUrl && <figure><AntdImage src={originalUrl} alt={`${task.brief.name} 原图`} /><figcaption>商品原图</figcaption></figure>}
-                  <figure><AntdImage src={image.url} alt={`${task.brief.name} 第 ${index + 1} 张当前选图`} /><figcaption>生成候选 {index + 1}</figcaption></figure>
+                  {task.scene === 'product-main' && originalUrl && <figure><AntdImage src={originalUrl} onError={() => {
+                    if (!originalRetried.current) { originalRetried.current = true; setOriginalUrl(undefined); }
+                  }} alt={`${task.brief.name} 原图`} /><figcaption>商品原图</figcaption></figure>}
+                  <figure><AntdImage src={imageUrl} onError={() => image && refreshImage(image.generationId)} onClick={() => image && gateway.assetUrl && void gateway.assetUrl(image.generationId).then(result => {
+                    if (result.url && result.url !== imageUrl) setSignedUrls(current => ({ ...current, [image.generationId]: result.url! }));
+                  }).catch(() => undefined)} alt={`${task.brief.name} 第 ${index + 1} 张当前选图`} /><figcaption>生成候选 {index + 1}</figcaption></figure>
                 </div>
               ) : (
                 <div className={styles.placeholder}>
@@ -583,7 +652,7 @@ export function CommerceTaskCard({
                       <option
                         key={item.generationId}
                         value={item.generationId}
-                        disabled={item.expired || !item.url}
+                        disabled={item.expired}
                       >
                         第 {candidateIndex + 1} 版
                         {item.expired ? "（已到期）" : ""}
@@ -595,7 +664,7 @@ export function CommerceTaskCard({
               <div className={styles.actions}>
                 {image && onPromote && (
                   <button
-                    disabled={!canEdit || !image.url || image.expired}
+                    disabled={!canEdit || image.expired}
                     onClick={() =>
                       void perform(() => onPromote(task, image.generationId))
                     }
@@ -608,7 +677,7 @@ export function CommerceTaskCard({
                 </button>
                 {selection && (
                   <button
-                    disabled={busy || !image?.url || image.expired}
+                    disabled={busy || !image || image.expired}
                     onClick={() =>
                       void perform(async () =>
                         setMessage(
@@ -621,7 +690,7 @@ export function CommerceTaskCard({
                   </button>
                 )}
               </div>
-            </section>
+            </VisibleCommerceSlot>
           );
         })}
       </div>

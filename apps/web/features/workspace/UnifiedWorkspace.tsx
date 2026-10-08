@@ -48,6 +48,7 @@ import { chatRecoveryActions, reconcileChatTimeline, type FailedChatAttempt } fr
 import { UnifiedComposer } from './UnifiedComposer';
 import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
+import { nextPollingDelay } from './bounded-polling';
 import styles from './workspace.module.css';
 import meitu from '@/features/commerce/meitu.module.css';
 import { CommerceHeader, CommerceNav } from '@/features/commerce/CommerceChrome';
@@ -409,36 +410,56 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   );
 
   const pendingBatchEntries = useMemo(() => Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
+    commerceActive || sessionId !== activeSessionId ? [] :
     runtime.timeline.flatMap((item) => (
       item.type === 'generation' && (item.batch.status === 'pending' || item.batch.status === 'processing')
         && item.batch.assets.some((asset) =>
           (asset.status === 'pending' || asset.status === 'processing') && asset.error?.code !== 'CONFLICT'
         )
-        ? [{ batchId: item.batch.id, sessionId }]
+        ? [{ batchId: item.batch.id, sessionId, createdAt: item.batch.createdAt }]
         : []
     ))
-  )), [runtimes]);
-  const pendingBatchKey = pendingBatchEntries.map((entry) => `${entry.sessionId}:${entry.batchId}`).join('|');
+  )), [runtimes, activeSessionId, commerceActive]);
+  const pendingBatchKey = pendingBatchEntries.map((entry) => `${entry.sessionId}:${entry.batchId}:${entry.createdAt}`).join('|');
+  const batchPollInFlight = useRef(new Set<string>());
+  const batchLastPolled = useRef(new Map<string, number>());
 
   useEffect(() => {
     if (!pendingBatchKey) return;
-    const poll = () => {
-      for (const { batchId, sessionId } of pendingBatchEntries) {
-        void gateway.getGenerationBatch(batchId).then((batch) => {
+    let stopped = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      if (document.visibilityState === 'hidden') return;
+      await Promise.all(pendingBatchEntries.map(async ({ batchId, sessionId, createdAt }) => {
+        const delay = gateway instanceof MockWorkspaceGateway ? 300 : nextPollingDelay(createdAt, 'generation');
+        if (delay === null || batchPollInFlight.current.has(batchId) || Date.now() - (batchLastPolled.current.get(batchId) ?? 0) < delay) return;
+        batchPollInFlight.current.add(batchId);
+        batchLastPolled.current.set(batchId, Date.now());
+        await gateway.getGenerationBatch(batchId).then((batch) => {
           if (batch.status !== 'pending' && batch.status !== 'processing') {
             void refreshQuota().catch(() => undefined);
           }
+          if (stopped) return;
           updateRuntime(sessionId, (runtime) => ({
             ...runtime,
             timeline: runtime.timeline.map((item) => (
               item.type === 'generation' && item.batch.id === batchId ? { ...item, batch } : item
             )),
           }));
-        }).catch(() => undefined);
-      }
+        }).catch(() => undefined).finally(() => batchPollInFlight.current.delete(batchId));
+      }));
     };
-    const timer = window.setInterval(poll, gateway instanceof MockWorkspaceGateway ? 300 : 1500);
-    return () => window.clearInterval(timer);
+    const schedule = () => {
+      const delays = pendingBatchEntries.map(entry => gateway instanceof MockWorkspaceGateway ? 300 : nextPollingDelay(entry.createdAt, 'generation'))
+        .filter((value): value is number => value !== null);
+      if (!delays.length || stopped) return;
+      timer = window.setTimeout(async () => { await poll(); schedule(); }, Math.min(...delays));
+    };
+    schedule();
+    window.addEventListener('focus', poll);
+    document.addEventListener('visibilitychange', poll);
+    return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer);
+      window.removeEventListener('focus', poll); document.removeEventListener('visibilitychange', poll); };
   }, [gateway, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
 
   const imageCreationEnabled = explicitImageToolEnabled;
@@ -874,13 +895,27 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     downloadingBatches.current.add(batch.id);
     setFeedback({ message: '正在准备图片下载…' });
     try {
-      const result = await downloadImages(batch);
+      const assets = await Promise.all(batch.assets.map(async asset => {
+        if (asset.status !== 'succeeded' || asset.expired || asset.url || !gateway.getGenerationAssetUrl) return asset;
+        try { return { ...asset, url: await gateway.getGenerationAssetUrl(asset.id) }; }
+        catch { return asset; }
+      }));
+      const result = await downloadImages({ ...batch, assets });
       setFeedback({ message: result.failed > 0
         ? `有 ${result.failed} 张图片下载失败，请刷新页面后重试。`
         : result.downloaded > 0 ? `已发起 ${result.downloaded} 张图片下载。` : '当前没有可下载的图片。' });
     } finally {
       downloadingBatches.current.delete(batch.id);
     }
+  };
+  const resolveAssetUrl = useMemo(() => gateway.getGenerationAssetUrl?.bind(gateway), [gateway]);
+  const refreshGenerationBatch = async (target: GenerationBatch) => {
+    try {
+      const batch = await gateway.getGenerationBatch(target.id);
+      updateRuntime(target.sessionId, runtime => ({ ...runtime, timeline: runtime.timeline.map(item =>
+        item.type === 'generation' && item.batch.id === target.id ? { ...item, batch } : item) }));
+      if (batch.status !== 'pending' && batch.status !== 'processing') void refreshQuota().catch(() => undefined);
+    } catch { setFeedback({ message: '进度暂时无法刷新，请稍后重试。' }); }
   };
 
   const addReferences = (files: FileList) => {
@@ -1026,6 +1061,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 if (tail && hasCommerce && !loading && !activeRuntime?.loadError && !activeRuntime?.streamingText && !activeRuntime?.awaitingFirstDelta && !activeRuntime?.optimisticImages.length) return null;
                 return (
                   <WorkspaceTimeline
+                    resolveAssetUrl={resolveAssetUrl}
+                    onRefreshBatch={(batch) => void refreshGenerationBatch(batch)}
                     awaitingFirstDelta={pendingOnHome || (tail && activeRuntime?.awaitingFirstDelta)}
                     isChatStreaming={tail && activeRuntime?.isChatStreaming}
                     items={pendingOnHome && pendingFirstMessage ? [pendingFirstMessage] : items}
