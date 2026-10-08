@@ -64,27 +64,26 @@ describe('claimed creative batch', () => {
       return { runs: [] };
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
-    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['get', 'submit', 'get']);
     expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'created', attemptCount: 1,
       nextAttemptAt: expect.any(String) });
     expect(Date.parse(checkpoints.at(-1)!.next!) - Date.now()).toBeGreaterThan(20_000);
   });
   it('quarantines a submission when its reconciliation read also fails', async () => {
     const row = makeRow();
-    row.items[0]!.status = 'created';
-    Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
     const { admin, checkpoints } = fakeStore(row);
     const dispatch = vi.fn(async (_user: string, operation: string) => {
+      if (operation === 'create') return { id: crypto.randomUUID() };
       if (operation === 'submit') throw new ApiRouteError({ code: 'service_not_ready', status: 503,
         retryable: true, message: 'temporary' });
       throw new TypeError('cannot read run');
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
-    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['create', 'submit', 'get']);
     expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'needs_review' });
     expect(checkpoints.at(-1)!.next).toBeNull();
   });
-  it('marks a 409 replay as submitted when the same request id already owns a run', async () => {
+  it('recognizes a completed submission before replaying after a crash', async () => {
     const row = makeRow();
     row.items[0]!.status = 'created';
     Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
@@ -95,7 +94,7 @@ describe('claimed creative batch', () => {
       return { runs: [{ requestId: row.items[0]!.submitRequestId }] };
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
-    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['submit', 'get']);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['get']);
     expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'submitted' });
     expect(checkpoints.at(-1)!.next).toBeNull();
   });
@@ -110,6 +109,20 @@ describe('claimed creative batch', () => {
       return { runs: [] };
     });
     await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['get', 'submit', 'get']);
+    expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'needs_review' });
+    expect(checkpoints.at(-1)!.next).toBeNull();
+  });
+  it('quarantines a resumed task when its prior submission cannot be checked', async () => {
+    const row = makeRow();
+    row.items[0]!.status = 'created';
+    Object.assign(row.items[0]!, { taskId: crypto.randomUUID() });
+    const { admin, checkpoints } = fakeStore(row);
+    const dispatch = vi.fn(async (_user: string, _operation: string) => {
+      throw new TypeError('cannot read run');
+    });
+    await processClaimedCreativeBatch(admin as never, row as never, 'trace', dispatch as never);
+    expect(dispatch.mock.calls.map(call => call[1])).toEqual(['get']);
     expect(checkpoints.at(-1)!.items[0]).toMatchObject({ status: 'needs_review' });
     expect(checkpoints.at(-1)!.next).toBeNull();
   });
@@ -126,6 +139,6 @@ describe('claimed creative batch', () => {
     const result = await runCreativeBatchWorker(admin as never, 'trace', dispatch as never);
     expect(result.processed).toBe(20);
     expect(queue).toHaveLength(1);
-    expect(dispatch).toHaveBeenCalledTimes(20);
+    expect(dispatch).toHaveBeenCalledTimes(40);
   });
 });

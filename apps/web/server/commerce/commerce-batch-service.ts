@@ -97,6 +97,7 @@ export async function processClaimedCreativeBatch(
   const item = batch.items.find(entry => (entry.status === 'pending' || entry.status === 'created')
     && (!entry.nextAttemptAt || Date.parse(entry.nextAttemptAt) <= Date.now()));
   if (!item) return checkpoint(true);
+  const resumedTask = Boolean(item.taskId);
   const retry = (cause: unknown, uncertain: boolean) => {
     item.error = cause instanceof Error ? cause.message : '子任务暂时无法提交';
     const attempt = (item.attemptCount ?? 0) + 1;
@@ -122,6 +123,18 @@ export async function processClaimedCreativeBatch(
     if (process.env.ZIMAGE_COMMERCE_SUBMIT_ENABLED === 'false') {
       item.nextAttemptAt = new Date(Date.now() + 60_000).toISOString();
       return checkpoint(true);
+    }
+    if (resumedTask) {
+      try {
+        const task = await dispatch(row.user_id, 'get', item.taskId, {}, correlationId) as { runs: Array<{ requestId: string }> };
+        if (task.runs.some(run => run.requestId === item.submitRequestId)) {
+          item.status = 'submitted'; item.error = undefined; item.nextAttemptAt = undefined;
+          return checkpoint(true);
+        }
+      } catch (cause) {
+        retry(cause, true);
+        return checkpoint(true);
+      }
     }
     try {
       await dispatch(row.user_id, 'submit', item.taskId,
