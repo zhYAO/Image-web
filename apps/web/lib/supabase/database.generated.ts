@@ -64,6 +64,103 @@ export type Database = {
         }
         Relationships: []
       }
+      apparel_assets: {
+        Row: {
+          claim_token: string
+          expires_at: string
+          height: number
+          id: string
+          name: string
+          retired: boolean
+          run_id: string
+          storage_path: string
+          uploaded: boolean
+          width: number
+        }
+        Insert: {
+          claim_token: string
+          expires_at?: string
+          height: number
+          id?: string
+          name: string
+          retired?: boolean
+          run_id: string
+          storage_path: string
+          uploaded?: boolean
+          width: number
+        }
+        Update: {
+          claim_token?: string
+          expires_at?: string
+          height?: number
+          id?: string
+          name?: string
+          retired?: boolean
+          run_id?: string
+          storage_path?: string
+          uploaded?: boolean
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apparel_assets_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "apparel_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      apparel_runs: {
+        Row: {
+          claim_token: string
+          created_at: string
+          error: string | null
+          id: string
+          lease_until: string | null
+          request_hash: string
+          request_id: string
+          revision: number
+          status: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          claim_token?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          lease_until?: string | null
+          request_hash: string
+          request_id: string
+          revision: number
+          status: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          claim_token?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          lease_until?: string | null
+          request_hash?: string
+          request_id?: string
+          revision?: number
+          status?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apparel_runs_task_id_revision_fkey"
+            columns: ["task_id", "revision"]
+            isOneToOne: false
+            referencedRelation: "commerce_revisions"
+            referencedColumns: ["task_id", "revision"]
+          },
+        ]
+      }
       commerce_exports: {
         Row: {
           created_at: string
@@ -668,6 +765,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apparel_dispatch: {
+        Args: {
+          p_correlation_id: string
+          p_input: Json
+          p_operation: string
+          p_request_hash: string
+          p_task_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       archive_image_message: {
         Args: { p_message_id: number }
         Returns: boolean
