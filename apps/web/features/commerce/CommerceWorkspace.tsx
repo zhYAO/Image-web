@@ -657,7 +657,7 @@ export function CommerceWorkspace({
               draftKey={`${ownerKey}:${draft.sessionId}`}
               ensureSession={ensureSession}
               embedded
-              active={draft.sessionId === sessionId}
+              active={draft.sessionId === sessionId && showDraft && !coordinatedLoading}
               promotedStyleIds={promotedStyles[draft.sessionId]}
               gateway={gateway}
               rightHeader={panelTabs}

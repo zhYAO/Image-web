@@ -101,10 +101,10 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
   };
 
   useEffect(() => {
-    if (batchId) return;
+    if (batchId || !active) return;
     const raw = sessionStorage.getItem(recoveryKey);
     if (!raw) return;
-    let active = true;
+    let mounted = true;
     try {
       const previous = JSON.parse(raw) as { requestId: string; sessionId: string };
       if (mockMode) {
@@ -115,16 +115,16 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
       void fetch(`/api/creative-batches?sessionId=${encodeURIComponent(previous.sessionId)}`, { cache: 'no-store' })
         .then(response => response.ok ? response.json() : [])
         .then(value => {
-          if (!active || !Array.isArray(value)) return;
+          if (!mounted || !Array.isArray(value)) return;
           const found = value.map(item => creativeBatchSchema.safeParse(item)).find(item => item.success && item.data.requestId === previous.requestId);
           if (found?.success) { sessionStorage.removeItem(recoveryKey); onCreated?.(found.data, sessionId); }
         }).catch(() => undefined);
     } catch { sessionStorage.removeItem(recoveryKey); }
-    return () => { active = false; };
-  }, [batchId, recoveryKey, onCreated, sessionId, ownerKey]);
+    return () => { mounted = false; };
+  }, [batchId, recoveryKey, onCreated, sessionId, ownerKey, active]);
 
   useEffect(() => {
-    if (!batchId) return;
+    if (!batchId || !active) return;
     let stopped = false;
     let advancing = false;
     let timer: number | undefined;
