@@ -2157,6 +2157,8 @@
 @container workspace (max-width: 824px) {
   .header {
     flex-wrap: wrap;
+    flex-basis: auto;
+    padding-block: 8px;
   }
 
   .header > :last-child {
@@ -2204,6 +2206,7 @@
 .workspaceBody { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .workspaceBody[hidden] { display: none; }
 .commerceScroll { display: flex; flex-direction: column; overflow: hidden; }
+@media (max-width: 767px) { .commerceScroll { overflow-y: auto; } }
 
 .bootstrapStatus {
   display: flex;

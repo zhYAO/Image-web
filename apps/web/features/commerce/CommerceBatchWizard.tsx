@@ -5,7 +5,7 @@ import { batchDraftKey, batchAttachmentKey, loadBatchDraft, saveBatchDraft } fro
 import { loadAttachments, saveAttachments, clearAttachments } from '@/store/composer-attachments';
 import meitu from './meitu.module.css';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { APLUS_SPECS, aPlusAspectRatio, COMMERCE_LANGUAGES, COMMERCE_PLATFORMS, COMMERCE_REGIONS, DETAIL_MODULES, PLATFORM_PRESETS, buildCommerceSlots, formatCredits, imageCreditItem, quoteCredits, validateCommercePlan, creativeBatchSchema, creativeBatchCreateSchema, type CreativeBatchCreate, type CommerceBrief, type CommerceGateway, type CommercePlan, type CommerceSlot, type CommerceTask, type CreativeBatch, type ProviderCapability, type UploadReference } from '@zimage/domain';
+import { APLUS_SPECS, aPlusAspectRatio, DETAIL_MODULES, buildCommerceSlots, formatCredits, imageCreditItem, quoteCredits, validateCommercePlan, creativeBatchSchema, creativeBatchCreateSchema, type CreativeBatchCreate, type CommerceBrief, type CommerceGateway, type CommercePlan, type CommerceSlot, type CommerceTask, type CreativeBatch, type ProviderCapability, type UploadReference } from '@zimage/domain';
 import { CreditFee, useCredits } from '@/features/credits/CreditsProvider';
 import { CommerceSelect } from './CommerceSelect';
 import { downloadCommerceFile } from './commerce-ui';
@@ -13,6 +13,7 @@ import { sessionHref } from '@/features/workspace/workspace-route';
 import styles from './commerce.module.css';
 import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 import { z } from 'zod';
+import { commerceGenerationPreset, hasCommerceModel } from './commerce-presets';
 
 type Workflow = 'product-set' | 'detail' | 'clone';
 type GenerationSettings = Pick<CommerceSlot, 'provider' | 'model' | 'aspectRatio' | 'resolution'>;
@@ -43,7 +44,7 @@ const readMockBatches = (owner: string): CreativeBatch[] => {
 };
 const saveMockBatch = (batch: CreativeBatch, owner: string) => sessionStorage.setItem(`zimage:commerce-batches:mock:v2:${owner}`, JSON.stringify([batch, ...readMockBatches(owner).filter(item => item.id !== batch.id)]));
 
-export function CommerceBatchWizard({ gateway, sessionId, ensureSession, settings, capabilities, batchId, onCreated, ownerKey = 'local', active = true }: {
+export function CommerceBatchWizard({ gateway, sessionId, ensureSession, capabilities, batchId, onCreated, ownerKey = 'local', active = true }: {
   ownerKey?: string; active?: boolean; gateway?: CommerceGateway; sessionId: string; ensureSession?: (title: string, requestId: string) => Promise<string>;
   settings: Pick<CommerceSlot, 'provider' | 'model' | 'aspectRatio' | 'resolution'>; capabilities: ProviderCapability[];
   batchId?: string; onCreated?: (batch: CreativeBatch, sourceId: string) => void;
@@ -53,10 +54,10 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
   const [restored] = useState(() => loadBatchDraft(storageKey));
   const [restoring, setRestoring] = useState(Boolean(restored && !batchId));
   const [workflow, setWorkflow] = useState<Workflow>(restored?.workflow ?? 'product-set');
-  const [platform, setPlatform] = useState<CommerceBrief['platform']>(restored?.platform ?? 'taobao');
-  const [language, setLanguage] = useState(restored?.language ?? 'zh-CN');
-  const [region, setRegion] = useState(restored?.region ?? 'cn');
-  const [generation, setGeneration] = useState(restored?.generation ?? settings);
+  const [platform] = useState<CommerceBrief['platform']>(restored?.platform ?? 'taobao');
+  const [language] = useState(restored?.language ?? 'zh-CN');
+  const [region] = useState(restored?.region ?? 'cn');
+  const [generation, setGeneration] = useState(restored?.generation ?? commerceGenerationPreset(capabilities));
   const [count, setCount] = useState(restored?.count ?? 7);
   const [advanced, setAdvanced] = useState(restored?.advanced ?? false);
   const [touched, setTouched] = useState(restored?.touched ?? { region: false, language: false, aspectRatio: false });
@@ -95,6 +96,20 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     try { saveBatchDraft(storageKey, { workflow, platform, language, region, generation, count, advanced, touched, rows }); } catch { return; }
     for (const row of rows) for (const role of ['products', 'references'] as const) void saveAttachments(batchAttachmentKey(storageKey, row.id, role), row[role].map(fileReference), role === 'products' ? 6 : 20);
   }, [storageKey, active, restoring, recovery, batchId, batch, workflow, platform, language, region, generation, count, advanced, touched, rows]);
+  const defaultsReady = useRef(Boolean(restored) || capabilities.length > 0);
+  useEffect(() => {
+    if (defaultsReady.current || !capabilities.length) return;
+    defaultsReady.current = true;
+    setGeneration(commerceGenerationPreset(capabilities));
+  }, [capabilities]);
+  const resetModel = () => {
+    if (recovery) return;
+    setConfirming(false);
+    const preset = commerceGenerationPreset(capabilities);
+    setGeneration(preset);
+    setRows(current => current.map(row => row.generation && !hasCommerceModel(capabilities, row.generation) ? { ...row, generation: preset } : row));
+    setError(undefined);
+  };
   const clearDraft = () => {
     sessionStorage.removeItem(storageKey); sessionStorage.removeItem(recoveryKey);
     for (const row of rows) for (const role of ['products', 'references'] as const) void clearAttachments(batchAttachmentKey(storageKey, row.id, role));
@@ -311,18 +326,10 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
     </section>;
   }
   const model = capabilities.find(item => item.provider === generation.provider)?.models.find(item => item.id === generation.model);
-  return <div className={meitu.batchBackdrop}><div className={meitu.batchDialog}><header className={meitu.batchHeader}><h2>批量生成</h2><Link href="/create">关闭 ✕</Link></header><div className={meitu.batchContent}><section aria-label="即时批量生成"><h2>批量生成</h2><p>统一参数 → 添加商品 → 逐项覆盖 → 核对费用并提交</p><p className={styles.note}>每批最多 20 个商品任务；当前会话最多保留 64 张参考图，上传仍受每日额度限制。</p>{restored && <p className={styles.note}>已恢复此账号、此标签页的批量草稿。</p>}
+  const unavailableModel = capabilities.length > 0 && (!hasCommerceModel(capabilities, generation) || rows.some(row => row.generation && !hasCommerceModel(capabilities, row.generation)));
+  return <div className={meitu.batchBackdrop}><div className={meitu.batchDialog}><header className={meitu.batchHeader}><h2>批量生成</h2><Link href="/create">关闭 ✕</Link></header><div className={meitu.batchContent}><section aria-label="即时批量生成"><h2>批量生成</h2><p>选择流程 → 添加商品与要求 → 核对费用并提交</p><p className={styles.note}>每批最多 20 个商品任务；当前会话最多保留 64 张参考图，上传仍受每日额度限制。</p>{restored && <p className={styles.note}>已恢复此账号、此标签页的批量草稿。</p>}
     <fieldset disabled={busy || restoring || Boolean(recovery)} onChange={() => setConfirming(false)}><div className={meitu.segments} aria-label="批量流程切换">{(['product-set', 'detail', 'clone'] as const).map(id => <button type="button" key={id} aria-pressed={workflow === id} onClick={() => { setWorkflow(id); setConfirming(false); }}>{id === 'product-set' ? '商品套图' : id === 'detail' ? 'A+/详情页' : '爆款图复刻'}</button>)}</div><div className={styles.batchGlobal}>
-      <label>生成类型<CommerceSelect aria-label="批量生成类型" value={workflow} onChange={value => { setWorkflow(value as Workflow); setError(undefined); }}><option value="product-set">商品套图</option><option value="detail">A+ 详情页</option><option value="clone">爆款图复刻</option></CommerceSelect></label>
-      <label>统一平台<CommerceSelect aria-label="批量统一平台" value={platform} onChange={value => { const next = value as CommerceBrief['platform']; setPlatform(next); if (!touched.region) setRegion(PLATFORM_PRESETS[next]?.region ?? region); if (!touched.language) setLanguage(PLATFORM_PRESETS[next]?.language ?? language); if (!touched.aspectRatio) setGeneration(current => ({ ...current, aspectRatio: PLATFORM_PRESETS[next]?.aspectRatio ?? current.aspectRatio })); }}>
-        {COMMERCE_PLATFORMS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </CommerceSelect></label>
-      <label>生成模型<CommerceSelect aria-label="批量生成模型" value={`${generation.provider}::${generation.model}`} onChange={value => { const [provider, name] = value.split('::'); const match = capabilities.find(item => item.provider === provider)?.models.find(item => item.id === name); if (provider && name && match) setGeneration(current => ({ ...current, provider, model: name, resolution: match.resolutions.includes(current.resolution) ? current.resolution : match.resolutions[0]!, aspectRatio: match.aspectRatios.includes(current.aspectRatio) ? current.aspectRatio : match.aspectRatios[0]! })); }}>
-        {capabilities.flatMap(provider => provider.models.map(model => <option key={model.id} value={`${provider.provider}::${model.id}`}>{model.label}</option>))}
-      </CommerceSelect></label>
       <label>分辨率<CommerceSelect aria-label="批量生成分辨率" value={generation.resolution} onChange={value => setGeneration(current => ({ ...current, resolution: value as CommerceSlot['resolution'] }))}>{model?.resolutions.map(resolution => <option key={resolution}>{resolution}</option>)}</CommerceSelect></label>
-      <label>地区<CommerceSelect aria-label="批量目标地区" value={region} onChange={value => { setTouched(current => ({ ...current, region: true })); setRegion(value as NonNullable<CommerceBrief['region']>); }}>{COMMERCE_REGIONS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
-      <label>语言<CommerceSelect aria-label="批量画面语言" value={language} onChange={value => { setTouched(current => ({ ...current, language: true })); setLanguage(value as NonNullable<CommerceBrief['language']>); }}>{COMMERCE_LANGUAGES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
       {workflow === 'detail' ? <p className={styles.note}>A+ 自动采用接近成品的模型比例：桌面 16:9，移动 4:3。</p> : <label>比例<CommerceSelect aria-label="批量生成比例" value={generation.aspectRatio} onChange={value => { setTouched(current => ({ ...current, aspectRatio: true })); setGeneration(current => ({ ...current, aspectRatio: value as CommerceSlot['aspectRatio'] })); }}>{model?.aspectRatios.map(ratio => <option key={ratio}>{ratio}</option>)}</CommerceSelect></label>}
       {workflow === 'product-set' && <label>每商品图片数量<CommerceSelect aria-label="批量每商品图片数量" value={count} onChange={value => setCount(Number(value))}>{Array.from({ length: 20 }, (_, index) => <option key={index + 1}>{index + 1}</option>)}</CommerceSelect></label>}
       {workflow === 'detail' && <label>输出规格<CommerceSelect aria-label="批量 A+ 输出规格" value={advanced ? 'advanced' : 'standard'} onChange={value => setAdvanced(value === 'advanced')}><option value="standard">普通 A+（6 张）</option><option value="advanced">高级 A+ 桌面＋移动（12 张）</option></CommerceSelect></label>}
@@ -331,24 +338,13 @@ export function CommerceBatchWizard({ gateway, sessionId, ensureSession, setting
       <label>{workflow === 'clone' ? '复刻参考图' : '商品原图'}<input aria-label={`商品 ${index + 1} ${workflow === 'clone' ? '复刻参考图' : '原图'}`} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={event => update(row.id, workflow === 'clone' ? { references: Array.from(event.target.files ?? []) } : { products: Array.from(event.target.files ?? []) })} /></label>
       {workflow === 'clone' && <label>替换商品图（可选）<input aria-label={`商品 ${index + 1} 替换图`} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={event => update(row.id, { products: Array.from(event.target.files ?? []) })} /></label>}
       <div className={meitu.batchFiles}>{(['products', 'references'] as const).map(role => row[role].map((file, fileIndex) => <span key={`${role}:${fileIndex}`}>{file.name}<button type="button" aria-label={`移除商品 ${index + 1} 的 ${file.name}`} onClick={() => update(row.id, { [role]: row[role].filter((_, i) => i !== fileIndex) })}>×</button></span>))}</div>
-      <label>商品名称<input maxLength={160} aria-label={`商品 ${index + 1} 名称`} value={row.name} onChange={event => update(row.id, { name: event.target.value })} /></label>
-      <label>商品描述<textarea maxLength={4000} aria-label={`商品 ${index + 1} 描述`} value={row.description} onChange={event => update(row.id, { description: event.target.value })} /></label>
-      <label>卖点<textarea maxLength={2000} aria-label={`商品 ${index + 1} 卖点`} value={row.sellingPoints} onChange={event => update(row.id, { sellingPoints: event.target.value })} /></label>
-      <details><summary>覆盖统一参数</summary><label>平台<CommerceSelect aria-label={`商品 ${index + 1} 平台覆盖`} value={row.platform ?? ''} onChange={value => update(row.id, { platform: value ? value as CommerceBrief['platform'] : undefined })}><option value="">继承统一平台</option>{COMMERCE_PLATFORMS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
-        <label>地区<CommerceSelect aria-label={`商品 ${index + 1} 地区覆盖`} value={row.region ?? ''} onChange={value => update(row.id, { region: value ? value as CommerceBrief['region'] : undefined })}><option value="">继承统一地区</option>{COMMERCE_REGIONS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
-        <label>语言<CommerceSelect aria-label={`商品 ${index + 1} 语言覆盖`} value={row.language ?? ''} onChange={value => update(row.id, { language: value ? value as CommerceBrief['language'] : undefined })}><option value="">继承统一语言</option>{COMMERCE_LANGUAGES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</CommerceSelect></label>
-        <label>模型<CommerceSelect aria-label={`商品 ${index + 1} 模型覆盖`} value={row.generation ? `${row.generation.provider}::${row.generation.model}` : ''} onChange={value => { const [provider, name] = value.split('::'); const match = capabilities.find(item => item.provider === provider)?.models.find(item => item.id === name); update(row.id, { generation: provider && name && match ? { provider, model: name, resolution: match.resolutions.includes((row.generation ?? generation).resolution) ? (row.generation ?? generation).resolution : match.resolutions[0]!, aspectRatio: match.aspectRatios.includes((row.generation ?? generation).aspectRatio) ? (row.generation ?? generation).aspectRatio : match.aspectRatios[0]! } : undefined }); }}><option value="">继承统一模型</option>{capabilities.flatMap(provider => provider.models.map(model => <option key={model.id} value={`${provider.provider}::${model.id}`}>{model.label}</option>))}</CommerceSelect></label>
-        {row.generation && <label>分辨率<CommerceSelect aria-label={`商品 ${index + 1} 分辨率覆盖`} value={row.generation.resolution} onChange={value => update(row.id, { generation: { ...row.generation!, resolution: value as CommerceSlot['resolution'] } })}>{capabilities.find(item => item.provider === row.generation!.provider)?.models.find(item => item.id === row.generation!.model)?.resolutions.map(resolution => <option key={resolution}>{resolution}</option>)}</CommerceSelect></label>}
-        {workflow !== 'detail' && row.generation && <label>画面比例<CommerceSelect aria-label={`商品 ${index + 1} 比例覆盖`} value={row.generation.aspectRatio} onChange={value => update(row.id, { generation: { ...row.generation!, aspectRatio: value as CommerceSlot['aspectRatio'] } })}>{capabilities.find(item => item.provider === row.generation!.provider)?.models.find(item => item.id === row.generation!.model)?.aspectRatios.map(ratio => <option key={ratio}>{ratio}</option>)}</CommerceSelect></label>}
-        {workflow === 'product-set' && <label>图片数量<CommerceSelect aria-label={`商品 ${index + 1} 数量覆盖`} value={row.count ?? ''} onChange={value => update(row.id, { count: value ? Number(value) : undefined })}><option value="">继承统一数量</option>{Array.from({ length: 20 }, (_, value) => <option key={value + 1}>{value + 1}</option>)}</CommerceSelect></label>}
-        {workflow === 'detail' && <label>A+ 规格<CommerceSelect aria-label={`商品 ${index + 1} A+规格覆盖`} value={row.advanced === undefined ? '' : row.advanced ? 'advanced' : 'standard'} onChange={value => update(row.id, { advanced: value ? value === 'advanced' : undefined })}><option value="">继承统一规格</option><option value="standard">普通 A+</option><option value="advanced">高级 A+</option></CommerceSelect></label>}
-        {workflow === 'clone' && <label>复刻方式<CommerceSelect aria-label={`商品 ${index + 1} 复刻方式覆盖`} value={row.cloneMode ?? ''} onChange={value => update(row.id, { cloneMode: value ? value as CommerceBrief['cloneMode'] : undefined })}><option value="">继承参考风格</option><option value="style">参考风格</option><option value="faithful">高度复刻</option></CommerceSelect></label>}
-        <label>额外要求<textarea maxLength={2000} aria-label={`商品 ${index + 1} 额外要求`} value={row.instruction} onChange={event => update(row.id, { instruction: event.target.value })} /></label>
-      </details><button type="button" disabled={rows.length === 1} onClick={() => { for (const role of ['products', 'references'] as const) void clearAttachments(batchAttachmentKey(storageKey, row.id, role)); setConfirming(false); setRows(current => current.filter(item => item.id !== row.id)); }}>移除商品</button>
+      <label>商品卖点 & 要求<textarea maxLength={4000} aria-label={`商品 ${index + 1} 描述`} value={row.description || [row.name, row.sellingPoints, row.instruction].filter(Boolean).join('\n')} placeholder="商品名称、核心卖点和创作要求" onChange={event => update(row.id, { description: event.target.value })} /></label>
+      <button type="button" disabled={rows.length === 1} onClick={() => { for (const role of ['products', 'references'] as const) void clearAttachments(batchAttachmentKey(storageKey, row.id, role)); setConfirming(false); setRows(current => current.filter(item => item.id !== row.id)); }}>移除商品</button>
     </fieldset>)}</div>
     <button type="button" disabled={rows.length >= 20} onClick={() => { setRows(current => [...current, newRow()]); setConfirming(false); }}>添加商品（最多 20 个）</button></fieldset>
+    {unavailableModel && <p role="alert">历史生成模型已不可用。<button type="button" disabled={busy || Boolean(recovery)} onClick={resetModel}>使用当前默认参数创建新版本</button></p>}
     <div className={meitu.batchActions}>
-      <CreditFee items={quoteItems} /><button type="button" className={styles.primary} disabled={busy || restoring || !active || !gateway} onClick={() => void submit()}>{busy ? '正在提交…' : restoring ? '正在恢复附件…' : recovery ? '恢复提交同一批次' : confirming ? `确认提交 ${rows.length} 个商品任务` : `核对 ${rows.length} 个商品任务费用`}</button></div>
+      <CreditFee items={quoteItems} /><button type="button" className={styles.primary} disabled={busy || restoring || !active || !gateway || (unavailableModel && !recovery)} onClick={() => void submit()}>{busy ? '正在提交…' : restoring ? '正在恢复附件…' : recovery ? '恢复提交同一批次' : confirming ? `确认提交 ${rows.length} 个商品任务` : `核对 ${rows.length} 个商品任务费用`}</button></div>
     {confirming && <div className={styles.batchConfirmation} role="dialog" aria-label="批量费用确认"><strong>确认批量提交</strong><p>{rows.length} 个商品任务 · {quoteItems.length} 张图片 · 预计 {quote ? formatCredits(quote.totalMinor) : '—'} 积分。逐项由现有队列生成，失败按实际结果结算。</p><button type="button" onClick={() => setConfirming(false)}>返回修改</button></div>}
     {error && <p role="alert">{error}</p>}
   </section></div></div></div>;

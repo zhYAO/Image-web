@@ -1,6 +1,7 @@
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
 import { CommerceEditor } from "./CommerceEditor";
+import { commerceGenerationPreset, hasCommerceModel } from "./commerce-presets";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   buildCommerceSlots,
@@ -103,12 +104,24 @@ export function CommerceWizard({
   const definition = COMMERCE_SCENES.find((item) => item.id === scene)!;
   const isPoster = scene === "xhs-poster";
   const credits = useCredits();
-  const selectedChatModel = useWorkspaceStore(state => state.selectedChatModel);
+  const sharedChatModel = useWorkspaceStore(state => state.selectedChatModel);
+  const simplified = ["product-set", "detail", "clone", "product-main"].includes(scene);
+  const selectedChatModel = simplified ? "doubao" : sharedChatModel;
   const setSelectedChatModel = useWorkspaceStore(state => state.setSelectedChatModel);
   const storageKey = draftKey ?? sessionId;
   const [restored] = useState(() => loadCommerceDraft(storageKey));
   const remoteSession = useRef(restored?.sessionId);
-  const [generationSettings, setGenerationSettings] = useState(restored?.settings ?? settings);
+  const [generationSettings, setGenerationSettings] = useState(() => {
+    const previous = restored?.plan?.slots[0] ?? seedPlan?.slots[0];
+    const prior = restored?.settings ?? (previous ? { provider: previous.provider, model: previous.model, aspectRatio: previous.aspectRatio, resolution: previous.resolution } : undefined);
+    return prior ?? (simplified ? commerceGenerationPreset(capabilities) : settings);
+  });
+  const defaultsReady = useRef(Boolean(restored || seedPlan) || capabilities.length > 0);
+  useEffect(() => {
+    if (!simplified || defaultsReady.current || !capabilities.length) return;
+    defaultsReady.current = true;
+    setGenerationSettings(commerceGenerationPreset(capabilities));
+  }, [capabilities, simplified]);
   const [step, setStep] = useState(1);
   const [brief, setBrief] = useState<CommerceBrief>(
     restored?.brief ?? seedPlan?.brief ?? {
@@ -382,7 +395,7 @@ export function CommerceWizard({
           ...previous,
           role: scene === 'clone' ? `参考图 ${index + 1}` : detailModule || (category ? previous && previous.role !== oldDefaultRole ? previous.role : nextDefaultRole : scene === 'product-main' && templateId !== 'white-main' ? COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.previewRole ?? slot.role : previous?.role ?? slot.role),
           category, module: detailModule as CommerceSlot['module'], outputSpec,
-          aspectRatio: outputSpec ? aPlusAspectRatio(outputSpec) : slot.aspectRatio,
+          aspectRatio: outputSpec ? aPlusAspectRatio(outputSpec) : previous?.aspectRatio ?? slot.aspectRatio,
           targetWidth: target?.width, targetHeight: target?.height,
           layout: category === 'selling' ? (sellingLayouts[index - categoryCounts.white] ?? previous?.layout ?? '自动分配') as typeof SELLING_LAYOUTS[number] : undefined,
           textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : detailModule && preparedBrief.moduleCopy?.[detailModule] !== undefined ? (preparedBrief.moduleCopy[detailModule] ? 'exact' as const : 'none' as const) : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
@@ -502,6 +515,15 @@ export function CommerceWizard({
     fee={<CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} />}
     productContext={productContext} chatModel={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} setChatModel={setSelectedChatModel}
     busy={busy} recovering={recoveringCreate} active={active} error={error} total={plannedCount}
+    unavailableModel={capabilities.length > 0 && (!hasCommerceModel(capabilities, generationSettings) || Boolean(plan?.slots.some(slot => !hasCommerceModel(capabilities, slot))))}
+    resetModel={() => {
+      if (creation.current) return;
+      const preset = commerceGenerationPreset(capabilities);
+      setGenerationSettings(preset);
+      setPlan(current => current ? { ...current, slots: current.slots.map(slot => ({ ...slot, ...preset, ...(slot.outputSpec ? { aspectRatio: aPlusAspectRatio(slot.outputSpec) } : {}) })) } : current);
+      setError(undefined);
+      setStep(1);
+    }}
   />;
   return (
     <section

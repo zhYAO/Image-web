@@ -15,9 +15,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  COMMERCE_LANGUAGES,
-  COMMERCE_PLATFORMS,
-  COMMERCE_REGIONS,
   DETAIL_MODULES,
   SELLING_LAYOUTS,
   templatesForScene,
@@ -31,7 +28,6 @@ import {
 } from "@zimage/domain";
 import { CommerceSelect } from "./CommerceSelect";
 import { CreativeTextField } from "./CreativeTextField";
-import { CommercePlanFields } from "./CommercePlanFields";
 import styles from "./meitu.module.css";
 
 type Settings = Pick<
@@ -89,13 +85,15 @@ export interface CommerceEditorProps {
   textFee: ReactNode;
   fee: ReactNode;
   productContext: CreativeTextOptimizeRequest["productContext"];
-  chatModel: string;
+  chatModel: 'doubao' | 'minimax';
   setChatModel: (value: string) => void;
   busy: boolean;
   recovering: boolean;
   active: boolean;
   error?: string;
   total: number;
+  unavailableModel?: boolean;
+  resetModel?: () => void;
 }
 
 export function CommerceExample({ scene }: { scene: CommerceScene }) {
@@ -212,11 +210,13 @@ function Uploader({
   role,
   optional,
   title,
+  existingOnly = false,
 }: {
   p: CommerceEditorProps;
   role: "product" | "style";
   optional?: boolean;
   title: string;
+  existingOnly?: boolean;
 }) {
   const entries = p.references
     .map((ref, index) => ({ ref, index }))
@@ -242,7 +242,7 @@ function Uploader({
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          if (!p.busy && !p.recovering)
+          if (!existingOnly && !p.busy && !p.recovering)
             p.addFiles(event.dataTransfer.files, role);
         }}
       >
@@ -281,7 +281,7 @@ function Uploader({
             ))}
           </div>
         )}
-        <label className={styles.uploadButton}>
+        {!existingOnly && <label className={styles.uploadButton}>
           <Upload size={16} aria-hidden />
           {entries.length
             ? "继续添加"
@@ -298,15 +298,15 @@ function Uploader({
               event.target.value = "";
             }}
           />
-        </label>
-        <p>
+        </label>}
+        {!existingOnly && <><p>
           {optional
             ? "有商品需替换时上传，无商品可跳过"
             : role === "product"
               ? "同一产品，最多 6 张"
               : `最多 ${max} 张参考图`}
         </p>
-        <small>PNG、JPG、WebP · 每张不超过 10 MB</small>
+        <small>PNG、JPG、WebP · 每张不超过 10 MB</small></>}
       </div>
     </Section>
   );
@@ -319,39 +319,6 @@ function GenerationSettings({ p }: { p: CommerceEditorProps }) {
   return (
     <Section title="生成设置">
       <div className={styles.settingGrid}>
-        <CommerceSelect
-          aria-label="创作平台"
-          value={p.brief.platform}
-          onChange={p.setPlatform}
-        >
-          {COMMERCE_PLATFORMS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </CommerceSelect>
-        <CommerceSelect
-          aria-label="目标地区"
-          value={p.productContext?.region ?? "cn"}
-          onChange={p.setRegion}
-        >
-          {COMMERCE_REGIONS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </CommerceSelect>
-        <CommerceSelect
-          aria-label="画面语言"
-          value={p.productContext?.language ?? "zh-CN"}
-          onChange={p.setLanguage}
-        >
-          {COMMERCE_LANGUAGES.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </CommerceSelect>
         {p.scene === "detail" ? (
           <CommerceSelect
             aria-label="A+ 输出规格"
@@ -371,11 +338,16 @@ function GenerationSettings({ p }: { p: CommerceEditorProps }) {
               })
             }
           >
+            {!model?.aspectRatios.includes(p.settings.aspectRatio) && <option disabled>{p.settings.aspectRatio}</option>}
             {model?.aspectRatios.map((value) => (
               <option key={value}>{value}</option>
             ))}
           </CommerceSelect>
         )}
+        <CommerceSelect aria-label="电商分辨率" value={p.settings.resolution} onChange={value => p.changeSettings({ resolution: value as Settings['resolution'] })}>
+          {!model?.resolutions.includes(p.settings.resolution) && <option disabled>{p.settings.resolution}</option>}
+          {model?.resolutions.map(value => <option key={value}>{value}</option>)}
+        </CommerceSelect>
       </div>
     </Section>
   );
@@ -386,6 +358,7 @@ function Description({ p }: { p: CommerceEditorProps }) {
     <Section title="商品卖点 & 要求">
       <CreativeTextField
         field="description"
+        chatModel={p.chatModel}
         label="商品描述"
         productContext={p.productContext}
         value={
@@ -406,130 +379,12 @@ function Description({ p }: { p: CommerceEditorProps }) {
   );
 }
 
-function StyleSettings({ p }: { p: CommerceEditorProps }) {
-  const model = p.capabilities
-    .find((c) => c.provider === p.settings.provider)
-    ?.models.find((m) => m.id === p.settings.model);
-  return (
-    <details className={styles.more}>
-      <summary>高级设置 · 平台、风格、数量与分图</summary>
-      <details className={styles.more}>
-        <summary>模型与分辨率</summary>
-        <label>
-          生成模型
-          <CommerceSelect
-            aria-label="电商生成模型"
-            value={`${p.settings.provider}::${p.settings.model}`}
-            onChange={(value) => {
-              const [provider, model] = value.split("::");
-              p.changeSettings({ provider, model });
-            }}
-          >
-            {p.capabilities.flatMap((c) =>
-              c.models.map((m) => (
-                <option
-                  key={`${c.provider}::${m.id}`}
-                  value={`${c.provider}::${m.id}`}
-                >
-                  {m.label}
-                </option>
-              )),
-            )}
-          </CommerceSelect>
-        </label>
-        <label>
-          分辨率
-          <CommerceSelect
-            aria-label="电商分辨率"
-            value={p.settings.resolution}
-            onChange={(value) =>
-              p.changeSettings({ resolution: value as Settings["resolution"] })
-            }
-          >
-            {model?.resolutions.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </CommerceSelect>
-        </label>
-        <label>
-          文字优化模型
-          <CommerceSelect
-            aria-label="文字优化模型"
-            value={p.chatModel}
-            onChange={p.setChatModel}
-          >
-            <option value="doubao">豆包</option>
-            <option value="minimax">MiniMax</option>
-          </CommerceSelect>
-        </label>
-      </details>
-      <details className={styles.more}>
-        <summary>商品资料与事实（选填）</summary>
-        <CreativeTextField
-          field="name"
-          label="商品名称"
-          maxLength={160}
-          value={p.brief.name}
-          onChange={(name) => p.patch({ name })}
-          productContext={p.productContext}
-        />
-        <CreativeTextField
-          field="facts"
-          label="商品事实"
-          multiline
-          maxLength={4000}
-          value={p.brief.facts}
-          onChange={(facts) => p.patch({ facts })}
-          productContext={p.productContext}
-        />
-        <CreativeTextField
-          field="sellingPoints"
-          label="商品卖点"
-          multiline
-          maxLength={2000}
-          value={p.brief.sellingPoints}
-          onChange={(sellingPoints) => p.patch({ sellingPoints })}
-          productContext={p.productContext}
-        />
-      </details>
-      {!["clone", "product-main"].includes(p.scene) && (
-        <Uploader p={p} role="style" title="风格参考图" />
-      )}
-      <label>
-        风格方向
-        <CommerceSelect
-          aria-label="风格模板"
-          value={p.templateId}
-          onChange={p.setTemplate}
-        >
-          {!templatesForScene(p.scene).some((t) => t.id === p.templateId) && (
-            <option value={p.templateId}>历史模板</option>
-          )}
-          {templatesForScene(p.scene).map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </CommerceSelect>
-      </label>
-      <CreativeTextField
-        field="instruction"
-        label="整套创作要求"
-        multiline
-        maxLength={2000}
-        value={p.instruction}
-        onChange={p.setInstruction}
-        productContext={p.productContext}
-      />
-    </details>
-  );
-}
-
 export function ProductSetFlow({ p }: { p: CommerceEditorProps }) {
   const [layoutOpen, setLayoutOpen] = useState(false);
   return (
     <>
       <Uploader p={p} role="product" title="商品原图" />
+      {p.references.some(reference => p.roleOf(reference) === 'style') && <Uploader p={p} role="style" title="已保存风格参考" existingOnly />}
       <GenerationSettings p={p} />
       <Description p={p} />
       <Section title="套图结构配置" extra={<small>共 {p.total} 张</small>}>
@@ -601,7 +456,6 @@ export function ProductSetFlow({ p }: { p: CommerceEditorProps }) {
           </div>
         ))}
       </Section>
-      <StyleSettings p={p} />
       <details className={styles.more}>
         <summary>商品上架文案（可选）</summary>
         <p>依据已填写资料生成，文字费用单独计算。</p>
@@ -807,7 +661,6 @@ export function DetailFlow({ p }: { p: CommerceEditorProps }) {
           ))}
         </div>
       </Section>
-      <StyleSettings p={p} />
     </>
   );
 }
@@ -880,6 +733,7 @@ export function CloneFlow({ p }: { p: CommerceEditorProps }) {
       <CreativeTextField
         field="instruction"
         label="统一复刻要求（选填）"
+        chatModel={p.chatModel}
         multiline
         maxLength={2000}
         value={p.instruction}
@@ -907,7 +761,6 @@ export function CloneFlow({ p }: { p: CommerceEditorProps }) {
       </Section>
       <GenerationSettings p={p} />
       <Description p={p} />
-      <StyleSettings p={p} />
     </>
   );
 }
@@ -964,6 +817,7 @@ export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
           <CreativeTextField
             field="instruction"
             label="场景描述"
+            chatModel={p.chatModel}
             value={p.instruction}
             onChange={p.setInstruction}
             multiline
@@ -989,7 +843,6 @@ export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
         </CommerceSelect>
       </label>
       <Description p={p} />
-      <StyleSettings p={p} />
     </>
   );
 }
@@ -1010,12 +863,13 @@ export function CommerceEditor(p: CommerceEditorProps) {
   );
   const blocked =
     p.busy ||
+    (!p.capabilities.length && !p.recovering) ||
+    (p.unavailableModel && !p.recovering) ||
     !p.active ||
     !hasInput ||
     p.total < 1 ||
     p.total > (isDetail ? 32 : p.scene === "product-main" ? 4 : 20);
   const firstUpload = p.scene === "product-main" && !product;
-  const review = p.showPlan && p.plan;
   return (
     <section
       className={`${styles.editor} ${isDetail ? styles.detailEditor : ""} ${firstUpload ? styles.firstUpload : ""}`}
@@ -1036,6 +890,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
           </fieldset>
         </div>
         <footer className={styles.actionBar}>
+          {p.unavailableModel && <p role="alert">历史生成模型已不可用。<button type="button" disabled={p.busy || p.recovering} onClick={p.resetModel}>使用当前默认参数创建新版本</button></p>}
           {p.error && (
             <p role="alert" className={styles.error}>
               {p.error}
@@ -1077,11 +932,8 @@ export function CommerceEditor(p: CommerceEditorProps) {
             </button>
           </div>
           <div className={styles.secondaryActions}>
-            <button disabled={p.busy || !p.active} onClick={p.prepare}>
-              调整分图方案
-            </button>
             <button
-              disabled={p.busy || !p.active}
+              disabled={p.busy || !p.active || (!p.capabilities.length && !p.recovering)}
               onClick={() => p.save(false)}
             >
               保存草稿
@@ -1093,19 +945,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
         </footer>
       </div>
       <aside className={styles.preview} aria-label="电商方案预览">
-        {review ? (
-          <>
-            <h2>编辑分图方案</h2>
-            <CommercePlanFields
-              plan={p.plan!}
-              capabilities={p.capabilities}
-              disabled={p.busy || p.recovering}
-              onChange={p.setPlan}
-              selectedSlotId={p.selectedSlotId}
-              onSelectSlot={p.selectSlot}
-            />
-          </>
-        ) : firstUpload ? (
+        {firstUpload ? (
           <div className={styles.uploadWelcome}>
             <div className={styles.welcomeArt}>
               <Image

@@ -26,6 +26,8 @@ import {
   commerceItemNeedsReview,
 } from "./commerce-ui";
 import styles from "./commerce.module.css";
+import { commerceGenerationPreset, hasCommerceModel } from './commerce-presets';
+import { aPlusAspectRatio, COMMERCE_PRIMARY_SCENE_IDS } from '@zimage/domain';
 
 export interface CommerceEditRequest {
   id: string;
@@ -477,6 +479,19 @@ export function CommerceTaskCard({
       .at(-1),
   );
   const pending = latest.some(unsettledCommerceItem);
+  const unavailableModel = capabilities.length > 0 && task.slots.some(slot => !hasCommerceModel(capabilities, slot));
+  const resetModel = () => perform(async () => {
+    if (unknown || pending || edit || task.archived) return;
+    const preset = commerceGenerationPreset(capabilities);
+    const plan = { ...planOf(task), slots: task.slots.map(slot => ({ ...slot, ...preset,
+      ...(slot.outputSpec ? { aspectRatio: aPlusAspectRatio(slot.outputSpec) } : {}) })) };
+    const key = JSON.stringify({ revision: task.revision, plan });
+    if (saveRequest.current?.key !== key) saveRequest.current = { key, requestId: crypto.randomUUID() };
+    const updated = await gateway.save(task.id, { expectedRevision: task.revision, plan, requestId: saveRequest.current.requestId });
+    onTask(updated);
+    setSelected(updated.slots.map(slot => slot.id));
+    setMessage('新版本已保存，请核对重新计算的费用后确认生成。');
+  });
   const awaitingReview = latest.some(commerceItemNeedsReview);
   const generating = latest.some(
     (item) => unsettledCommerceItem(item) && !commerceItemNeedsReview(item),
@@ -526,7 +541,7 @@ export function CommerceTaskCard({
           {task.archived ? `已归档 · ${title}` : title}
         </strong>
       </header>
-      {task.slots.some(slot=>slot.provider==='seedream'&&slot.model==='seedream-4.5') && <p role="note" className={styles.notice}>此方案使用 Seedream 4.5。历史图片与费用保持原样；再次生成前，请修改模型为 Flash 或 Pro 并保存新版本。</p>}
+      {unavailableModel && <p role="alert" className={styles.notice}>历史生成模型已不可用。<button disabled={!canEdit || pending || Boolean(edit)} onClick={() => void resetModel()}>使用当前默认参数创建新版本</button></p>}
       <p className={styles.note}>
         新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>
@@ -829,6 +844,7 @@ export function CommerceTaskCard({
           className={styles.primary}
           disabled={
             !canEdit ||
+            unavailableModel ||
             Boolean(edit) ||
             !selected.length ||
             selected.some((id) =>
@@ -857,6 +873,7 @@ export function CommerceTaskCard({
             。保存后还需确认生成；仅重新生成选中的图片。
           </p>
           <CommercePlanFields
+            hideGeneration={COMMERCE_PRIMARY_SCENE_IDS.some(scene => scene === task.scene)}
             disabled={busy}
             numbers={edit.indexes.map((index) => index + 1)}
             plan={{

@@ -19,12 +19,14 @@ export function CommercePlanFields({
   disabled = false,
   selectedSlotId,
   onSelectSlot,
+  hideGeneration = false,
 }: {
   plan: CommercePlan;
   numbers?: number[];
   disabled?: boolean;
   selectedSlotId?: string;
   onSelectSlot?: (slotId: string) => void;
+  hideGeneration?: boolean;
   capabilities: ProviderCapability[];
   onChange: (plan: CommercePlan) => void;
 }) {
@@ -130,7 +132,7 @@ export function CommercePlanFields({
               disabled={disabled}
               onChange={(exactText) => update(slot.id, { exactText, textMode: exactText ? 'exact' : 'none' })}
             />
-            <label>
+            {!hideGeneration && <><label>
               生成模型
               <CommerceSelect
                 disabled={disabled}
@@ -202,7 +204,7 @@ export function CommercePlanFields({
                   ))}
                 </CommerceSelect>
               </label>
-            </div>
+            </div></>}
             <p className={styles.note}>
               引用：
               {

@@ -2,6 +2,7 @@
 
 import {
   CHAT_PROVIDER_MODELS,
+  COMMERCE_SCENES,
   imageCreditItem,
   formatCredits,
   type CreditConfirmation,
@@ -50,8 +51,8 @@ import { useSmartAutoScroll } from './use-smart-auto-scroll';
 import { WorkspaceTimeline, type OptimisticImageTurnView } from './WorkspaceTimeline';
 import { nextPollingDelay } from './bounded-polling';
 import styles from './workspace.module.css';
-import meitu from '@/features/commerce/meitu.module.css';
-import { CommerceHeader, CommerceNav } from '@/features/commerce/CommerceChrome';
+import { CommerceCatalogue } from '@/features/commerce/CommerceCatalogue';
+import { WorkspaceFrame } from './WorkspaceFrame';
 import Link from 'next/link';
 
 interface UnifiedWorkspaceProps {
@@ -169,6 +170,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   }, [gateway]);
   const [capabilities, setCapabilities] = useState<ProviderCapability[]>([]);
   const [health, setHealth] = useState<ProviderHealth[]>([]);
+  const commerceCapabilities = useMemo(() => {
+    const available = capabilities.filter(capability => health.find(item => item.provider === capability.provider)?.status !== 'unavailable');
+    return available.length ? available : capabilities;
+  }, [capabilities, health]);
   const [feedback, setFeedback] = useState<{ error?: SafeError; message: string; retrySessionId?: string }>();
   const localPreviewUrls = useRef(new Set<string>());
   const downloadingBatches = useRef(new Set<string>());
@@ -177,6 +182,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean; scene?: CommerceScene }>();
   const commerceActive = commerceMode?.sessionId === activeSessionId && Boolean(commerceMode?.active);
   const commerceShell = commerceActive || route?.kind === 'commerce';
+  const catalogueActive = route?.kind === 'catalogue';
   const maxActiveReferences = commerceActive || route?.kind === 'commerce' ? 26 : MAX_REFERENCES;
   const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean, scene?: CommerceScene) => {
     setCommerceMode((current) => current?.sessionId === sessionId && current?.active === active && current?.scene === scene ? current : { sessionId, active, scene });
@@ -338,6 +344,11 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     if (cancelled) return;
     appliedRoute.current = routeScope;
     setRouteError(undefined);
+    if (route.kind === 'catalogue') {
+      setActivePopover(undefined);
+      setConfigDrawerOpen(false);
+      return;
+    }
     if (route.kind === 'invalid') {
       setRouteError('页面不存在，请选择创作方式或历史会话。');
       return;
@@ -363,7 +374,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }
     });
     return () => { cancelled = true; };
-  }, [route, routeScope, initializing, ownerKey, setActiveSessionId, refreshTimeline, updateRuntime]);
+  }, [route, routeScope, initializing, ownerKey, setActiveSessionId, setActivePopover, setConfigDrawerOpen, refreshTimeline, updateRuntime]);
 
   const ensureCommerceSession = async (title: string, requestId: string) => {
     const session = await gateway.createSession(title.slice(0, 100), requestId);
@@ -372,7 +383,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
   const commerceSaved = (task: import('@zimage/domain').CreativeCommerceTask, sourceId: string) => {
     const current = useWorkspaceStore.getState();
-    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside';
+    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside' && routeRef.current?.kind !== 'catalogue';
     if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, task.sessionId);
     updateSessions([{ ...sessionsRef.current.find(item => item.id === task.sessionId)!, id: task.sessionId,
       title: sessionsRef.current.find(item => item.id === task.sessionId)?.title ?? ('engine' in task ? task.plan.brief.name : task.brief.name),
@@ -385,7 +396,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
   const commerceBatchCreated = (batch: import('@zimage/domain').CreativeBatch, sourceId: string) => {
     const current = useWorkspaceStore.getState();
-    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside';
+    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside' && routeRef.current?.kind !== 'catalogue';
     if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, batch.sessionId);
     if (stillHere) {
       setActiveSessionId(batch.sessionId);
@@ -999,15 +1010,11 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   return (
     <>
-    <div className={`${styles.workspace} ${sidebarCollapsed ? styles.workspaceCollapsed : ''} ${commerceShell ? `${meitu.theme} ${meitu.shell}` : ''}`}>
-      {commerceShell ? <><CommerceHeader onHistory={() => setSessionDrawerOpen(true)} /><CommerceNav scene={route?.kind === 'commerce' ? route.scene : commerceMode?.scene} /></> : <aside className={styles.sidebar}>
-        {sidebar(sidebarCollapsed)}
-      </aside>}
-      <main className={styles.main}>
-        {!commerceShell && <header className={styles.header}>
-          <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
+    <WorkspaceFrame collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
+          <header className={styles.header}>
+          <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
-            <CreditBalance /><Link href="/create">电商生图</Link><Link href="/account">账号</Link>
+            <CreditBalance /><Link href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
               <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
@@ -1015,7 +1022,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
             )}
             <Button aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} icon={<Archive size={16} />} onClick={() => setFeedback({ message: zhCN.workspace.assetLibraryUnavailable })}>{zhCN.workspace.assetLibrary}</Button>
           </Space>
-        </header>}
+        </header>
+      }>
+        {catalogueActive && <CommerceCatalogue />}
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
         {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">
@@ -1023,7 +1032,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           {modelsError ? <span>模型状态暂不可用 <button type="button" onClick={() => { setModelsLoading(true); setModelsAttempt(value => value + 1); }}>重试模型</button></span> : modelsLoading ? <span>正在加载模型配置…</span> : null}
         </div>}
         {routeError && <div className={styles.statusFeedback} role="alert">{routeError} <Link href="/create">返回创作目录</Link></div>}
-        <div className={styles.workspaceBody} hidden={Boolean(routeError)}>
+        <div className={styles.workspaceBody} hidden={Boolean(routeError) || catalogueActive}>
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
         <PreviewGroup preview={{ motionName: '' }}>
           <div aria-label="对话时间线" className={`${styles.timelineScroll} ${commerceActive ? styles.commerceScroll : ""}`} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
@@ -1042,7 +1051,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               routeDriven={Boolean(route)}
               onViewChange={(id, task, view) => { if (onNavigate && !isLocalCommerceDraft(id)) onNavigate(sessionHref(id, task, view)); }}
               ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
-              items={activeRuntime?.timeline ?? []} references={references} capabilities={capabilities}
+              items={activeRuntime?.timeline ?? []} references={references} capabilities={commerceCapabilities}
               timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'}
               settings={{ provider: selectedProvider ?? 'gemini', model: selectedModelId ?? 'gemini-3-pro-image', aspectRatio, resolution }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference}
@@ -1116,10 +1125,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           </div>}
         </PreviewGroup>
         </div>
-      </main>
       <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar()}</Drawer>
       <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</Drawer>
-    </div>
+    </WorkspaceFrame>
     </>
   );
 }

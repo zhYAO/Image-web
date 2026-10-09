@@ -6,7 +6,8 @@ import {
   notifyAuthChange,
   useAuthStatus,
 } from "@/features/auth/AuthStatusProvider";
-import { CommerceCatalogue } from "@/features/commerce/CommerceCatalogue";
+import { PublicCommerceCatalogue } from "@/features/commerce/PublicCommerceCatalogue";
+import { catalogueRuntimeAllowed } from "@/features/workspace/catalogue-runtime";
 import { AnonymousAuthGate } from "@/app/anonymous-auth-gate";
 
 const replace = vi.hoisted(() => vi.fn());
@@ -32,12 +33,12 @@ describe("shared authentication presentation", () => {
     const view = render(
       <StrictMode>
         <AuthStatusProvider>
-          <CommerceCatalogue />
+          <PublicCommerceCatalogue /><Identity />
         </AuthStatusProvider>
       </StrictMode>,
     );
     expect(screen.queryByRole("link", { name: "登录" })).toBeNull();
-    await screen.findByRole("link", { name: "账号" });
+    await screen.findByText('authorized:10000000-0000-4000-8000-000000000001');
     view.rerender(
       <StrictMode>
         <AuthStatusProvider>
@@ -85,7 +86,7 @@ describe("shared authentication presentation", () => {
     );
     render(
       <AuthStatusProvider>
-        <CommerceCatalogue />
+        <PublicCommerceCatalogue />
       </AuthStatusProvider>,
     );
     act(() => {
@@ -94,6 +95,25 @@ describe("shared authentication presentation", () => {
     expect(screen.getByRole("link", { name: "登录" })).toBeVisible();
     await act(async () => complete(new Response("{}", { status: 200 })));
     expect(screen.getByRole("link", { name: "登录" })).toBeVisible();
+  });
+  it('keeps the guest catalogue public without requesting private sessions', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
+    const fetcher = vi.fn().mockResolvedValue(new Response('{}', { status: 401 }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AuthStatusProvider><PublicCommerceCatalogue /></AuthStatusProvider>);
+    await screen.findByRole('link', { name: '登录' });
+    expect(screen.getAllByRole('link', { name: /^开始/ })).toHaveLength(6);
+    expect(screen.getByRole('button', { name: '新对话' })).toBeVisible();
+    expect(fetcher.mock.calls.map(call => call[0])).toEqual(['/api/auth/session']);
+    expect(replace).not.toHaveBeenCalled();
+  });
+  it('never treats synthetic legacy HTTP authorization as catalogue runtime access', () => {
+    vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'false');
+    vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
+    expect(catalogueRuntimeAllowed('authorized')).toBe(false);
+    vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'mock');
+    expect(catalogueRuntimeAllowed('authorized')).toBe(true);
+    expect(catalogueRuntimeAllowed('guest')).toBe(false);
   });
   it.each(['/?scene=product-set', '/create/product-set?platform=taobao', '/sessions/abc?task=xyz&view=results'])("preserves %s when an expired account redirects to login", async (path) => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");

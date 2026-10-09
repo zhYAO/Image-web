@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import type { CreativeTextFieldName } from '@zimage/domain';
+import { IMAGE_PROVIDER_CAPABILITIES, type CreativeTextFieldName } from '@zimage/domain';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CreativeTextField } from '@/features/commerce/CreativeTextField';
 import { useWorkspaceStore } from '@/store/workspace-store';
+import { CommerceWizard } from '@/features/commerce/CommerceWizard';
 
 function Harness({ initial = '旧文案', field = 'title' }: { initial?: string; field?: CreativeTextFieldName }) {
   const [value, setValue] = useState(initial);
@@ -11,6 +12,22 @@ function Harness({ initial = '旧文案', field = 'title' }: { initial?: string;
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); useWorkspaceStore.setState({ selectedChatModel: 'doubao' }); });
 describe('current-field AI editing', () => {
+  it.each(['product-set', 'clone', 'product-main'] as const)('uses Doubao for %s field optimization without changing the homepage model', async scene => {
+    vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
+    useWorkspaceStore.setState({ selectedChatModel: 'minimax' });
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: '已优化陶瓷杯', mock: false })));
+    vi.stubGlobal('fetch', fetcher);
+    render(<CommerceWizard scene={scene} sessionId={crypto.randomUUID()} references={[{ id: crypto.randomUUID(), name: 'product.png', mimeType: 'image/png', size: 1, status: 'ready' }]}
+      promotedStyleIds={scene === 'clone' ? [] : undefined} capabilities={IMAGE_PROVIDER_CAPABILITIES} settings={{ provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1', resolution: '2K' }}
+      onReferenceAdd={vi.fn()} onReferenceRemove={vi.fn()} onReferenceUploaded={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+    if (scene === 'product-main') fireEvent.click(screen.getByRole('button', { name: '自定义' }));
+    const field = screen.getByLabelText(scene === 'clone' ? '统一复刻要求（选填）' : scene === 'product-main' ? '场景描述' : '商品描述');
+    fireEvent.change(field, { target: { value: '陶瓷杯' } });
+    fireEvent.click(within(field.parentElement!).getByRole('button', { name: 'AI 优化当前内容' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetcher.mock.calls[0]![1].body).chatModel).toBe('doubao');
+    expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');
+  });
   it('uses the workspace chat model without creating a conversation message', async () => {
     vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
     useWorkspaceStore.setState({ selectedChatModel: 'minimax' });

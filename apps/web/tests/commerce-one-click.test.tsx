@@ -16,6 +16,7 @@ const settings = { provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio:
 
 describe('commerce navigation and durable drafts', () => {
   it('preserves legacy scenes and real task/view addresses', () => {
+    expect(workspaceRoute('/create')).toEqual({ kind: 'catalogue' });
     expect(workspaceRoute('/', 'scene=xhs-poster&platform=xiaohongshu')).toMatchObject({ kind: 'commerce', scene: 'xhs-poster' });
     expect(commerceHref('xhs-poster')).toBe('/create/xhs-poster?platform=xiaohongshu');
     expect(workspaceRoute('/create/unknown')).toEqual({ kind: 'invalid' });
@@ -29,10 +30,13 @@ describe('commerce navigation and durable drafts', () => {
     const props = { gateway, onNavigate: vi.fn(), ownerKey: 'owner' };
     const view = render(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     fireEvent.change(await screen.findByLabelText('商品描述', {}, { timeout: 10000 }), { target: { value: '米白色棉质衬衫，宽松版型。' } });
-    fireEvent.click(screen.getByText('模型与分辨率'));
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '文字优化模型' }));
-    fireEvent.click(await screen.findByText('MiniMax', { selector: '.ant-select-item-option-content' }));
-    expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');
+    act(() => useWorkspaceStore.getState().setSelectedChatModel('minimax'));
+    view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'catalogue' }} />);
+    await screen.findByRole('heading', { name: '电商生图' });
+    expect(screen.queryByRole('textbox', { name: '创作输入' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '商品描述' })).toBeNull();
+    view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('米白色棉质衬衫，宽松版型。'));
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'home' }} />);
     await screen.findByRole('textbox', { name: '创作输入' }, { timeout: 10000 });
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-main' }} />);
@@ -54,6 +58,29 @@ describe('commerce navigation and durable drafts', () => {
     render(<UnifiedWorkspace gateway={gateway} route={{ kind: 'session', sessionId: 'missing' }} onNavigate={vi.fn()} />);
     expect(await screen.findByText('会话不存在、已删除或无权访问。', {}, { timeout: 10000 })).toBeVisible();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('keeps the catalogue visible when a background draft save finishes', async () => {
+    const gateway = createTestGateway();
+    let finish!: () => void;
+    const original = gateway.commerce.create.bind(gateway.commerce);
+    const create = vi.spyOn(gateway.commerce, 'create').mockImplementation(async input => {
+      await new Promise<void>(resolve => { finish = resolve; });
+      return original(input);
+    });
+    const onNavigate = vi.fn();
+    const props = { gateway, onNavigate, ownerKey: 'delayed-owner' };
+    const view = render(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
+    fireEvent.change(await screen.findByLabelText('商品描述'), { target: { value: '陶瓷杯，白色陶瓷。' } });
+    act(() => useWorkspaceStore.getState().setReferences([{ id: crypto.randomUUID(), name: 'product.png', size: 1, mimeType: 'image/png', status: 'ready' }]));
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'catalogue' }} />);
+    await screen.findByRole('heading', { name: '电商生图' });
+    await act(async () => { finish(); await create.mock.results[0]!.value; });
+    expect(screen.getByRole('heading', { name: '电商生图' })).toBeVisible();
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(await gateway.commerce.list(create.mock.calls[0]![0].sessionId)).toHaveLength(1);
   });
 
   it('merges image and chat, prioritizes commerce, preserves types on rename and marks unresolved metadata', () => {

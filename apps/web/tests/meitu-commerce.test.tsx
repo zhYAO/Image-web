@@ -11,9 +11,12 @@ import {
   IMAGE_PROVIDER_CAPABILITIES,
   TRIAL_CREDIT_CATALOG,
   quoteCredits,
+  buildCommerceSlots,
   compileCommerceSlot,
   type CommerceScene,
   type CreditItem,
+  type CreativeBatch,
+  type CreativeBatchCreate,
   type UploadReference,
 } from "@zimage/domain";
 import { CommerceWizard } from "@/features/commerce/CommerceWizard";
@@ -25,7 +28,7 @@ import {
   loadBatchDraft,
   saveBatchDraft,
 } from "@/features/commerce/commerce-batch-storage";
-import { loadCommerceDraft } from "@/features/commerce/commerce-draft-storage";
+import { loadCommerceDraft, saveCommerceDraft } from "@/features/commerce/commerce-draft-storage";
 import { createTestGateway } from "./workspace-test-fixtures";
 
 const attachments = vi.hoisted(() => ({
@@ -132,6 +135,18 @@ async function wizard(scene: CommerceScene, references = [ref("product.png")]) {
 }
 
 describe("Meitu commerce workflow contracts", () => {
+  it.each(['product-set', 'detail', 'clone', 'product-main'] as const)("keeps only output settings in %s without the technical plan editor", async scene => {
+    await wizard(scene);
+    expect(screen.queryByLabelText('创作平台')).toBeNull();
+    expect(screen.queryByLabelText('目标地区')).toBeNull();
+    expect(screen.queryByLabelText('画面语言')).toBeNull();
+    expect(screen.queryByLabelText('电商生成模型')).toBeNull();
+    expect(screen.queryByLabelText('文字优化模型')).toBeNull();
+    expect(screen.queryByText('高级设置 · 平台、风格、数量与分图')).toBeNull();
+    expect(screen.queryByRole('button', { name: '调整分图方案' })).toBeNull();
+    expect(screen.getByLabelText('电商分辨率')).toHaveValue('2K');
+    expect(screen.getByLabelText(scene === 'detail' ? 'A+ 输出规格' : '电商画面比例')).toBeVisible();
+  });
   it("reuploads retained file bytes when a new local draft has an older session's reference ID", async () => {
     const view = await wizard("product-set");
     view.unmount();
@@ -161,6 +176,7 @@ describe("Meitu commerce workflow contracts", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(submit).toHaveBeenCalledTimes(1);
     const plan = create.mock.calls[0]![0].plan;
+    expect(plan.slots.every(slot => slot.provider === 'gemini' && slot.model === 'gemini-3-pro-image' && slot.aspectRatio === '1:1' && slot.resolution === '2K')).toBe(true);
     expect(plan.brief).toMatchObject({
       platform: "taobao",
       region: "cn",
@@ -181,6 +197,36 @@ describe("Meitu commerce workflow contracts", () => {
           s.referenceIds.join() === props.references.map((r) => r.id).join(),
       ),
     ).toBe(true);
+  });
+  it('uses valid preset output options instead of the homepage selection', async () => {
+    const view = await wizard('product-set');
+    view.unmount();
+    sessionStorage.clear();
+    const capabilities = [{ provider: 'seedream', models: [{ id: 'seedream-5.0-flash', label: 'Flash', maxImages: 4, aspectRatios: ['1:1', '3:4'] as const, resolutions: ['2K'] as const }] }];
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    render(<CommerceWizard {...view.props} capabilities={capabilities.map(provider => ({ ...provider, models: provider.models.map(model => ({ ...model, aspectRatios: [...model.aspectRatios], resolutions: [...model.resolutions] })) }))} settings={{ ...settings, aspectRatio: '16:9', resolution: '1K' }} />);
+    fireEvent.change(screen.getByLabelText('商品描述'), { target: { value: '真实陶瓷杯' } });
+    expect(screen.getByLabelText('电商画面比例')).toHaveValue('1:1');
+    expect(screen.getByLabelText('电商分辨率')).toHaveValue('2K');
+    expect(screen.getByLabelText('电商画面比例').querySelectorAll('option')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0].plan.slots.every(slot => slot.provider === 'seedream' && slot.model === 'seedream-5.0-flash')).toBe(true);
+  });
+  it('preserves old drafts without a settings snapshot, including individual image ratios', async () => {
+    const view = await wizard('product-set');
+    view.unmount();
+    const brief = { name: '旧陶瓷杯', facts: '陶瓷', sellingPoints: '', platform: 'amazon' as const, region: 'us' as const, language: 'en' as const, placement: '商品展示', productReferenceIds: view.props.references.map(reference => reference.id!), styleReferenceIds: [] };
+    const slots = buildCommerceSlots(brief, 'product-set', 2, { ...settings, aspectRatio: '16:9', resolution: '1K' }).map((slot, index) => ({ ...slot, aspectRatio: index ? '3:4' as const : '16:9' as const }));
+    saveCommerceDraft('unit-draft', { scene: 'product-set', brief, count: 2, templateId: 'soft-studio', instruction: '', roles: {}, plan: { scene: 'product-set', brief, templateId: 'soft-studio', slots } });
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    render(<CommerceWizard {...view.props} />);
+    expect(screen.getByLabelText('电商画面比例')).toHaveValue('16:9');
+    expect(screen.getByLabelText('电商分辨率')).toHaveValue('1K');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0].plan.brief).toMatchObject({ platform: 'amazon', region: 'us', language: 'en' });
+    expect(create.mock.calls[0]![0].plan.slots.map(slot => slot.aspectRatio)).toEqual(['16:9', '3:4']);
   });
   it("preserves detail copy across review, refresh, reorder and advanced desktop/mobile variants", async () => {
     const view = await wizard("detail");
@@ -286,6 +332,17 @@ describe("Meitu commerce workflow contracts", () => {
 });
 
 describe("batch ownership and durable recovery", () => {
+  it('offers one batch workflow chooser and only unified output settings', () => {
+    render(<CommerceBatchWizard sessionId="local-draft" settings={settings} capabilities={IMAGE_PROVIDER_CAPABILITIES} />);
+    expect(screen.queryByLabelText('批量生成类型')).toBeNull();
+    expect(screen.queryByLabelText('批量统一平台')).toBeNull();
+    expect(screen.queryByLabelText('批量生成模型')).toBeNull();
+    expect(screen.queryByLabelText('批量目标地区')).toBeNull();
+    expect(screen.queryByLabelText('批量画面语言')).toBeNull();
+    expect(screen.queryByText('覆盖统一参数')).toBeNull();
+    expect(screen.getByLabelText('批量生成比例')).toHaveValue('1:1');
+    expect(screen.getByLabelText('批量生成分辨率')).toHaveValue('2K');
+  });
   const draft = () => ({
     workflow: "product-set",
     platform: "taobao",
@@ -351,12 +408,61 @@ describe("batch ownership and durable recovery", () => {
       resolve([{ ...ref(file.name), file, previewUrl: "blob:restored" }]),
     );
     expect(screen.getByText("restored.png")).toBeVisible();
-    expect(screen.getByLabelText("商品 1 数量覆盖")).toHaveValue("2");
+    expect(screen.queryByLabelText("商品 1 数量覆盖")).toBeNull();
+    expect(loadBatchDraft(key)?.rows[0]?.count).toBe(2);
     expect(attachments.load).toHaveBeenCalledWith(
       batchAttachmentKey(key, data.rows[0]!.id, "products"),
       6,
     );
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:restored");
+  });
+  it('continues submitting a late-created batch while its preserved form is hidden by the catalogue', async () => {
+    const sessionId = crypto.randomUUID();
+    const gateway = createTestGateway();
+    vi.spyOn(gateway.commerce, 'upload').mockResolvedValue(crypto.randomUUID());
+    let finish!: (response: Response) => void;
+    let finishAdvance!: () => void;
+    let batch!: CreativeBatch;
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/uploads')) return new Response(JSON.stringify({ count: 0, limit: 64 }));
+      if (url === '/api/creative-batches' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as CreativeBatchCreate;
+        batch = { id: crypto.randomUUID(), requestId: body.requestId, sessionId: body.sessionId, workflow: body.workflow, globalParams: body.globalParams,
+          items: body.tasks.map(task => ({ ...task, id: crypto.randomUUID(), createRequestId: crypto.randomUUID(), submitRequestId: crypto.randomUUID(), status: 'pending' })), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        return new Promise<Response>(resolve => { finish = resolve; });
+      }
+      if (url === `/api/creative-batches/${batch.id}`) {
+        if (init?.method === 'POST') return new Promise<Response>(resolve => {
+          finishAdvance = () => {
+            batch = { ...batch, items: batch.items.map(item => ({ ...item, status: 'submitted' })) };
+            resolve(new Response(JSON.stringify(batch)));
+          };
+        });
+        return new Response(JSON.stringify(batch));
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const props = { ownerKey: 'late-owner', sessionId, gateway: gateway.commerce, settings, capabilities: IMAGE_PROVIDER_CAPABILITIES };
+    const onCreated = vi.fn();
+    const view = render(<div><div><CommerceBatchWizard {...props} onCreated={onCreated} /></div></div>);
+    fireEvent.change(screen.getByLabelText('商品 1 原图'), { target: { files: [new File(['x'], 'cup.png', { type: 'image/png' })] } });
+    fireEvent.change(screen.getByLabelText('商品 1 描述'), { target: { value: '真实陶瓷杯' } });
+    fireEvent.click(screen.getByRole('button', { name: '核对 1 个商品任务费用' }));
+    await screen.findByRole('dialog', { name: '批量费用确认' });
+    fireEvent.click(screen.getByRole('button', { name: '确认提交 1 个商品任务' }));
+    await waitFor(() => expect(finish).toBeDefined());
+    view.rerender(<div><div hidden><CommerceBatchWizard {...props} onCreated={onCreated} /></div></div>);
+    await act(async () => finish(new Response(JSON.stringify(batch))));
+    await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method === 'POST')).toBe(true));
+    view.rerender(<div><div hidden><CommerceBatchWizard {...props} active={false} onCreated={onCreated} /></div><CommerceBatchWizard {...props} batchId={batch.id} /></div>);
+    await waitFor(() => expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method !== 'POST')).toHaveLength(2));
+    await act(async () => finishAdvance());
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method === 'POST')).toHaveLength(1);
+    expect(batch.items.every(item => item.status === 'submitted')).toBe(true);
+    view.unmount();
+    vi.unstubAllGlobals();
   });
   it("replays a lost batch create body after remount, with no new upload or duplicate request", async () => {
     const data = draft();

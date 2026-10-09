@@ -3,6 +3,7 @@ import { commerceSceneSchema, COMMERCE_PLATFORMS, type CommerceBrief, type Comme
 export type CommerceView = 'examples' | 'plan' | 'results';
 export type WorkspaceRoute =
   | { kind: 'home' }
+  | { kind: 'catalogue' }
   | { kind: 'commerce'; scene: CommerceScene; platform?: CommerceBrief['platform']; template?: string }
   | { kind: 'session'; sessionId: string; taskId?: string; batchId?: string; view?: CommerceView }
   | { kind: 'invalid' }
@@ -10,6 +11,7 @@ export type WorkspaceRoute =
 
 export function workspaceRoute(pathname: string, search = ''): WorkspaceRoute {
   const query = new URLSearchParams(search);
+  if (pathname === '/create' || pathname === '/create/') return { kind: 'catalogue' };
   if (pathname === '/' && !query.has('scene')) return { kind: 'home' };
   if (pathname === '/' || pathname.startsWith('/create/')) {
     if (pathname !== '/' && !/^\/create\/[^/]+\/?$/.test(pathname)) return { kind: 'invalid' };

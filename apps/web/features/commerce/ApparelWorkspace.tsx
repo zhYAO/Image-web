@@ -498,30 +498,6 @@ export function ApparelWorkspace({
             )}
           </div>
         </fieldset>
-        <fieldset disabled={busy || Boolean(draft.pending)}>
-          <legend>面料裁切</legend>
-          <p>从主图 2 裁切，坐标范围为 0–1。</p>
-          <div className={styles.crop}>
-            {["左", "上", "右", "下"].map((title, i) => (
-              <label key={title}>
-                {title}
-                <input
-                  aria-label={`面料裁切${title}`}
-                  type="number"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={draft.crop[i]}
-                  onChange={(event) => {
-                    const crop = [...draft.crop] as ApparelDraft["crop"];
-                    crop[i] = Number(event.target.value);
-                    update({ crop });
-                  }}
-                />
-              </label>
-            ))}
-          </div>
-        </fieldset>
         {error && (
           <p role="alert" className={styles.error}>
             {error}

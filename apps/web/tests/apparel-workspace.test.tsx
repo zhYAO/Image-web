@@ -44,6 +44,7 @@ describe("apparel form in the shared commerce workspace", () => {
     render(<ApparelWorkspace {...props} ownerKey="account-b" />);
     expect(screen.getByLabelText("商品名称")).toHaveValue("");
     expect(screen.queryByLabelText("模型")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("面料裁切左")).not.toBeInTheDocument();
   });
   it("assigns uploaded photos through shared reference callbacks", () => {
     render(<ApparelWorkspace {...props} />);
@@ -91,7 +92,7 @@ describe("apparel form in the shared commerce workspace", () => {
       sessionId: apparelIds[7],
       engine: "apparel-catalog",
       revision: 1,
-      plan: apparelFixture,
+      plan: { ...apparelFixture, fabricCrop: [0.22, 0.2, 0.76, 0.57] },
       createdAt: "now",
       updatedAt: "now",
       runs: [],
@@ -123,9 +124,7 @@ describe("apparel form in the shared commerce workspace", () => {
     fireEvent.change(screen.getByLabelText("Design"), {
       target: { value: "新的设计说明" },
     });
-    fireEvent.change(screen.getByLabelText("面料裁切左"), {
-      target: { value: "0.22" },
-    });
+    expect(screen.queryByLabelText("面料裁切左")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "保存为新版本" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("响应丢失");
     expect(onTask).not.toHaveBeenCalled();

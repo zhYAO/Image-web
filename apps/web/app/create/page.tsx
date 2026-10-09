@@ -1,5 +1,5 @@
-import { CommerceCatalogue } from "@/features/commerce/CommerceCatalogue";
+import { PublicCommerceCatalogue } from "@/features/commerce/PublicCommerceCatalogue";
 
 export default function CreatePage() {
-  return <CommerceCatalogue />;
+  return <PublicCommerceCatalogue />;
 }

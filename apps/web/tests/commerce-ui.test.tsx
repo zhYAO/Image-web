@@ -124,15 +124,18 @@ describe("commerce UI", () => {
     window.sessionStorage.clear();
   });
 
-  it("offers six primary scenes, keeps legacy scenes in more creation, and carries launch parameters", () => {
+  it("offers only six primary scenes without platform or template discovery and keeps old launch URLs compatible", () => {
     render(<CommerceCatalogue />);
     expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(6);
-    fireEvent.click(screen.getByRole("button", { name: "小红书" }));
     expect(
       screen.getByRole("link", { name: "开始商品套图 →" }),
-    ).toHaveAttribute("href", "/create/product-set?platform=xiaohongshu");
+    ).toHaveAttribute("href", "/create/product-set");
+    expect(screen.queryByLabelText("平台筛选")).toBeNull();
+    expect(screen.queryByText("更多创作")).toBeNull();
+    expect(screen.queryByText("原创风格方向")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "搜索电商工具" })).toBeNull();
+    expect(screen.getByRole("link", { name: "开始服装商品图片 →" })).toHaveAttribute("href", "/create/apparel-catalog");
     expect(screen.queryByRole("button", { name: /分析/ })).toBeNull();
-    expect(screen.getByRole("link", { name: "使用清新种草模板", hidden: true })).toHaveAttribute("href", "/create/xhs-poster?platform=xiaohongshu&template=xhs-fresh");
     expect(resolveCommerceLaunch("?scene=product-set&platform=douyin")).toEqual(
       { scene: "product-set", platform: "douyin" },
     );
@@ -188,6 +191,23 @@ describe("commerce UI", () => {
     expect(isExplicitImageRequest("这套图片怎么改更好？")).toBe(false);
     expect(isExplicitImageRequest("先不要生成图片")).toBe(false);
     expect(isExplicitImageRequest("生成一张杯子图片")).toBe(true);
+  });
+
+  it('creates a new saved version for an unavailable historical model without changing its content or generating', async () => {
+    const gateway = createTestGateway();
+    const original = await createPlan(gateway, 2);
+    const old = { ...original, slots: original.slots.map(slot => ({ ...slot, provider: 'seedream', model: 'seedream-4.5' })) };
+    const save = vi.spyOn(gateway.commerce, 'save');
+    const submit = vi.spyOn(gateway.commerce, 'submit');
+    render(<Card initial={old} gateway={gateway} />);
+    fireEvent.click(screen.getByRole('button', { name: '使用当前默认参数创建新版本' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0]?.[1]).toMatchObject({ expectedRevision: 1, plan: { brief: old.brief, slots: old.slots.map(slot => ({ ...slot, provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1', resolution: '2K' })) } });
+    await screen.findByText(/新版本已保存/);
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '修改第 1 张' }));
+    expect(screen.queryByLabelText('第 1 张模型')).toBeNull();
+    expect(screen.queryByLabelText('第 1 张比例')).toBeNull();
   });
 
   it("explicit commerce launch asks one missing question before any generation", async () => {
@@ -498,7 +518,7 @@ describe("commerce UI", () => {
       within(task).getByRole("button", { name: "采用第 1 张为风格参考" }),
     );
     const wizard = await screen.findByRole("region", { name: "商品套图向导" });
-    expect(within(wizard).getByLabelText("商品名称")).toHaveValue("陶瓷杯");
+    expect(within(wizard).getByLabelText("商品描述")).toHaveValue("陶瓷杯\n白色陶瓷");
     expect(
       within(wizard).getByLabelText("参考图 2 用途").closest(".ant-select"),
     ).toHaveTextContent("风格参考图");
@@ -514,7 +534,6 @@ describe("commerce UI", () => {
       status: "ready",
     });
     expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(within(wizard).getByRole("button", { name: "调整分图方案" }));
     fireEvent.click(
       await within(wizard).findByRole("button", { name: "保存草稿" }),
     );
@@ -718,7 +737,6 @@ describe("commerce UI", () => {
     const submit = vi.spyOn(gateway.commerce, "submit");
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByTestId("commerce-task");
-    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(await screen.findByRole("button", { name: "测试商品套图" }));
     await screen.findByTestId("commerce-task");
     // Task loading notifies the parent composer mode through an effect.
@@ -736,7 +754,6 @@ describe("commerce UI", () => {
       revision: task.revision,
       slotIds: task.slots.map((slot) => slot.id),
     });
-    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(screen.getByRole("button", { name: "新对话" }));
     await screen.findByRole("textbox", { name: "创作输入" });
     fireEvent.click(screen.getByRole("button", { name: "创建图片" }));
@@ -831,14 +848,12 @@ describe("commerce UI", () => {
     await createPlan(gateway, 3);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByTestId("commerce-task");
-    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(await screen.findByRole("button", { name: "测试商品套图" }));
     await screen.findByTestId("commerce-task");
     fireEvent.click(screen.getByRole("button", { name: "修改第 3 张" }));
     fireEvent.change(screen.getByLabelText("第 3 张文案"), {
       target: { value: "未保存的准确文案" },
     });
-    fireEvent.click(await screen.findByRole("button", { name: "生成记录" }));
     fireEvent.click(screen.getByRole("button", { name: "另一个会话" }));
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "修改分图方案" })).toBeNull(),
@@ -911,20 +926,14 @@ describe("commerce UI", () => {
       );
     }
     render(<Wizard />);
-    fireEvent.change(screen.getByLabelText("商品名称"), {
+    fireEvent.change(screen.getByLabelText("商品描述"), {
       target: { value: "杯子" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await screen.findByRole("button", { name: "保存草稿" });
     fireEvent.click(screen.getByRole("button", { name: "替换商品" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "共享参考图或用途已变化",
-    );
     expect(
       screen.getByRole("button", { name: "保存草稿" }),
     ).toBeEnabled();
     expect(create).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
     fireEvent.click(
       await screen.findByRole("button", { name: "保存草稿" }),
     );
@@ -942,13 +951,13 @@ describe("commerce UI", () => {
     expect(upload).toHaveBeenCalledTimes(1);
   });
 
-  it("review: changed common instructions update existing and new slots while preserving explicit per-slot overrides", async () => {
+  it("preserves historical per-slot requirements when the simplified form changes product requirements and counts", async () => {
     const gateway = createTestGateway();
     const task = await createPlan(gateway, 3);
     const create = vi.spyOn(gateway.commerce, "create");
     render(
       <CommerceWizard
-        seedPlan={task}
+        seedPlan={{ ...task, slots: task.slots.map((slot, index) => ({ ...slot, instruction: index === 2 ? "第三张单独使用绿色" : "" })) }}
         scene="product-set"
         sessionId={task.sessionId}
         gateway={gateway.commerce}
@@ -975,35 +984,15 @@ describe("commerce UI", () => {
         onClose={() => undefined}
       />,
     );
-    fireEvent.change(screen.getByLabelText("整套创作要求"), {
-      target: { value: "冷色背景" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await screen.findByRole("button", { name: "保存草稿" });
-    fireEvent.click(screen.getByRole("button", { name: /^编辑第 3 张：/ }));
-    fireEvent.change(screen.getByLabelText("第 3 张要求"), {
-      target: { value: "第三张单独使用绿色" },
-    });
-
-    fireEvent.change(screen.getByLabelText("整套创作要求"), {
-      target: { value: "暖色背景" },
-    });
+    fireEvent.change(screen.getByLabelText("商品描述"), { target: { value: "陶瓷杯，暖色背景。" } });
     fireEvent.change(screen.getByLabelText("scene图片数量"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("other图片数量"), { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: "调整分图方案" }));
-    await screen.findByRole("button", { name: "保存草稿" });
-    for (const index of [1, 2, 4]) {
-      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^编辑第 ${index} 张：`) }));
-      expect(screen.getByLabelText(`第 ${index} 张要求`)).toHaveValue("暖色背景");
-    }
-    fireEvent.click(screen.getByRole("button", { name: /^编辑第 3 张：/ }));
-    expect(screen.getByLabelText("第 3 张要求")).toHaveValue(
-      "第三张单独使用绿色",
-    );
+    expect(screen.queryByRole("button", { name: "调整分图方案" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "保存草稿" }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(
       create.mock.calls[0]?.[0].plan.slots.map((slot) => slot.instruction),
-    ).toEqual(["暖色背景", "暖色背景", "第三张单独使用绿色", "暖色背景"]);
+    ).toEqual(["", "", "第三张单独使用绿色", ""]);
+    expect(create.mock.calls[0]?.[0].plan.brief.description).toBe("陶瓷杯，暖色背景。");
   });
 });
