@@ -416,12 +416,11 @@ describe("batch ownership and durable recovery", () => {
     );
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:restored");
   });
-  it('continues submitting a late-created batch while its preserved form is hidden by the catalogue', async () => {
+  it('keeps a hidden late-created batch passive while visible history reads progress', async () => {
     const sessionId = crypto.randomUUID();
     const gateway = createTestGateway();
     vi.spyOn(gateway.commerce, 'upload').mockResolvedValue(crypto.randomUUID());
     let finish!: (response: Response) => void;
-    let finishAdvance!: () => void;
     let batch!: CreativeBatch;
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.startsWith('/api/uploads')) return new Response(JSON.stringify({ count: 0, limit: 64 }));
@@ -432,14 +431,13 @@ describe("batch ownership and durable recovery", () => {
         return new Promise<Response>(resolve => { finish = resolve; });
       }
       if (url === `/api/creative-batches/${batch.id}`) {
-        if (init?.method === 'POST') return new Promise<Response>(resolve => {
-          finishAdvance = () => {
-            batch = { ...batch, items: batch.items.map(item => ({ ...item, status: 'submitted' })) };
-            resolve(new Response(JSON.stringify(batch)));
-          };
-        });
         return new Response(JSON.stringify(batch));
       }
+      if (url === `/api/creative-batches/${batch.id}/progress`) return new Response(JSON.stringify({
+        id: batch.id, createdAt: batch.createdAt, updatedAt: batch.updatedAt, terminal: false,
+        items: batch.items.map(item => ({ id: item.id, taskId: null, status: item.status,
+          error: null, total: item.plan.slots.length, succeeded: 0, failed: 0, processing: 0, review: 0 })),
+      }));
       throw new Error(`unexpected request ${url}`);
     });
     vi.stubGlobal('fetch', fetcher);
@@ -454,13 +452,12 @@ describe("batch ownership and durable recovery", () => {
     await waitFor(() => expect(finish).toBeDefined());
     view.rerender(<div><div hidden><CommerceBatchWizard {...props} onCreated={onCreated} /></div></div>);
     await act(async () => finish(new Response(JSON.stringify(batch))));
-    await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method === 'POST')).toBe(true));
-    view.rerender(<div><div hidden><CommerceBatchWizard {...props} active={false} onCreated={onCreated} /></div><CommerceBatchWizard {...props} batchId={batch.id} /></div>);
-    await waitFor(() => expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method !== 'POST')).toHaveLength(2));
-    await act(async () => finishAdvance());
     expect(onCreated).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method === 'POST')).toHaveLength(1);
-    expect(batch.items.every(item => item.status === 'submitted')).toBe(true);
+    expect(fetcher.mock.calls.some(([url]) => String(url).startsWith(`/api/creative-batches/${batch.id}`))).toBe(false);
+    view.rerender(<div><div hidden><CommerceBatchWizard {...props} active={false} onCreated={onCreated} /></div><CommerceBatchWizard {...props} batchId={batch.id} /></div>);
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url === `/api/creative-batches/${batch.id}/progress`)).toBe(true));
+    expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method !== 'POST')).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([url, init]) => String(url).startsWith(`/api/creative-batches/${batch.id}`) && init?.method === 'POST')).toHaveLength(0);
     view.unmount();
     vi.unstubAllGlobals();
   });
