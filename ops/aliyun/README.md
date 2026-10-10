@@ -56,7 +56,9 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 
 正式 HTTP Webpack 构建设置 `NODE_OPTIONS=--max-old-space-size=4096`。首次 Linux runner 运行已证明默认约 2GB V8 堆不足；此设置仅作用于构建 job，不改变生产服务运行内存或在服务器执行构建。
 
-## 批量后台续跑发布顺序
+## 批量后台续跑发布顺序（2026-10-10 已退役，仅供历史查阅）
+
+以下第 1–4 项记录旧版发布过程；专用批次页面、POST 与 Cron 已退役，当前状态以 `doc/project-progress.md`、现行 CI 及本次 PR 交付记录为准。
 
 1. 先通过 CI 的数据库测试及类型生成检查，再应用 `20261008152649_creative_batch_worker.sql` 兼容迁移。迁移不会开启新 Cron，也不会自动推进历史批次。
 2. 第一版网站只发布批次服务、进度接口和内部 Worker；保留旧页面。服务器 `/etc/zimage/environment` 设置独立的 `ZIMAGE_BATCH_CRON_SECRET`，Supabase Vault 存储同值 `zimage_batch_cron_secret` 及完整 HTTPS Worker URL `zimage_batch_worker_url`。不要在 GitHub 构建变量或客户端公开密钥。先用内部请求验证 401/200，再调用 `schedule_creative_batch_worker()`；只有到期工作存在时才会发送 HTTP 请求。

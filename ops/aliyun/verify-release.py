@@ -8,6 +8,7 @@ import json
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -34,7 +35,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def verify(base, expected_sha, timeout=12):
-    opener = urllib.request.build_opener(NoRedirect())
+    handlers = [NoRedirect()]
+    if urllib.parse.urlsplit(base).hostname == '127.0.0.1':
+        # Verify the local application itself; an inherited HTTP proxy can
+        # redirect this loopback request to a different origin. Public checks
+        # retain the environment's existing transport and reject redirects.
+        handlers.append(urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(*handlers)
     for method, path, expected_status, uncached in CHECKS:
         headers = {'Host': 'www.zimage.store', 'Accept': 'application/json'}
         if method == 'POST':

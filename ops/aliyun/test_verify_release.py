@@ -1,5 +1,6 @@
 import http.server
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -73,7 +74,7 @@ class PublishedRelease(unittest.TestCase):
             server.shutdown()
             server.server_close()
 
-    def run_check(self, sha=SHA, timeout=1):
+    def run_check(self, sha=SHA, timeout=1, env=None, bases=None):
         # Run the actual CLI handler against real local HTTP servers. Replacing
         # only the two destinations avoids any production request in this suite.
         bootstrap = '''
@@ -84,8 +85,43 @@ spec.loader.exec_module(module)
 module.BASES = tuple(sys.argv[2:4])
 raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
 '''
-        return subprocess.run([sys.executable, '-c', bootstrap, str(SCRIPT), *self.bases, sha, str(timeout)],
-                              capture_output=True, text=True, timeout=8)
+        return subprocess.run([sys.executable, '-c', bootstrap, str(SCRIPT), *(self.bases if bases is None else bases), sha, str(timeout)],
+                              capture_output=True, text=True, timeout=8, env=env)
+
+    def redirecting_proxy_environment(self):
+        self.proxy_requests = []
+        owner = self
+
+        class RedirectProxy(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                owner.proxy_requests.append(self.path)
+                self.send_response(301)
+                self.send_header('Location', owner.bases[0] + '/unexpected-endpoint')
+                self.end_headers()
+
+            def log_message(self, *_):
+                pass
+
+        proxy = http.server.ThreadingHTTPServer(('127.0.0.1', 0), RedirectProxy)
+        proxy.daemon_threads = True
+        threading.Thread(target=proxy.serve_forever, kwargs={'poll_interval': 0.01}, daemon=True).start()
+        self.servers.append(proxy)
+        address = f'http://127.0.0.1:{proxy.server_port}'
+        return {**os.environ, 'HTTP_PROXY': address, 'http_proxy': address, 'NO_PROXY': '', 'no_proxy': ''}
+
+    def test_loopback_checks_reach_the_origin_when_an_environment_proxy_redirects_http(self):
+        result = self.run_check(env=self.redirecting_proxy_environment())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.requests), 12)
+        self.assertEqual(self.proxy_requests, [])
+
+    def test_public_checks_keep_the_environment_proxy_and_reject_its_redirect(self):
+        result = self.run_check(env=self.redirecting_proxy_environment(),
+                                bases=['http://published.invalid', 'http://published.invalid'])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('expected HTTP 200, got 301', result.stderr)
+        self.assertEqual(self.requests, [])
+        self.assertEqual(self.proxy_requests, ['http://published.invalid/api/health/ready'])
 
     def test_success_reports_both_destinations_without_credentials_or_paid_requests(self):
         result = self.run_check()
