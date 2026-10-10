@@ -31,7 +31,7 @@ export default {
         await rpc(admin, 'archive_image_message', { p_message_id: claim.messageId });
         return Response.json({ action: 'archived', reason: claim.reason });
       }
-      if (claim.action !== 'process' && claim.action !== 'recover') throw new Error('invalid_queue_action');
+      if (claim.action !== 'process' && claim.action !== 'recover' && claim.action !== 'recover_rejection') throw new Error('invalid_queue_action');
 
       correlationId = claim.correlationId;
       generationId = claim.generationId;

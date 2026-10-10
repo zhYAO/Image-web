@@ -198,14 +198,15 @@ export async function billedChat(
   if (op.status !== "reserved") throw pendingCreditError();
   const started = startedSchema.parse(op.started);
   let provider: ReturnType<typeof resolveChatProvider>;
+  let history: Awaited<ReturnType<SupabaseChatStore["history"]>>;
   try {
     provider = resolveChatProvider(model);
     await store.assertProviderAvailable(model);
+    history = await store.history(started.session.id);
   } catch {
     await cancelUnclaimed(admin, user, requestId);
     throw new ApiRouteError({code:'provider_error',status:503,message:'聊天服务暂时不可用，冻结积分已退回，请重新编辑后发送。',retryable:false});
   }
-  const history = await store.history(started.session.id);
   if (request.signal.aborted) {
     await cancelUnclaimed(admin, user, requestId);
     throw new ApiRouteError({

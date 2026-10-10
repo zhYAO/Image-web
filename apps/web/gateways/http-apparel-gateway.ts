@@ -64,12 +64,22 @@ export class HttpApparelGateway implements ApparelGateway {
     });
   }
   async download(id: string, input: Parameters<ApparelGateway["export"]>[1]) {
-    const response = await this.fetcher(this.path(id, "download"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-      credentials: "same-origin",
+    const networkError = () => new WorkspaceError({
+      code: "NETWORK",
+      message: "下载失败，请稍后重试。",
+      retryable: true,
     });
+    let response: Response;
+    try {
+      response = await this.fetcher(this.path(id, "download"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+        credentials: "same-origin",
+      });
+    } catch {
+      throw networkError();
+    }
     if (!response.ok) {
       const parsed = apiErrorSchema.safeParse(
         await response.json().catch(() => null),
@@ -89,7 +99,11 @@ export class HttpApparelGateway implements ApparelGateway {
         retryable: response.status >= 500,
       });
     }
-    return response.blob();
+    try {
+      return await response.blob();
+    } catch {
+      throw networkError();
+    }
   }
   upload(sessionId: string, reference: UploadReference) {
     return this.uploader(sessionId, reference);

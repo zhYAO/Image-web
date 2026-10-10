@@ -43,7 +43,7 @@ jobs:
           pnpm --filter @zimage/web exec vitest run --coverage --maxWorkers=1 --testTimeout=120000
       - run: pnpm --filter @zimage/web test:acceptance-budget
       - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
-      - run: pnpm exec vitest run supabase/functions/generation-worker/image-providers.test.ts
+      - run: pnpm exec vitest run supabase/functions/generation-worker supabase/functions/cleanup-worker
       - run: pnpm build
         env:
           NEXT_PUBLIC_DATA_MODE: mock
@@ -144,6 +144,15 @@ jobs:
           digest=$(sha256sum /tmp/production/zimage-release.tgz | cut -d ' ' -f1)
           scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/zimage-release.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.tgz"
           ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
+      - uses: actions/checkout@v4
+      - name: Verify published version and retired batch endpoints
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -T -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "python3 - $RELEASE_SHA" < ops/aliyun/verify-release.py
       - name: Remove runner key
         if: always()
         run: rm -f ~/.ssh/zimage

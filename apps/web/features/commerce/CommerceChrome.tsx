@@ -7,7 +7,6 @@ import {
   Grid2X2,
   History,
   Images,
-  Layers3,
   ListOrdered,
   Plus,
   Sparkles,
@@ -31,10 +30,6 @@ export function CommerceHeader({ onHistory }: { onHistory?: () => void }) {
       <Link href="/create">
         <Plus size={15} />
         新建任务
-      </Link>
-      <Link href="/create/batch">
-        <Layers3 size={15} />
-        批量生成
       </Link>
       <span className={styles.headerSpacer} />
       <CreditBalance />
@@ -74,7 +69,6 @@ const links = [
   },
   { id: "detail", href: "/create/detail", title: "详情页", Icon: ListOrdered },
   { id: "clone", href: "/create/clone", title: "爆款复刻", Icon: Copy },
-  { id: "batch", href: "/create/batch", title: "批量生成", Icon: Layers3 },
   {
     id: "product-main",
     href: "/create/product-main",

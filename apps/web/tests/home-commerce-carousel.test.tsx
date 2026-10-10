@@ -6,7 +6,7 @@ afterEach(() => vi.useRealTimers());
 const names = () =>
   screen.getAllByRole("link").map((link) => link.getAttribute("aria-label"));
 describe("home commerce carousel", () => {
-  it("cycles two groups and links to all six scene workflows", () => {
+  it("cycles two groups and links to all five scene workflows", () => {
     render(<HomeCommerceCarousel />);
     expect(names()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     expect(screen.getByRole("link", { name: "商品套图" })).toHaveAttribute(
@@ -14,12 +14,12 @@ describe("home commerce carousel", () => {
       "/create/product-set",
     );
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
-    expect(names()).toEqual(["批量生成", "AI 商品图", "服装商品图片"]);
+    expect(names()).toEqual(["AI 商品图", "服装商品图片", "商品套图"]);
     expect(screen.getByRole('link',{name:'服装商品图片'})).toHaveAttribute('href','/create/apparel-catalog');
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
     expect(names()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     fireEvent.click(screen.getByRole("button", { name: "下一组电商功能" }));
-    expect(names()[0]).toBe("批量生成");
+    expect(names()[0]).toBe("AI 商品图");
     fireEvent.click(screen.getByRole("button", { name: "上一组电商功能" }));
     expect(names()[0]).toBe("商品套图");
   });
@@ -29,15 +29,15 @@ describe("home commerce carousel", () => {
     act(() => vi.advanceTimersByTime(4999));
     expect(names()[0]).toBe("商品套图");
     act(() => vi.advanceTimersByTime(1));
-    expect(names()[0]).toBe("批量生成");
+    expect(names()[0]).toBe("AI 商品图");
     const region = screen.getByRole("region", { name: "电商生图" });
     fireEvent.mouseEnter(region);
     act(() => vi.advanceTimersByTime(10000));
-    expect(names()[0]).toBe("批量生成");
+    expect(names()[0]).toBe("AI 商品图");
     fireEvent.mouseLeave(region);
     act(() => screen.getByRole("button", { name: "下一组电商功能" }).focus());
     act(() => vi.advanceTimersByTime(10000));
-    expect(names()[0]).toBe("批量生成");
+    expect(names()[0]).toBe("AI 商品图");
     fireEvent.blur(region, { relatedTarget: document.body });
     act(() => vi.advanceTimersByTime(5000));
     expect(names()[0]).toBe("商品套图");
@@ -58,7 +58,7 @@ it("pauses in hidden tabs and restarts a full interval after returning", () => {
   act(() => vi.advanceTimersByTime(4999));
   expect(names()[0]).toBe("商品套图");
   act(() => vi.advanceTimersByTime(1));
-  expect(names()[0]).toBe("批量生成");
+  expect(names()[0]).toBe("AI 商品图");
   hidden.mockRestore();
 });
 
@@ -89,13 +89,13 @@ it("swipes horizontally without following the card link, and ignores vertical ge
     );
   pointer("pointerdown", 200, 50);
   pointer("pointerup", 100, 55);
-  expect(names()[0]).toBe("批量生成");
-  expect(fireEvent.click(screen.getByRole("link", { name: "批量生成" }))).toBe(
+  expect(names()[0]).toBe("AI 商品图");
+  expect(fireEvent.click(screen.getByRole("link", { name: "AI 商品图" }))).toBe(
     false,
   );
   pointer("pointerdown", 200, 50);
   pointer("pointerup", 190, 140);
-  expect(names()[0]).toBe("批量生成");
+  expect(names()[0]).toBe("AI 商品图");
 });
 
 it("resumes autoplay if swiping removes the focused card", () => {
@@ -112,7 +112,7 @@ it("resumes autoplay if swiping removes the focused card", () => {
     viewport,
     new MouseEvent("pointerup", { bubbles: true, clientX: 100, clientY: 50 }),
   );
-  expect(names()[0]).toBe("批量生成");
+  expect(names()[0]).toBe("AI 商品图");
   act(() => vi.advanceTimersByTime(5000));
   expect(names()[0]).toBe("商品套图");
 });

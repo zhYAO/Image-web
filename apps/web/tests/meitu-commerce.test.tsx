@@ -1,5 +1,4 @@
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -15,19 +14,10 @@ import {
   compileCommerceSlot,
   type CommerceScene,
   type CreditItem,
-  type CreativeBatch,
-  type CreativeBatchCreate,
   type UploadReference,
 } from "@zimage/domain";
 import { CommerceWizard } from "@/features/commerce/CommerceWizard";
 import { CommerceDetailPreview } from "@/features/commerce/CommerceDetailPreview";
-import { CommerceBatchWizard } from "@/features/commerce/CommerceBatchWizard";
-import {
-  batchDraftKey,
-  batchAttachmentKey,
-  loadBatchDraft,
-  saveBatchDraft,
-} from "@/features/commerce/commerce-batch-storage";
 import { loadCommerceDraft, saveCommerceDraft } from "@/features/commerce/commerce-draft-storage";
 import { createTestGateway } from "./workspace-test-fixtures";
 
@@ -328,192 +318,5 @@ describe("Meitu commerce workflow contracts", () => {
         (s) => s.instruction === "木质桌面自然光",
       ),
     ).toBe(true);
-  });
-});
-
-describe("batch ownership and durable recovery", () => {
-  it('offers one batch workflow chooser and only unified output settings', () => {
-    render(<CommerceBatchWizard sessionId="local-draft" settings={settings} capabilities={IMAGE_PROVIDER_CAPABILITIES} />);
-    expect(screen.queryByLabelText('批量生成类型')).toBeNull();
-    expect(screen.queryByLabelText('批量统一平台')).toBeNull();
-    expect(screen.queryByLabelText('批量生成模型')).toBeNull();
-    expect(screen.queryByLabelText('批量目标地区')).toBeNull();
-    expect(screen.queryByLabelText('批量画面语言')).toBeNull();
-    expect(screen.queryByText('覆盖统一参数')).toBeNull();
-    expect(screen.getByLabelText('批量生成比例')).toHaveValue('1:1');
-    expect(screen.getByLabelText('批量生成分辨率')).toHaveValue('2K');
-  });
-  const draft = () => ({
-    workflow: "product-set",
-    platform: "taobao",
-    region: "cn",
-    language: "zh-CN",
-    generation: settings,
-    count: 7,
-    advanced: false,
-    rows: [
-      {
-        id: crypto.randomUUID(),
-        name: "原账号商品",
-        description: "陶瓷杯",
-        sellingPoints: "",
-        instruction: "",
-        count: 2,
-      },
-    ],
-  });
-  it("isolates owner and draft identities, refuses unowned v1 caches and expires old drafts", () => {
-    const key = batchDraftKey("owner-A", "draft-A");
-    const data = draft();
-    saveBatchDraft(key, data);
-    localStorage.setItem(
-      "zimage:commerce-batch-draft:v1",
-      JSON.stringify(data),
-    );
-    expect(loadBatchDraft(key)?.rows[0]?.count).toBe(2);
-    expect(loadBatchDraft(batchDraftKey("owner-B", "draft-A"))).toBeUndefined();
-    expect(loadBatchDraft(batchDraftKey("owner-A", "draft-B"))).toBeUndefined();
-    sessionStorage.setItem(
-      key,
-      JSON.stringify({ savedAt: Date.now() - 86400001, draft: data }),
-    );
-    expect(loadBatchDraft(key)).toBeUndefined();
-  });
-  it("restores files before enabling submission and preserves individual overrides", async () => {
-    const data = draft();
-    const key = batchDraftKey("owner-A", "local-draft");
-    saveBatchDraft(key, data);
-    let resolve!: (refs: UploadReference[]) => void;
-    attachments.load.mockImplementation((id: string) =>
-      id.endsWith(":products")
-        ? new Promise<UploadReference[]>((done) => {
-            resolve = done;
-          })
-        : Promise.resolve([]),
-    );
-    render(
-      <CommerceBatchWizard
-        ownerKey="owner-A"
-        sessionId="local-draft"
-        gateway={createTestGateway().commerce}
-        settings={settings}
-        capabilities={IMAGE_PROVIDER_CAPABILITIES}
-      />,
-    );
-    expect(
-      screen.getByRole("button", { name: "正在恢复附件…" }),
-    ).toBeDisabled();
-    const file = new File(["x"], "restored.png", { type: "image/png" });
-    await act(async () =>
-      resolve([{ ...ref(file.name), file, previewUrl: "blob:restored" }]),
-    );
-    expect(screen.getByText("restored.png")).toBeVisible();
-    expect(screen.queryByLabelText("商品 1 数量覆盖")).toBeNull();
-    expect(loadBatchDraft(key)?.rows[0]?.count).toBe(2);
-    expect(attachments.load).toHaveBeenCalledWith(
-      batchAttachmentKey(key, data.rows[0]!.id, "products"),
-      6,
-    );
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:restored");
-  });
-  it('keeps a hidden late-created batch passive while visible history reads progress', async () => {
-    const sessionId = crypto.randomUUID();
-    const gateway = createTestGateway();
-    vi.spyOn(gateway.commerce, 'upload').mockResolvedValue(crypto.randomUUID());
-    let finish!: (response: Response) => void;
-    let batch!: CreativeBatch;
-    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.startsWith('/api/uploads')) return new Response(JSON.stringify({ count: 0, limit: 64 }));
-      if (url === '/api/creative-batches' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as CreativeBatchCreate;
-        batch = { id: crypto.randomUUID(), requestId: body.requestId, sessionId: body.sessionId, workflow: body.workflow, globalParams: body.globalParams,
-          items: body.tasks.map(task => ({ ...task, id: crypto.randomUUID(), createRequestId: crypto.randomUUID(), submitRequestId: crypto.randomUUID(), status: 'pending' })), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        return new Promise<Response>(resolve => { finish = resolve; });
-      }
-      if (url === `/api/creative-batches/${batch.id}`) {
-        return new Response(JSON.stringify(batch));
-      }
-      if (url === `/api/creative-batches/${batch.id}/progress`) return new Response(JSON.stringify({
-        id: batch.id, createdAt: batch.createdAt, updatedAt: batch.updatedAt, terminal: false,
-        items: batch.items.map(item => ({ id: item.id, taskId: null, status: item.status,
-          error: null, total: item.plan.slots.length, succeeded: 0, failed: 0, processing: 0, review: 0 })),
-      }));
-      throw new Error(`unexpected request ${url}`);
-    });
-    vi.stubGlobal('fetch', fetcher);
-    const props = { ownerKey: 'late-owner', sessionId, gateway: gateway.commerce, settings, capabilities: IMAGE_PROVIDER_CAPABILITIES };
-    const onCreated = vi.fn();
-    const view = render(<div><div><CommerceBatchWizard {...props} onCreated={onCreated} /></div></div>);
-    fireEvent.change(screen.getByLabelText('商品 1 原图'), { target: { files: [new File(['x'], 'cup.png', { type: 'image/png' })] } });
-    fireEvent.change(screen.getByLabelText('商品 1 描述'), { target: { value: '真实陶瓷杯' } });
-    fireEvent.click(screen.getByRole('button', { name: '核对 1 个商品任务费用' }));
-    await screen.findByRole('dialog', { name: '批量费用确认' });
-    fireEvent.click(screen.getByRole('button', { name: '确认提交 1 个商品任务' }));
-    await waitFor(() => expect(finish).toBeDefined());
-    view.rerender(<div><div hidden><CommerceBatchWizard {...props} onCreated={onCreated} /></div></div>);
-    await act(async () => finish(new Response(JSON.stringify(batch))));
-    expect(onCreated).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls.some(([url]) => String(url).startsWith(`/api/creative-batches/${batch.id}`))).toBe(false);
-    view.rerender(<div><div hidden><CommerceBatchWizard {...props} active={false} onCreated={onCreated} /></div><CommerceBatchWizard {...props} batchId={batch.id} /></div>);
-    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url === `/api/creative-batches/${batch.id}/progress`)).toBe(true));
-    expect(fetcher.mock.calls.filter(([url, init]) => url === `/api/creative-batches/${batch.id}` && init?.method !== 'POST')).toHaveLength(1);
-    expect(fetcher.mock.calls.filter(([url, init]) => String(url).startsWith(`/api/creative-batches/${batch.id}`) && init?.method === 'POST')).toHaveLength(0);
-    view.unmount();
-    vi.unstubAllGlobals();
-  });
-  it("replays a lost batch create body after remount, with no new upload or duplicate request", async () => {
-    const data = draft();
-    const sessionId = crypto.randomUUID();
-    const key = batchDraftKey("owner", sessionId);
-    saveBatchDraft(key, data);
-    const file = new File(["x"], "cup.png", { type: "image/png" });
-    attachments.load.mockImplementation((id: string) =>
-      Promise.resolve(
-        id.endsWith(":products") ? [{ ...ref(file.name), file }] : [],
-      ),
-    );
-    const gateway = createTestGateway();
-    const upload = vi
-      .spyOn(gateway.commerce, "upload")
-      .mockResolvedValue(crypto.randomUUID());
-    const bodies: string[] = [];
-    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.startsWith("/api/uploads"))
-        return new Response(JSON.stringify({ count: 0, limit: 64 }));
-      if (url.startsWith("/api/creative-batches?")) return new Response("[]");
-      bodies.push(String(init?.body));
-      throw new Error("response lost");
-    });
-    vi.stubGlobal("fetch", fetcher);
-    const props = {
-      ownerKey: "owner",
-      sessionId,
-      gateway: gateway.commerce,
-      settings,
-      capabilities: IMAGE_PROVIDER_CAPABILITIES,
-    };
-    const view = render(<CommerceBatchWizard {...props} />);
-    const ready = await screen.findByRole("button", {
-      name: "核对 1 个商品任务费用",
-    });
-    fireEvent.click(ready);
-    await screen.findByRole("dialog", { name: "批量费用确认" });
-    fireEvent.click(
-      screen.getByRole("button", { name: "确认提交 1 个商品任务" }),
-    );
-    await screen.findByText("response lost");
-    const frozen = bodies[0];
-    expect(JSON.parse(frozen!).tasks[0].plan.slots).toHaveLength(2);
-    view.unmount();
-    render(<CommerceBatchWizard {...props} />);
-    const resume = await screen.findByRole("button", {
-      name: "恢复提交同一批次",
-    });
-    await waitFor(() => expect(resume).toBeEnabled());
-    fireEvent.click(resume);
-    await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(bodies[1]).toBe(frozen);
-    expect(upload).toHaveBeenCalledTimes(1);
-    vi.unstubAllGlobals();
   });
 });

@@ -12,7 +12,6 @@ export const commerceSceneSchema = z.enum([
   "product-set",
   "detail",
   "clone",
-  "batch",
   "social",
   "style-reference",
   "model",

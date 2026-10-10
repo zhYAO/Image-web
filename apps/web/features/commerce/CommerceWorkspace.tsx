@@ -12,7 +12,6 @@ import {
   type UploadReference,
   type CommerceTask,
   type CreativeCommerceTask,
-  type CreativeBatch,
   type TimelineItem,
 } from "@zimage/domain";
 import {
@@ -31,7 +30,7 @@ import Link from "next/link";
 import { ArrowLeft, Layers3, Plus } from "lucide-react";
 import { TemplatePreview } from "./TemplatePreview";
 import { CommerceExample } from './CommerceEditor';
-import { CommerceBatchWizard } from './CommerceBatchWizard';
+import { LegacyCreativeBatchHistory } from './LegacyCreativeBatchHistory';
 import { templateName } from "./commerce-ui";
 import {
   CommerceTaskCard,
@@ -71,7 +70,6 @@ export function CommerceWorkspace({
   ownerKey = 'local',
   ensureSession,
   onSavedSession,
-  onBatchCreated,
   onDraftSessionsChange,
   requestedTaskId,
   requestedBatchId,
@@ -94,7 +92,6 @@ export function CommerceWorkspace({
   ownerKey?: string;
   ensureSession?: (title: string, requestId: string) => Promise<string>;
   onSavedSession?: (task: CreativeCommerceTask, sourceId: string) => void;
-  onBatchCreated?: (batch: CreativeBatch, sourceId: string) => void;
   onDraftSessionsChange?: (ids: string[]) => void;
   requestedTaskId?: string;
   requestedBatchId?: string;
@@ -403,12 +400,12 @@ export function CommerceWorkspace({
     tasks.find((task) => task.id === requestedTask) ?? (requestedTaskId && requestedTaskId !== "draft" ? undefined : tasks.at(-1));
   const selectedApparel = apparel.tasks.find(task => task.id === requestedTask) ?? (!requestedTask && !tasks.length ? apparel.tasks.at(-1) : undefined);
   const showDraft = Boolean(
-    currentDraft &&
+    !requestedBatchId && currentDraft &&
     (!requestedTask ||
       requestedTask === "draft" ||
       !tasks.some((task) => task.id === requestedTask) && !selectedApparel),
   );
-  const activeScene = showDraft ? currentDraft?.scene : requestedBatchId ? 'batch' : selectedApparel ? 'apparel-catalog' : selectedTask?.scene;
+  const activeScene = requestedBatchId ? undefined : showDraft ? currentDraft?.scene : selectedApparel ? 'apparel-catalog' : selectedTask?.scene;
   useEffect(() => { onModeChange?.(sessionId, hasCommerce, activeScene); }, [sessionId, hasCommerce, activeScene, onModeChange]);
   const panelKey = showDraft ? currentDraft!.id : (selectedTask?.id ?? "");
   const panel =
@@ -647,7 +644,7 @@ export function CommerceWorkspace({
           </div>
         </section>
       </div>
-      {requestedBatchId && sessionId && !coordinatedLoading && <CommerceBatchWizard ownerKey={ownerKey} key={requestedBatchId} gateway={gateway} batchId={requestedBatchId} sessionId={sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} />}
+      {requestedBatchId && sessionId && !coordinatedLoading && <LegacyCreativeBatchHistory ownerKey={ownerKey} key={requestedBatchId} gateway={gateway} batchId={requestedBatchId} sessionId={sessionId} />}
       {drafts.map((draft) => (
         <div
           className={styles.draftWorkbench}
@@ -656,7 +653,7 @@ export function CommerceWorkspace({
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
           }
         >
-          {draft.scene === 'batch' ? <CommerceBatchWizard ownerKey={ownerKey} active={draft.sessionId === sessionId && showDraft && !coordinatedLoading} gateway={gateway} sessionId={draft.sessionId} ensureSession={ensureSession} settings={wizardProps.settings} capabilities={wizardProps.capabilities} onCreated={onBatchCreated} /> : <AntdImage.PreviewGroup>
+          <AntdImage.PreviewGroup>
             <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}
@@ -683,7 +680,7 @@ export function CommerceWorkspace({
               }}
             />
             </Suspense>
-          </AntdImage.PreviewGroup>}
+          </AntdImage.PreviewGroup>
         </div>
       ))}
       {hasCommerce && visible.length > 0 && !coordinatedLoading && (
