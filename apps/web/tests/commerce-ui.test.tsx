@@ -124,9 +124,10 @@ describe("commerce UI", () => {
     window.sessionStorage.clear();
   });
 
-  it("offers only six primary scenes without platform or template discovery and keeps old launch URLs compatible", () => {
+  it("offers five primary scenes after retiring batch creation and keeps the remaining launch URLs compatible", () => {
     render(<CommerceCatalogue />);
-    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(6);
+    expect(screen.getAllByRole("link", { name: /^开始/ })).toHaveLength(5);
+    expect(screen.queryByRole("link", { name: "开始批量生成 →" })).toBeNull();
     expect(
       screen.getByRole("link", { name: "开始商品套图 →" }),
     ).toHaveAttribute("href", "/create/product-set");

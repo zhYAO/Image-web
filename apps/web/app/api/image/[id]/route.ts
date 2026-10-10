@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ApiRouteError } from '@/server/api-error';
 import { executeRoute, requireVerifiedUserId } from '@/server/route-context';
+import { assertActiveBusinessSession } from '@/server/session-access';
 import {
   generationBatchColumns,
   mapGenerationBatchRow,
@@ -17,7 +18,7 @@ interface BatchRouteContext {
 export async function GET(_request: Request, context: BatchRouteContext) {
   return executeRoute(async () => {
     const client = await createSupabaseServerClient();
-    await requireVerifiedUserId(client);
+    const userId = await requireVerifiedUserId(client);
     const { id } = await context.params;
     const batchId = z.uuid().parse(id);
     const { data, error } = await client
@@ -41,6 +42,7 @@ export async function GET(_request: Request, context: BatchRouteContext) {
         status: 404,
       });
     }
+    await assertActiveBusinessSession(client, userId, data.session_id);
     return NextResponse.json(generationBatchResponseSchema.parse({ batch: mapGenerationBatchRow(data) }));
   });
 }

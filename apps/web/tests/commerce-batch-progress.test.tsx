@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import { buildCommerceSlots, IMAGE_PROVIDER_CAPABILITIES } from '@zimage/domain';
+import { buildCommerceSlots } from '@zimage/domain';
 import { afterEach, expect, it, vi } from 'vitest';
-import { CommerceBatchWizard } from '@/features/commerce/CommerceBatchWizard';
+import { LegacyCreativeBatchHistory } from '@/features/commerce/LegacyCreativeBatchHistory';
 import { createTestGateway } from './workspace-test-fixtures';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,8 +30,8 @@ it('reads twenty child counts with one progress request and no child GET or brow
   vi.stubGlobal('fetch', fetcher);
   const gateway = createTestGateway().commerce;
   const get = vi.spyOn(gateway, 'get');
-  render(<CommerceBatchWizard ownerKey="owner" batchId={batchId} sessionId={sessionId}
-    gateway={gateway} settings={settings} capabilities={IMAGE_PROVIDER_CAPABILITIES} />);
+  render(<LegacyCreativeBatchHistory ownerKey="owner" batchId={batchId} sessionId={sessionId}
+    gateway={gateway} />);
   await screen.findByText(/已提交 20\/20 个商品任务/);
   expect(screen.getByText(/待核对 1 个/)).toBeTruthy();
   expect(fetcher).toHaveBeenCalledTimes(2);
@@ -58,8 +58,8 @@ it('clears a transient progress error after the next successful read', async () 
     if (!url.endsWith('/progress')) return Response.json(batch);
     return ++reads === 1 ? Response.json({ error: 'unavailable' }, { status: 503 }) : Response.json(progress);
   }));
-  render(<CommerceBatchWizard ownerKey="owner" batchId={batchId} sessionId={sessionId}
-    gateway={createTestGateway().commerce} settings={settings} capabilities={IMAGE_PROVIDER_CAPABILITIES} />);
+  render(<LegacyCreativeBatchHistory ownerKey="owner" batchId={batchId} sessionId={sessionId}
+    gateway={createTestGateway().commerce} />);
   expect(await screen.findByRole('alert')).toHaveTextContent('批量进度暂时无法读取。');
   expect(await screen.findByText(/已提交 1\/1 个商品任务/, {}, { timeout: 7000 })).toBeTruthy();
   expect(screen.queryByText('批量进度暂时无法读取。')).toBeNull();

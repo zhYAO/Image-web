@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ApiRouteError } from '@/server/api-error';
 import { executeRoute, requireVerifiedUserId } from '@/server/route-context';
+import { assertActiveBusinessSession } from '@/server/session-access';
 
 interface AssetRouteContext {
   params: Promise<{ id: string }>;
@@ -14,12 +15,12 @@ interface AssetRouteContext {
 export async function GET(_request: Request, context: AssetRouteContext) {
   return executeRoute(async () => {
     const client = await createSupabaseServerClient();
-    await requireVerifiedUserId(client);
+    const userId = await requireVerifiedUserId(client);
     const { id } = await context.params;
     const generationId = z.uuid().parse(id);
     const generation = await client
       .from('generations')
-      .select('id,status,asset_status,asset_expires_at,storage_bucket,storage_path')
+      .select('id,batch_id,status,asset_status,asset_expires_at,storage_bucket,storage_path')
       .eq('id', generationId)
       .maybeSingle();
     if (generation.error) {
@@ -38,6 +39,14 @@ export async function GET(_request: Request, context: AssetRouteContext) {
         status: 404,
       });
     }
+
+    const batch = await client.from('generation_batches').select('session_id')
+      .eq('id', generation.data.batch_id).eq('user_id', userId).maybeSingle();
+    if (batch.error || !batch.data) {
+      throw new ApiRouteError({ code: 'not_found', status: 404, retryable: false,
+        message: '图片不存在或无权访问。' });
+    }
+    await assertActiveBusinessSession(client, userId, batch.data.session_id);
 
     const expired = generation.data.asset_status === 'expired'
       || (generation.data.asset_expires_at && Date.parse(generation.data.asset_expires_at) <= Date.now());

@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-const spies = vi.hoisted(() => ({ calls: 0, fail: false, healthFail: false, beforeHealthFailure: undefined as (() => void) | undefined }));
+const spies = vi.hoisted(() => ({
+  calls: 0,
+  fail: false,
+  healthFail: false,
+  historyFail: false,
+  beforeHealthFailure: undefined as (() => void) | undefined,
+  beforeHistoryFailure: undefined as (() => void) | undefined,
+}));
 vi.mock("@/server/preview/preview-usage-guard", () => ({
   createPreviewUsageGuard: () => ({}),
   withPreviewUsageReservation: async (
@@ -8,17 +15,6 @@ vi.mock("@/server/preview/preview-usage-guard", () => ({
     _b: unknown,
     fn: () => Promise<unknown>,
   ) => fn(),
-}));
-vi.mock("@/server/chat/supabase-chat-store", () => ({
-  SupabaseChatStore: class {
-    async assertProviderAvailable() {
-      if (spies.healthFail) { spies.beforeHealthFailure?.(); throw Error("unavailable"); }
-    }
-    async history() {
-      return [];
-    }
-    async recordProviderResult() {}
-  },
 }));
 vi.mock("@/server/chat/chat-providers", () => ({
   resolveChatProvider: () => ({}),
@@ -39,9 +35,19 @@ function fixture() {
   const rpc = vi.fn(
     async (
       _name: string,
-      args: { p_action: string; p_input: Record<string, unknown> },
+      args: Record<string, unknown>,
     ) => {
+      if (_name === "assert_chat_provider_available") {
+        if (spies.healthFail) {
+          spies.beforeHealthFailure?.();
+          return { data: null, error: { message: "health unavailable" } };
+        }
+        return { data: true, error: null };
+      }
+      if (_name === "record_chat_provider_result")
+        return { data: null, error: null };
       const action = args.p_action;
+      const input = args.p_input as Record<string, unknown>;
       if (action === "text_start") {
         op ??= {
           id: crypto.randomUUID(),
@@ -65,7 +71,7 @@ function fixture() {
         op!.status = "processing";
         return { data: { claimed: true }, error: null };
       } else if (action === "text_result") {
-        op!.result = args.p_input.result;
+        op!.result = input.result;
         op!.status = "result";
       } else if (action === "text_complete") {
         if (checkpointFailure) {
@@ -80,8 +86,25 @@ function fixture() {
       return { data: structuredClone(op), error: null };
     },
   );
+  // Keep SupabaseChatStore real; only the database query boundary is simulated.
+  const historyQuery = {
+    select: vi.fn(),
+    eq: vi.fn(),
+    order: vi.fn(),
+    limit: vi.fn(async () => {
+      if (spies.historyFail) {
+        spies.beforeHistoryFailure?.();
+        return { data: null, error: { message: "history unavailable" } };
+      }
+      return { data: [], error: null };
+    }),
+  };
+  historyQuery.select.mockReturnValue(historyQuery);
+  historyQuery.eq.mockReturnValue(historyQuery);
+  historyQuery.order.mockReturnValue(historyQuery);
+  const from = vi.fn().mockReturnValue(historyQuery);
   return {
-    admin: { rpc } as unknown as SupabaseClient,
+    admin: { rpc, from } as unknown as SupabaseClient,
     rpc,
     input: {
       requestId,
@@ -121,7 +144,9 @@ describe("billed text recovery", () => {
     spies.calls = 0;
     spies.fail = false;
     spies.healthFail = false;
+    spies.historyFail = false;
     spies.beforeHealthFailure = undefined;
+    spies.beforeHistoryFailure = undefined;
   });
   it("replays saved result without calling a now unavailable model", async () => {
     const f = fixture();
@@ -152,5 +177,39 @@ describe("billed text recovery", () => {
     await expect(run(f)).rejects.toThrow();
     expect(f.op()?.status).toBe("refunded");
     expect(spies.calls).toBe(0);
+  });
+  it("cancels an unclaimed request when history loading fails", async () => {
+    const f = fixture();
+    spies.historyFail = true;
+    await expect(run(f)).rejects.toMatchObject({
+      code: "provider_error",
+      status: 503,
+      retryable: false,
+    });
+    expect(f.op()?.status).toBe("refunded");
+    expect(spies.calls).toBe(0);
+    expect(f.rpc.mock.calls.filter(([, args]) => args.p_action === "text_cancel")).toHaveLength(1);
+    expect(f.rpc.mock.calls.some(([, args]) => args.p_action === "text_claim" || args.p_action === "text_refund")).toBe(false);
+  });
+  it("does not refund another retry's claimed call when history loading fails", async () => {
+    const f = fixture();
+    spies.historyFail = true;
+    spies.beforeHistoryFailure = () => { f.op()!.status = "processing"; };
+    await expect(run(f)).rejects.toMatchObject({ code: "billing_pending" });
+    expect(f.op()?.status).toBe("processing");
+    expect(spies.calls).toBe(0);
+    expect(f.rpc.mock.calls.filter(([, args]) => args.p_action === "text_cancel")).toHaveLength(1);
+    expect(f.rpc.mock.calls.some(([, args]) => args.p_action === "text_refund")).toBe(false);
+  });
+  it("never calls upstream when replaying a request cancelled after a history failure", async () => {
+    const f = fixture();
+    spies.historyFail = true;
+    await expect(run(f)).rejects.toMatchObject({ code: "provider_error", status: 503 });
+    spies.historyFail = false;
+    await expect(run(f)).rejects.toMatchObject({ code: "provider_error", status: 409 });
+    expect(f.op()?.status).toBe("refunded");
+    expect(spies.calls).toBe(0);
+    expect(f.rpc.mock.calls.filter(([, args]) => args.p_action === "text_cancel")).toHaveLength(1);
+    expect(f.rpc.mock.calls.some(([, args]) => args.p_action === "text_claim")).toBe(false);
   });
 });

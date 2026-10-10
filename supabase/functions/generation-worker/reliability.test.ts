@@ -1,6 +1,6 @@
 import { ImageProviderError } from '../_shared/image-providers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { processClaim, type ClaimedGeneration, type ResultCheckpoint } from '../_shared/generation-runner';
+import { parseClaim, processClaim, type ClaimedGeneration, type ResultCheckpoint } from '../_shared/generation-runner';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const claim: ClaimedGeneration = { action: 'process', generationId: id, batchId: id, sessionId: id, userId: id,
@@ -155,6 +155,143 @@ describe('generation worker reliability', () => {
     expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'failed' });
     expect(f.events).toContain('fail'); expect(f.events).not.toContain('unknown');
     expect(f.provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('finalizes a definite rejection when the separate safety audit endpoint is unavailable', async () => {
+    const f = fixture();
+    const originalRpc = f.admin.rpc;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'record_image_safety_decision') {
+        f.events.push(name);
+        return { data: null, error: { message: 'audit_transport_unavailable' } };
+      }
+      return originalRpc(name, args);
+    };
+    f.provider.mockRejectedValue(new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected'));
+
+    // The database test must separately prove that rejection and its audit are
+    // atomic; this runner regression guards the independent audit RPC outage.
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'failed', code: 'moderation' });
+    expect(f.events).toContain('fail');
+    expect(f.events).not.toContain('unknown');
+    expect(f.provider).toHaveBeenCalledTimes(1);
+    expect(f.objects.size).toBe(0);
+  });
+
+  it('retries rejection finalization after a transport error without another provider call', async () => {
+    const f = fixture();
+    const originalRpc = f.admin.rpc;
+    let failures = 1;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'fail' && failures-- > 0) {
+        f.events.push('fail_transport_error');
+        return { data: null, error: { message: 'transient' } };
+      }
+      return originalRpc(name, args);
+    };
+    f.provider.mockRejectedValue(new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected'));
+
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'failed', code: 'moderation' });
+    expect(f.events).toContain('fail_transport_error');
+    expect(f.events).toContain('fail');
+    expect(f.provider).toHaveBeenCalledTimes(1);
+    expect(f.objects.size).toBe(0);
+  });
+
+  it('does not write a rejection audit after its lease token has been replaced', async () => {
+    const f = fixture();
+    f.provider.mockImplementation(async () => {
+      f.fence();
+      throw new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected');
+    });
+
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'deferred' });
+    expect(f.events).not.toContain('record_image_safety_decision');
+    expect(f.provider).toHaveBeenCalledTimes(1);
+    expect(f.objects.size).toBe(0);
+  });
+
+  it('checkpoints a definite rejection before attempting its finalization', async () => {
+    const f = fixture();
+    f.provider.mockRejectedValue(new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected'));
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'failed' });
+    expect(f.events.indexOf('checkpoint_rejection')).toBeGreaterThan(f.events.indexOf('submitted'));
+    expect(f.events.indexOf('checkpoint_rejection')).toBeLessThan(f.events.indexOf('fail'));
+    expect(f.events).not.toContain('record_image_safety_decision');
+  });
+
+  it('leaves a rejection pending when its durable checkpoint cannot be written', async () => {
+    const f = fixture(); const originalRpc = f.admin.rpc;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'checkpoint_rejection') {
+        f.events.push('checkpoint_rejection');
+        return { data: null, error: { message: 'offline' } };
+      }
+      return originalRpc(name, args);
+    };
+    f.provider.mockRejectedValue(new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected'));
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'deferred' });
+    expect(f.events.filter(event => event === 'checkpoint_rejection')).toHaveLength(3);
+    expect(f.events).not.toContain('fail'); expect(f.events).not.toContain('unknown');
+    expect(f.provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers only finalization after an audit transaction keeps failing', async () => {
+    const f = fixture(); const originalRpc = f.admin.rpc;
+    let savedCode: unknown; let failures = 3;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'checkpoint_rejection') {
+        savedCode = (args.p_payload as Record<string, unknown>).code;
+      }
+      if (name === 'generation_worker_step' && args?.p_operation === 'fail' && failures-- > 0) {
+        f.events.push('audit_transaction_error');
+        return { data: null, error: { message: 'audit_insert_failed' } };
+      }
+      return originalRpc(name, args);
+    };
+    f.provider.mockRejectedValue(new ImageProviderError('moderation', 'provider_content_blocked', false, 'rejected'));
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'deferred' });
+    expect(savedCode).toBe('moderation');
+    expect(f.events.filter(event => event === 'audit_transaction_error')).toHaveLength(3);
+    const recovery = parseClaim({ ...claim, action: 'recover_rejection', rejectionCode: savedCode });
+    expect(await processClaim(f.admin, recovery as ClaimedGeneration, { callProvider: f.provider })).toMatchObject({ action: 'failed', code: 'moderation' });
+    expect(f.events.filter(event => event === 'checkpoint_rejection')).toHaveLength(1);
+    expect(f.events).not.toContain('unknown'); expect(f.provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays finalization after its response is lost without buying or checkpointing again', async () => {
+    const f = fixture(); const originalRpc = f.admin.rpc; let responseLost = true;
+    f.admin.rpc = async (name, args) => {
+      const response = await originalRpc(name, args);
+      if (name === 'generation_worker_step' && args?.p_operation === 'fail' && responseLost) {
+        responseLost = false;
+        return { data: null, error: { message: 'response_lost' } };
+      }
+      return response;
+    };
+    f.provider.mockRejectedValue(new ImageProviderError('provider_error', 'provider_rejected', false, 'rejected'));
+    expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'failed', code: 'provider_error' });
+    expect(f.events.filter(event => event === 'fail')).toHaveLength(2);
+    expect(f.events.filter(event => event === 'checkpoint_rejection')).toHaveLength(1);
+    expect(f.provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers a durable rejection without provider availability, references or storage work', async () => {
+    const f = fixture(); const originalRpc = f.admin.rpc;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'assert_chat_provider_available') throw new Error('provider_disabled');
+      return originalRpc(name, args);
+    };
+    const recovery = parseClaim({ ...claim, action: 'recover_rejection', rejectionCode: 'moderation',
+      params: { ...claim.params, referenceIds: [id] }, references: [] });
+    expect(recovery).toMatchObject({ action: 'recover_rejection', rejectionCode: 'moderation' });
+    expect(await processClaim(f.admin, recovery as ClaimedGeneration, { callProvider: f.provider })).toMatchObject({ action: 'failed', code: 'moderation' });
+    expect(f.provider).not.toHaveBeenCalled(); expect(f.objects.size).toBe(0);
+    expect(f.events).toEqual(['renew', 'fail']);
+  });
+
+  it.each([undefined, null, 'reference_download_failed', 'provider_reconciliation_required'])('rejects a recovery claim with invalid rejection code %s', code => {
+    expect(() => parseClaim({ ...claim, action: 'recover_rejection', rejectionCode: code })).toThrow('invalid_queue_claim');
   });
 
 });

@@ -25,10 +25,13 @@ interface QueueReference {
   path: string;
 }
 
+type RejectionCode = ImageProviderError['code'];
+
 export interface ClaimedGeneration {
-  action: 'process' | 'recover';
+  action: 'process' | 'recover' | 'recover_rejection';
   claimToken: string;
   checkpoint?: ResultCheckpoint;
+  rejectionCode?: RejectionCode;
   batchId: string;
   correlationId?: string;
   generationId: string;
@@ -79,7 +82,8 @@ export function parseClaim(value: unknown): ClaimedGeneration | QueueAction | nu
   const references = Array.isArray(claim.references) ? claim.references : [];
   const referenceIds = params && Array.isArray(params.referenceIds) ? params.referenceIds : [];
   if (
-    (claim.action !== 'process' && claim.action !== 'recover')
+    (claim.action !== 'process' && claim.action !== 'recover' && claim.action !== 'recover_rejection')
+    || (claim.action === 'recover_rejection' && !isRejectionCode(claim.rejectionCode))
     || !isUuid(claim.claimToken)
     || !isUuid(claim.batchId)
     || !isUuid(claim.generationId)
@@ -115,6 +119,7 @@ export function parseClaim(value: unknown): ClaimedGeneration | QueueAction | nu
     action: claim.action as ClaimedGeneration['action'],
     claimToken: claim.claimToken as string,
     checkpoint: claim.action === 'recover' ? parseCheckpoint(claim.checkpoint) : undefined,
+    rejectionCode: claim.action === 'recover_rejection' ? claim.rejectionCode as RejectionCode : undefined,
     batchId: claim.batchId,
     correlationId: typeof claim.correlationId === 'string' ? claim.correlationId : undefined,
     generationId: claim.generationId,
@@ -128,6 +133,10 @@ export function parseClaim(value: unknown): ClaimedGeneration | QueueAction | nu
     sessionId: claim.sessionId,
     userId: claim.userId,
   };
+}
+
+function isRejectionCode(value: unknown): value is RejectionCode {
+  return value === 'moderation' || value === 'provider_error' || value === 'provider_unavailable';
 }
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -260,6 +269,11 @@ export async function processClaim(
   };
   try {
     await bounded(step('renew'));
+    if (claim.action === 'recover_rejection') {
+      if (!isRejectionCode(claim.rejectionCode)) throw new Error('invalid_rejection_checkpoint');
+      await retry(() => step('fail', { code: claim.rejectionCode, messageId: claim.messageId, outcome: 'rejected' }));
+      return { action: 'failed', code: claim.rejectionCode };
+    }
     let checkpoint = claim.checkpoint;
     if (claim.action !== 'recover') {
       let references: ProviderReference[];
@@ -282,16 +296,18 @@ export async function processClaim(
       catch (error) {
         if (error instanceof LeaseLost) throw error;
         const known = error instanceof ImageProviderError && error.outcome === 'rejected';
-        if (known && error.code === 'moderation') {
-          await bounded(rpc(admin, 'record_image_safety_decision', {
-            p_category: 'provider_content_policy', p_decision: 'block', p_generation_id: claim.generationId,
-          }));
+        if (known) {
+          // Persist the provider fact separately from finalization. Audit and
+          // settlement can then be retried after a crash without resubmitting.
+          await retry(() => step('checkpoint_rejection', { code: error.code, outcome: 'rejected' }));
+          await retry(() => step('fail', { code: error.code, messageId: claim.messageId, outcome: 'rejected' }));
+          return { action: 'failed', code: error.code };
         }
-        await bounded(step(known ? 'fail' : 'unknown', {
-          code: known ? error.code : 'provider_reconciliation_required', messageId: claim.messageId,
-          outcome: known ? 'rejected' : 'unknown',
+        await bounded(step('unknown', {
+          code: 'provider_reconciliation_required', messageId: claim.messageId,
+          outcome: 'unknown',
         }));
-        return { action: known ? 'failed' : 'reconcile', code: known ? error.code : 'provider_reconciliation_required' };
+        return { action: 'reconcile', code: 'provider_reconciliation_required' };
       }
       const bytes = base64ToBytes(result.bytesBase64);
       if (bytes.length === 0 || bytes.length > 30 * 1024 * 1024) {

@@ -394,15 +394,6 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       onNavigate?.(sessionHref(task.sessionId, task.id, task.runs.length ? 'results' : 'plan'), true);
     }
   };
-  const commerceBatchCreated = (batch: import('@zimage/domain').CreativeBatch, sourceId: string) => {
-    const current = useWorkspaceStore.getState();
-    const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside' && routeRef.current?.kind !== 'catalogue';
-    if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, batch.sessionId);
-    if (stillHere) {
-      setActiveSessionId(batch.sessionId);
-      onNavigate?.(`/sessions/${batch.sessionId}?batch=${batch.id}`, true);
-    }
-  };
 
   useEffect(() => {
     for (const reference of references) {
@@ -1041,7 +1032,6 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
             </div> : <CommerceWorkspace
               ensureSession={ensureCommerceSession}
               onSavedSession={commerceSaved}
-              onBatchCreated={commerceBatchCreated}
               onExitDraft={() => onNavigate?.('/create')}
               ownerKey={ownerKey}
               onDraftSessionsChange={onDraftSessionsChange}

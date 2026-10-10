@@ -102,7 +102,8 @@ describe("shared authentication presentation", () => {
     vi.stubGlobal('fetch', fetcher);
     render(<AuthStatusProvider><PublicCommerceCatalogue /></AuthStatusProvider>);
     await screen.findByRole('link', { name: '登录' });
-    expect(screen.getAllByRole('link', { name: /^开始/ })).toHaveLength(6);
+    expect(screen.getAllByRole('link', { name: /^开始/ })).toHaveLength(5);
+    expect(screen.queryByRole('link', { name: '开始批量生成' })).toBeNull();
     expect(screen.getByRole('button', { name: '新对话' })).toBeVisible();
     expect(fetcher.mock.calls.map(call => call[0])).toEqual(['/api/auth/session']);
     expect(replace).not.toHaveBeenCalled();

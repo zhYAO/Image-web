@@ -1,5 +1,5 @@
 import { VISUAL_DIRECTIONS } from "./commerce-visuals";
-export const COMMERCE_PRIMARY_SCENE_IDS = ['product-set', 'detail', 'clone', 'batch', 'product-main', 'apparel-catalog'] as const;
+export const COMMERCE_PRIMARY_SCENE_IDS = ['product-set', 'detail', 'clone', 'product-main', 'apparel-catalog'] as const;
 export const COMMERCE_SCENES = [
   { id: "apparel-catalog", name: "服装商品图片", description: "上传五张主图、展示照片与 Logo，按固定版式排出完整商品图。", count: 11, roles: ["服装固定排版"] },
   {
@@ -24,7 +24,6 @@ export const COMMERCE_SCENES = [
     roles: ["品牌首屏", "核心卖点", "产品展示", "使用场景", "材质细节", "功能介绍"],
   },
   { id: "clone", name: "爆款图复刻", description: "每张参考图独立设置要求，按图逐张生成。", count: 1, roles: ["参考风格"] },
-  { id: "batch", name: "批量生成", description: "统一参数、逐商品覆盖，即时提交并跟踪进度。", count: 1, roles: ["批量商品"] },
   {
     id: "social",
     name: "种草图文",

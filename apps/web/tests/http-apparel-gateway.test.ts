@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceError } from "@zimage/domain";
 import { HttpWorkspaceGateway } from "@/gateways/http-workspace-gateway";
+import { zipCommerceStream } from "@/server/commerce/commerce-export";
 import { apparelFixture, apparelIds } from "./apparel-fixtures";
 const task = {
   id: apparelIds[7]!,
@@ -74,6 +76,48 @@ describe("apparel HTTP task contract", () => {
     );
     await expect(gateway.download(task.id, input)).rejects.toMatchObject({
       safe: { code: "ASSET_EXPIRED" },
+    });
+  });
+  it("reports a rejected download request as a safe retryable network error", async () => {
+    const fetcher = async () => {
+      throw new TypeError("private upstream connection diagnostic");
+    };
+    const gateway = new HttpWorkspaceGateway({ fetcher }).commerce.apparel;
+    const downloading = gateway.download(task.id, {
+      requestId: apparelIds[0]!,
+      revision: 1,
+      runId: apparelIds[1]!,
+    });
+    await expect(downloading).rejects.toBeInstanceOf(WorkspaceError);
+    await expect(downloading).rejects.toMatchObject({
+      message: "下载失败，请稍后重试。",
+      safe: { code: "NETWORK", retryable: true, message: "下载失败，请稍后重试。" },
+    });
+  });
+  it.each([
+    ["before the first ZIP file", false],
+    ["after the first ZIP file", true],
+  ])("reports a ZIP interrupted %s as a safe retryable error", async (_stage, hasFirstFile) => {
+    async function* files() {
+      if (hasFirstFile) {
+        yield { name: "主图/1.jpg", bytes: new Uint8Array([255, 216, 1, 255, 217]) };
+      }
+      throw new Error("private upstream storage diagnostic");
+    }
+    const fetcher = async () => new Response(zipCommerceStream(files()), {
+      status: 200,
+      headers: { "content-type": "application/zip" },
+    });
+    const gateway = new HttpWorkspaceGateway({ fetcher }).commerce.apparel;
+    const downloading = gateway.download(task.id, {
+      requestId: apparelIds[0]!,
+      revision: 1,
+      runId: apparelIds[1]!,
+    });
+    await expect(downloading).rejects.toBeInstanceOf(WorkspaceError);
+    await expect(downloading).rejects.toMatchObject({
+      message: "下载失败，请稍后重试。",
+      safe: { code: "NETWORK", retryable: true, message: "下载失败，请稍后重试。" },
     });
   });
   it("retains the selected historical run when restoring and exporting a newer plan", async () => {
