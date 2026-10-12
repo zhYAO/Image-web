@@ -1,11 +1,12 @@
 import { creditsEnabled, creditCall } from "@/server/credits/credit-service";
 import type { CreditConfirmation } from "@zimage/domain";
+import { IMAGE_MODEL_UPGRADE_MESSAGE } from "@zimage/domain";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { ApiRouteError } from "@/server/api-error";
 
-import type { GenerationSubmissionStore } from "./image-service";
+import type { GenerationSubmissionStore, GenerationSubmissionSnapshot } from "./image-service";
 
 const submissionResultSchema = z.object({
   batchId: z.uuid(),
@@ -16,6 +17,8 @@ const submissionResultSchema = z.object({
 
 function submissionFailure(error: { code?: string; message?: string } | null) {
   const diagnostic = `${error?.code ?? ""} ${error?.message ?? ""}`;
+  if (/seedream_upgrade_required|image_model_upgrade_required|image_model_unavailable/.test(diagnostic))
+    return new ApiRouteError({ code: 'bad_request', status: 400, message: IMAGE_MODEL_UPGRADE_MESSAGE, retryable: false });
   if (diagnostic.includes('quota_exceeded')) {
     return new ApiRouteError({
       code: 'quota_exceeded',
@@ -86,6 +89,23 @@ function submissionFailure(error: { code?: string; message?: string } | null) {
 
 export class SupabaseGenerationStore implements GenerationSubmissionStore {
   constructor(private readonly adminClient: SupabaseClient) {}
+
+  async lookupSubmission(input: { userId: string; idempotencyKey: string }): Promise<GenerationSubmissionSnapshot | null> {
+    const { data, error } = await this.adminClient.from('generation_batches')
+      .select('id,session_id,config,model,provider,request_hash,skill_id,skill_version,source')
+      .eq('user_id', input.userId).eq('idempotency_key', input.idempotencyKey).maybeSingle();
+    if (error) throw submissionFailure(error);
+    if (!data) return null;
+    const owner = await this.adminClient.from('sessions').select('id')
+      .eq('id', data.session_id).eq('user_id', input.userId).eq('status', 'active').maybeSingle();
+    if (owner.error) throw submissionFailure(owner.error);
+    if (!owner.data) throw new ApiRouteError({ code: 'not_found', status: 404, message: '会话不存在或无权访问。', retryable: false });
+    const row = z.object({ id: z.uuid(), session_id: z.uuid(), config: z.object({ registryVersion: z.string().optional() }),
+      model: z.string().min(1), provider: z.string().min(1), request_hash: z.string().min(1),
+      skill_id: z.string().nullable(), skill_version: z.string().nullable(), source: z.enum(['direct', 'chat_tool']) }).parse(data);
+    return { batchId: row.id, sessionId: row.session_id, config: row.config, model: row.model, provider: row.provider,
+      requestHash: row.request_hash, skillId: row.skill_id ?? undefined, skillVersion: row.skill_version ?? undefined, source: row.source };
+  }
 
   async submit(input: Parameters<GenerationSubmissionStore["submit"]>[0]) {
     if (creditsEnabled())

@@ -22,6 +22,7 @@ import {
   WorkspaceError,
   aggregateBatchStatus,
   hasExplicitImageIntent,
+  resolveImageModel,
   nextTimelineSequence,
   sanitizeError,
   validateImageRequest,
@@ -413,7 +414,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
         aspectRatio: '1:1',
         count: 2,
         prompt: request.message,
-        resolution: '1K',
+        resolution: '2K',
         scenario: request.scenario,
         sessionId: session.id,
         skillId: request.skillId,
@@ -586,6 +587,16 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
           });
         return this.getGenerationBatch(previous.batchId);
       }
+    }
+    let resolved: ReturnType<typeof resolveImageModel>;
+    try {
+      resolved = resolveImageModel(request);
+    } catch (error) {
+      throw new WorkspaceError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : '所选图片模型暂不可用。', retryable: false });
+    }
+    if (!resolved.capability.aspectRatios.includes(request.aspectRatio) || !resolved.capability.resolutions.includes(request.resolution) || request.count > resolved.capability.maxImages)
+      throw new WorkspaceError({ code: 'BAD_REQUEST', message: '所选模型不支持当前生成参数。', retryable: false });
+    if (request.billing) {
       checkMockQuote([imageCreditItem(request)], request.billing);
       if (
         this.state.credits!.wallet.availableMinor < request.billing.totalMinor
@@ -603,11 +614,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
       : this.createSessionNow(this.titleFrom(request.prompt));
     const createdAt = this.timestamp();
     const batchId = this.id("batch");
-    const defaultCapability = CAPABILITIES[0];
-    const provider =
-      request.provider ?? defaultCapability?.provider ?? "unknown";
-    const model =
-      request.model ?? defaultCapability?.models[0]?.id ?? "unknown";
+    const { provider, model } = resolved;
     const assets: GenerationAsset[] = Array.from(
       { length: request.count },
       () => ({

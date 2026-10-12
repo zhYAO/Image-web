@@ -1,0 +1,105 @@
+-- Real local PostgreSQL/PGMQ only. Fixtures and queued messages roll back.
+begin;
+create extension if not exists pgtap with schema extensions;
+select no_plan();
+create temporary table plan_catalog_before as select version from private.credit_settings where singleton;
+create function pg_temp.pid(label text) returns uuid language sql as $$select md5('plan:'||label)::uuid$$;
+create function pg_temp.cfg(n int default 1) returns jsonb language sql as $$select jsonb_build_object('count',n,'resolution','2K','aspectRatio','1:1','referenceIds','[]'::jsonb,'registryVersion','2026-10-12.1')$$;
+create function pg_temp.attempt(sql text) returns jsonb language plpgsql as $$declare result jsonb;begin execute sql into result;return jsonb_build_object('result',result);exception when others then return jsonb_build_object('code',sqlstate,'message',sqlerrm);end$$;
+insert into auth.users(id,email,email_confirmed_at,is_anonymous) values(pg_temp.pid('owner'),'plan@example.invalid',now(),false);
+insert into public.sessions(id,user_id,title) values(pg_temp.pid('session'),pg_temp.pid('owner'),'Plan');
+update private.runtime_flags set enabled=true where flag='generation_enabled';
+update private.provider_runtime_config set enabled=true where provider in ('seedream','gemini');
+delete from private.provider_health_windows where provider in ('seedream','gemini');
+delete from pgmq.q_image_generation;
+update private.credit_settings set enabled=true where singleton;
+select is((select version from private.credit_settings where singleton),'2026-10-12.1','active catalog switches to Plan');
+select is((select count(*)::int from private.credit_price_versions v join private.credit_settings s on s.version=v.version,jsonb_array_elements(v.prices) p where p->>'operation'='image'),1,'active catalog has one image price');
+select is((select string_agg(p->>'model',',') from private.credit_price_versions v join private.credit_settings s on s.version=v.version,jsonb_array_elements(v.prices) p where p->>'operation'='image'),'doubao-seedream-5.0-pro','active image ID is exact dotted Plan ID');
+select is(pg_temp.attempt($$select private.credit_quote('[{"operation":"image","provider":"seedream","model":"doubao-seedream-5.0-pro","resolution":"2K","count":2}]')$$)#>>'{result,totalMinor}','60','Plan stays 30 minor per image');
+select is((select jsonb_agg(p order by p->>'operation',p->>'provider') from private.credit_price_versions v join private.credit_settings s on s.version=v.version,jsonb_array_elements(v.prices) p where p->>'operation'<>'image'),(select jsonb_agg(p order by p->>'operation',p->>'provider') from private.credit_price_versions v,jsonb_array_elements(v.prices) p where v.version='2026-10-06.1' and p->>'operation'<>'image'),'all chat and optimization prices remain identical');
+select ok(exists(select 1 from private.credit_price_versions where version='2026-09-15.1' and prices @> '[{"model":"seedream-4.5","unitMinor":30}]'),'historical 4.5 price remains');
+select ok(exists(select 1 from private.credit_price_versions where version='2026-10-06.1' and prices @> '[{"model":"seedream-5.0-flash","unitMinor":30},{"model":"seedream-5.0-pro","unitMinor":30},{"model":"gemini-3-pro-image","resolution":"2K","unitMinor":80}]'),'historical Flash Pro Gemini prices remain');
+create function pg_temp.plan(provider text default 'seedream',model text default 'doubao-seedream-5.0-pro') returns jsonb language sql as $$select jsonb_build_object('scene','xhs-poster','templateId','xhs-editorial','brief',jsonb_build_object('contentMode','content','name','Plan poster','facts','Poster body','sellingPoints','','platform','xiaohongshu','placement','cover','productReferenceIds','[]'::jsonb,'styleReferenceIds','[]'::jsonb),'slots',jsonb_build_array(jsonb_build_object('id',pg_temp.pid('slot'),'role','Cover','instruction','','exactText','','referenceIds','[]'::jsonb,'provider',provider,'model',model,'aspectRatio','1:1','resolution','2K')))$$;
+create function pg_temp.compiled(provider text default 'seedream',model text default 'doubao-seedream-5.0-pro') returns jsonb language sql as $$select jsonb_build_array(jsonb_build_object('slotId',pg_temp.pid('slot'),'prompt','Plan poster','hash',md5(provider||model),'provider',provider,'model',model,'templateVersion','1.0.0','compilerVersion','commerce-3','config',pg_temp.cfg()))$$;
+select lives_ok($$select private.commerce_validate_plan(pg_temp.plan(),pg_temp.compiled())$$,'Plan commerce revision validates');
+create temporary table plan_state(label text primary key,value jsonb);
+create function pg_temp.saved(label text) returns jsonb language sql as $$select value from plan_state where plan_state.label=$1$$;
+insert into plan_state values('created',pg_temp.attempt(format('select public.commerce_dispatch(%L,''create'',null,%L::jsonb,''create-hash'',%L::jsonb,%L)',pg_temp.pid('owner'),jsonb_build_object('requestId',pg_temp.pid('create'),'sessionId',pg_temp.pid('session'),'plan',pg_temp.plan()),pg_temp.compiled(),gen_random_uuid())));
+select ok(pg_temp.saved('created') ? 'result','new Plan task saves');
+create function pg_temp.check_retired(provider text,model text) returns setof text language plpgsql as $$begin
+ return next throws_ok(format('select private.credit_quote(%L::jsonb)',jsonb_build_array(jsonb_build_object('operation','image','provider',provider,'model',model,'resolution','2K','count',1))),'P0001','credit_price_unavailable',model||' cannot receive active quote');
+ return next throws_ok(format('select private.commerce_validate_plan(%L::jsonb,%L::jsonb)',pg_temp.plan(provider,model),pg_temp.compiled(provider,model)),'22023','invalid_commerce_slot',model||' cannot save new revision');
+end$$;
+select pg_temp.check_retired(provider,model) from (values('gemini','gemini-3-pro-image'),('seedream','seedream-5.0-flash'),('seedream','seedream-5.0-pro'),('seedream','seedream-4.5')) m(provider,model);
+update private.credit_settings set enabled=false where singleton;
+create function pg_temp.check_submit(provider text,model text) returns setof text language plpgsql as $$begin return next throws_ok(format('select private.submit_image_generation(%L,%L,''stopped model'',%L,%L,%L::jsonb,''direct'',null,null,null,%L,%L,%L)',pg_temp.pid('owner'),pg_temp.pid('session'),provider,model,pg_temp.cfg(),gen_random_uuid(),md5(model),gen_random_uuid()),'22023','image_model_upgrade_required',model||' cannot enter a new unbilled batch');end$$;
+select pg_temp.check_submit(provider,model) from (values('gemini','gemini-3-pro-image'),('seedream','seedream-5.0-flash'),('seedream','seedream-5.0-pro'),('seedream','seedream-4.5'),('doubao','doubao-seedream-5.0-pro'),('seedream','doubao-seedream-5-0-pro')) m(provider,model);
+select throws_ok($$select private.submit_image_generation(pg_temp.pid('owner'),pg_temp.pid('session'),'bad resolution','seedream','doubao-seedream-5.0-pro',jsonb_set(pg_temp.cfg(),'{resolution}','"1K"'),'direct',null,null,null,'bad-resolution','bad-resolution',gen_random_uuid())$$,'22023','image_model_upgrade_required','Plan cannot admit 1K');
+update private.credit_settings set enabled=true where singleton;
+create function pg_temp.image() returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.pid('image'),'sessionId',pg_temp.pid('session'),'prompt','Plan image','provider','seedream','model','doubao-seedream-5.0-pro','config',pg_temp.cfg(2),'requestHash','plan-image','correlationId',gen_random_uuid(),'billing',jsonb_build_object('version','2026-10-12.1','totalMinor',60))$$;
+create function pg_temp.test_plan() returns setof text language plpgsql as $$declare result jsonb;begin
+ begin result:=public.credit_dispatch(pg_temp.pid('owner'),'image',pg_temp.image());exception when others then return next fail('Plan billed submit: '||sqlerrm);return;end;
+ return next is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.pid('owner')),60,'Plan freezes each image at 30');
+ return next is(public.credit_dispatch(pg_temp.pid('owner'),'image',pg_temp.image()),result,'Plan submit replays idempotently');
+ return next is((select count(*)::int from private.credit_operations where user_id=pg_temp.pid('owner')),2,'replay adds no operations');
+ update public.generations set status='succeeded',provider_submission_state='submitted' where id=(select id from public.generations where batch_id=(result->>'batchId')::uuid order by id limit 1);
+ update public.generations set status='failed',error_code='cancelled',provider_submission_state='not_submitted' where batch_id=(result->>'batchId')::uuid and status='pending';
+ return next is((select jsonb_build_array(available_minor,frozen_minor,spent_minor) from private.credit_wallets where user_id=pg_temp.pid('owner')),'[970,0,30]'::jsonb,'Plan capture and refund conserve wallet');end$$;
+select pg_temp.test_plan();
+-- These persisted old IDs are historical fixtures, never new admission calls.
+update private.credit_settings set enabled=false where singleton;
+insert into public.generation_batches(id,user_id,session_id,source,prompt,provider,model,config,idempotency_key,request_hash)
+select pg_temp.pid('old-batch-'||model),pg_temp.pid('owner'),pg_temp.pid('session'),'direct','Historical image',provider,model,pg_temp.cfg(),'old-'||model,'old-'||model from (values('gemini','gemini-3-pro-image'),('seedream','seedream-5.0-flash'),('seedream','seedream-5.0-pro'),('seedream','seedream-4.5')) m(provider,model);
+insert into public.generations(id,batch_id,provider,model,prompt,params) select pg_temp.pid('old-generation-'||model),pg_temp.pid('old-batch-'||model),provider,model,'Historical image',pg_temp.cfg() from (values('gemini','gemini-3-pro-image'),('seedream','seedream-5.0-flash'),('seedream','seedream-5.0-pro'),('seedream','seedream-4.5')) m(provider,model);
+insert into private.quota_ledger(user_id,batch_id,generation_id,entry_type,amount,business_key) select pg_temp.pid('owner'),batch_id,id,'reserve',1,'reserve:'||id from public.generations where prompt='Historical image';
+select pgmq.send('image_generation',jsonb_build_object('generationId',id)) from public.generations where prompt='Historical image';
+update private.credit_settings set enabled=true,version='2026-10-06.1' where singleton;
+select private.credit_reserve(pg_temp.pid('owner'),'image:'||id,id::text,jsonb_build_object('operation','image','provider',provider,'model',model,'resolution','2K','count',1),id) from public.generations where prompt='Historical image' and model<>'seedream-4.5';
+update private.credit_settings set version='2026-09-15.1' where singleton;
+select private.credit_reserve(pg_temp.pid('owner'),'image:'||id,id::text,jsonb_build_object('operation','image','provider',provider,'model',model,'resolution','2K','count',1),id) from public.generations where prompt='Historical image' and model='seedream-4.5';
+update private.credit_settings set version=(select version from plan_catalog_before) where singleton;
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.pid('owner')),170,'legacy holds keep historical 80/30/30/30 prices');
+create function pg_temp.replay(provider text,model text) returns setof text language plpgsql as $$declare replay jsonb;begin replay:=private.submit_image_generation(pg_temp.pid('owner'),pg_temp.pid('session'),'Historical image',provider,model,pg_temp.cfg(),'direct',null,null,null,'old-'||model,'old-'||model,gen_random_uuid());return next is(replay->>'batchId',pg_temp.pid('old-batch-'||model)::text,model||' old submit keeps batch');return next ok((replay->>'deduplicated')::boolean,model||' old submit remains idempotent');end$$;
+select pg_temp.replay(provider,model) from (values('gemini','gemini-3-pro-image'),('seedream','seedream-5.0-flash'),('seedream','seedream-5.0-pro'),('seedream','seedream-4.5')) m(provider,model);
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.pid('owner')),170,'legacy replay leaves holds unchanged');
+delete from pgmq.q_image_generation where message->>'generationId' in(select id::text from public.generations where prompt<>'Historical image');
+create function pg_temp.claim_old() returns setof text language plpgsql as $$declare claim jsonb;i int;begin for i in 1..4 loop claim:=public.claim_image_generation();return next is(claim->>'action','process','already queued retired model is claimable');return next ok(claim->>'model' in ('gemini-3-pro-image','seedream-5.0-flash','seedream-5.0-pro','seedream-4.5'),'claim keeps original model ID');end loop;end$$;
+select pg_temp.claim_old();
+update public.generations set status='succeeded',provider_submission_state='submitted' where id=pg_temp.pid('old-generation-seedream-5.0-pro');
+update public.generations set status='failed',provider_submission_state='not_submitted',error_code='cancelled' where prompt='Historical image' and model<>'seedream-5.0-pro';
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.pid('owner')),0,'legacy capture and cancellation release old holds');
+select is((select amount_minor::int from private.credit_operations where original_generation_id=pg_temp.pid('old-generation-gemini-3-pro-image')),80,'legacy Gemini operation retains 80');
+select is((select version from private.credit_operations where original_generation_id=pg_temp.pid('old-generation-seedream-5.0-pro')),'2026-10-06.1','legacy Pro operation retains version');
+-- Use the real RPC for a new revision, not just the validator boundary.
+select lives_ok(format('select public.commerce_dispatch(%L,''save'',%L,%L::jsonb,''new-save'',%L::jsonb,%L)',pg_temp.pid('owner'),pg_temp.saved('created')#>>'{result,id}',jsonb_build_object('requestId',pg_temp.pid('new-save'),'expectedRevision',1,'plan',pg_temp.plan()),pg_temp.compiled(),gen_random_uuid()),'new Plan revision saves through commerce RPC');
+select throws_ok(format('select public.commerce_dispatch(%L,''save'',%L,%L::jsonb,''retired-save'',%L::jsonb,%L)',pg_temp.pid('owner'),pg_temp.saved('created')#>>'{result,id}',jsonb_build_object('requestId',pg_temp.pid('retired-save'),'expectedRevision',2,'plan',pg_temp.plan('seedream','seedream-5.0-pro')),pg_temp.compiled('seedream','seedream-5.0-pro'),gen_random_uuid()),'22023','invalid_commerce_slot','actual save RPC rejects retired Pro');
+-- Historical saved tasks and receipts keep old IDs. They were already admitted.
+insert into public.commerce_tasks(id,user_id,session_id) values(pg_temp.pid('old-task'),pg_temp.pid('owner'),pg_temp.pid('session'));
+insert into public.commerce_revisions(task_id,revision,plan) values(pg_temp.pid('old-task'),1,pg_temp.plan('seedream','seedream-5.0-pro'));
+insert into private.commerce_compiled_slots(task_id,revision,slot_id,compiled) values(pg_temp.pid('old-task'),1,pg_temp.pid('slot'),pg_temp.compiled('seedream','seedream-5.0-pro')->0);
+insert into public.commerce_selections(task_id,slot_id) values(pg_temp.pid('old-task'),pg_temp.pid('slot'));
+select is(public.commerce_dispatch(pg_temp.pid('owner'),'get',pg_temp.pid('old-task'),'{}',null,null,gen_random_uuid())#>>'{slots,0,model}','seedream-5.0-pro','historical commerce read retains retired model');
+update private.credit_settings set enabled=false where singleton;
+select throws_ok($$select public.commerce_dispatch(pg_temp.pid('owner'),'submit',pg_temp.pid('old-task'),jsonb_build_object('requestId',gen_random_uuid(),'revision',1,'slotIds',jsonb_build_array(pg_temp.pid('slot'))),'retired-new-submit',null,gen_random_uuid())$$,'22023','image_model_upgrade_required','unbilled historical commerce retry cannot create retired work');
+select throws_ok($$select private.recreate_image_generation(pg_temp.pid('owner'),pg_temp.pid('old-batch-seedream-5.0-pro'),'all',null,'new-old-recreate','new-old-recreate',gen_random_uuid())$$,'22023','image_model_upgrade_required','direct recreate cannot create retired work');
+select is((select count(*)::int from public.commerce_runs where task_id=pg_temp.pid('old-task')),0,'rejected historical retry leaves no partial commerce run');
+update private.credit_settings set enabled=true where singleton;
+create function pg_temp.old_input() returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.pid('old-credit-request'),'sessionId',pg_temp.pid('session'),'prompt','Historical image','provider','seedream','model','seedream-5.0-pro','config',pg_temp.cfg(),'requestHash','old-credit-request','billing',jsonb_build_object('version','2026-10-06.1','totalMinor',30))$$;
+insert into private.credit_requests(user_id,request_id,request_hash,result) values(pg_temp.pid('owner'),pg_temp.pid('old-credit-request'),md5('image'||((pg_temp.old_input()-'billing'-'correlationId')::text)),jsonb_build_object('batchId',pg_temp.pid('old-batch-seedream-5.0-pro'),'sessionId',pg_temp.pid('session'),'status','pending'));
+insert into plan_state values('wallet-before-receipts',(select to_jsonb(w) from private.credit_wallets w where user_id=pg_temp.pid('owner')));
+select is(public.credit_dispatch(pg_temp.pid('owner'),'image',pg_temp.old_input())->>'batchId',pg_temp.pid('old-batch-seedream-5.0-pro')::text,'billed old image receipt returns before active quote');
+insert into private.commerce_operation_results(user_id,operation,request_id,task_id,request_hash,result)
+select pg_temp.pid('owner'),op,pg_temp.pid('old-receipt-'||op),pg_temp.pid('old-task'),'old-receipt-'||op,jsonb_build_object('id',pg_temp.pid('old-task'),'model','seedream-5.0-pro','operation',op) from unnest(array['create','save','submit']) op;
+create function pg_temp.receipts() returns setof text language plpgsql as $$declare op text;result jsonb;begin foreach op in array array['create','save','submit'] loop
+ result:=public.commerce_dispatch(pg_temp.pid('owner'),op,case when op='create' then null else pg_temp.pid('old-task') end,jsonb_build_object('requestId',pg_temp.pid('old-receipt-'||op),'sessionId',pg_temp.pid('session'),'revision',1,'plan',pg_temp.plan('seedream','seedream-5.0-pro'),'slotIds',jsonb_build_array(pg_temp.pid('slot'))),'old-receipt-'||op,pg_temp.compiled('seedream','seedream-5.0-pro'),gen_random_uuid());
+ return next is(result->>'operation',op,'historical commerce '||op||' receipt replays before new-model validation');
+ return next is(result->>'model','seedream-5.0-pro','historical commerce receipt keeps old Pro ID');end loop;end$$;
+select pg_temp.receipts();
+select is((select to_jsonb(w) from private.credit_wallets w where user_id=pg_temp.pid('owner')),pg_temp.saved('wallet-before-receipts'),'historical receipt replays add no hold or settlement');
+select throws_ok($$select public.credit_admin(jsonb_build_object('action','price','version','test-same-count-retired','prices',(select jsonb_agg(case when p->>'operation'='image' then p||jsonb_build_object('model','seedream-5.0-pro') else p end) from private.credit_price_versions v,jsonb_array_elements(v.prices) p where v.version='2026-10-12.1'),'reason','same count replacement','actor','local test','requestId',gen_random_uuid(),'apply',true))$$,'P0001','invalid_credit_prices','price admin rejects same-count replacement with retired Pro');
+select throws_ok($$select public.credit_admin(jsonb_build_object('action','price','version','test-retired','prices',(select prices from private.credit_price_versions where version='2026-10-06.1'),'reason','retired models','actor','local test','requestId',gen_random_uuid(),'apply',true))$$,'P0001','invalid_credit_prices','price admin cannot restore retired catalog');
+select lives_ok($$select public.credit_admin(jsonb_build_object('action','price','version','test-plan-price','prices',(select jsonb_agg(p||jsonb_build_object('unitMinor',(p->>'unitMinor')::int+1)) from private.credit_price_versions v,jsonb_array_elements(v.prices) p where v.version='2026-10-12.1'),'reason','Plan price update','actor','local test','requestId',gen_random_uuid(),'apply',true))$$,'price admin accepts current catalog');
+select is((select amount_minor::int from private.credit_operations where original_generation_id=pg_temp.pid('old-generation-seedream-5.0-pro')),30,'operator price update preserves old operation amount');
+select * from finish();
+rollback;

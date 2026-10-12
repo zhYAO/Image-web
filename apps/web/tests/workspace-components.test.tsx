@@ -232,36 +232,35 @@ describe('workspace presentation components', () => {
     expect(screen.getByRole('button', { name: '生成参数 1:1 2K' })).toHaveFocus();
   });
 
-  it('normalizes generation values against the newly selected model capability', () => {
+  it('normalizes Plan parameters without replacing a retired model selection', () => {
     const capabilities: ProviderCapability[] = [
       {
         models: [
-          { aspectRatios: ['1:1', '16:9'], id: 'wide', label: 'Wide', maxImages: 2, resolutions: ['1K'] },
-          { aspectRatios: ['3:4', '1:1'], id: 'portrait', label: 'Portrait', maxImages: 4, resolutions: ['1K', '2K'] },
+          { aspectRatios: ['3:4', '1:1'], id: 'doubao-seedream-5.0-pro', label: 'Seedream 5.0 Pro', maxImages: 4, resolutions: ['2K'] },
         ],
-        provider: 'Studio',
+        provider: 'seedream',
       },
     ];
 
     expect(normalizeGenerationSelection(capabilities, {
-      aspectRatio: '16:9', count: 4, model: 'wide', provider: 'Studio', resolution: '2K',
-    })).toEqual({ aspectRatio: '16:9', count: 2, model: 'wide', provider: 'Studio', resolution: '1K' });
+      aspectRatio: '16:9', count: 8, model: 'doubao-seedream-5.0-pro', provider: 'seedream', resolution: '1K',
+    })).toEqual({ aspectRatio: '3:4', count: 4, model: 'doubao-seedream-5.0-pro', provider: 'seedream', resolution: '2K' });
     expect(normalizeGenerationSelection(capabilities, {
-      aspectRatio: '16:9', count: 2, model: 'portrait', provider: 'Studio', resolution: '1K',
-    })).toEqual({ aspectRatio: '3:4', count: 2, model: 'portrait', provider: 'Studio', resolution: '1K' });
+      aspectRatio: '16:9', count: 2, model: 'seedream-5.0-flash', provider: 'seedream', resolution: '1K',
+    })).toEqual({ aspectRatio: '16:9', count: 2, model: 'seedream-5.0-flash', provider: 'seedream', resolution: '1K' });
   });
 
   it('keeps image settings collapsed behind one summary and edits all advanced values in one panel', () => {
     const onOpenChange = vi.fn();
     const capabilities: ProviderCapability[] = [{
-      models: [{ aspectRatios: ['1:1', '16:9'], id: 'image', label: 'Image Pro', maxImages: 2, resolutions: ['1K', '2K'] }],
-      provider: 'Studio',
+      models: [{ aspectRatios: ['1:1', '16:9'], id: 'doubao-seedream-5.0-pro', label: 'Seedream 5.0 Pro', maxImages: 4, resolutions: ['2K'] }],
+      provider: 'seedream',
     }];
     const props = {
       aspectRatio: '1:1' as const,
       capabilities,
       count: 2,
-      health: [{ checkedAt: '2026', provider: 'Studio', status: 'healthy' as const }],
+      health: [{ checkedAt: '2026', provider: 'seedream', status: 'healthy' as const }],
       onAspectRatioChange: vi.fn(),
       onCountChange: vi.fn(),
       onModelSelect: vi.fn(),
@@ -269,19 +268,20 @@ describe('workspace presentation components', () => {
       onResolutionChange: vi.fn(),
       resolution: '2K' as const,
       selectedModel: capabilities[0]!.models[0],
-      selectedProvider: 'Studio',
+      selectedProvider: 'seedream',
     };
     const { rerender } = render(<ImageSettingsPopover {...props} open={false} />);
 
     expect(screen.queryByRole('dialog', { name: '图片生成设置' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '图片设置 Studio Image Pro 1:1 2K 2张' }));
+    fireEvent.click(screen.getByRole('button', { name: '图片设置 seedream Seedream 5.0 Pro 1:1 2K 2张' }));
     expect(onOpenChange).toHaveBeenCalledWith(true);
 
     rerender(<ImageSettingsPopover {...props} open />);
     const panel = screen.getByRole('dialog', { name: '图片生成设置' });
-    expect(panel).toContainElement(screen.getByRole('button', { name: 'Studio · Image Pro' }));
+    expect(panel).toContainElement(screen.getByRole('button', { name: 'seedream · Seedream 5.0 Pro' }));
     expect(panel).toContainElement(screen.getByRole('button', { name: '比例 16:9' }));
-    expect(panel).toContainElement(screen.getByRole('button', { name: '分辨率 1K' }));
+    expect(panel).toContainElement(screen.getByRole('button', { name: '分辨率 2K' }));
+    expect(screen.queryByRole('button', { name: '分辨率 1K' })).not.toBeInTheDocument();
     expect(panel).toContainElement(screen.getByRole('button', { name: '生成数量 2' }));
   });
 

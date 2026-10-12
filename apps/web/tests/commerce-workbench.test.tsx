@@ -40,8 +40,8 @@ describe("persistent commerce workbench", () => {
       styleReferenceIds: [],
     };
     const settings = {
-      provider: "gemini",
-      model: "gemini-3-pro-image",
+      provider: "seedream",
+      model: "doubao-seedream-5.0-pro",
       aspectRatio: "1:1",
       resolution: "2K",
     } as const;

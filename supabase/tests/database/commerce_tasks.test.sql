@@ -15,7 +15,7 @@ create function pg_temp.commerce_plan(n integer default 2) returns jsonb languag
     'productReferenceIds',jsonb_build_array(pg_temp.cid('reference')),'styleReferenceIds','[]'::jsonb),
     'slots',(select jsonb_agg(jsonb_build_object('id',pg_temp.cid('slot-'||i),'role','Product '||i,
       'instruction','','exactText','','referenceIds',jsonb_build_array(pg_temp.cid('reference')),
-      'provider','gemini','model','gemini-3-pro-image','aspectRatio','1:1','resolution','2K') order by i)
+      'provider','seedream','model','doubao-seedream-5.0-pro','aspectRatio','1:1','resolution','2K') order by i)
       from generate_series(1,n) i));
 $$;
 create function pg_temp.commerce_compile(plan jsonb) returns jsonb language sql as $$
@@ -23,7 +23,7 @@ create function pg_temp.commerce_compile(plan jsonb) returns jsonb language sql 
     'hash',md5((plan->'brief')::text||s::text),'provider',s->>'provider','model',s->>'model',
     'templateVersion','1.0.0','compilerVersion','commerce-1','config',jsonb_build_object(
       'aspectRatio',s->>'aspectRatio','resolution',s->>'resolution','count',1,
-      'referenceIds',s->'referenceIds','registryVersion','2026-08-25.1')))
+      'referenceIds',s->'referenceIds','registryVersion','2026-10-12.1')))
     from jsonb_array_elements(plan->'slots') s;
 $$;
 create function pg_temp.commerce_call(op text, body jsonb default '{}'::jsonb, target uuid default null,
@@ -56,8 +56,8 @@ insert into public.reference_uploads(id,user_id,session_id,storage_path,original
   values(pg_temp.cid('reference'),pg_temp.cid('owner'),pg_temp.cid('session'),
     pg_temp.cid('owner')||'/'||pg_temp.cid('session')||'/commerce.webp','commerce.webp','image/webp',10,1,1);
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=true where provider='gemini';
-delete from private.provider_health_windows where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider='seedream';
+delete from private.provider_health_windows where provider='seedream';
 
 select has_function('public','commerce_dispatch',array['uuid','text','uuid','jsonb','text','jsonb','uuid'],'exact public dispatcher signature');
 select ok(not has_function_privilege('anon','public.commerce_dispatch(uuid,text,uuid,jsonb,text,jsonb,uuid)','execute'),'anon cannot dispatch');
@@ -121,10 +121,10 @@ update private.runtime_flags set enabled=false where flag='generation_enabled';
 select throws_ok($$select pg_temp.commerce_call('submit',jsonb_build_object('revision',1,'slotIds',jsonb_build_array(pg_temp.cid('slot-1'))))$$,
   'P0001','feature_disabled:generation','commerce cannot bypass emergency stop');
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=false where provider='gemini';
+update private.provider_runtime_config set enabled=false where provider='seedream';
 select throws_ok($$select pg_temp.commerce_call('submit',jsonb_build_object('revision',1,'slotIds',jsonb_build_array(pg_temp.cid('slot-1'))))$$,
   'P0001','provider_unavailable','commerce cannot bypass disabled provider');
-update private.provider_runtime_config set enabled=true where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider='seedream';
 
 -- Fail after the first child's durable queue/quota writes, at child two.
 create function pg_temp.commerce_fail_second() returns trigger language plpgsql as $$
@@ -350,7 +350,7 @@ reset role;
 -- Insert a genuinely old fixture instead of rewriting immutable ledger facts.
 select pg_temp.keep('prior-day-task',pg_temp.commerce_call('create',jsonb_build_object('sessionId',pg_temp.cid('session'),'plan',pg_temp.commerce_plan(1))));
 insert into public.generation_batches(id,user_id,session_id,source,prompt,provider,model,config,idempotency_key,request_hash,created_at)
-  values(pg_temp.cid('prior-day-batch'),pg_temp.cid('owner'),pg_temp.cid('session'),'direct','Yesterday pending product','gemini','gemini-3-pro-image',
+  values(pg_temp.cid('prior-day-batch'),pg_temp.cid('owner'),pg_temp.cid('session'),'direct','Yesterday pending product','seedream','doubao-seedream-5.0-pro',
     '{"count":1,"aspectRatio":"1:1","resolution":"2K"}',pg_temp.cid('prior-day-run')||':'||pg_temp.cid('slot-1'),'yesterday-hash',
     (date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')-interval '1 hour');
 insert into public.generations(id,batch_id,provider,model,prompt,params,created_at)

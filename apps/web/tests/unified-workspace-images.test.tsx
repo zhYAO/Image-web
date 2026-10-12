@@ -2,7 +2,7 @@ import type { GenerationBatch, TimelineItem, WorkspaceGateway } from '@zimage/do
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { UnifiedWorkspace } from '@/features/workspace/UnifiedWorkspace';
-import { setupWorkspaceTest, CapturingGateway, SeedreamOnlyGateway, MultiModelGateway, ControlledImageGateway, FailOnceImageGateway, createTestGateway } from './workspace-test-fixtures';
+import { setupWorkspaceTest, CapturingGateway, SeedreamOnlyGateway, UnavailableImageGateway, PlanOnlyGateway, ControlledImageGateway, FailOnceImageGateway, createTestGateway } from './workspace-test-fixtures';
 
 describe('UnifiedWorkspace', () => {
   setupWorkspaceTest();
@@ -140,13 +140,11 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('blocks a direct image request for an unavailable image provider', async () => {
-    const gateway = createTestGateway(SeedreamOnlyGateway);
+    const gateway = createTestGateway(UnavailableImageGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '请生成一张白底马克杯商品图' },
     });
@@ -157,13 +155,11 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('allows ordinary chat when only the selected image provider is unavailable', async () => {
-    const gateway = createTestGateway(SeedreamOnlyGateway);
+    const gateway = createTestGateway(UnavailableImageGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
 
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'gemini · Gemini 3 Pro Image' }));
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '只讨论白底商品图的构图原则' },
@@ -180,7 +176,7 @@ describe('UnifiedWorkspace', () => {
     const pending = await gateway.submitImage({
       aspectRatio: '1:1',
       count: 1,
-      model: 'seedream-5.0-flash',
+      model: 'doubao-seedream-5.0-pro',
       prompt: '失败图片',
       provider: 'seedream',
       resolution: '2K',
@@ -226,19 +222,19 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('uses the selected provider, model and generation parameters in the image request', async () => {
-    const gateway = createTestGateway(MultiModelGateway);
+    const gateway = createTestGateway(PlanOnlyGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 1K' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 2K' }));
     fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
     fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Studio · Portrait' }));
-    expect(screen.getByRole('button', { name: '生成参数 3:4 1K' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'seedream · Seedream 5.0 Pro' }));
+    expect(screen.getByRole('button', { name: '生成参数 16:9 2K' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '生成参数 3:4 1K' }));
-    fireEvent.click(screen.getByRole('button', { name: '分辨率 2K' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成参数 16:9 2K' }));
+    fireEvent.click(screen.getByRole('button', { name: '比例 3:4' }));
     expect(screen.queryByRole('button', { name: /生成数量/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
       target: { value: '生成一张秋日产品海报' },
@@ -249,8 +245,8 @@ describe('UnifiedWorkspace', () => {
     expect(gateway.lastImageRequest).toMatchObject({
       aspectRatio: '3:4',
       count: 1,
-      model: 'portrait',
-      provider: 'Studio',
+      model: 'doubao-seedream-5.0-pro',
+      provider: 'seedream',
       resolution: '2K',
     });
   }, 60_000);

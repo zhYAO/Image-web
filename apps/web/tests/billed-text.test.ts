@@ -88,6 +88,7 @@ function fixture() {
   );
   // Keep SupabaseChatStore real; only the database query boundary is simulated.
   const historyQuery = {
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     select: vi.fn(),
     eq: vi.fn(),
     order: vi.fn(),
@@ -111,7 +112,7 @@ function fixture() {
       sessionId,
       message: "hello",
       chatModel: "doubao" as const,
-      billing: { version: "2026-09-15.1", totalMinor: 2 },
+      billing: { version: "2026-10-12.1", totalMinor: 2 },
     },
     user: crypto.randomUUID(),
     op: () => op,

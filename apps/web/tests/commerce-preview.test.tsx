@@ -11,8 +11,8 @@ import { CommerceWizard } from "@/features/commerce/CommerceWizard";
 import { createTestGateway } from "./workspace-test-fixtures";
 
 const settings = {
-  provider: "gemini",
-  model: "gemini-3-pro-image",
+  provider: "seedream",
+  model: "doubao-seedream-5.0-pro",
   aspectRatio: "1:1" as const,
   resolution: "2K" as const,
 };

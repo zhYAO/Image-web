@@ -541,7 +541,7 @@ export function CommerceTaskCard({
           {task.archived ? `已归档 · ${title}` : title}
         </strong>
       </header>
-      {unavailableModel && <p role="alert" className={styles.notice}>历史生成模型已不可用。<button disabled={!canEdit || pending || Boolean(edit)} onClick={() => void resetModel()}>使用当前默认参数创建新版本</button></p>}
+      {unavailableModel && <p role="alert" className={styles.notice}>历史图片模型已停止新生成，请主动更新为 Seedream 5.0 Pro 并保存新版本。<button disabled={!canEdit || pending || Boolean(edit)} onClick={() => void resetModel()}>使用当前默认参数创建新版本</button></p>}
       <p className={styles.note}>
         新成功图默认采用，可手动切回旧图。请核对{task.brief.contentMode === "content" ? "内容与排版" : "商品外观与文字"}；改字需要重新生成。
       </p>

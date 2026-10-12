@@ -2,6 +2,9 @@ import {
   generateGeminiImage,
   generateSeedreamImage,
   ImageProviderError,
+  normalizeSeedreamPlanEndpoint,
+  SEEDREAM_PLAN_IMAGE_ENDPOINT,
+  SEEDREAM_STANDARD_IMAGE_ENDPOINT,
   type ImageAspectRatio,
   type ImageResolution,
   type ProviderImageResult,
@@ -171,6 +174,14 @@ async function downloadReferences(admin: AdminClient, references: QueueReference
 }
 
 export function providerConfiguration(provider: ClaimedGeneration['provider'], model: string) {
+  // This persisted ID distinguishes new Plan jobs from already queued Pro jobs.
+  // Never reuse the shared Ark credential or reroute an old model to Plan.
+  if (provider === 'seedream' && model === 'doubao-seedream-5.0-pro') {
+    const endpoint = normalizeSeedreamPlanEndpoint(
+      Deno.env.get('ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT')?.trim() || SEEDREAM_PLAN_IMAGE_ENDPOINT,
+    );
+    return { apiKey: env('ZIMAGE_SEEDREAM_PLAN_API_KEY'), model, endpoint };
+  }
   const seedreamEnvironment: Record<string, string> = {
     'seedream-5.0-flash': 'ZIMAGE_SEEDREAM_FLASH_IMAGE_MODEL',
     'seedream-5.0-pro': 'ZIMAGE_SEEDREAM_PRO_IMAGE_MODEL',
@@ -179,7 +190,7 @@ export function providerConfiguration(provider: ClaimedGeneration['provider'], m
   if (provider === 'seedream' && !seedreamEnvironment[model]) throw new Error('unsupported_seedream_model');
   return provider === 'gemini'
     ? { apiKey: env('GEMINI_API_KEY'), model: env('ZIMAGE_GEMINI_IMAGE_MODEL') }
-    : { apiKey: env('ARK_API_KEY'), model: env(seedreamEnvironment[model]!) };
+    : { apiKey: env('ARK_API_KEY'), model: env(seedreamEnvironment[model]!), endpoint: SEEDREAM_STANDARD_IMAGE_ENDPOINT };
 }
 
 async function callProvider(claim: ClaimedGeneration, references: ProviderReference[], signal?: AbortSignal) {
@@ -199,7 +210,7 @@ async function callProvider(claim: ClaimedGeneration, references: ProviderRefere
     };
     return claim.provider === 'gemini'
       ? await generateGeminiImage(input, configuration.apiKey, fetch, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal)
-      : await generateSeedreamImage(input, configuration.apiKey, fetch, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal);
+      : await generateSeedreamImage(input, configuration.apiKey, fetch, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, configuration.endpoint);
   } finally {
     clearTimeout(timeout);
   }

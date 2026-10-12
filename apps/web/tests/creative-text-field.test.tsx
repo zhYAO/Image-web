@@ -18,7 +18,7 @@ describe('current-field AI editing', () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: '已优化陶瓷杯', mock: false })));
     vi.stubGlobal('fetch', fetcher);
     render(<CommerceWizard scene={scene} sessionId={crypto.randomUUID()} references={[{ id: crypto.randomUUID(), name: 'product.png', mimeType: 'image/png', size: 1, status: 'ready' }]}
-      promotedStyleIds={scene === 'clone' ? [] : undefined} capabilities={IMAGE_PROVIDER_CAPABILITIES} settings={{ provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1', resolution: '2K' }}
+      promotedStyleIds={scene === 'clone' ? [] : undefined} capabilities={IMAGE_PROVIDER_CAPABILITIES} settings={{ provider: 'seedream', model: 'doubao-seedream-5.0-pro', aspectRatio: '1:1', resolution: '2K' }}
       onReferenceAdd={vi.fn()} onReferenceRemove={vi.fn()} onReferenceUploaded={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
     if (scene === 'product-main') fireEvent.click(screen.getByRole('button', { name: '自定义' }));
     const field = screen.getByLabelText(scene === 'clone' ? '统一复刻要求（选填）' : scene === 'product-main' ? '场景描述' : '商品描述');

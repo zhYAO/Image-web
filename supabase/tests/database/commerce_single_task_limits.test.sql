@@ -5,8 +5,8 @@ create extension if not exists pgtap with schema extensions;
 select no_plan();
 
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=true where provider='gemini';
-delete from private.provider_health_windows where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider='seedream';
+delete from private.provider_health_windows where provider='seedream';
 select set_config('request.jwt.claims','{}',true);
 
 create temporary table f1_state(label text primary key, value jsonb);
@@ -41,7 +41,7 @@ begin
     refs:=jsonb_build_array(product);
     if shape='clone' then refs:=refs||jsonb_build_array(styles[i]); end if;
     s:=jsonb_build_object('id',gen_random_uuid(),'role','F1 item '||i,'instruction','',
-      'exactText','','referenceIds',refs,'provider','gemini','model','gemini-3-pro-image',
+      'exactText','','referenceIds',refs,'provider','seedream','model','doubao-seedream-5.0-pro',
       'aspectRatio','1:1','resolution','2K');
     if shape='detail' then
       output_spec:=case when i<=n/2 then 'desktop' else 'mobile' end;
@@ -51,7 +51,7 @@ begin
         'targetHeight',case when output_spec='desktop' then 600 else 450 end);
     end if;
     cfg:=jsonb_build_object('aspectRatio',s->>'aspectRatio','resolution','2K','count',1,
-      'referenceIds',refs,'registryVersion','2026-10-06.1');
+      'referenceIds',refs,'registryVersion','2026-10-12.1');
     if shape='detail' then cfg:=cfg||jsonb_build_object('targetWidth',s->'targetWidth','targetHeight',s->'targetHeight'); end if;
     slots:=slots||jsonb_build_array(s);
     compiled:=compiled||jsonb_build_array(jsonb_build_object('slotId',s->>'id','prompt','F1 compiled item '||i,
@@ -79,7 +79,7 @@ begin
     select s.version into version from private.credit_settings s where singleton;
     return public.credit_dispatch((f->>'userId')::uuid,'commerce',body||jsonb_build_object(
       'taskId',f->>'taskId','requestHash',md5(body::text),'correlationId',gen_random_uuid(),
-      'billing',jsonb_build_object('version',version,'totalMinor',coalesce(billing_total,80*jsonb_array_length(f->'slotIds')))));
+      'billing',jsonb_build_object('version',version,'totalMinor',coalesce(billing_total,30*jsonb_array_length(f->'slotIds')))));
   end if;
   return public.commerce_dispatch((f->>'userId')::uuid,'submit',(f->>'taskId')::uuid,body,md5(body::text),null,gen_random_uuid());
 end $$;
@@ -129,7 +129,7 @@ begin
   before_state:=pg_temp.f1_snapshot(f);
   if enabled then
     quote:=pg_temp.f1_quote(f);
-    return next is((quote->>'totalMinor')::integer,80*n,label||' trusted saved-task quote totals all selected children');
+    return next is((quote->>'totalMinor')::integer,30*n,label||' trusted saved-task quote totals all selected children');
     return next is(jsonb_array_length(quote->'items'),n,label||' quote preserves each child');
   end if;
   outcome:=pg_temp.f1_attempt(f,enabled,req);
@@ -148,7 +148,7 @@ begin
   return next is((select max(position) from public.commerce_run_items where task_id=t),n,label||' persists final position');
   return next ok(not exists(select 1 from public.generations g join public.generation_batches b on b.id=g.batch_id
     where b.user_id=u and (b.config->>'count')::integer<>1),label||' never widens per-child count');
-  return next is((after_state#>>'{wallet,frozen_minor}')::integer,case when enabled then 80*n else 0 end,label||' freezes exact price only when billing enabled');
+  return next is((after_state#>>'{wallet,frozen_minor}')::integer,case when enabled then 30*n else 0 end,label||' freezes exact price only when billing enabled');
   return next is(jsonb_array_length(after_state->'operations'),case when enabled then n else 0 end,label||' each billed child reserved once');
   replay:=pg_temp.f1_attempt(f,enabled,req);
   return next is(replay,outcome,label||' same request returns same result');
@@ -163,34 +163,34 @@ cross join (values(false),(true)) e(enabled);
 update private.credit_settings set enabled=true;
 select pg_temp.f1_keep('raw-owner',pg_temp.f1_fixture(1,'product-set'));
 create function pg_temp.f1_image_items(n integer, quantity integer default 1) returns jsonb language sql as $$
-  select jsonb_agg(jsonb_build_object('operation','image','provider','gemini','model','gemini-3-pro-image','resolution','2K','count',quantity)) from generate_series(1,n);
+  select jsonb_agg(jsonb_build_object('operation','image','provider','seedream','model','doubao-seedream-5.0-pro','resolution','2K','count',quantity)) from generate_series(1,n);
 $$;
 select throws_ok($$select private.credit_quote(pg_temp.f1_image_items(9))$$,'P0001','invalid_credit_items','legacy quote still rejects 9 raw items');
 select throws_ok($$select public.credit_dispatch((pg_temp.f1_saved('raw-owner')->>'userId')::uuid,'quote',jsonb_build_object('items',pg_temp.f1_image_items(9)))$$,'P0001','invalid_credit_items','public raw quote cannot opt into commerce capacity');
-select is((private.credit_quote(pg_temp.f1_image_items(8,8))->>'totalMinor')::integer,5120,'legacy 8 rows/count 8 quote retains its original price');
+select is((private.credit_quote(pg_temp.f1_image_items(8,8))->>'totalMinor')::integer,1920,'raw quote retains 8 rows/count 8 at the current Plan price');
 select throws_ok($$select private.credit_quote(pg_temp.f1_image_items(1,9))$$,'P0001','invalid_credit_count','legacy per-item count remains at 8');
 
 -- Keep direct-image admission at 1..4 even if a generic price quote accepts count 8.
 select throws_ok($$select public.credit_dispatch((pg_temp.f1_saved('raw-owner')->>'userId')::uuid,'image',jsonb_build_object(
   'requestId',gen_random_uuid(),'sessionId',pg_temp.f1_saved('raw-owner')->>'sessionId','prompt','F1 direct guard',
-  'provider','gemini','model','gemini-3-pro-image','config',jsonb_build_object('count',5,'aspectRatio','1:1','resolution','2K','referenceIds','[]'::jsonb),
-  'billing',jsonb_build_object('version',(select version from private.credit_settings where singleton),'totalMinor',400),
+  'provider','seedream','model','doubao-seedream-5.0-pro','config',jsonb_build_object('count',5,'aspectRatio','1:1','resolution','2K','referenceIds','[]'::jsonb),
+  'billing',jsonb_build_object('version',(select version from private.credit_settings where singleton),'totalMinor',150),
   'requestHash','direct-five','correlationId',gen_random_uuid()))$$,'22023',null,'direct generation still rejects count 5');
 
 select pg_temp.f1_keep('insufficient',pg_temp.f1_fixture(20,'product-set'));
-update private.credit_wallets set available_minor=80*19 where user_id=(pg_temp.f1_saved('insufficient')->>'userId')::uuid;
+update private.credit_wallets set available_minor=30*19 where user_id=(pg_temp.f1_saved('insufficient')->>'userId')::uuid;
 select pg_temp.f1_keep('insufficient-before',pg_temp.f1_snapshot(pg_temp.f1_saved('insufficient')));
 select is(pg_temp.f1_attempt(pg_temp.f1_saved('insufficient'),true,gen_random_uuid())->>'message','insufficient_credits','child 20 insufficient balance rejects the full execution group');
 select is(pg_temp.f1_snapshot(pg_temp.f1_saved('insufficient')),pg_temp.f1_saved('insufficient-before'),'late balance rejection rolls back runs/items/generations/queue/quota/wallet/requests/ledger');
 
 select pg_temp.f1_keep('stale',pg_temp.f1_fixture(20,'clone'));
 select pg_temp.f1_keep('stale-before',pg_temp.f1_snapshot(pg_temp.f1_saved('stale')));
-select is(pg_temp.f1_attempt(pg_temp.f1_saved('stale'),true,gen_random_uuid(),80*20-1)->>'message','credit_price_changed','commerce large quote still requires exact confirmed price');
+select is(pg_temp.f1_attempt(pg_temp.f1_saved('stale'),true,gen_random_uuid(),30*20-1)->>'message','credit_price_changed','commerce large quote still requires exact confirmed price');
 select is(pg_temp.f1_snapshot(pg_temp.f1_saved('stale')),pg_temp.f1_saved('stale-before'),'stale price leaves all generation and billing state unchanged');
 select throws_ok($$select public.credit_dispatch((pg_temp.f1_saved('raw-owner')->>'userId')::uuid,'quote',jsonb_build_object(
   'action','commerce','input',jsonb_build_object('taskId',pg_temp.f1_saved('stale')->>'taskId','revision',1,'slotIds',pg_temp.f1_saved('stale')->'slotIds')))$$,'P0001','revision_conflict','commerce quote remains tied to owner and saved revision');
 select is((pg_temp.f1_quote(pg_temp.f1_saved('stale'),jsonb_build_object('items',pg_temp.f1_image_items(1),'count',1))->>'totalMinor')::integer,
-  1600,'commerce quote ignores client prices/counts and reconstructs every saved selected child');
+  600,'commerce quote ignores client prices/counts and reconstructs every saved selected child');
 
 -- Check actual table enforcement, using persisted real 32-child results.
 select throws_ok($$update public.commerce_run_items set position=0 where task_id=(pg_temp.f1_saved('full32')->>'taskId')::uuid and position=32$$,'23514',null,'position zero remains forbidden');

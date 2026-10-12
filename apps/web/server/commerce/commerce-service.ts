@@ -2,6 +2,7 @@ import { creditsEnabled, creditCall } from "@/server/credits/credit-service";
 import {
   COMMERCE_TEMPLATES,
   MODEL_REGISTRY_VERSION,
+  IMAGE_MODEL_UPGRADE_MESSAGE,
   commerceCreateSchema,
   commerceSaveSchema,
   commerceSubmitSchema,
@@ -40,7 +41,7 @@ interface CommerceRpc {
   }>;
 }
 function failure(message: string) {
-  if (/seedream_upgrade_required/.test(message)) return new ApiRouteError({code:'bad_request',status:400,retryable:false,message:'Seedream 4.5 已停止新生成，请选择 Flash 或 Pro 并保存新版本。'});
+  if (/seedream_upgrade_required|image_model_upgrade_required|image_model_unavailable/.test(message)) return new ApiRouteError({code:'bad_request',status:400,retryable:false,message:IMAGE_MODEL_UPGRADE_MESSAGE});
   if (/invalid_commerce_plan|PGRST202|commerce_not_ready/.test(message))
     return new ApiRouteError({
       code: "service_not_ready",
@@ -148,8 +149,7 @@ async function compile(plan: CommercePlan) {
       try {
         capability = resolveImageModel(slot).capability;
       } catch (error) {
-        if (slot.provider === 'seedream' && slot.model === 'seedream-4.5') throw failure('seedream_upgrade_required');
-        void error;
+        if (error instanceof Error && error.message === IMAGE_MODEL_UPGRADE_MESSAGE) throw failure('image_model_upgrade_required');
         throw failure("invalid_model");
       }
       if (

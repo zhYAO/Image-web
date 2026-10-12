@@ -1,5 +1,6 @@
 import {
   TRIAL_CREDIT_CATALOG,
+  IMAGE_MODEL_UPGRADE_MESSAGE,
   creditCatalogSchema,
   creditLedgerSchema,
   creditQuoteSchema,
@@ -24,6 +25,8 @@ export function creditFailure(
   error: { message?: string; code?: string } | null,
 ): ApiRouteError {
   const message = error?.message ?? "";
+  if (/seedream_upgrade_required|image_model_upgrade_required|image_model_unavailable/.test(message))
+    return new ApiRouteError({ code: 'bad_request', status: 400, message: IMAGE_MODEL_UPGRADE_MESSAGE, retryable: false });
   if (message.includes("insufficient_credits"))
     return new ApiRouteError({
       code: "insufficient_credits",

@@ -20,6 +20,8 @@ export async function POST(request: Request) {
     const idempotencyKey = z.uuid().parse(request.headers.get('idempotency-key'));
     const admin = createSupabaseAdminClient();
     const imageService = createImageService(new SupabaseGenerationStore(admin));
+    const prior = await imageService.recover(userId, input, idempotencyKey);
+    if (prior) return NextResponse.json(imageSubmissionResponseSchema.parse(prior), { status: 202 });
     const prepared = await imageService.prepare(userId, input, idempotencyKey, correlationId);
     return withPreviewUsageReservation(createPreviewUsageGuard(admin), {
       businessKey: `generation:${idempotencyKey}`,

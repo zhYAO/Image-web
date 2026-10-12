@@ -5,7 +5,7 @@ export type CommerceGenerationSettings = Pick<CommerceSlot, 'provider' | 'model'
 
 export function commerceGenerationPreset(capabilities: ProviderCapability[]): CommerceGenerationSettings {
   const value = normalizeGenerationSelection(capabilities, { aspectRatio: '1:1', resolution: '2K', count: 1 });
-  return { provider: value.provider ?? 'gemini', model: value.model ?? 'gemini-3-pro-image', aspectRatio: value.aspectRatio, resolution: value.resolution };
+  return { provider: value.provider ?? 'seedream', model: value.model ?? 'doubao-seedream-5.0-pro', aspectRatio: value.aspectRatio, resolution: value.resolution };
 }
 
 export function hasCommerceModel(capabilities: ProviderCapability[], settings: CommerceGenerationSettings) {
