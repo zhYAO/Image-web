@@ -2,7 +2,6 @@ import {
   generateGeminiImage,
   generateSeedreamImage,
   ImageProviderError,
-  normalizeSeedreamPlanEndpoint,
   SEEDREAM_PLAN_IMAGE_ENDPOINT,
   SEEDREAM_STANDARD_IMAGE_ENDPOINT,
   type ImageAspectRatio,
@@ -161,11 +160,43 @@ async function rpc<T>(admin: AdminClient, name: string, input?: Record<string, u
   return data as T;
 }
 
+type PreparationStage = 'provider_availability' | 'provider_configuration' | 'reference_validation' | 'reference_download';
+
+class ReferenceDownloadFailure extends Error {
+  readonly storageHttpStatus?: number;
+
+  constructor(storageError?: { message: string }) {
+    super('reference_download_failed');
+    const status = (storageError as { status?: unknown } | undefined)?.status;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) {
+      this.storageHttpStatus = status;
+    }
+  }
+}
+
+function preparationDiagnostic(stage: PreparationStage, error: unknown) {
+  // Only fixed categories and a bounded numeric status may reach logs. In
+  // particular, never return exception text, Storage URLs or configuration values.
+  const reason = error instanceof ReferenceDownloadFailure ? 'storage_download_failed'
+    : error instanceof TypeError ? 'runtime_type_error'
+      : error instanceof Error && error.message === 'invalid_seedream_plan_endpoint' ? 'invalid_endpoint'
+        : error instanceof Error && error.message.startsWith('missing_env:') ? 'missing_environment'
+          : error instanceof Error && error.message === 'reference_count_mismatch' ? 'reference_count_mismatch'
+            : error instanceof Error && error.message === 'reference_download_invalid' ? 'reference_bytes_invalid'
+              : error instanceof Error && error.message === 'provider_unavailable' ? 'provider_unavailable'
+                : 'unexpected_error';
+  return {
+    stage, reason,
+    ...(error instanceof ReferenceDownloadFailure && error.storageHttpStatus !== undefined
+      ? { storageHttpStatus: error.storageHttpStatus } : {}),
+  };
+}
+
 async function downloadReferences(admin: AdminClient, references: QueueReference[]) {
   const downloaded: ProviderReference[] = [];
   for (const reference of references) {
     const { data, error } = await admin.storage.from(reference.bucket).download(reference.path);
-    if (error || !data) throw new Error('reference_download_failed');
+    if (error || !data) throw new ReferenceDownloadFailure(error ?? undefined);
     const bytes = new Uint8Array(await data.arrayBuffer());
     if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024) throw new Error('reference_download_invalid');
     downloaded.push({ bytesBase64: bytesToBase64(bytes), mimeType: reference.mimeType });
@@ -177,10 +208,9 @@ export function providerConfiguration(provider: ClaimedGeneration['provider'], m
   // This persisted ID distinguishes new Plan jobs from already queued Pro jobs.
   // Never reuse the shared Ark credential or reroute an old model to Plan.
   if (provider === 'seedream' && model === 'doubao-seedream-5.0-pro') {
-    const endpoint = normalizeSeedreamPlanEndpoint(
-      Deno.env.get('ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT')?.trim() || SEEDREAM_PLAN_IMAGE_ENDPOINT,
-    );
-    return { apiKey: env('ZIMAGE_SEEDREAM_PLAN_API_KEY'), model, endpoint };
+    // This model is admitted only through the approved Plan route. Pin it rather
+    // than letting a legacy optional endpoint setting block reference preparation.
+    return { apiKey: env('ZIMAGE_SEEDREAM_PLAN_API_KEY'), model, endpoint: SEEDREAM_PLAN_IMAGE_ENDPOINT };
   }
   const seedreamEnvironment: Record<string, string> = {
     'seedream-5.0-flash': 'ZIMAGE_SEEDREAM_FLASH_IMAGE_MODEL',
@@ -288,18 +318,23 @@ export async function processClaim(
     let checkpoint = claim.checkpoint;
     if (claim.action !== 'recover') {
       let references: ProviderReference[];
+      let preparationStage: PreparationStage = 'provider_availability';
       try {
         const available = await bounded(rpc<boolean>(admin, 'assert_chat_provider_available', { p_provider: claim.provider }));
         if (!available) throw new Error('provider_unavailable');
+        preparationStage = 'provider_configuration';
         if (dependencies.callProvider === callProvider) providerConfiguration(claim.provider, claim.model);
+        preparationStage = 'reference_validation';
         if ((claim.params.referenceIds?.length ?? 0) !== claim.references.length) throw new Error('reference_count_mismatch');
+        preparationStage = 'reference_download';
         references = await bounded(downloadReferences(admin, claim.references));
       } catch (error) {
         if (error instanceof LeaseLost) throw error;
         const code = error instanceof Error && (error.message.startsWith('missing_env:')
           || error.message.includes('provider')) ? 'provider_unavailable' : 'reference_download_failed';
         await bounded(step(claim.readCount < 5 ? 'retry' : 'fail', { code, messageId: claim.messageId }));
-        return { action: claim.readCount < 5 ? 'retry' : 'failed', code };
+        return { action: claim.readCount < 5 ? 'retry' : 'failed', code,
+          preparation: preparationDiagnostic(preparationStage, error) };
       }
       await bounded(step('submitted'));
       let result: ProviderImageResult;

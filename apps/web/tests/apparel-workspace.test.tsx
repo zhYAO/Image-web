@@ -24,6 +24,17 @@ describe("apparel form in the shared commerce workspace", () => {
     vi.clearAllMocks();
     sessionStorage.clear();
   });
+  it("shows inspectable AI layout examples without adopting fictional product data", () => {
+    render(<ApparelWorkspace {...props} />);
+    const example = screen.getByRole("img", { name: "原创 AI 服装示例 · 主图 1" });
+    expect(screen.getByText(/虚构商品，仅展示排版/)).toBeInTheDocument();
+    fireEvent.click(example);
+    expect(screen.getByLabelText("商品名称")).toHaveValue("");
+    expect(screen.getByLabelText("面料成分")).toHaveValue("");
+    expect(screen.getByLabelText("上架尺码")).toHaveValue("");
+    expect(props.onReferenceAdd).not.toHaveBeenCalled();
+    expect(props.onTask).not.toHaveBeenCalled();
+  });
   it("uses upload/form inputs, preserves fields on refresh and isolates accounts", () => {
     const first = render(<ApparelWorkspace {...props} />);
     expect(screen.getByLabelText("主图 1")).toHaveAttribute(

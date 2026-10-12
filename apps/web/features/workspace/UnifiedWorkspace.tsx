@@ -37,6 +37,7 @@ import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
+import { NavGlassFilter } from './NavGlassFilter';
 import { useWorkspaceStore, snapshotComposer, type ComposerState } from '@/store/workspace-store';
 import { sessionHref, isLocalCommerceDraft, type WorkspaceRoute } from './workspace-route';
 import { mergeSessionActivity } from './session-category';
@@ -1007,6 +1008,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     <>
     <WorkspaceFrame collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
           <header className={styles.header}>
+          <NavGlassFilter />
           <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
             <CreditBalance /><Link href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>

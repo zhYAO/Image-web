@@ -15,7 +15,7 @@
 | 变量 | 用途 |
 |---|---|
 | `ZIMAGE_SEEDREAM_PLAN_API_KEY` | 必填，仅新 Plan 图片任务使用。当前示例留空；缺失时在供应商请求前拒绝，不借用其他密钥。 |
-| `ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT` | 可选非敏感地址。省略时使用上述完整 Plan URL，也接受官方 Plan Base URL。 |
+| `ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT` | 旧可选配置。当前Worker不读取该覆盖值，固定使用上述官方完整Plan URL。 |
 
 模型名固定，不需要另填模型 Secret。示例见 `supabase/functions/.env.example`。真实密钥不能进入浏览器变量、仓库、聊天、命令、日志或发布包；不读回或复制现有生产密钥。
 
