@@ -68,15 +68,15 @@ describe('safe preparation failure diagnostics', () => {
     expect(f.provider).not.toHaveBeenCalled();
   });
 
-  it('marks an invalid Plan endpoint as configuration failure before storage or provider use', async () => {
+  it('marks a missing Plan credential as configuration failure before storage or provider use', async () => {
     const values: Record<string, string> = {
-      ZIMAGE_SEEDREAM_PLAN_API_KEY: 'synthetic-key',
       ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT: 'https://unapproved.invalid/private',
     };
     vi.stubGlobal('Deno', { env: { get: (name: string) => values[name] } });
     const f = boundary(async () => { throw new Error('download must remain uncalled'); });
     const outcome = await processClaim(f.admin, claim);
-    expect(outcome).toMatchObject({ preparation: { stage: 'provider_configuration', reason: 'invalid_endpoint' } });
+    expect(outcome).toMatchObject({ code: 'provider_unavailable',
+      preparation: { stage: 'provider_configuration', reason: 'missing_environment' } });
     expect(f.operations).toEqual(['renew', 'retry']);
     expect(JSON.stringify(outcome)).not.toContain('synthetic-key');
     expect(JSON.stringify(outcome)).not.toContain('unapproved.invalid');

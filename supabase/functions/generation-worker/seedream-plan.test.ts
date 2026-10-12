@@ -41,6 +41,16 @@ describe('Seedream Plan route isolation', () => {
       .toThrow('missing_env:ZIMAGE_SEEDREAM_PLAN_API_KEY');
   });
 
+  it('pins Plan configuration to its approved endpoint without reading an endpoint override', () => {
+    vi.stubGlobal('Deno', { env: { get: (name: string) => {
+      if (name === 'ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT') throw new Error('endpoint override must remain unread');
+      return name === 'ZIMAGE_SEEDREAM_PLAN_API_KEY' ? 'synthetic-plan-key' : undefined;
+    } } });
+    expect(providerConfiguration('seedream', planModel)).toEqual({
+      apiKey: 'synthetic-plan-key', model: planModel, endpoint: planEndpoint,
+    });
+  });
+
   it('keeps all historical Seedream models on their original route and credentials', () => {
     environment({
       ARK_API_KEY: 'synthetic-legacy-key',
@@ -90,8 +100,7 @@ describe('Seedream Plan route isolation', () => {
     'https://synthetic:credential@ark.cn-beijing.volces.com/api/plan/v3',
     'not-a-url',
   ])('rejects unapproved endpoints before any provider request: %s', (endpoint) => {
-    environment({ ZIMAGE_SEEDREAM_PLAN_API_KEY: 'synthetic-plan-key', ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT: endpoint });
-    expect(() => providerConfiguration('seedream', planModel)).toThrow('invalid_seedream_plan_endpoint');
+    expect(() => normalizeSeedreamPlanEndpoint(endpoint)).toThrow('invalid_seedream_plan_endpoint');
   });
 
   it('sends the full Plan endpoint unchanged and requests one base64 image', async () => {
@@ -108,7 +117,7 @@ describe('Seedream Plan route isolation', () => {
   });
 
   it('preserves the standard endpoint for historical callers', async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }] }), { status: 200 }));
+    const fetcher = vi.fn(async (_url: string | URL | Request) => new Response(JSON.stringify({ data: [{ b64_json: 'iVBORw0KGgo=' }] }), { status: 200 }));
     await generateSeedreamImage({ ...input, model: 'historical-pro-deployment' }, 'synthetic-legacy-key', fetcher as typeof fetch);
     expect(fetcher.mock.calls[0]?.[0]).toBe(standardEndpoint);
   });

@@ -2,7 +2,6 @@ import {
   generateGeminiImage,
   generateSeedreamImage,
   ImageProviderError,
-  normalizeSeedreamPlanEndpoint,
   SEEDREAM_PLAN_IMAGE_ENDPOINT,
   SEEDREAM_STANDARD_IMAGE_ENDPOINT,
   type ImageAspectRatio,
@@ -209,10 +208,9 @@ export function providerConfiguration(provider: ClaimedGeneration['provider'], m
   // This persisted ID distinguishes new Plan jobs from already queued Pro jobs.
   // Never reuse the shared Ark credential or reroute an old model to Plan.
   if (provider === 'seedream' && model === 'doubao-seedream-5.0-pro') {
-    const endpoint = normalizeSeedreamPlanEndpoint(
-      Deno.env.get('ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT')?.trim() || SEEDREAM_PLAN_IMAGE_ENDPOINT,
-    );
-    return { apiKey: env('ZIMAGE_SEEDREAM_PLAN_API_KEY'), model, endpoint };
+    // This model is admitted only through the approved Plan route. Pin it rather
+    // than letting a legacy optional endpoint setting block reference preparation.
+    return { apiKey: env('ZIMAGE_SEEDREAM_PLAN_API_KEY'), model, endpoint: SEEDREAM_PLAN_IMAGE_ENDPOINT };
   }
   const seedreamEnvironment: Record<string, string> = {
     'seedream-5.0-flash': 'ZIMAGE_SEEDREAM_FLASH_IMAGE_MODEL',
