@@ -10,7 +10,7 @@
   color: var(--z-text);
 }
 .form {
-  background: #fff;
+  background: var(--z-panel);
   border-radius: 12px;
   padding: 24px;
 }
@@ -112,7 +112,8 @@
 }
 .material button {
   border: 0;
-  background: #f2f5f8;
+  background: var(--z-image-bg);
+  color: var(--z-image-text);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -127,21 +128,21 @@
   position: sticky;
   bottom: 0;
   padding: 12px 0;
-  background: white;
+  background: var(--z-panel);
 }
 .actions button,
 .download {
   border: 1px solid var(--z-border-control);
   border-radius: 7px;
   padding: 11px 14px;
-  background: #fff;
+  background: var(--z-panel);
   color: var(--z-text);
   cursor: pointer;
   font-size: 12px;
 }
 .actions .primary {
   background: var(--z-primary);
-  color: white;
+  color: var(--z-on-primary);
   border-color: var(--z-primary);
 }
 .actions button:disabled,
@@ -166,7 +167,7 @@
 .preview span,
 .preview label {
   font-size: 12px;
-  color: #7a889a;
+  color: var(--z-muted);
 }
 .preview select {
   margin: 10px 0;
@@ -185,7 +186,7 @@
 .results figure {
   margin: 0;
   padding: 6px;
-  background: white;
+  background: var(--z-panel);
   border-radius: 8px;
 }
 .results :global(.ant-image) {
@@ -198,7 +199,7 @@
 }
 .results figcaption {
   font-size: 10px;
-  color: #728094;
+  color: var(--z-muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
   padding: 7px 3px;
@@ -209,14 +210,14 @@
 }
 .empty div {
   padding: 28px;
-  background: white;
+  background: var(--z-panel);
   text-align: center;
   margin: 12px 0;
-  color: #8ea3ba;
+  color: var(--z-muted);
   border-radius: 7px;
 }
 .error {
-  color: #bf3f43 !important;
+  color: var(--z-error) !important;
 }
 @media (max-width: 900px) {
   .workspace {
@@ -231,12 +232,38 @@
   }
 }
 
-.workspace { grid-template-columns: minmax(0, 480px) minmax(0, 1fr); padding: 0; }
-.form, .preview { border: 1px solid var(--z-border); border-radius: 24px; background: var(--z-panel); min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.fields input, .fields textarea, .preview select, .file { border-radius: 12px; }
-.actions { background: var(--z-panel); flex-wrap: wrap; }
-.actions button, .download { border-radius: 12px; }
-.file:focus-within { outline: 2px solid var(--z-focus); outline-offset: 2px; }
+.workspace {
+  grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+  padding: 0;
+}
+.form,
+.preview {
+  border: 1px solid var(--z-border);
+  border-radius: 24px;
+  background: var(--z-panel);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.fields input,
+.fields textarea,
+.preview select,
+.file {
+  border-radius: 12px;
+}
+.actions {
+  background: var(--z-panel);
+  flex-wrap: wrap;
+}
+.actions button,
+.download {
+  border-radius: 12px;
+}
+.file:focus-within {
+  outline: 2px solid var(--z-focus);
+  outline-offset: 2px;
+}
 @media (max-width: 1150px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
@@ -246,6 +273,17 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
-  .form, .preview { overflow-y: visible; }
+  .form,
+  .preview {
+    overflow-y: visible;
+  }
 }
-@media (max-width: 767px) { .form, .preview { padding: 16px; } .fields { grid-template-columns: 1fr; } }
+@media (max-width: 767px) {
+  .form,
+  .preview {
+    padding: 16px;
+  }
+  .fields {
+    grid-template-columns: 1fr;
+  }
+}

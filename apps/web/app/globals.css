@@ -32,6 +32,7 @@
   --z-on-primary: #fff;
   --z-accent: var(--z-primary);
   --z-image-bg: #f5f5f5;
+  --z-image-text: #6f687a;
   --z-scrim: rgba(0, 0, 0, 0.4);
   --z-radius-control: 12px;
   --z-radius-content: 18px;
@@ -43,15 +44,18 @@
   --z-shadow-soft: 0 2px 8px rgba(37, 35, 42, 0.06);
   --z-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-  --z-glass-nav: rgba(255, 255, 255, 0.68);
+  --z-glass-nav: rgba(255, 255, 255, 0.64);
+  --z-glass-overlay: rgba(255, 255, 255, 0.9);
   --z-glass-control: #fff;
   --z-glass-rim: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.48),
     rgba(255, 255, 255, 0)
   );
-  --z-glass-shadow: var(--z-glass-highlight), inset 0 -1px 0 rgba(112, 80, 181, 0.06), 0 8px 28px rgba(73, 53, 103, 0.08);
-  --z-glass-blur: 18px;
+  --z-glass-shadow:
+    var(--z-glass-highlight), inset 0 -1px 0 rgba(112, 80, 181, 0.06),
+    0 8px 28px rgba(73, 53, 103, 0.08);
+  --z-glass-blur: 14px;
   --z-duration-press: 100ms;
   --z-duration-fast: 160ms;
   --z-duration-overlay: 220ms;
@@ -74,6 +78,118 @@
   --z-layer-popover: 30;
   --z-layer-feedback: 40;
 }
+/* The head bootstrap sets this before paint; providers use the same system preference. */
+:root[data-z-theme="light"] {
+  color-scheme: light;
+}
+:root[data-z-theme="dark"] {
+  color-scheme: dark;
+  --z-bg: #17141e;
+  --z-bg-gradient:
+    radial-gradient(
+      ellipse at 85% 0%,
+      rgba(128, 96, 174, 0.16),
+      transparent 48%
+    ),
+    linear-gradient(#17141e, #17141e);
+  --z-panel: #211e29;
+  --z-panel-strong: #292431;
+  --z-control-bg: #211e29;
+  --z-glass-control: #211e29;
+  --z-text: #f3eff8;
+  --z-muted: #beb3cc;
+  --z-placeholder: #beb3cc;
+  --z-primary: #b79be5;
+  --z-primary-hover: #c7aff0;
+  --z-primary-active: #a98ad8;
+  --z-primary-soft: #352a46;
+  --z-focus: #c7aff0;
+  --z-on-primary: #21182d;
+  --z-border: #493d57;
+  --z-border-subtle: #352e40;
+  --z-border-control: #8d7e9e;
+  --z-disabled: #92889e;
+  --z-disabled-bg: #302a38;
+  --z-success: #77cba0;
+  --z-success-soft: #1d382a;
+  --z-warning: #e9b765;
+  --z-warning-soft: #3d2e19;
+  --z-error: #ffaaa2;
+  --z-error-soft: #402423;
+  --z-scrim: rgba(0, 0, 0, 0.6);
+  --z-glass-nav: rgba(33, 30, 41, 0.76);
+  --z-glass-overlay: rgba(41, 36, 49, 0.94);
+  --z-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --z-glass-rim: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1),
+    transparent 55%
+  );
+  --z-glass-shadow:
+    var(--z-glass-highlight), inset 0 -1px 0 rgba(183, 155, 229, 0.07),
+    0 8px 28px rgba(0, 0, 0, 0.24);
+  --z-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  --z-shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+/* Bridge server-rendered component variables until the coordinated dark provider hydrates. */
+html[data-z-theme="dark"] .zimage {
+  --ant-color-bg-layout: var(--z-bg);
+  --ant-color-bg-container: var(--z-panel);
+  --ant-color-bg-elevated: var(--z-panel-strong);
+  --ant-color-text: var(--z-text);
+  --ant-color-text-secondary: var(--z-muted);
+  --ant-color-text-heading: var(--z-text);
+  --ant-color-text-description: var(--z-muted);
+  --ant-color-text-tertiary: var(--z-muted);
+  --ant-color-text-quaternary: var(--z-muted);
+  --ant-color-text-disabled: var(--z-disabled);
+  --ant-color-text-placeholder: var(--z-placeholder);
+  --ant-color-border: var(--z-border-control);
+  --ant-color-border-secondary: var(--z-border);
+  --ant-color-primary: var(--z-primary);
+  --ant-color-primary-hover: var(--z-primary-hover);
+  --ant-color-primary-active: var(--z-primary-active);
+  --ant-color-primary-bg: var(--z-primary-soft);
+  --ant-color-text-light-solid: var(--z-on-primary);
+  --ant-color-link: var(--z-primary);
+  --ant-color-link-hover: var(--z-primary-hover);
+  --ant-color-link-active: var(--z-primary-active);
+  --ant-color-bg-container-disabled: var(--z-disabled-bg);
+  --ant-button-default-bg: var(--z-panel);
+  --ant-button-default-color: var(--z-text);
+  --ant-button-default-border-color: var(--z-border-control);
+  --ant-button-primary-color: var(--z-on-primary);
+  --ant-button-default-hover-bg: var(--z-primary-soft);
+  --ant-button-default-hover-color: var(--z-primary);
+  --ant-button-default-hover-border-color: var(--z-primary);
+  --ant-button-default-active-bg: var(--z-primary-soft);
+  --ant-button-default-active-color: var(--z-primary-active);
+  --ant-button-default-bg-disabled: var(--z-disabled-bg);
+  --ant-button-default-color-disabled: var(--z-disabled);
+  --ant-button-border-color-disabled: var(--z-border-subtle);
+  --ant-button-text-text-color: var(--z-text);
+  --ant-button-text-text-hover-color: var(--z-primary);
+  --ant-button-text-text-active-color: var(--z-primary-active);
+  --ant-button-text-hover-bg: var(--z-primary-soft);
+  --ant-button-text-active-bg: var(--z-primary-soft);
+  --ant-select-selector-bg: var(--z-control-bg);
+  --ant-select-option-selected-bg: var(--z-primary-soft);
+  --ant-select-option-selected-color: var(--z-primary);
+  --ant-select-option-active-bg: var(--z-primary-soft);
+  --ant-select-clear-bg: var(--z-control-bg);
+  --ant-select-hover-border-color: var(--z-primary);
+  --ant-select-active-border-color: var(--z-primary);
+  --ant-input-hover-bg: var(--z-control-bg);
+  --ant-input-active-bg: var(--z-control-bg);
+  --ant-input-hover-border-color: var(--z-primary);
+  --ant-input-active-border-color: var(--z-primary);
+  --ant-input-number-hover-bg: var(--z-control-bg);
+  --ant-input-number-active-bg: var(--z-control-bg);
+  --ant-input-number-handle-bg: var(--z-control-bg);
+  --ant-input-number-filled-handle-bg: var(--z-control-bg);
+  --ant-input-number-handle-border-color: var(--z-border-control);
+  --ant-input-number-handle-hover-color: var(--z-primary);
+}
 * {
   box-sizing: border-box;
 }
@@ -83,6 +199,17 @@ body {
   min-height: 100%;
   background: var(--z-bg-gradient);
   color: var(--z-text);
+}
+body .ant-app {
+  color: var(--z-text);
+  background: transparent;
+}
+/* Lobe's essential override also sets primary text; keep our paired foreground. */
+body
+  .ant-btn.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):not(
+    [aria-disabled="true"]
+  ) {
+  color: var(--z-on-primary) !important;
 }
 body {
   font-family:
@@ -429,19 +556,23 @@ body
 }
 .ant-select-dropdown,
 .ant-popover .ant-popover-container,
-.ant-popover .ant-popover-inner,
-.ant-modal .ant-modal-container {
-  background: var(--z-panel);
+.ant-popover .ant-popover-inner {
+  background: var(--z-glass-overlay);
   border: 1px solid var(--z-border);
-  box-shadow: var(--z-shadow);
+  box-shadow: var(--z-glass-shadow), var(--z-shadow);
   border-radius: 18px;
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
 }
 .ant-modal .ant-modal-container {
+  background: var(--z-panel-strong);
+  border: 1px solid var(--z-border);
+  box-shadow: var(--z-shadow);
   border-radius: 24px;
   padding: 24px;
 }
 .ant-image-preview .ant-image-preview-operations {
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--z-panel-strong);
   color: var(--z-text);
   border: 1px solid var(--z-border-control);
   border-radius: 12px;
@@ -453,13 +584,18 @@ body
 :where(button, a[role="button"], .glass-site-nav a) {
   touch-action: manipulation;
 }
-:where(button:not(:disabled):not([aria-disabled="true"]), .glass-site-nav a):active {
-  transform: translateY(1px) scale(.985);
+:where(
+  button:not(:disabled):not([aria-disabled="true"]),
+  .glass-site-nav a
+):active {
+  transform: translateY(1px) scale(0.985);
   transition-duration: var(--z-duration-press);
 }
-.ant-select-dropdown, .ant-popover, .ant-modal {
-  --ant-motion-duration-mid: .18s;
-  --ant-motion-duration-slow: .22s;
+.ant-select-dropdown,
+.ant-popover,
+.ant-modal {
+  --ant-motion-duration-mid: 0.18s;
+  --ant-motion-duration-slow: 0.22s;
 }
 
 /* Startup UI stays independent of hydration and provider initialization. */
@@ -639,24 +775,28 @@ body
 @supports not (
   (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
 ) {
-  :root {
-    --z-glass-nav: #fff;
+  :root,
+  :root[data-z-theme] {
+    --z-glass-overlay: var(--z-panel-strong);
+    --z-glass-nav: var(--z-panel);
     --z-glass-rim: none;
     --z-glass-blur: 0px;
     --z-glass-highlight: 0 0 transparent;
   }
 }
 @media (prefers-reduced-transparency: reduce) {
-  :root {
-    --z-bg-gradient: linear-gradient(#f7f6fa, #f7f6fa);
-    --z-glass-nav: #fff;
+  :root,
+  :root[data-z-theme] {
+    --z-glass-overlay: var(--z-panel-strong);
+    --z-bg-gradient: linear-gradient(var(--z-bg), var(--z-bg));
+    --z-glass-nav: var(--z-panel);
     --z-glass-rim: none;
     --z-glass-blur: 0px;
     --z-glass-highlight: 0 0 transparent;
   }
   .glass-site-nav,
   .ant-image-preview .ant-image-preview-operations {
-    background: #fff;
+    background: var(--z-panel-strong);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -680,13 +820,16 @@ body
   }
 }
 @media (forced-colors: active) {
-  :root {
+  :root,
+  :root[data-z-theme] {
     --z-bg: Canvas;
     --z-bg-gradient: none;
     --z-panel: Canvas;
     --z-panel-strong: Canvas;
     --z-control-bg: Canvas;
     --z-glass-nav: Canvas;
+    --z-glass-overlay: Canvas;
+    --z-on-primary: HighlightText;
     --z-glass-blur: 0px;
     --z-glass-control: Canvas;
     --z-glass-rim: none;
@@ -704,6 +847,7 @@ body
     --z-disabled: GrayText;
     --z-disabled-bg: Canvas;
     --z-image-bg: Canvas;
+    --z-image-text: CanvasText;
     --z-shadow: none;
     --z-shadow-soft: none;
     --z-glass-shadow: none;
@@ -723,5 +867,38 @@ body
   [aria-pressed="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce),
+  (prefers-contrast: more),
+  (forced-colors: active) {
+  :root,
+  :root[data-z-theme] {
+    --z-glass-nav: var(--z-panel);
+    --z-glass-overlay: var(--z-panel-strong);
+    --z-glass-rim: none;
+    --z-glass-highlight: 0 0 transparent;
+  }
+  .ant-select-dropdown,
+  .ant-popover .ant-popover-container,
+  .ant-popover .ant-popover-inner,
+  .glass-site-nav,
+  .ant-image-preview .ant-image-preview-operations {
+    background: var(--z-panel-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .ant-select-dropdown,
+  .ant-popover .ant-popover-container,
+  .ant-popover .ant-popover-inner {
+    background: var(--z-panel-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
