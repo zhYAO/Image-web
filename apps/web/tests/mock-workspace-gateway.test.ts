@@ -63,7 +63,7 @@ describe('MockWorkspaceGateway', () => {
       aspectRatio: '1:1',
       count: 3,
       prompt: 'partial result',
-      resolution: '1K',
+      resolution: '2K',
       scenario: 'partial',
       sessionId: session.id,
     });
@@ -180,27 +180,29 @@ describe('MockWorkspaceGateway', () => {
     const batch = await gateway.submitImage({
       aspectRatio: '16:9',
       count: 1,
-      model: 'gemini-3-pro-image',
+      model: 'doubao-seedream-5.0-pro',
       prompt: '可重生成',
-      provider: 'Google Gemini',
+      provider: 'seedream',
       resolution: '2K',
       sessionId: session.id,
     });
     expect(batch).toMatchObject({
       config: { aspectRatio: '16:9', count: 1, resolution: '2K' },
-      model: 'gemini-3-pro-image',
-      provider: 'Google Gemini',
+      model: 'doubao-seedream-5.0-pro',
+      provider: 'seedream',
     });
     await vi.runAllTimersAsync();
     expect(await gateway.recreateGeneration({ batchId: batch.id, scope: 'all' })).toMatchObject({
       config: { aspectRatio: '16:9', count: 1, resolution: '2K' },
-      model: 'gemini-3-pro-image',
-      provider: 'Google Gemini',
+      model: 'doubao-seedream-5.0-pro',
+      provider: 'seedream',
       status: 'pending',
     });
     expect(await gateway.getSkills()).toHaveLength(3);
-    expect(await gateway.getProviderCapabilities()).toHaveLength(2);
-    expect(await gateway.getProviderHealth()).toHaveLength(4);
+    expect(await gateway.getProviderCapabilities()).toEqual([
+      expect.objectContaining({ provider: 'seedream', models: [expect.objectContaining({ id: 'doubao-seedream-5.0-pro', resolutions: ['2K'] })] }),
+    ]);
+    expect((await gateway.getProviderHealth()).map(({ provider }) => provider)).toEqual(['seedream', 'doubao', 'minimax']);
     expect(await gateway.getQuota()).toMatchObject({ limit: 30 });
   });
 });

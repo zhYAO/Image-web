@@ -14,7 +14,8 @@ import {
   streamOpenAiCompatibleChat,
 } from "@/server/chat/chat-providers";
 import { SupabaseChatStore } from "@/server/chat/supabase-chat-store";
-import { prepareImageSubmission } from "@/server/image/image-service";
+import { prepareImageSubmission, restoreImageSubmission } from "@/server/image/image-service";
+import { SupabaseGenerationStore } from "@/server/image/supabase-generation-store";
 import { optimizeCreativeText } from "@/server/creative-text/creative-text-service";
 import {
   createPreviewUsageGuard,
@@ -46,6 +47,13 @@ function eventsResponse(events: ChatEvent[]) {
       },
     },
   );
+}
+function imageEventsResponse(raw: unknown) {
+  const result = z.object({ batchId: z.uuid(), sessionId: z.uuid(), toolMessageId: z.uuid() }).parse(raw);
+  return eventsResponse([
+    { type: 'tool.queued', batchId: result.batchId },
+    { type: 'message.completed', messageId: result.toolMessageId, content: '已创建图片生成任务，你可以继续聊天或提交下一批。' },
+  ]);
 }
 function finalEvents(op: TextOperation): ChatEvent[] {
   const started = startedSchema.parse(op.started);
@@ -121,11 +129,21 @@ export async function billedChat(
     throw creditFailure({ message: "credit_request_id_required" });
   const requestId = z.uuid().parse(input.requestId);
   const store = new SupabaseChatStore(admin);
-  if (
+  const imageIntent = Boolean(
     !input.skillId &&
     input.tools?.includes("generate_image") &&
     hasExplicitImageIntent(input.message)
-  ) {
+  );
+  const image = { billing: input.billing, prompt: input.message, provider: input.imageProvider, sessionId: input.sessionId,
+    params: { aspectRatio: '1:1' as const, count: 1, resolution: '2K' as const, referenceIds: input.images } };
+  const prior = await new SupabaseGenerationStore(admin).lookupSubmission({ userId: user, idempotencyKey: requestId });
+  if (prior) {
+    if (!imageIntent || prior.source !== 'chat_tool')
+      throw new ApiRouteError({ code: 'conflict', status: 409, message: '相同请求编号已用于另一份创作，请重新发送。', retryable: false });
+    const restored = await restoreImageSubmission(user, image, requestId, correlationId, prior, 'chat_tool');
+    return imageEventsResponse(await creditCall(admin, user, 'image', { ...restored, requestId, chatMessage: input.message }));
+  }
+  if (imageIntent) {
     const prepared = await prepareImageSubmission(
       user,
       {
@@ -160,21 +178,7 @@ export async function billedChat(
           chatMessage: input.message,
         }),
     );
-    const result = z
-      .object({
-        batchId: z.uuid(),
-        sessionId: z.uuid(),
-        toolMessageId: z.uuid(),
-      })
-      .parse(raw);
-    return eventsResponse([
-      { type: "tool.queued", batchId: result.batchId },
-      {
-        type: "message.completed",
-        messageId: result.toolMessageId,
-        content: "已创建图片生成任务，你可以继续聊天或提交下一批。",
-      },
-    ]);
+    return imageEventsResponse(raw);
   }
   const model = input.chatModel === "minimax" ? "minimax" : "doubao";
 

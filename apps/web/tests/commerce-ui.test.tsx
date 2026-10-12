@@ -69,8 +69,8 @@ async function createPlan(
     styleReferenceIds: [],
   };
   const slots = buildCommerceSlots(brief, "product-set", count, {
-    provider: "gemini",
-    model: "gemini-3-pro-image",
+    provider: "seedream",
+    model: "doubao-seedream-5.0-pro",
     aspectRatio: "1:1",
     resolution: "2K",
   });
@@ -203,7 +203,7 @@ describe("commerce UI", () => {
     render(<Card initial={old} gateway={gateway} />);
     fireEvent.click(screen.getByRole('button', { name: '使用当前默认参数创建新版本' }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0]?.[1]).toMatchObject({ expectedRevision: 1, plan: { brief: old.brief, slots: old.slots.map(slot => ({ ...slot, provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1', resolution: '2K' })) } });
+    expect(save.mock.calls[0]?.[1]).toMatchObject({ expectedRevision: 1, plan: { brief: old.brief, slots: old.slots.map(slot => ({ ...slot, provider: 'seedream', model: 'doubao-seedream-5.0-pro', aspectRatio: '1:1', resolution: '2K' })) } });
     await screen.findByText(/新版本已保存/);
     expect(submit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '修改第 1 张' }));
@@ -908,8 +908,8 @@ describe("commerce UI", () => {
             references={references}
             capabilities={IMAGE_PROVIDER_CAPABILITIES}
             settings={{
-              provider: "gemini",
-              model: "gemini-3-pro-image",
+              provider: "seedream",
+              model: "doubao-seedream-5.0-pro",
               aspectRatio: "1:1",
               resolution: "2K",
             }}
@@ -973,8 +973,8 @@ describe("commerce UI", () => {
         ]}
         capabilities={IMAGE_PROVIDER_CAPABILITIES}
         settings={{
-          provider: "gemini",
-          model: "gemini-3-pro-image",
+          provider: "seedream",
+          model: "doubao-seedream-5.0-pro",
           aspectRatio: "1:1",
           resolution: "2K",
         }}

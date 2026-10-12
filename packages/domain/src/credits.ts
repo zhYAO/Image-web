@@ -56,36 +56,16 @@ export const creditLedgerSchema = z.object({
 });
 export type CreditLedger = z.infer<typeof creditLedgerSchema>;
 export const TRIAL_CREDIT_CATALOG: CreditCatalog = {
-  version: "2026-10-06.1",
+  version: "2026-10-12.1",
   enabled: true,
   prices: [
     {
       operation: "image",
       provider: "seedream",
-      model: "seedream-5.0-flash",
+      model: "doubao-seedream-5.0-pro",
       resolution: "2K",
       unitMinor: 30,
-      label: "Seedream 5.0 Flash",
-    },
-    {
-      operation: "image", provider: "seedream", model: "seedream-5.0-pro",
-      resolution: "2K", unitMinor: 30, label: "Seedream 5.0 Pro",
-    },
-    {
-      operation: "image",
-      provider: "gemini",
-      model: "gemini-3-pro-image",
-      resolution: "1K",
-      unitMinor: 60,
-      label: "Gemini 3 Pro Image",
-    },
-    {
-      operation: "image",
-      provider: "gemini",
-      model: "gemini-3-pro-image",
-      resolution: "2K",
-      unitMinor: 80,
-      label: "Gemini 3 Pro Image",
+      label: "Seedream 5.0 Pro",
     },
     {
       operation: "chat",
@@ -159,10 +139,10 @@ export function imageCreditItem(input: {
 }): CreditItem {
   return {
     operation: "image",
-    provider: input.provider ?? "gemini",
+    provider: input.provider ?? "seedream",
     model:
       input.model ??
-      (input.provider === "seedream" ? "seedream-5.0-flash" : "gemini-3-pro-image"),
+      "doubao-seedream-5.0-pro",
     resolution: input.resolution,
     count: input.count,
   };

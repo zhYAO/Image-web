@@ -1,8 +1,10 @@
 .workspace {
   display: grid;
   grid-template-columns: minmax(360px, 520px) minmax(300px, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 24px;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
   padding: 24px;
   background: transparent;
   color: var(--z-text);
@@ -230,10 +232,20 @@
 }
 
 .workspace { grid-template-columns: minmax(0, 480px) minmax(0, 1fr); padding: 0; }
-.form, .preview { border: 1px solid var(--z-border); border-radius: 24px; background: var(--z-panel); min-width: 0; }
+.form, .preview { border: 1px solid var(--z-border); border-radius: 24px; background: var(--z-panel); min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .fields input, .fields textarea, .preview select, .file { border-radius: 12px; }
 .actions { background: var(--z-panel); flex-wrap: wrap; }
 .actions button, .download { border-radius: 12px; }
 .file:focus-within { outline: 2px solid var(--z-focus); outline-offset: 2px; }
-@media (max-width: 1150px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1150px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: max-content;
+    align-content: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .form, .preview { overflow-y: visible; }
+}
 @media (max-width: 767px) { .form, .preview { padding: 16px; } .fields { grid-template-columns: 1fr; } }

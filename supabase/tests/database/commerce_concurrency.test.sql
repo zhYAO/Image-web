@@ -30,9 +30,9 @@ begin
   select pid into pid_two from extensions.dblink('commerce_b','select pg_backend_pid()') as r(pid integer);
   select flags into saved_flags from extensions.dblink('commerce_a',
     $$select jsonb_build_object('generation',(select enabled from private.runtime_flags where flag='generation_enabled'),
-      'provider',(select enabled from private.provider_runtime_config where provider='gemini'))$$) as r(flags jsonb);
+      'provider',(select enabled from private.provider_runtime_config where provider='seedream'))$$) as r(flags jsonb);
   flags_sql := format('update private.runtime_flags set enabled=%L where flag=''generation_enabled'';
-    update private.provider_runtime_config set enabled=%L where provider=''gemini''',saved_flags->>'generation',saved_flags->>'provider');
+    update private.provider_runtime_config set enabled=%L where provider=''seedream''',saved_flags->>'generation',saved_flags->>'provider');
   cleanup_sql := format($cleanup$
     do $inner$ declare q record; begin
       for q in select q0.msg_id from pgmq.q_image_generation q0 join public.generations g on g.id::text=q0.message->>'generationId'
@@ -52,17 +52,17 @@ begin
       insert into public.reference_uploads(id,user_id,session_id,storage_path,original_filename,mime_type,size_bytes,width,height)
         values(%L,%L,%L,%L,'test.webp','image/webp',10,1,1);
       update private.runtime_flags set enabled=true where flag='generation_enabled';
-      update private.provider_runtime_config set enabled=true where provider='gemini';
+      update private.provider_runtime_config set enabled=true where provider='seedream';
     $seed$,owner_uuid,owner_uuid||'@commerce.test',session_uuid,owner_uuid,reference_uuid,owner_uuid,session_uuid,
       owner_uuid||'/'||session_uuid||'/race.webp'));
     plan_json := jsonb_build_object('scene','product-set','templateId','white-main','brief',jsonb_build_object(
       'name','Concurrent product','facts','','sellingPoints','','platform','taobao','placement','main',
       'productReferenceIds',jsonb_build_array(reference_uuid),'styleReferenceIds','[]'::jsonb),'slots',
       (select jsonb_agg(jsonb_build_object('id',s,'role','Product','instruction','','exactText','',
-        'referenceIds',jsonb_build_array(reference_uuid),'provider','gemini','model','gemini-3-pro-image','aspectRatio','1:1','resolution','2K'))
+        'referenceIds',jsonb_build_array(reference_uuid),'provider','seedream','model','doubao-seedream-5.0-pro','aspectRatio','1:1','resolution','2K'))
       from unnest(array[slot_one,slot_two]) s));
     compiled := (select jsonb_agg(jsonb_build_object('slotId',s->>'id','prompt','Concurrent product','hash',md5(s::text),
-      'provider','gemini','model','gemini-3-pro-image','templateVersion','1.0.0','compilerVersion','commerce-1',
+      'provider','seedream','model','doubao-seedream-5.0-pro','templateVersion','1.0.0','compilerVersion','commerce-1',
       'config',jsonb_build_object('count',1,'aspectRatio','1:1','resolution','2K','referenceIds',jsonb_build_array(reference_uuid))))
       from jsonb_array_elements(plan_json->'slots') s);
     body := jsonb_build_object('requestId',gen_random_uuid(),'sessionId',session_uuid,'plan',plan_json);

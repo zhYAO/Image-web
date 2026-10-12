@@ -13,7 +13,7 @@ import { ApiRouteError } from "@/server/api-error";
 
 export interface GenerationSubmissionInput {
   billing?: ImageApiRequest["billing"];
-  config: ImageApiRequest["params"] & { registryVersion: string };
+  config: ImageApiRequest["params"] & { registryVersion?: string };
   correlationId: string;
   idempotencyKey: string;
   model: string;
@@ -28,9 +28,22 @@ export interface GenerationSubmissionInput {
 }
 
 export interface GenerationSubmissionStore {
+  lookupSubmission?(input: { userId: string; idempotencyKey: string }): Promise<GenerationSubmissionSnapshot | null>;
   submit(
     input: GenerationSubmissionInput,
   ): Promise<ImageSubmissionResponse & { deduplicated: boolean }>;
+}
+
+export interface GenerationSubmissionSnapshot {
+  batchId: string;
+  sessionId: string;
+  config: { registryVersion?: string };
+  model: string;
+  provider: string;
+  requestHash: string;
+  skillId?: string;
+  skillVersion?: string;
+  source: 'direct' | 'chat_tool';
 }
 
 function canonicalize(value: unknown): unknown {
@@ -141,13 +154,39 @@ export function toImageSubmissionResponse(result: {
   });
 }
 
+export async function restoreImageSubmission(userId: string, raw: ImageApiRequest, idempotencyKey: string, correlationId: string, snapshot: GenerationSubmissionSnapshot, source: 'direct' | 'chat_tool' = 'direct'): Promise<GenerationSubmissionInput> {
+  z.uuid().parse(userId); z.uuid().parse(idempotencyKey); z.uuid().parse(correlationId);
+  const request = imageRequestSchema.parse(raw);
+  const config = { ...request.params, ...(snapshot.config.registryVersion ? { registryVersion: snapshot.config.registryVersion } : {}) };
+  const model = request.model ?? snapshot.model, provider = request.provider ?? snapshot.provider;
+  const skillVersion = request.skillId === snapshot.skillId ? snapshot.skillVersion : undefined;
+  const requestHash = await hashCanonicalRequest({ config, model, prompt: request.prompt, provider, sessionId: request.sessionId, skillId: request.skillId, skillVersion, source, userId });
+  if (snapshot.source !== source || requestHash !== snapshot.requestHash)
+    throw new ApiRouteError({ code: 'conflict', status: 409, retryable: false, message: '相同幂等键已用于另一份请求，请重新提交。' });
+  return { billing: request.billing, config, correlationId, idempotencyKey, model, prompt: request.prompt, provider,
+    requestHash: snapshot.requestHash, sessionId: request.sessionId, skillId: request.skillId, skillVersion, source, userId };
+}
+
 export function createImageService(store: GenerationSubmissionStore) {
+  async function recover(userId: string, raw: ImageApiRequest, idempotencyKey: string, source: 'direct' | 'chat_tool' = 'direct') {
+    if (!store.lookupSubmission) return null;
+    z.uuid().parse(userId);
+    z.uuid().parse(idempotencyKey);
+    const request = imageRequestSchema.parse(raw);
+    const snapshot = await store.lookupSubmission({ userId, idempotencyKey });
+    if (!snapshot) return null;
+    // Compare the original material and registry version before today's admission
+    // whitelist. A committed request may be recovered, never repurchased.
+    await restoreImageSubmission(userId, request, idempotencyKey, idempotencyKey, snapshot, source);
+    return toImageSubmissionResponse({ batchId: snapshot.batchId, sessionId: snapshot.sessionId, status: 'pending' });
+  }
   async function submitPrepared(prepared: GenerationSubmissionInput) {
     const result = await store.submit(prepared);
     return toImageSubmissionResponse(result);
   }
 
   return {
+    recover,
     prepare: prepareImageSubmission,
     async submit(
       userId: string,
@@ -156,6 +195,8 @@ export function createImageService(store: GenerationSubmissionStore) {
       correlationId: string,
       source: "direct" | "chat_tool" = "direct",
     ) {
+      const prior = await recover(userId, input, idempotencyKey, source);
+      if (prior) return prior;
       return submitPrepared(
         await prepareImageSubmission(
           userId,

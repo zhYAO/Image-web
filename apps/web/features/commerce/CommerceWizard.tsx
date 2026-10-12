@@ -1,5 +1,5 @@
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
-import { imageCreditItem } from "@zimage/domain";
+import { imageCreditItem, IMAGE_MODEL_UPGRADE_MESSAGE } from "@zimage/domain";
 import { CommerceEditor } from "./CommerceEditor";
 import { commerceGenerationPreset, hasCommerceModel } from "./commerce-presets";
 import { CommerceSelect } from "./CommerceSelect";
@@ -275,12 +275,22 @@ export function CommerceWizard({
       setBusy(false);
     }
   };
+  const unavailableModel = capabilities.length > 0 && (!hasCommerceModel(capabilities, generationSettings) || Boolean(plan?.slots.some(slot => !hasCommerceModel(capabilities, slot))));
+  const resetModel = () => {
+    if (creation.current) return;
+    const preset = commerceGenerationPreset(capabilities);
+    setGenerationSettings(preset);
+    setPlan(current => current ? { ...current, slots: current.slots.map(slot => ({ ...slot, ...preset, ...(slot.outputSpec ? { aspectRatio: aPlusAspectRatio(slot.outputSpec) } : {}) })) } : current);
+    setError(undefined);
+    setStep(1);
+  };
   const preparePlan = async (previewOnly = false): Promise<CommercePlan> => {
       if (!gateway) throw new Error("电商服务暂未连接，请稍后重试。");
       if (creation.current) {
         // A lost create response must replay the original body even after reload.
         return creation.current.plan;
       }
+      if (unavailableModel) throw new Error(IMAGE_MODEL_UPGRADE_MESSAGE);
       if (!contentOnly && scene !== 'clone' && !references.some(reference => roleOf(reference) === 'product'))
         throw new Error("请上传至少一张清晰的真实商品图。");
       const description = brief.description?.trim() || [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n');
@@ -423,7 +433,7 @@ export function CommerceWizard({
   };
   const savePlan = async (nextPlan: CommercePlan, generate: boolean) => {
     if (!gateway) throw new Error("电商服务暂未连接，请稍后重试。");
-    validateCommercePlan(
+    if (!creation.current) validateCommercePlan(
       nextPlan.brief,
       nextPlan.scene,
       nextPlan.slots,
@@ -515,15 +525,8 @@ export function CommerceWizard({
     fee={<CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} />}
     productContext={productContext} chatModel={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} setChatModel={setSelectedChatModel}
     busy={busy} recovering={recoveringCreate} active={active} error={error} total={plannedCount}
-    unavailableModel={capabilities.length > 0 && (!hasCommerceModel(capabilities, generationSettings) || Boolean(plan?.slots.some(slot => !hasCommerceModel(capabilities, slot))))}
-    resetModel={() => {
-      if (creation.current) return;
-      const preset = commerceGenerationPreset(capabilities);
-      setGenerationSettings(preset);
-      setPlan(current => current ? { ...current, slots: current.slots.map(slot => ({ ...slot, ...preset, ...(slot.outputSpec ? { aspectRatio: aPlusAspectRatio(slot.outputSpec) } : {}) })) } : current);
-      setError(undefined);
-      setStep(1);
-    }}
+    unavailableModel={unavailableModel}
+    resetModel={resetModel}
   />;
   return (
     <section
@@ -810,6 +813,7 @@ export function CommerceWizard({
               </fieldset>
             </div>
             {error && <p role="alert">{error}</p>}
+            {unavailableModel && !recoveringCreate && <p role="alert">{IMAGE_MODEL_UPGRADE_MESSAGE}<button type="button" disabled={busy} onClick={resetModel}>使用当前默认参数创建新版本</button></p>}
             {recoveringCreate && !busy && <p className={styles.note}>已保留本次方案，点击生成或保存将恢复同一任务。</p>}
             <div className={`${styles.actions} ${styles.wizardControls}`}>
               <div className={styles.generationSummary}><p className={styles.note}>
@@ -817,10 +821,10 @@ export function CommerceWizard({
                 张
               </p>
               <CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} /></div>
-              <button className={styles.primary} disabled={busy || !active || plannedCount < 1 || plannedCount > maxCommerceSlots(scene, advancedAplus)} onClick={() => void save(true)}>{busy ? '正在准备…' : `一键生成 ${step === 3 ? plan?.slots.length ?? plannedCount : plannedCount} 张`}</button>
+              <button className={styles.primary} disabled={busy || !active || (unavailableModel && !recoveringCreate) || plannedCount < 1 || plannedCount > maxCommerceSlots(scene, advancedAplus)} onClick={() => void save(true)}>{busy ? '正在准备…' : `一键生成 ${step === 3 ? plan?.slots.length ?? plannedCount : plannedCount} 张`}</button>
               {(plannedCount < 1 || plannedCount > maxCommerceSlots(scene, advancedAplus)) && <p role="alert">请选择 1–{maxCommerceSlots(scene, advancedAplus)} 张图片。</p>}
-              <button disabled={busy || !active} onClick={() => void prepare()}>调整分图方案</button>
-              <button disabled={busy || !active} onClick={() => void save()}>保存草稿</button>
+              <button disabled={busy || !active || (unavailableModel && !recoveringCreate)} onClick={() => void prepare()}>调整分图方案</button>
+              <button disabled={busy || !active || (unavailableModel && !recoveringCreate)} onClick={() => void save()}>保存草稿</button>
               <button disabled={busy} onClick={() => { clearCommerceDraft(storageKey); onClose(); }}>
                 取消方案
               </button>

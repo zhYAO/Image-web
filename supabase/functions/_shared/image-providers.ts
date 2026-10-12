@@ -1,6 +1,25 @@
 export type ImageAspectRatio = '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
 export type ImageResolution = '1K' | '2K';
 
+export const SEEDREAM_STANDARD_IMAGE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/images/generations';
+export const SEEDREAM_PLAN_IMAGE_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/plan/v3/images/generations';
+
+export function normalizeSeedreamPlanEndpoint(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('invalid_seedream_plan_endpoint');
+  }
+  const path = url.pathname.replace(/\/$/, '');
+  if (url.origin !== 'https://ark.cn-beijing.volces.com'
+    || url.username || url.password || url.search || url.hash
+    || !['/api/plan/v3', '/api/plan/v3/images/generations'].includes(path)) {
+    throw new Error('invalid_seedream_plan_endpoint');
+  }
+  return SEEDREAM_PLAN_IMAGE_ENDPOINT;
+}
+
 export interface ProviderReference {
   bytesBase64: string;
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
@@ -207,8 +226,12 @@ export async function generateSeedreamImage(
   apiKey: string,
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
+  endpoint?: string,
 ) {
-  const response = await fetcher('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+  const targetEndpoint = input.model === 'doubao-seedream-5.0-pro'
+    ? normalizeSeedreamPlanEndpoint(endpoint ?? SEEDREAM_PLAN_IMAGE_ENDPOINT)
+    : endpoint ?? SEEDREAM_STANDARD_IMAGE_ENDPOINT;
+  const response = await fetcher(targetEndpoint, {
     body: JSON.stringify(buildSeedreamRequest(input)),
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     method: 'POST',

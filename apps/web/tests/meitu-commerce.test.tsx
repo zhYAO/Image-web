@@ -77,8 +77,8 @@ vi.mock("@/features/commerce/CreativeTextField", () => ({
   ),
 }));
 const settings = {
-  provider: "gemini",
-  model: "gemini-3-pro-image",
+  provider: "seedream",
+  model: "doubao-seedream-5.0-pro",
   aspectRatio: "1:1" as const,
   resolution: "2K" as const,
 };
@@ -166,7 +166,7 @@ describe("Meitu commerce workflow contracts", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(submit).toHaveBeenCalledTimes(1);
     const plan = create.mock.calls[0]![0].plan;
-    expect(plan.slots.every(slot => slot.provider === 'gemini' && slot.model === 'gemini-3-pro-image' && slot.aspectRatio === '1:1' && slot.resolution === '2K')).toBe(true);
+    expect(plan.slots.every(slot => slot.provider === 'seedream' && slot.model === 'doubao-seedream-5.0-pro' && slot.aspectRatio === '1:1' && slot.resolution === '2K')).toBe(true);
     expect(plan.brief).toMatchObject({
       platform: "taobao",
       region: "cn",
@@ -192,7 +192,7 @@ describe("Meitu commerce workflow contracts", () => {
     const view = await wizard('product-set');
     view.unmount();
     sessionStorage.clear();
-    const capabilities = [{ provider: 'seedream', models: [{ id: 'seedream-5.0-flash', label: 'Flash', maxImages: 4, aspectRatios: ['1:1', '3:4'] as const, resolutions: ['2K'] as const }] }];
+    const capabilities = [{ provider: 'seedream', models: [{ id: 'doubao-seedream-5.0-pro', label: 'Seedream 5.0 Pro', maxImages: 4, aspectRatios: ['1:1', '3:4'] as const, resolutions: ['2K'] as const }] }];
     const create = vi.spyOn(view.gateway.commerce, 'create');
     render(<CommerceWizard {...view.props} capabilities={capabilities.map(provider => ({ ...provider, models: provider.models.map(model => ({ ...model, aspectRatios: [...model.aspectRatios], resolutions: [...model.resolutions] })) }))} settings={{ ...settings, aspectRatio: '16:9', resolution: '1K' }} />);
     fireEvent.change(screen.getByLabelText('商品描述'), { target: { value: '真实陶瓷杯' } });
@@ -201,22 +201,26 @@ describe("Meitu commerce workflow contracts", () => {
     expect(screen.getByLabelText('电商画面比例').querySelectorAll('option')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    expect(create.mock.calls[0]![0].plan.slots.every(slot => slot.provider === 'seedream' && slot.model === 'seedream-5.0-flash')).toBe(true);
+    expect(create.mock.calls[0]![0].plan.slots.every(slot => slot.provider === 'seedream' && slot.model === 'doubao-seedream-5.0-pro')).toBe(true);
   });
-  it('preserves old drafts without a settings snapshot, including individual image ratios', async () => {
+  it('preserves old drafts until explicitly upgrading to Plan before save', async () => {
     const view = await wizard('product-set');
     view.unmount();
     const brief = { name: '旧陶瓷杯', facts: '陶瓷', sellingPoints: '', platform: 'amazon' as const, region: 'us' as const, language: 'en' as const, placement: '商品展示', productReferenceIds: view.props.references.map(reference => reference.id!), styleReferenceIds: [] };
-    const slots = buildCommerceSlots(brief, 'product-set', 2, { ...settings, aspectRatio: '16:9', resolution: '1K' }).map((slot, index) => ({ ...slot, aspectRatio: index ? '3:4' as const : '16:9' as const }));
+    const slots = buildCommerceSlots(brief, 'product-set', 2, { provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '16:9', resolution: '1K' }).map((slot, index) => ({ ...slot, aspectRatio: index ? '3:4' as const : '16:9' as const }));
     saveCommerceDraft('unit-draft', { scene: 'product-set', brief, count: 2, templateId: 'soft-studio', instruction: '', roles: {}, plan: { scene: 'product-set', brief, templateId: 'soft-studio', slots } });
     const create = vi.spyOn(view.gateway.commerce, 'create');
     render(<CommerceWizard {...view.props} />);
     expect(screen.getByLabelText('电商画面比例')).toHaveValue('16:9');
     expect(screen.getByLabelText('电商分辨率')).toHaveValue('1K');
+    expect(screen.getByRole('button', { name: '保存草稿' })).toBeDisabled();
+    expect(create).not.toHaveBeenCalled();
+    expect(loadCommerceDraft('unit-draft')!.plan!.slots.map(slot => slot.aspectRatio)).toEqual(['16:9', '3:4']);
+    fireEvent.click(screen.getByRole('button', { name: '使用当前默认参数创建新版本' }));
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]![0].plan.brief).toMatchObject({ platform: 'amazon', region: 'us', language: 'en' });
-    expect(create.mock.calls[0]![0].plan.slots.map(slot => slot.aspectRatio)).toEqual(['16:9', '3:4']);
+    expect(create.mock.calls[0]![0].plan.slots).toMatchObject(slots.map(({ id, exactText, instruction, referenceIds }) => ({ id, exactText, instruction, referenceIds, ...settings })));
   });
   it("preserves detail copy across review, refresh, reorder and advanced desktop/mobile variants", async () => {
     const view = await wizard("detail");

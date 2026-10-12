@@ -28,7 +28,7 @@ begin
   select pid into pid_b from extensions.dblink('reliability_b','select pg_backend_pid()') as r(pid integer);
   select flags into saved_flags from extensions.dblink('reliability_a',
     $$select jsonb_build_object('generation',(select enabled from private.runtime_flags where flag='generation_enabled'),
-      'provider',(select enabled from private.provider_runtime_config where provider='gemini'))$$) as r(flags jsonb);
+      'provider',(select enabled from private.provider_runtime_config where provider='seedream'))$$) as r(flags jsonb);
   cleanup_sql:=format($cleanup$
     delete from pgmq.q_image_generation q using public.generations g,public.generation_batches b
       where q.message->>'generationId'=g.id::text and g.batch_id=b.id and b.user_id=%L;
@@ -38,13 +38,13 @@ begin
     delete from auth.users where id=%L;
     delete from private.generation_work where user_id=%L;
     update private.runtime_flags set enabled=%L where flag='generation_enabled';
-    update private.provider_runtime_config set enabled=%L where provider='gemini';
+    update private.provider_runtime_config set enabled=%L where provider='seedream';
   $cleanup$,owner_id,owner_id,owner_id,owner_id,owner_id,saved_flags->>'generation',saved_flags->>'provider');
   begin
     perform extensions.dblink_exec('reliability_a',format($seed$
       insert into auth.users(id,email,email_confirmed_at,is_anonymous) values(%L,%L,now(),false);
       update private.runtime_flags set enabled=true where flag='generation_enabled';
-      update private.provider_runtime_config set enabled=true where provider='gemini';
+      update private.provider_runtime_config set enabled=true where provider='seedream';
     $seed$,owner_id,owner_id||'@reliability.test'));
     perform extensions.dblink_exec('reliability_b',$remote$
       create function pg_temp.legacy_call(statement text) returns jsonb language plpgsql as $fn$
@@ -55,8 +55,8 @@ begin
     foreach operation in array array['mark','retry','fail','cleanup_complete','cleanup_fail','account_complete','account_fail'] loop
       if operation in ('mark','retry','fail') then
         select result->>'batchId' into bid from extensions.dblink('reliability_a',format(
-          'select private.submit_image_generation(%L,null,''lock test'',''gemini'',''test-model'',%L::jsonb,''direct'',null,null,null,%L,%L,%L)',
-          owner_id,'{"count":1,"aspectRatio":"1:1","resolution":"1K"}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid())) as r(result jsonb);
+          'select private.submit_image_generation(%L,null,''lock test'',''seedream'',''doubao-seedream-5.0-pro'',%L::jsonb,''direct'',null,null,null,%L,%L,%L)',
+          owner_id,'{"count":1,"aspectRatio":"1:1","resolution":"2K"}',gen_random_uuid(),gen_random_uuid(),gen_random_uuid())) as r(result jsonb);
         select id into gid from extensions.dblink('reliability_a',format('select id from public.generations where batch_id=%L',bid)) as r(id uuid);
         perform extensions.dblink_exec('reliability_a','begin');
         select result into claim from extensions.dblink('reliability_a','select public.claim_image_generation()') as r(result jsonb);

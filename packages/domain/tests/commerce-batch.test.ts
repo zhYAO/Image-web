@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCommerceSlots, creativeBatchCreateSchema, creativeBatchSchema } from '../src';
 
-const settings = { provider: 'gemini' as const, model: 'gemini-3-pro-image', aspectRatio: '1:1' as const, resolution: '2K' as const };
+const settings = { provider: 'seedream' as const, model: 'doubao-seedream-5.0-pro', aspectRatio: '1:1' as const, resolution: '2K' as const };
 const brief = () => ({ name: '测试商品', description: '已确认的商品描述', facts: '', sellingPoints: '', platform: 'taobao' as const,
   placement: '商品展示', productReferenceIds: [crypto.randomUUID()], styleReferenceIds: [] });
 const task = () => {

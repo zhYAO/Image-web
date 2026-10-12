@@ -12,7 +12,7 @@ import { createTestGateway, setupWorkspaceTest } from './workspace-test-fixtures
 
 setupWorkspaceTest();
 beforeEach(() => { sessionStorage.clear(); window.history.replaceState({}, '', '/'); });
-const settings = { provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1' as const, resolution: '2K' as const };
+const settings = { provider: 'seedream', model: 'doubao-seedream-5.0-pro', aspectRatio: '1:1' as const, resolution: '2K' as const };
 
 describe('commerce navigation and durable drafts', () => {
   it('preserves legacy scenes and real task/view addresses', () => {

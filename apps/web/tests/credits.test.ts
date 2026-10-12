@@ -13,6 +13,7 @@ describe("credit accounting boundaries", () => {
     const state = initialMockCredits();
     const item = imageCreditItem({
       provider: "seedream",
+      model: "doubao-seedream-5.0-pro",
       resolution: "2K",
       count: 1,
     });
@@ -37,14 +38,15 @@ describe("credit accounting boundaries", () => {
   it("rejects altered idempotency content and prices", () => {
     const s = initialMockCredits();
     const item = imageCreditItem({
-      provider: "gemini",
+      provider: "seedream",
+      model: "doubao-seedream-5.0-pro",
       resolution: "2K",
       count: 1,
     });
     reserveMockCredits(s, "r", "a", item);
     expect(() => reserveMockCredits(s, "r", "b", item)).toThrow();
     expect(() =>
-      checkMockQuote([item], { version: "2026-09-15.1", totalMinor: 1 }),
+      checkMockQuote([item], { version: TRIAL_CREDIT_CATALOG.version, totalMinor: 1 }),
     ).toThrow();
   });
   it("keeps credits, image quota, stale price and unknown errors distinct", () => {
@@ -107,7 +109,7 @@ describe("credit accounting boundaries", () => {
                 exactText: "标题",
                 referenceIds: [],
                 provider: "seedream",
-                model: "seedream-5.0-flash",
+                model: "doubao-seedream-5.0-pro",
                 aspectRatio: "3:4",
                 resolution: "2K",
               },

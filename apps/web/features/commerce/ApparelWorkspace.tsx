@@ -503,6 +503,7 @@ export function ApparelWorkspace({
             {error}
           </p>
         )}
+        {dirty && <p>资料或素材有修改，请先保存新版本。</p>}
         <div className={styles.actions}>
           <button
             type="button"
@@ -534,7 +535,6 @@ export function ApparelWorkspace({
             </button>
           )}
         </div>
-        {dirty && <p>资料或素材有修改，请先保存新版本。</p>}
       </div>
       <aside className={styles.preview}>
         <header>

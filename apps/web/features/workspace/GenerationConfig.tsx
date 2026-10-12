@@ -30,8 +30,8 @@ export function findModelCapability(
   provider?: string,
   modelId?: string,
 ) {
-  const providerCapability = capabilities.find((item) => item.provider === provider) ?? capabilities[0];
-  const model = providerCapability?.models.find((item) => item.id === modelId) ?? providerCapability?.models[0];
+  const providerCapability = provider ? capabilities.find((item) => item.provider === provider) : capabilities[0];
+  const model = modelId ? providerCapability?.models.find((item) => item.id === modelId) : providerCapability?.models[0];
   return providerCapability && model ? { model, provider: providerCapability.provider } : undefined;
 }
 

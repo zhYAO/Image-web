@@ -1,5 +1,18 @@
 # ZImage 项目进度
 
+## 2026-10-12 服装滚动与 Seedream Plan（本地验收完成，仅开发分支提交）
+
+- 用户明确本轮先不上线，仅提交代码。以最新远程 main `e4fbb37c91bf3569d3812ac3d9c1327430feeb53` 为基线，在独立分支 `codex/apparel-scroll-seedream5-20261012` 实现；原工作树、上轮交付、历史价格和真实记录保留。未合并 main、发布网站/Worker、应用生产迁移或配置生产 Secrets。
+- 真实复现服装页左侧滚动：1440×900/720/600 下表单被内容撑到约 1485px，自身 `overflow-y:visible`，外层隐藏溢出，滚轮不能到达下半部分。修复剩余 flex 高度和 grid/panel 最小尺寸，桌面左右独立滚动，既有窄屏断点统一滚动；把既有修改提示移到 sticky 操作区之前，末尾按钮位移从 31.64px 降为容差内 0.453px。
+- 桌面 Chromium Mock 实验通过 3 种桌面高度、6 种窄窗口、连续小 delta、左右独立滚动及图片/积分弹层开关；最后输入和结果可达，外层不跟随滚动，积分不变。仅为桌面窗口缩放和模拟连续滚轮，不声称真实手机/触控板硬件、生产账号或私有 Storage 验收。临时 Next/CDP 已释放；证据在 `/workspace/scratch/Image-web-apparel-seedream-20261012/browser/`。
+- 按用户选择保留 Plan，精确模型 `doubao-seedream-5.0-pro` 已由火山官方 Ark CLI 默认资源文档核实。新图片 UI、默认值和服务端/SQL 新保存提交仅此模型；聊天保留独立原契约。沿用 2K、五种比例、30 minor/张，新注册/价格目录 `2026-10-12.1`。旧草稿须显式更新并保存新版本；既有 direct、聊天生图和电商原请求恢复保持旧模型、注册版本、hash、批次及助手回执，不重复预占、扣费或调用。
+- Plan 的新持久模型身份、独立 `ZIMAGE_SEEDREAM_PLAN_API_KEY` 与可选 `ZIMAGE_SEEDREAM_PLAN_IMAGE_ENDPOINT` 区分旧队列。完整 Plan 端点直接使用，Base URL 仅补一次后缀；错误源、按量路径、凭据或重复后缀拒绝，不借用旧 Key、不回退到按量。旧 Seedream 4.5/Flash/Pro 与 Gemini 仅保留已排队执行映射和历史结算。空值示例与未来安全填写位置见 [配置交接](seedream-plan-handoff.md)，本轮不要求填写密钥。
+- 最终固定源码全量单次验收：Domain **76/76（10 文件）**、Web **631/631（91 文件）**，使用命令级 `--maxWorkers=2`，仓库/CI 默认未改；Worker **70/70**、运维辅助 **20/20**、预算保护 **5/5**、lint、typecheck 与 `git diff --check` 通过。初始化 pnpm 依赖自检试图自动 install 并失败，之后仅命令级禁止自动 install，沿用现有依赖；满盘及并行修改期间的早期不完整测试不作为通过证据。旧聊天恢复和新准入专项先 RED 后 GREEN。
+- 新迁移 `20261012024930_seedream_plan_only_image_admission.sql` 仅在自有 network-none 隔离库验证：29 SQL 文件/1005 TAP 为 **1001 pass + 4 明确 legacy fixture skip，0 fail**，所有进程退出 0；相同最新四条另用历史 fixture 验证 **4/4**，不冒充新的可靠性迁移前升级。新准入专项 **67/67**，真实旧 RPC 形成的 16 类记录迁移前后完全一致、补验 **16/16**；旧验收库摘要不变，原后台进程恢复。现有 service-only/空 search_path 权限保留，隔离 security advisors 无 WARN/ERROR。未连接生产数据库执行写入。
+- 标准 Next.js 16.3 Turbopack Mock 构建通过。为核验云环境跨目录依赖链接，在临时隔离副本中逐字节核对 500 个源码文件、复制已有依赖并只在副本重定位链接；运行时源码摘要未变，没有安装依赖或修改项目构建配置。原链接失败日志和最终成功记录均保留在 `/tmp/zimage-apparel-seedream-20261012-final-qa/`，没有将环境失败隐瞒为项目通过。
+- 独立全轮只读审查最终 Critical 0 / Important 0 / Minor 0；早期旧聊天生图恢复与 SQL 升级提示问题已补回归修复。新增行密钥模式扫描无命中；没有读取聊天新 Key、真实环境文件或进行付费生成。真实 Plan 账户能力/响应、生产迁移与上线仍未执行，本地构造/Mock/SQL 不能代替这些验收。
+- 已核实唯一工作流 push 仅匹配 `setup2`/`main`，部署需 main 且非 PR；本轮 codex 开发分支推送不会触发该工作流。没有活动 Git 推送 hook，不改工作流，不合并或触发生产发布。
+
 ## 2026-10-10 可靠性、安全修复与专用批量创作退役（功能版本已激活，发布门禁修复）
 
 - 在新的 Codex 云任务工作区以远程 `fef6089603e4397b45481cf7ea3fe95d6ed36450` 为基线实现；父对话原 dot 云电脑及原工作树保留。用户已确认暂停尚未提交的存量批次条目，并明确授权整批提交、发布及本轮三项生产权限收紧。

@@ -890,7 +890,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
           </fieldset>
         </div>
         <footer className={styles.actionBar}>
-          {p.unavailableModel && <p role="alert">历史生成模型已不可用。<button type="button" disabled={p.busy || p.recovering} onClick={p.resetModel}>使用当前默认参数创建新版本</button></p>}
+          {p.unavailableModel && <p role="alert">历史图片模型已停止新生成，请主动更新为 Seedream 5.0 Pro 并保存新版本。<button type="button" disabled={p.busy || p.recovering} onClick={p.resetModel}>使用当前默认参数创建新版本</button></p>}
           {p.error && (
             <p role="alert" className={styles.error}>
               {p.error}
@@ -933,7 +933,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
           </div>
           <div className={styles.secondaryActions}>
             <button
-              disabled={p.busy || !p.active || (!p.capabilities.length && !p.recovering)}
+              disabled={p.busy || !p.active || (!p.capabilities.length && !p.recovering) || (p.unavailableModel && !p.recovering)}
               onClick={() => p.save(false)}
             >
               保存草稿
