@@ -67,21 +67,28 @@ export class SeedreamOnlyGateway extends CapturingGateway {
   }
 }
 
-export class MultiModelGateway extends CapturingGateway {
+export class UnavailableImageGateway extends SeedreamOnlyGateway {
+  override async getProviderHealth() {
+    return (await super.getProviderHealth()).map((health) => health.provider === 'seedream'
+      ? { ...health, status: 'unavailable' as const }
+      : health);
+  }
+}
+
+export class PlanOnlyGateway extends CapturingGateway {
   override async getProviderCapabilities(): Promise<ProviderCapability[]> {
     return [
       {
         models: [
-          { aspectRatios: ['1:1', '16:9'], id: 'wide', label: 'Wide', maxImages: 2, resolutions: ['1K'] },
-          { aspectRatios: ['3:4', '1:1'], id: 'portrait', label: 'Portrait', maxImages: 4, resolutions: ['1K', '2K'] },
+          { aspectRatios: ['1:1', '3:4', '4:3', '9:16', '16:9'], id: 'doubao-seedream-5.0-pro', label: 'Seedream 5.0 Pro', maxImages: 4, resolutions: ['2K'] },
         ],
-        provider: 'Studio',
+        provider: 'seedream',
       },
     ];
   }
 
   override async getProviderHealth() {
-    return [{ checkedAt: '2026-08-23', provider: 'Studio', status: 'healthy' as const }];
+    return [{ checkedAt: '2026-08-23', provider: 'seedream', status: 'healthy' as const }];
   }
 }
 

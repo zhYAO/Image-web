@@ -15,7 +15,7 @@ describe('explicit creation modes', () => {
     act(() => {
       const store = useWorkspaceStore.getState();
       store.setSelectedProvider('seedream');
-      store.setSelectedModelId('seedream-5.0-flash');
+      store.setSelectedModelId('doubao-seedream-5.0-pro');
       store.setCount(1);
       store.setAspectRatio('4:3');
     });
@@ -27,7 +27,7 @@ describe('explicit creation modes', () => {
     await waitFor(() => expect(gateway.lastImageRequest ?? gateway.lastChatRequest).toBeDefined());
     expect(gateway.lastImageRequest).toMatchObject({
       prompt: '一只橘猫坐在窗边，午后阳光，写实摄影',
-      provider: 'seedream', model: 'seedream-5.0-flash', count: 1, aspectRatio: '4:3', resolution: '2K',
+      provider: 'seedream', model: 'doubao-seedream-5.0-pro', count: 1, aspectRatio: '4:3', resolution: '2K',
     });
     expect(gateway.lastChatRequest).toBeUndefined();
   });

@@ -10,7 +10,7 @@ async function wizard(initialTemplateId?: string, seedPlan?: CommercePlan) {
   const gateway = createTestGateway();
   const session = await gateway.createSession('海报测试');
   const create = vi.spyOn(gateway.commerce, 'create');
-  render(<CommerceWizard scene="xhs-poster" seedPlan={seedPlan} initialTemplateId={initialTemplateId} sessionId={session.id} gateway={gateway.commerce} references={[]} capabilities={IMAGE_PROVIDER_CAPABILITIES} settings={{ provider: 'gemini', model: 'gemini-3-pro-image', aspectRatio: '1:1', resolution: '1K' }} onReferenceAdd={() => {}} onReferenceRemove={() => {}} onReferenceUploaded={() => {}} onSaved={() => {}} onClose={() => {}} />);
+  render(<CommerceWizard scene="xhs-poster" seedPlan={seedPlan} initialTemplateId={initialTemplateId} sessionId={session.id} gateway={gateway.commerce} references={[]} capabilities={IMAGE_PROVIDER_CAPABILITIES} settings={{ provider: 'seedream', model: 'doubao-seedream-5.0-pro', aspectRatio: '1:1', resolution: '2K' }} onReferenceAdd={() => {}} onReferenceRemove={() => {}} onReferenceUploaded={() => {}} onSaved={() => {}} onClose={() => {}} />);
   return { create };
 }
 async function choose(label: string, option: string) {
@@ -43,7 +43,7 @@ describe('小红书海报字段方案', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('请上传至少一张清晰的真实商品图');
     expect(screen.getByRole('button', { name: /一键生成/ })).toBeEnabled();
   });
-  it('keeps a saved historical template explicit and preserves it on save', async () => {
+  it('keeps a historical template when explicitly upgrading its model before saving', async () => {
     const seedPlan: CommercePlan = {
       scene: 'xhs-poster', templateId: 'soft-studio',
       brief: { name: '历史标题', facts: '已有内容', sellingPoints: '', platform: 'xiaohongshu', placement: '图文内容', contentMode: 'content', productReferenceIds: [], styleReferenceIds: [] },
@@ -53,10 +53,14 @@ describe('小红书海报字段方案', () => {
     const historical = COMMERCE_TEMPLATES.find(template => template.id === 'soft-studio')!;
     expect(screen.getByLabelText('风格模板').closest('.ant-select')).toHaveTextContent(`历史模板 · ${historical.name}`);
     for (const guidance of screen.getAllByText(historical.guidance)) expect(guidance).toBeVisible();
+    expect(seedPlan.slots[0]!.model).toBe('gemini-3-pro-image');
+    fireEvent.click(screen.getByRole('button', { name: '使用当前默认参数创建新版本' }));
     await preview();
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     expect(create.mock.calls[0]?.[0].plan.templateId).toBe('soft-studio');
+    expect(create.mock.calls[0]?.[0].plan.slots[0]).toMatchObject({ provider: 'seedream', model: 'doubao-seedream-5.0-pro', resolution: '2K' });
+    expect(seedPlan.slots[0]!.model).toBe('gemini-3-pro-image');
   });
   it('splits eight cards and preserves edited copy and roles after content change and count reduction', async () => {
     const { create } = await wizard(); fill();

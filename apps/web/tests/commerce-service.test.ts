@@ -14,7 +14,7 @@ const brief = {
 };
 const settings = {
   provider: "seedream",
-  model: "seedream-5.0-flash",
+  model: "doubao-seedream-5.0-pro",
   aspectRatio: "1:1" as const,
   resolution: "2K" as const,
 };
@@ -39,7 +39,7 @@ describe("trusted commerce service", () => {
     const legacy={...plan,slots:plan.slots.map(slot=>({...slot,model:'seedream-4.5'})),id:crypto.randomUUID(),sessionId,revision:1,createdAt:'now',updatedAt:'now',runs:[],selections:[]};
     const rpc=vi.fn().mockResolvedValueOnce({data:legacy,error:null}).mockResolvedValueOnce({data:null,error:null});
     expect(await createCommerceService({rpc}).dispatch(userId,'get',legacy.id,{},crypto.randomUUID())).toMatchObject({slots:legacy.slots});
-    await expect(createCommerceService({rpc}).dispatch(userId,'save',legacy.id,{requestId:crypto.randomUUID(),expectedRevision:1,plan:legacy},crypto.randomUUID())).rejects.toThrow(/Flash.*Pro/);
+    await expect(createCommerceService({rpc}).dispatch(userId,'save',legacy.id,{requestId:crypto.randomUUID(),expectedRevision:1,plan:legacy},crypto.randomUUID())).rejects.toThrow("所选图片模型已停止新生成，请主动更新为 Seedream 5.0 Pro 并保存新版本。");
     expect(rpc.mock.calls).toHaveLength(2);
   });
 

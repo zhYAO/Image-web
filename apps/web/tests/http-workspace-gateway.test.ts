@@ -156,12 +156,12 @@ describe('HttpWorkspaceGateway', () => {
       .mockResolvedValueOnce(json({ batchId, sessionId, status: 'pending' }, 202))
       .mockResolvedValueOnce(json({ batch: {
         assets: [{ id: '40000000-0000-4000-8000-0000000000a1', status: 'pending' }],
-        config: { aspectRatio: '1:1', count: 1, resolution: '1K' },
+        config: { aspectRatio: '1:1', count: 1, resolution: '2K' },
         createdAt: '2026-08-24T00:00:00.000Z',
         id: batchId,
-        model: 'gemini-3-pro-image',
+        model: 'doubao-seedream-5.0-pro',
         prompt: '商品图',
-        provider: 'gemini',
+        provider: 'seedream',
         sessionId,
         source: 'direct',
         status: 'pending',
@@ -174,7 +174,7 @@ describe('HttpWorkspaceGateway', () => {
       count: 1,
       prompt: '商品图',
       references: [{ file, mimeType: file.type, name: file.name, size: file.size }],
-      resolution: '1K',
+      resolution: '2K',
       sessionId,
     })).resolves.toMatchObject({ id: batchId, status: 'pending' });
 
@@ -211,7 +211,7 @@ describe('HttpWorkspaceGateway', () => {
         config: { aspectRatio: '1:1', count: 1, resolution: '2K' },
         createdAt: '2026-08-24T00:00:00.000Z',
         id: batchId,
-        model: 'seedream-5.0-flash',
+        model: 'doubao-seedream-5.0-pro',
         prompt: '商品图',
         provider: 'seedream',
         sessionId,

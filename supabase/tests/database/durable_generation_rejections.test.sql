@@ -3,20 +3,20 @@ create extension if not exists pgtap with schema extensions;
 select no_plan();
 -- Real local transactions/queue/billing; no provider or physical Storage calls.
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=true where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider='seedream';
 update private.credit_settings set enabled=true;
 delete from pgmq.q_image_generation;
-delete from private.provider_health_windows where provider='gemini';
+delete from private.provider_health_windows where provider='seedream';
 insert into auth.users(id,email,email_confirmed_at,is_anonymous)
   values('f3000000-0000-4000-8000-000000000001','rejection@example.invalid',now(),false);
 create function pg_temp.new_rejection_job() returns jsonb language plpgsql as $$
 declare request_id uuid:=gen_random_uuid(); admitted jsonb;
 begin
   admitted:=public.credit_dispatch('f3000000-0000-4000-8000-000000000001','image',jsonb_build_object(
-    'requestId',request_id,'prompt','Local rejection test','provider','gemini','model','gemini-3-pro-image',
-    'config',jsonb_build_object('count',1,'resolution','2K','aspectRatio','1:1','referenceIds','[]'::jsonb,'registryVersion','2026-08-25.1'),
+    'requestId',request_id,'prompt','Local rejection test','provider','seedream','model','doubao-seedream-5.0-pro',
+    'config',jsonb_build_object('count',1,'resolution','2K','aspectRatio','1:1','referenceIds','[]'::jsonb,'registryVersion','2026-10-12.1'),
     'requestHash',request_id::text,'correlationId',gen_random_uuid(),
-    'billing',jsonb_build_object('version','2026-10-06.1','totalMinor',80)));
+    'billing',jsonb_build_object('version','2026-10-12.1','totalMinor',30)));
   return public.claim_image_generation();
 end;
 $$;
@@ -29,7 +29,7 @@ create function pg_temp.rejection_release_count(c jsonb) returns bigint language
     where o.original_generation_id=(c->>'generationId')::uuid and l.kind='release';
 $$;
 create function pg_temp.rejection_health_count() returns bigint language sql as $$
-  select coalesce(sum(total_count),0)::bigint from private.provider_health_windows where provider='gemini';
+  select coalesce(sum(total_count),0)::bigint from private.provider_health_windows where provider='seedream';
 $$;
 create temporary table rejection_cases(name text primary key,claim jsonb);
 insert into rejection_cases values('atomic',pg_temp.new_rejection_job());
@@ -48,7 +48,7 @@ select ok((select pg_temp.rejection_step(claim,'checkpoint_rejection') from reje
 select ok(not (select pg_temp.rejection_step(claim,'checkpoint_rejection','provider_error') from rejection_cases where name='atomic'),'checkpoint cannot change its durable code');
 select ok(not (select pg_temp.rejection_step(claim,'fail','provider_error') from rejection_cases where name='atomic'),'finalization cannot bypass moderation audit by changing code');
 select ok(not (select pg_temp.rejection_step(claim,'unknown') from rejection_cases where name='atomic'),'known rejection cannot become unknown');
-select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),80::bigint,'checkpoint alone retains hold');
+select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),30::bigint,'checkpoint alone retains hold');
 select is(pg_temp.rejection_health_count(),0::bigint,'checkpoint alone records no provider sample');
 
 -- The audit INSERT fails within the finalization transaction. pgTAP catches
@@ -111,7 +111,7 @@ select ok((select pg_temp.rejection_step(claim,'unknown') from rejection_cases w
 select is((select status from public.generations where id=(select (claim->>'generationId')::uuid from rejection_cases where name='unknown')),'processing','unknown retains processing');
 select is((select status from private.credit_operations where original_generation_id=(select (claim->>'generationId')::uuid from rejection_cases where name='unknown')),'needs_review','unknown requires manual reconciliation');
 select is((select pg_temp.rejection_release_count(claim) from rejection_cases where name='unknown'),0::bigint,'unknown never refunded');
-select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),80::bigint,'unknown retains credit hold');
+select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),30::bigint,'unknown retains credit hold');
 select is(pg_temp.rejection_health_count(),4::bigint,'three definite failures and one unknown recorded');
 update private.generation_work set lease_until=clock_timestamp()-interval '1 second'
   where generation_id=(select (claim->>'generationId')::uuid from rejection_cases where name='unknown');
@@ -119,6 +119,6 @@ select pgmq.send('image_generation',jsonb_build_object('generationId',claim->'ge
 select is(public.claim_image_generation()->>'reason','provider_reconciliation_required','expired unknown is archived for manual reconciliation instead of rejection recovery');
 select is(pg_temp.rejection_health_count(),4::bigint,'unknown redelivery adds no health sample');
 select is((select pg_temp.rejection_release_count(claim) from rejection_cases where name='unknown'),0::bigint,'unknown redelivery still cannot refund');
-select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),80::bigint,'unknown redelivery retains payment hold');
+select is((select frozen_minor from private.credit_wallets where user_id='f3000000-0000-4000-8000-000000000001'),30::bigint,'unknown redelivery retains payment hold');
 select finish();
 rollback;

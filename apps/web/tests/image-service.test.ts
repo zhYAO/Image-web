@@ -39,10 +39,10 @@ describe('image submission service', () => {
 
     expect(submit).toHaveBeenCalledTimes(2);
     expect(submit.mock.calls[0]?.[0]).toMatchObject({
-      config: { aspectRatio: '16:9', count: 2, resolution: '2K' },
-      model: 'gemini-3-pro-image',
+      config: { aspectRatio: '16:9', count: 2, resolution: '2K', registryVersion: '2026-10-12.1' },
+      model: 'doubao-seedream-5.0-pro',
       prompt: '极简商品图',
-      provider: 'gemini',
+      provider: 'seedream',
       skillVersion: '2.0.0',
       source: 'direct',
       userId,

@@ -3,7 +3,7 @@ set local timezone='UTC';
 create extension if not exists pgtap with schema extensions;
 select no_plan();
 update private.runtime_flags set enabled=true where flag='generation_enabled';
-update private.provider_runtime_config set enabled=true where provider='gemini';
+update private.provider_runtime_config set enabled=true where provider='seedream';
 insert into auth.users(id,email,email_confirmed_at,is_anonymous)
 values('c1000000-0000-4000-8000-000000000001','review-regressions@example.invalid',now(),false);
 create function pg_temp.review_job(error_code text default null, submission_state text default 'not_submitted', reserved_at timestamptz default now())
@@ -12,10 +12,10 @@ declare s uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); g uuid:=gen_random
 begin
   insert into public.sessions(id,user_id) values(s,'c1000000-0000-4000-8000-000000000001');
   insert into public.generation_batches(id,user_id,session_id,source,prompt,provider,model,config,idempotency_key,request_hash)
-  values(b,'c1000000-0000-4000-8000-000000000001',s,'direct','test','gemini','test-model',
-    '{"count":1,"aspectRatio":"1:1","resolution":"1K"}',b::text,b::text);
+  values(b,'c1000000-0000-4000-8000-000000000001',s,'direct','test','seedream','doubao-seedream-5.0-pro',
+    '{"count":1,"aspectRatio":"1:1","resolution":"2K"}',b::text,b::text);
   insert into public.generations(id,batch_id,provider,model,prompt,params,status,error_code,provider_submission_state)
-  values(g,b,'gemini','test-model','test','{}',case when error_code is null then 'pending' else 'failed' end,error_code,submission_state);
+  values(g,b,'seedream','doubao-seedream-5.0-pro','test','{}',case when error_code is null then 'pending' else 'failed' end,error_code,submission_state);
   insert into private.quota_ledger(user_id,batch_id,generation_id,entry_type,amount,business_key,created_at)
   values('c1000000-0000-4000-8000-000000000001',b,g,'reserve',1,'reserve:'||g,reserved_at);
   return g;
@@ -35,7 +35,7 @@ select public.fail_image_generation(0,(select gid from review_cases where name='
 select is((select created_at from private.quota_ledger where business_key='release:'||(select gid from review_cases where name='old_fail')),
   (select created_at from private.quota_ledger where business_key='reserve:'||(select gid from review_cases where name='old_fail')),'legacy failure release uses original reservation timestamp');
 
--- Persisted pre-upgrade states have no journal, including archived queue results.
+-- Persisted states may have no journal, including archived queue results.
 insert into review_cases values('legacy_unknown',pg_temp.review_job('provider_result_unknown','unknown')),
   ('legacy_storage',pg_temp.review_job('result_storage_failed','submitted')),
   ('legacy_typed',pg_temp.review_job('provider_error','submitted')),
@@ -51,8 +51,8 @@ select lives_ok(format('select private.recreate_image_generation(%L,%L,''failed'
 -- Fill today's remaining allowance with actual reserve rows; yesterday's refunds
 -- must not let the authoritative submit RPC accept generation 31.
 select pg_temp.review_job() from generate_series(1,25);
-select throws_ok($sql$select private.submit_image_generation('c1000000-0000-4000-8000-000000000001',null,'over quota','gemini','test-model',
-  '{"count":1,"aspectRatio":"1:1","resolution":"1K"}','direct',null,null,null,'review-over-quota','review-over-quota',gen_random_uuid())$sql$,
+select throws_ok($sql$select private.submit_image_generation('c1000000-0000-4000-8000-000000000001',null,'over quota','seedream','doubao-seedream-5.0-pro',
+  '{"count":1,"aspectRatio":"1:1","resolution":"2K"}','direct',null,null,null,'review-over-quota','review-over-quota',gen_random_uuid())$sql$,
   'P0001','quota_exceeded','prior-day refunds do not permit a 31st current-day reservation');
 -- The RPC also treats a post-submission 'fail' without rejection evidence as
 -- unknown, even if a caller forgets the worker's TypeScript classification.

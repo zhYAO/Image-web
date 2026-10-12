@@ -3,7 +3,7 @@ import { buildCommerceSlots, compileCommerceSlot, validateCommercePlan } from '.
 import { COMMERCE_TEMPLATES } from '../src/commerce-templates';
 
 const brief = { name: '周末阅读', facts: '选一本书\n留出半小时\n记录一句感想', sellingPoints: '', platform: 'xiaohongshu' as const, placement: '海报', contentMode: 'content' as const, productReferenceIds: [], styleReferenceIds: [] };
-const settings = { provider: 'seedream', model: 'seedream-5.0-flash', aspectRatio: '3:4' as const, resolution: '2K' as const };
+const settings = { provider: 'seedream', model: 'doubao-seedream-5.0-pro', aspectRatio: '3:4' as const, resolution: '2K' as const };
 describe('content posters', () => {
   it('accepts content posters without inventing product references', () => {
     const slots = buildCommerceSlots(brief, 'xhs-poster', 1, settings);

@@ -777,6 +777,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     if (commerceRef.current?.edit(prompt)) { setDraft(''); return; }
     // The image switch is explicit generation intent; descriptions need no command prefix.
     const generate = imageCreationEnabled && !isCommerceDiscussion(prompt) && !hasTextOnlyImageIntent(prompt);
+    if (generate && !findModelCapability(capabilities, selectedProvider, selectedModelId)) {
+      setFeedback({ message: '所选图片模型已停止新生成，请主动更新为 Seedream 5.0 Pro。' });
+      return;
+    }
     const activeProvider = generate ? selectedProvider : selectedChatModel;
     if (health.find((item) => item.provider === activeProvider)?.status === 'unavailable') {
       const error: SafeError = { code: 'PROVIDER_UNAVAILABLE', message: '所选服务暂时不可用，请选择其他 provider。', retryable: true };
@@ -1043,7 +1047,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
               items={activeRuntime?.timeline ?? []} references={references} capabilities={commerceCapabilities}
               timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'}
-              settings={{ provider: selectedProvider ?? 'gemini', model: selectedModelId ?? 'gemini-3-pro-image', aspectRatio, resolution }}
+              settings={{ provider: selectedProvider ?? 'seedream', model: selectedModelId ?? 'doubao-seedream-5.0-pro', aspectRatio, resolution }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference}
               onReferencesAdopt={(next, sessionId) => {
                 const current = useWorkspaceStore.getState();
@@ -1084,6 +1088,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           </div>
           {!legacyCommercePending && !commerceActive && !(commerceLaunch?.sessionId === activeSessionId && commerceMode?.sessionId !== activeSessionId) && <div className={styles.composerDock}>
             {showScrollToBottom && <Button aria-label="回到底部" className={styles.scrollToBottom} icon={<ArrowDown size={17} />} onClick={() => scrollToBottom('smooth')} shape="circle" />}
+            {imageCreationEnabled && !modelsLoading && capabilities.length > 0 && !selectedModel && <p role="alert">
+              当前草稿的图片模型已停止新生成，请主动更新模型后发送。
+              <Button onClick={() => { const current = capabilities[0]; const model = current?.models[0]; if (current && model) selectModel(current.provider, model.id); }}>更新为 Seedream 5.0 Pro</Button>
+            </p>}
             <UnifiedComposer
               activePopover={activePopover}
               aspectRatio={aspectRatio}

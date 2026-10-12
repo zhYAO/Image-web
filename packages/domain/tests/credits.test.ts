@@ -21,9 +21,9 @@ describe("credit pricing", () => {
     expect(
       quoteCredits(TRIAL_CREDIT_CATALOG, [
         imageCreditItem({ provider: "seedream", resolution: "2K", count: 2 }),
-        imageCreditItem({ provider: "gemini", resolution: "1K", count: 1 }),
+        { operation: 'chat', provider: 'doubao', model: 'doubao', resolution: '', count: 1 },
       ]).totalMinor,
-    ).toBe(120);
+    ).toBe(62);
   });
   it("does not silently quote unsupported selections as free", () => {
     expect(() =>
