@@ -1,7 +1,6 @@
 "use client";
 
 import { COMMERCE_SCENES, COMMERCE_PRIMARY_SCENE_IDS } from "@zimage/domain";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Pause, Play } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -26,17 +25,17 @@ type Gesture = {
   y: number;
   dx: number;
   locked: boolean;
+  vertical: boolean;
 };
 
 export function HomeCommerceCarousel() {
   const compact = useMediaQuery("(max-width: 767px)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const size = compact ? 1 : 3;
-  const last = Math.max(0, featured.length - size);
+  const last = Math.floor((featured.length - 1) / size) * size;
   const [cursor, setCursor] = useState(0);
-  const index = Math.min(cursor, last);
+  const index = Math.floor(Math.min(cursor, last) / size) * size;
   const [drag, setDrag] = useState(0);
-  const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [focusedPosition, setFocusedPosition] = useState<number | null>(null);
@@ -47,18 +46,18 @@ export function HomeCommerceCarousel() {
   const gesture = useRef<Gesture | undefined>(undefined);
   const suppressClick = useRef(false);
   const wheel = useRef({ distance: 0, at: 0, changed: 0 });
-  const [preferences, setPreferences] = useState({ last, reduced });
-  if (preferences.last !== last || preferences.reduced !== reduced) {
-    setPreferences({ last, reduced });
-    setCursor((current) => Math.min(current, last));
+  const [previousSize, setPreviousSize] = useState(size);
+  if (previousSize !== size) {
+    setPreviousSize(size);
+    setCursor(index);
     setDrag(0);
     if (
       focusedPosition !== null &&
       (focusedPosition < index || focusedPosition >= index + size)
     )
       setFocusRequest(index);
-    if (reduced || index === last) setPlaying(false);
   }
+  const playing = !reduced && !hovered && !focused && !touching && !hidden && last > 0;
   useLayoutEffect(() => {
     // Wait for aria-hidden/inert to reflect the new window before focusing.
     if (focusRequest !== null)
@@ -73,27 +72,16 @@ export function HomeCommerceCarousel() {
     return () => document.removeEventListener("visibilitychange", visibility);
   }, []);
   useEffect(() => {
-    if (
-      !playing ||
-      reduced ||
-      hovered ||
-      focused ||
-      touching ||
-      hidden ||
-      index >= last
-    )
-      return;
+    if (!playing) return;
     const timer = window.setTimeout(() => {
-      setCursor(index + 1);
-      if (index + 1 >= last) setPlaying(false);
+      setCursor(index === last ? 0 : index + size);
     }, 6000);
     return () => window.clearTimeout(timer);
-  }, [playing, reduced, hovered, focused, touching, hidden, index, last]);
+  }, [playing, index, last, size]);
 
   const moveTo = (target: number) => {
     const next = Math.max(0, Math.min(last, target));
     setCursor(next);
-    setPlaying(false);
     setDrag(0);
     // A keyboard move must not strand focus on a card that becomes inert.
     if (
@@ -116,7 +104,7 @@ export function HomeCommerceCarousel() {
     if (event.currentTarget.hasPointerCapture?.(start.id))
       event.currentTarget.releasePointerCapture(start.id);
     if (!cancel && start.locked && Math.abs(start.dx) > 45)
-      moveTo(index + (start.dx < 0 ? 1 : -1));
+      moveTo(index + (start.dx < 0 ? size : -size));
   };
 
   return (
@@ -146,9 +134,9 @@ export function HomeCommerceCarousel() {
       onKeyDown={(event) => {
         const target =
           event.key === "ArrowLeft"
-            ? index - 1
+            ? index - size
             : event.key === "ArrowRight"
-              ? index + 1
+              ? index + size
               : event.key === "Home"
                 ? 0
                 : event.key === "End"
@@ -162,7 +150,6 @@ export function HomeCommerceCarousel() {
     >
       <div className={styles.heading}>
         <h2>电商生图</h2>
-        <div className={styles.controls}>
           <span
             className={styles.counter}
             aria-live={playing ? "off" : "polite"}
@@ -170,35 +157,8 @@ export function HomeCommerceCarousel() {
           >
             {size === 1
               ? `${index + 1} / ${featured.length}`
-              : `${index + 1}–${index + size} / ${featured.length}`}
+              : `${index + 1}–${Math.min(index + size, featured.length)} / ${featured.length}`}
           </span>
-          <button
-            type="button"
-            aria-label={playing ? "暂停电商功能" : "播放电商功能"}
-            aria-pressed={playing}
-            disabled={reduced || (!playing && index === last)}
-            title={reduced ? "已遵循减少动态效果设置" : undefined}
-            onClick={() => setPlaying((current) => !current)}
-          >
-            {playing ? <Pause size={17} /> : <Play size={17} />}
-          </button>
-          <button
-            type="button"
-            aria-label="上一张电商功能"
-            disabled={index === 0}
-            onClick={() => moveTo(index - 1)}
-          >
-            <ArrowLeft size={17} />
-          </button>
-          <button
-            type="button"
-            aria-label="下一张电商功能"
-            disabled={index === last}
-            onClick={() => moveTo(index + 1)}
-          >
-            <ArrowRight size={17} />
-          </button>
-        </div>
       </div>
       <div
         className={styles.viewport}
@@ -210,7 +170,7 @@ export function HomeCommerceCarousel() {
           wheel.current.at = now;
           wheel.current.distance += event.deltaX;
           if (Math.abs(wheel.current.distance) > 60) {
-            moveTo(index + (wheel.current.distance > 0 ? 1 : -1));
+            moveTo(index + (wheel.current.distance > 0 ? size : -size));
             wheel.current = { distance: 0, at: now, changed: now };
           }
         }}
@@ -223,6 +183,7 @@ export function HomeCommerceCarousel() {
             y: event.clientY,
             dx: 0,
             locked: false,
+            vertical: false,
           };
           setTouching(true);
         }}
@@ -237,19 +198,20 @@ export function HomeCommerceCarousel() {
             finish(event, true);
             return;
           }
+          if (start.vertical) return;
           const dx = event.clientX - start.x,
             dy = event.clientY - start.y;
           if (!start.locked) {
             if (Math.abs(dy) > 8 && Math.abs(dy) >= Math.abs(dx)) {
-              gesture.current = undefined;
-              setTouching(false);
+              // Leave vertical scrolling to the browser, but retain contact
+              // until release/cancel so autoplay cannot move beneath a finger.
+              start.vertical = true;
               return;
             }
             if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
             start.locked = true;
             if (event.pointerId !== undefined)
               event.currentTarget.setPointerCapture?.(event.pointerId);
-            setPlaying(false);
           }
           event.preventDefault();
           start.dx = dx;
@@ -306,7 +268,6 @@ export function HomeCommerceCarousel() {
                 </div>
                 <div className={styles.caption}>
                   <span>{scene.name}</span>
-                  <ArrowUpRight size={17} aria-hidden />
                 </div>
               </Link>
             );
