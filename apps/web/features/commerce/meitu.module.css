@@ -1,4 +1,7 @@
-.theme { color: var(--z-text); background: var(--z-bg); }
+.theme {
+  color: var(--z-text);
+  background: var(--z-bg);
+}
 .shell {
   height: 100dvh;
   padding: 0 !important;
@@ -35,7 +38,7 @@
   align-items: center;
   gap: 12px;
   padding: 0 20px;
-  background: #fff;
+  background: var(--z-panel);
   border-bottom: 1px solid var(--z-border);
   z-index: 10;
 }
@@ -75,7 +78,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px 5px;
-  background: #fff;
+  background: var(--z-panel);
   border-right: 1px solid var(--z-border);
   min-height: 0;
   overflow-y: auto;
@@ -93,7 +96,7 @@
   white-space: nowrap;
 }
 .nav a:hover {
-  background: #f5f7fb;
+  background: var(--z-bg);
 }
 .nav a span {
   max-width: 100%;
@@ -130,7 +133,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--z-panel);
   border-right: 1px solid var(--z-border);
 }
 .configScroll {
@@ -187,7 +190,7 @@
   line-height: 1.65;
 }
 .editor textarea::placeholder {
-  color: #9499a2;
+  color: var(--z-placeholder);
   font-size: 12px;
 }
 .editor select {
@@ -220,16 +223,16 @@
 .sectionTitle small,
 .editor small {
   font-size: 11px;
-  color: #858b94;
+  color: var(--z-muted);
 }
 .uploadArea {
-  border: 1px dashed #dfe3e9;
+  border: 1px dashed var(--z-border-control);
   border-radius: 10px;
   padding: 17px 12px;
   text-align: center;
 }
 .uploadArea p {
-  color: #8b9098;
+  color: var(--z-muted);
   margin: 10px 0 4px;
   font-size: 12px;
 }
@@ -242,9 +245,9 @@
   padding: 8px 14px;
   margin: 0;
   gap: 8px;
-  background: #f2f4f7;
+  background: var(--z-image-bg);
   border-radius: 7px;
-  color: #414750;
+  color: var(--z-image-text);
   cursor: pointer;
 }
 .uploadButton input {
@@ -274,7 +277,8 @@
   right: -5px;
   top: -5px;
   border: 0;
-  background: #fff;
+  background: var(--z-panel);
+  color: var(--z-text);
   box-shadow: 0 1px 5px #0002;
   border-radius: 50%;
   width: 21px;
@@ -298,7 +302,7 @@
 .more {
   font-size: 12px;
   margin: 16px 0;
-  color: #626a77;
+  color: var(--z-muted);
 }
 .more summary {
   cursor: pointer;
@@ -333,11 +337,12 @@
   align-items: center;
   padding: 2px;
   border-radius: 6px;
-  background: #e9ecf2;
+  background: var(--z-disabled-bg);
 }
 .stepper button {
   border: 0;
-  background: #fff;
+  background: var(--z-panel);
+  color: var(--z-text);
   display: grid;
   place-items: center;
   border-radius: 4px;
@@ -348,6 +353,7 @@
 .stepper input {
   width: 32px;
   background: transparent;
+  color: var(--z-text);
   border: 0;
   font-size: 13px;
   text-align: center;
@@ -366,14 +372,14 @@
   align-items: center;
   padding: 10px;
   border: 0;
-  background: #fff;
+  background: var(--z-panel);
   border-radius: 6px;
   font-size: 12px !important;
 }
 .layoutTrigger span {
   display: flex;
   align-items: center;
-  color: #8190a3;
+  color: var(--z-muted);
   gap: 8px;
 }
 .layoutLabel {
@@ -463,7 +469,7 @@
 }
 .segments button[aria-pressed="true"] {
   color: var(--z-text);
-  background: #fff;
+  background: var(--z-panel);
   box-shadow: 0 1px 3px #172b4d0d;
 }
 .cloneModes {
@@ -495,7 +501,7 @@
 .sceneGrid button {
   padding: 0;
   text-align: left;
-  background: #fff;
+  background: var(--z-panel);
   border: 1px solid var(--z-border);
   border-radius: 9px;
   overflow: hidden;
@@ -520,7 +526,7 @@
 }
 .actionBar {
   flex: none;
-  background: #fff;
+  background: var(--z-panel);
   border-top: 1px solid var(--z-border);
   padding: 11px 16px 9px;
 }
@@ -551,7 +557,7 @@
   width: 100%;
   min-height: 43px;
   background: var(--z-primary);
-  color: #fff;
+  color: var(--z-on-primary);
   border: 0;
   font-weight: 600;
   font-size: 13px;
@@ -559,8 +565,8 @@
 }
 .editor .primary:disabled {
   opacity: 1;
-  background: #cbced3;
-  color: #fff;
+  background: var(--z-disabled-bg);
+  color: var(--z-disabled);
 }
 .secondaryActions {
   display: flex;
@@ -576,7 +582,7 @@
   font-size: 11px;
 }
 .error {
-  color: #bf3b3b;
+  color: var(--z-error);
   font-size: 12px;
   margin: 0 0 8px;
 }
@@ -611,7 +617,7 @@
 .exampleStage {
   max-width: 880px;
   margin: 0 auto;
-  background: #fff;
+  background: var(--z-panel);
   border-radius: 20px;
   padding: 20px;
   display: grid;
@@ -626,7 +632,7 @@
   border-radius: 12px;
 }
 .exampleStage > svg {
-  color: #afbfce;
+  color: var(--z-muted);
   width: 24px;
 }
 .exampleStage span {
@@ -695,7 +701,8 @@
   height: calc(100% - 65px);
   display: grid;
   place-items: center;
-  background: #e9ecf2;
+  background: var(--z-image-bg);
+  color: var(--z-image-text);
   border-radius: 8px;
 }
 .productCanvas img {
@@ -718,7 +725,7 @@
   margin: 30px auto;
   max-width: 650px;
   padding: 40px 60px;
-  background: #fff;
+  background: var(--z-panel);
   border-radius: 24px;
   text-align: center;
 }
@@ -730,7 +737,7 @@
   justify-content: center;
 }
 .uploadWelcome p {
-  color: #9aa0a9;
+  color: var(--z-muted);
   font-size: 12px;
 }
 .welcomeArt img {
@@ -767,7 +774,7 @@
 .toolCard {
   display: block;
   min-width: 0;
-  background: #fff;
+  background: var(--z-panel);
   border-radius: 16px;
   text-decoration: none;
   color: var(--z-text);
@@ -869,7 +876,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
+  background: var(--z-panel);
   border-bottom: 1px solid var(--z-border);
 }
 .batchHeader h2 {
@@ -906,7 +913,7 @@
   padding: 20px 24px;
   border: 1px solid var(--z-border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--z-panel);
   margin: 0 0 18px;
 }
 .batchContent legend {
@@ -937,7 +944,7 @@
   width: 100%;
   min-width: 0;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--z-bg);
   border: 1px dashed var(--z-border);
   border-radius: 8px;
 }
@@ -949,7 +956,7 @@
 .batchContent button {
   border: 1px solid var(--z-border);
   border-radius: 7px;
-  background: #fff;
+  background: var(--z-panel);
   padding: 8px 12px;
   cursor: pointer;
   font-size: 12px;
@@ -1092,13 +1099,13 @@
   align-items: center;
   gap: 20px;
   padding: 16px;
-  background: #fff;
+  background: var(--z-panel);
   border-top: 1px solid var(--z-border);
   z-index: 2;
 }
 .batchActions button:last-child {
   background: var(--z-primary);
-  color: #fff;
+  color: var(--z-on-primary);
   border: 0;
 }
 .batchFiles {
@@ -1167,34 +1174,119 @@
 }
 
 /* Home chrome with an embedded editor and one scroll owner per column. */
-.editor { border: 1px solid var(--z-border); border-radius: 24px; overflow: hidden; background: var(--z-panel); }
-.config, .actionBar, .batchHeader { background: var(--z-panel); }
-.uploadArea { border-color: var(--z-border-control); border-radius: 16px; background: var(--z-glass-control); }
-.editor textarea { border-radius: 12px; }
-.editor :global(.ant-select) { border-radius: 12px; }
-.detailEditor .settingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.detailEditor .settingGrid > :last-child { grid-column: auto; }
-.batchBackdrop { height: 100%; padding: 0; background: transparent; }
-.batchDialog { max-width: none; border-radius: 24px; border-color: var(--z-border); background: var(--z-panel); box-shadow: none; }
-.batchHeader { padding: 16px 24px; }
-.batchContent { background: transparent; }
-.batchRows fieldset { background: var(--z-panel); border-color: var(--z-border); border-radius: 16px; }
-.actionBar [role="alert"] { display: grid; gap: 8px; margin: 0 0 12px; color: var(--z-muted); font-size: 12px; }
-.actionBar [role="alert"] button { padding: 8px 12px; border: 1px solid var(--z-border); border-radius: 10px; background: var(--z-primary-soft); color: var(--z-primary); }
+.editor {
+  border: 1px solid var(--z-border);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--z-panel);
+}
+.config,
+.actionBar,
+.batchHeader {
+  background: var(--z-panel);
+}
+.uploadArea {
+  border-color: var(--z-border-control);
+  border-radius: 16px;
+  background: var(--z-glass-control);
+}
+.editor textarea {
+  border-radius: 12px;
+}
+.editor :global(.ant-select) {
+  border-radius: 12px;
+}
+.detailEditor .settingGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.detailEditor .settingGrid > :last-child {
+  grid-column: auto;
+}
+.batchBackdrop {
+  height: 100%;
+  padding: 0;
+  background: transparent;
+}
+.batchDialog {
+  max-width: none;
+  border-radius: 24px;
+  border-color: var(--z-border);
+  background: var(--z-panel);
+  box-shadow: none;
+}
+.batchHeader {
+  padding: 16px 24px;
+}
+.batchContent {
+  background: transparent;
+}
+.batchRows fieldset {
+  background: var(--z-panel);
+  border-color: var(--z-border);
+  border-radius: 16px;
+}
+.actionBar [role="alert"] {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--z-muted);
+  font-size: 12px;
+}
+.actionBar [role="alert"] button {
+  padding: 8px 12px;
+  border: 1px solid var(--z-border);
+  border-radius: 10px;
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+}
 @media (max-width: 1000px) {
-  .editor, .detailEditor { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
-  .configScroll { padding: 20px 16px; }
-  .preview { padding: 24px 12px; }
+  .editor,
+  .detailEditor {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  }
+  .configScroll {
+    padding: 20px 16px;
+  }
+  .preview {
+    padding: 24px 12px;
+  }
 }
 @media (max-width: 767px) {
-  .editor, .detailEditor { grid-template-columns: 1fr; height: auto; }
-  .config { border-right: 0; }
-  .configScroll { overflow: visible; }
-  .preview, .detailEditor .preview { padding: 24px 16px; min-height: 260px; }
-  .previewIntro { margin: 0 0 24px; }
-  .previewIntro h1 { font-size: 24px; }
-  .batchBackdrop, .batchDialog { height: auto; overflow: visible; }
-  .batchContent { overflow: visible; padding: 16px; }
-  .batchHeader { padding: 16px; }
-  .batchRows fieldset { grid-template-columns: 1fr; }
+  .editor,
+  .detailEditor {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .config {
+    border-right: 0;
+  }
+  .configScroll {
+    overflow: visible;
+  }
+  .preview,
+  .detailEditor .preview {
+    padding: 24px 16px;
+    min-height: 260px;
+  }
+  .previewIntro {
+    margin: 0 0 24px;
+  }
+  .previewIntro h1 {
+    font-size: 24px;
+  }
+  .batchBackdrop,
+  .batchDialog {
+    height: auto;
+    overflow: visible;
+  }
+  .batchContent {
+    overflow: visible;
+    padding: 16px;
+  }
+  .batchHeader {
+    padding: 16px;
+  }
+  .batchRows fieldset {
+    grid-template-columns: 1fr;
+  }
 }

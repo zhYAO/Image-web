@@ -2,6 +2,7 @@ import { theme as antdTheme, type ThemeConfig } from "antd";
 
 // The CSS counterparts live in globals.css; both component providers consume this config.
 export const zimageTheme: ThemeConfig = {
+  cssVar: { key: "zimage" },
   token: {
     colorPrimary: "#7050b5",
     colorInfo: "#7050b5",
@@ -97,3 +98,79 @@ export const zimageAntdTheme: ThemeConfig = {
   ...zimageTheme,
   algorithm: antdTheme.defaultAlgorithm,
 };
+
+const darkTheme: ThemeConfig = {
+  ...zimageTheme,
+  token: {
+    ...zimageTheme.token,
+    colorPrimary: "#b79be5",
+    colorInfo: "#b79be5",
+    colorLink: "#b79be5",
+    colorPrimaryHover: "#c7aff0",
+    colorLinkHover: "#c7aff0",
+    colorPrimaryActive: "#a98ad8",
+    colorLinkActive: "#a98ad8",
+    colorPrimaryBg: "#352a46",
+    colorPrimaryBgHover: "#403153",
+    colorPrimaryText: "#b79be5",
+    colorPrimaryTextHover: "#c7aff0",
+    colorPrimaryTextActive: "#a98ad8",
+    controlItemBgActive: "#352a46",
+    controlItemBgActiveHover: "#403153",
+    controlItemBgHover: "#302a3b",
+    colorText: "#f3eff8",
+    colorTextSecondary: "#beb3cc",
+    colorTextTertiary: "#beb3cc",
+    colorTextQuaternary: "#beb3cc",
+    colorTextDescription: "#beb3cc",
+    colorIcon: "#beb3cc",
+    colorTextPlaceholder: "#beb3cc",
+    colorTextDisabled: "#92889e",
+    colorTextLightSolid: "#21182d",
+    colorBgLayout: "#17141e",
+    colorBgContainer: "#211e29",
+    colorBgElevated: "#292431",
+    colorBgContainerDisabled: "#302a38",
+    colorBgMask: "rgba(0,0,0,.60)",
+    colorBorder: "#8d7e9e",
+    colorBorderSecondary: "#493d57",
+    colorSplit: "#493d57",
+    colorSuccess: "#77cba0",
+    colorSuccessBg: "#1d382a",
+    colorWarning: "#e9b765",
+    colorWarningBg: "#3d2e19",
+    colorError: "#ffaaa2",
+    colorErrorBg: "#402423",
+    colorInfoBg: "#352a46",
+    controlOutline: "#c7aff0",
+    boxShadow: "0 12px 32px rgba(0,0,0,.30)",
+    boxShadowSecondary: "0 4px 16px rgba(0,0,0,.20)",
+  },
+  components: {
+    ...zimageTheme.components,
+    Input: {
+      ...zimageTheme.components?.Input,
+      activeBorderColor: "#b79be5",
+      hoverBorderColor: "#b79be5",
+    },
+    InputNumber: {
+      ...zimageTheme.components?.InputNumber,
+      activeBorderColor: "#b79be5",
+      hoverBorderColor: "#b79be5",
+    },
+    Select: {
+      ...zimageTheme.components?.Select,
+      activeBorderColor: "#b79be5",
+      hoverBorderColor: "#b79be5",
+      optionSelectedBg: "#352a46",
+      optionSelectedColor: "#b79be5",
+    },
+  },
+};
+
+const darkComponentTheme = { ...darkTheme, algorithm: antdTheme.darkAlgorithm };
+const darkThemes = { lobe: darkComponentTheme, antd: darkComponentTheme };
+const lightThemes = { lobe: zimageAntdTheme, antd: zimageAntdTheme };
+export function getZimageThemes(appearance: "light" | "dark") {
+  return appearance === "dark" ? darkThemes : lightThemes;
+}
