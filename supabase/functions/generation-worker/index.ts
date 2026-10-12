@@ -43,6 +43,7 @@ export default {
         correlationId,
         generationId,
         provider: claim.provider,
+        preparation: 'preparation' in result ? result.preparation : undefined,
       }));
       return Response.json(result);
     } catch (error: unknown) {
