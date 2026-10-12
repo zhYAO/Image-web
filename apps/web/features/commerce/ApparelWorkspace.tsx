@@ -18,6 +18,20 @@ import {
   type ApparelDraft,
 } from "./apparel-draft-storage";
 import styles from "./apparel.module.css";
+const examplePages = [
+  ...Array.from({ length: 5 }, (_, index) => ({
+    file: `main-${index + 1}`,
+    title: `主图 ${index + 1}`,
+    width: 750,
+    height: 1000,
+  })),
+  { file: "detail-01", title: "商品首图", width: 790, height: 1227 },
+  { file: "detail-03", title: "商品信息", width: 790, height: 574 },
+  { file: "detail-04", title: "尺码信息", width: 790, height: 631 },
+  { file: "detail-05", title: "DESIGN", width: 790, height: 1555 },
+  { file: "detail-06", title: "FABRIC", width: 790, height: 1243 },
+  { file: "detail-07", title: "产品展示", width: 790, height: 1334 },
+];
 const empty: ApparelBrief = {
   name: "",
   sku: "",
@@ -602,14 +616,27 @@ export function ApparelWorkspace({
             </Image.PreviewGroup>
           </>
         ) : (
-          <div className={styles.empty}>
-            <p>五张 750 × 1000 主图</p>
-            <div>商品首图</div>
-            <div>商品信息 / 尺码信息</div>
-            <div>DESIGN / FABRIC</div>
-            <div>产品展示</div>
-            <p>完整成品保存 90 天，修改后整套生成新版本。</p>
-          </div>
+          <section className={styles.examples} aria-label="服装排版效果示例">
+            <h3>排版效果示例</h3>
+            <p>原创 AI 示例 · 虚构商品，仅展示排版。成分、尺码和文案不作为商品事实，也不会填入你的方案。</p>
+            <p>5 张 750 × 1000 主图 + 790px 详情模块 · 点击查看原始 JPEG</p>
+            <Image.PreviewGroup>
+              <div className={styles.results}>
+                {examplePages.map((example) => (
+                  <figure key={example.file}>
+                    <Image
+                      src={`/commerce/apparel-v1/${example.file}.webp`}
+                      alt={`原创 AI 服装示例 · ${example.title}`}
+                      loading="lazy"
+                      preview={{ src: `/commerce/apparel-v1/${example.file}.jpg` }}
+                    />
+                    <figcaption>{example.title}<br />{example.width} × {example.height}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </Image.PreviewGroup>
+            <p>完整成品保存 90 天，修改后整套排版新版本。</p>
+          </section>
         )}
       </aside>
     </section>

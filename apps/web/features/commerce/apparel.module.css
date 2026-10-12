@@ -204,17 +204,9 @@
   overflow-wrap: anywhere;
   padding: 7px 3px;
 }
-.empty {
-  max-width: 460px;
-  margin: 60px auto;
-}
-.empty div {
-  padding: 28px;
-  background: var(--z-panel);
-  text-align: center;
-  margin: 12px 0;
-  color: var(--z-muted);
-  border-radius: 7px;
+.examples h3 {
+  margin: 0;
+  font-size: 15px;
 }
 .error {
   color: var(--z-error) !important;

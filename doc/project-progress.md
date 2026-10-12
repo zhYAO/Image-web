@@ -1,5 +1,15 @@
 # ZImage 项目进度
 
+## 2026-10-12 服装示例补齐与质量测试准备（本地验收完成，真实 Plan 未测）
+
+- 沿用 `codex/apparel-scroll-seedream5-20261012`，精确基线 `dbceba77a71281b11f05a2036f0f8b17a94536bc`；保护此前滚动、玻璃和轮播改动。`clone-web` 仅阅读。未合并 main、部署、应用生产迁移或配置密钥。
+- 使用正式 image_gen 生成原创 AI 米白女装照片，以现有 AI 衬衫为外观参考，再运行未经修改的服装排版器，得到 5 张 750×1000 JPEG 主图及 6 个 790px 详情模块。服装空预览补齐 11 张 WebP 缩略图，点击检查原始 JPEG，目录封面同步更新；虚构成分、尺码及文案明确为示例，不自动进入用户资料或引用。
+- 本轮 lint、typecheck、标准 Mock 构建及 git diff 检查通过；预算保护 5/5，全量 Domain 76/76、Web 643/643 单次通过。新增表单不采用示例资料的回归先红后绿，服装工作区 6/6。Desktop Chromium 151 实际检查 1440×900/600、720×900 和深色桌面：11 图全部加载、末图可达、无横向溢出，保持既有宽屏双栏/窄窗口单区滚动；原图预览 750×1000，表单为空。浏览器仅有既有 favicon 404，lint 有既有 pages 检测提示。
+- 排版示例展示合格；面料放大存在源分辨率柔化，AI 照片间衣袋/纽扣细节不能用于真实商品保真。其他 image_gen 工具和 Mock 输出不计入项目 Seedream 验收。电商和聊天两条 Plan 真实路径均未测，不能判定合格。
+- 本地无 Plan/Supabase/账号安全配置。只读已连接项目 `klmiycyesxnpinxpeqep`：线上 generation-worker v16 不含新 Plan Key/模型分支，生产未应用 `20261012024930` 准入迁移；未读取 Secret 值。用户选在 Supabase 私有变量安全填写，但单设 Secret 不更新代码、数据库或本地 Next.js，当前禁止部署条件下仍无可执行的该分支端到端路径。
+- 四张实测方案为电商白底/模特/中文细节各一张、普通聊天一张，指定 Plan Pro 和完整 Plan URL。项目静态报价 120 minor / 1.20 积分，供应商现有 Plan 实际额度未知；主会话确认卡尚待批准，限制仅现有套餐额度、不充值/额外按量/自动重试。安全交接与逐张示例结论见 [质量报告](qa/2026-10-12-apparel-examples-quality.md)、[安全配置交接](qa/2026-10-12-plan-safe-test-handoff.md)。
+- Library 样图传输受环境连接阻碍，三项均 `transfer_failed`，无 finalize 或 Library ID，不宣称保存成功，不规避代理/网络策略。原图与资源来源摘要已保留；全部排版 JPEG 在该开发分支的 `apps/web/public/commerce/apparel-v1/`，报告与证据包可供继续安全交付。
+
 ## 2026-10-12 分层玻璃、浅深主题与首页轮播（本地验收完成，仅开发分支交付）
 
 - 用户确认“分层精致”并授权开始改动。沿用 `codex/apparel-scroll-seedream5-20261012`，基线 `f35fe5b9cdb4a950fd1e6eb9e74392d927665d48`；本轮只提交推送该分支，不合并 main、发布网站/Worker 或应用生产迁移。此前服装滚动与 Seedream Plan 逻辑保留。
