@@ -625,10 +625,10 @@ export function ApparelWorkspace({
                 {examplePages.map((example) => (
                   <figure key={example.file}>
                     <Image
-                      src={`/commerce/apparel-v1/${example.file}.webp`}
+                      src={`/commerce/apparel-v2/${example.file}.webp`}
                       alt={`原创 AI 服装示例 · ${example.title}`}
                       loading="lazy"
-                      preview={{ src: `/commerce/apparel-v1/${example.file}.jpg` }}
+                      preview={{ src: `/commerce/apparel-v2/${example.file}.jpg` }}
                     />
                     <figcaption>{example.title}<br />{example.width} × {example.height}</figcaption>
                   </figure>

@@ -1,0 +1,229 @@
+{
+  "version": "apparel-examples-2",
+  "kind": "original_ai_example_with_deterministic_layout",
+  "not_project_seedream_quality_test": true,
+  "generation": {
+    "version": "apparel-examples-2",
+    "tool": "image_gen.imagegen",
+    "generated_at": "2026-10-12",
+    "fictional_product": true,
+    "reference": "commerce/examples/womenswear/product-main.webp",
+    "reference_model": "source-hero.png",
+    "entries": [
+      {
+        "name": "hero",
+        "path": "source-hero.png",
+        "prompt": "Create ONE single high-resolution portrait fashion editorial photograph, NOT a collage or contact sheet. Original AI example for a fictional unbranded apparel catalog. The attached flat shirt photo is the exact garment visual reference. Preserve the oatmeal ivory/beige textured woven overshirt: pointed collar, TWO rectangular chest patch pockets with straight flap tops, ONE small brown button centered on EACH pocket flap, exactly SEVEN brown buttons along the central front placket, long sleeves with a narrow straight cuff, relaxed straight silhouette and gently rounded untucked hem. Do not add chest seams, pockets, zips, metallic hardware, logos, patterns or change the garment fabric/colour. Show all front garment structure fully and clearly. Adult East Asian woman aged 28, elegant natural everyday appearance, softly waved chin-to-shoulder dark hair tucked behind one ear, understated makeup, authentic skin texture, small gold earrings. Pair shirt with high-rise flowing ivory wide-leg trousers. Shirt untucked, fully closed front, sleeves fully down, no bag or accessories over the shirt. Photograph head to below knees, relaxed slightly asymmetric stance with one knee soft, hands low and natural with all fingers correct, neither hand covering the shirt pockets or buttons. Airy cream apartment studio, quiet warm white wall and a soft diagonal window-light shadow, one simple walnut chair with a chestnut leather bag at far edge, subdued stone flooring. Sophisticated social fashion lookbook aesthetics: candid elegance, thoughtful outfit styling, clean editorial framing, spacious margin, soft daylight, matte neutral colours, tangible textile texture, subtly cinematic but accurately neutral beige white balance, natural perspective and lifelike proportions. Garment is the focal point and occupies most of the frame; both cuffs and hem visible. No writing, no logo, no watermark, no frame, no decorative graphics. Keep textile details crisp at original pixels. Output one large portrait image.",
+        "model": "Tool-managed; exact model not disclosed; not project Seedream",
+        "status": "original_ai_example",
+        "corrections": [
+          {
+            "prompt": "Edit this exact single fashion photograph with one very small garment consistency correction. Preserve the SAME adult model, face, pose, hair, hands, trousers, shirt fabric, collar, both pocket flaps, both pocket buttons, environment, lighting and composition. The central shirt placket currently has SIX visible brown buttons: collar, below collar, chest, upper abdomen, abdomen, and lower abdomen. Add exactly ONE matching small brown four-hole button on the SAME central placket between the current lowest button and the lower hem, approximately at image coordinate x=522,y=947 (image is 1024x1536). Keep all six existing buttons. The resulting central vertical front placket must have exactly SEVEN visible brown buttons, plus the two independent chest pocket-flap buttons. Do not add another pocket or any other hardware, do not change shirt length or hem, do not crop, and do not restyle any part of the image. Maintain original sharpness and textile weave. No writing or watermark. One single portrait image.",
+            "reason": "Initial six placket buttons corrected to seven",
+            "seconds": 45.6
+          }
+        ],
+        "sha256": "aedc3ec3139a7bd4a93fd391106bac965e9fee4e86f59667ec70bb8b82af9c2a",
+        "native_width": 1024,
+        "native_height": 1536
+      },
+      {
+        "name": "detail",
+        "path": "source-detail.png",
+        "prompt": "Create ONE standalone high-resolution portrait detail fashion photograph of the EXACT SAME shirt on the EXACT SAME adult woman in the attached reference photograph, NOT a collage. Frame from her mouth/chin to upper thighs, close enough that the entire shirt fills about 85% of the image width, showing its collar, BOTH symmetrical chest pockets, BOTH cuffs, full central button row and full rounded hem. Precisely preserve the warm oatmeal beige woven texture, pointed collar, two rectangular chest patch pockets each with a straight-top flap and ONE brown central pocket-flap button, exactly SEVEN visible brown buttons on the central placket, narrow straight cuffs and untucked relaxed silhouette. Keep all shirt structure identical to reference, do not redesign pockets or enlarge buttons. Same white wide-leg trousers and small gold earrings, adult East Asian model. Both hands relaxed low outside the shirt silhouette, natural anatomy; no hand touching collar or obscuring detail. Soft clean ivory studio background, refined diffused daylight, no harsh shadows, honest warm-neutral white balance. This is a tactile product-detail photograph for a beautiful minimalist fashion catalog, not an advertisement layout. Extremely clear weave, seams and button holes at source resolution, gentle believable fabric folds. No face beautification, writing, logos, watermark, borders, collage, props or added hardware. One large portrait photo only.",
+        "model": "Tool-managed; exact model not disclosed; not project Seedream",
+        "status": "original_ai_example",
+        "corrections": [],
+        "sha256": "e6a4de7bd4d03e9c711e814bc8edaed6dcd4ff3adab9b1ff6ac60a54210cbcab",
+        "native_width": 1024,
+        "native_height": 1536
+      },
+      {
+        "name": "lifestyle",
+        "path": "source-lifestyle.png",
+        "prompt": "Create ONE single high-resolution portrait lifestyle fashion editorial photograph using the attached image as the EXACT apparel AND model identity reference, NOT a collage. Keep this same clearly adult East Asian woman age 28, same face, short dark wavy hair, small gold earrings, oatmeal beige woven shirt and flowing ivory wide-leg trousers. Precisely keep the shirt's pointed collar, TWO rectangular chest flap pockets, ONE brown centered button on each flap, exactly SEVEN front placket brown buttons, straight narrow long-sleeve cuffs, loose straight untucked silhouette and rounded hem; no redesign, tuck or extra hardware. Frame head to below knees with entire shirt front, both cuffs and hem visible. New pose: model stands naturally at a cream doorway, torso turned just 10 degrees, her face looking softly toward window light, both arms lowered loosely, fingers natural and visible, pockets and front buttons unobscured. Simple airy cream apartment, soft natural side light, quiet warm stone wall, small walnut side table at far edge with closed book and a ceramic cup, no objects crossing the shirt. Sophisticated candid social fashion editorial: understated outfit styling, relaxed elegant adult, tangible weave, clean generous framing, muted cream palette and lifelike neutral colour. Garment is clearly the focus. Preserve actual garment details rather than adding fashionable decoration. No text, watermark, logos, collage, decorative frame or distortions. One large portrait image.",
+        "model": "Tool-managed; exact model not disclosed; not project Seedream",
+        "status": "original_ai_example",
+        "corrections": [],
+        "sha256": "ade6669834269c52f0875b2e0bdb74411e6078946d1eba2182311457f64e0009",
+        "native_width": 1024,
+        "native_height": 1536
+      },
+      {
+        "name": "seated",
+        "path": "source-seated.png",
+        "prompt": "Create ONE standalone portrait fashion lookbook photograph, NOT a collage. Use the attached image as exact model and garment reference. SAME adult East Asian woman age 28, same short dark wavy hair, face and small gold earrings; SAME oatmeal ivory woven overshirt and flowing off-white wide-leg trousers. Preserve exactly SEVEN small brown front placket buttons (including collar), TWO rectangular chest patch pockets each with a straight flap and ONE brown button, pointed collar, narrow straight long-sleeve cuffs, softly rounded untucked hem and natural straight loose silhouette. Do not change pocket shape, fabric, garment colour or hardware. New elegant relaxed pose: sitting upright at the very front edge of a low plain walnut stool, legs softly angled, knees naturally bent and apart modestly under wide trousers, arms lowered loosely with palms resting lightly on the upper trouser thighs OUTSIDE the shirt area. Garment front from collar to hem remains flat enough to read, all buttons and pockets visible, no folds that hide hem or placket. Head to ankles framed with margins, realistic anatomy and fingers. Clean softly lit pale warm-grey photography studio with one subtle cream curtain on the far edge, natural diffused light, quiet matte background with no dominant diagonal shadows. Thoughtfully styled modern social fashion editorial, comfortable confident adult woman, lifelike skin and tactile textile, clean premium restrained composition. Keep shirt the focus rather than props. No bag across body, writing, logo, watermark, collage or frame. Crisp source textile details. One large portrait image.",
+        "model": "Tool-managed; exact model not disclosed; not project Seedream",
+        "status": "original_ai_example",
+        "corrections": [
+          {
+            "prompt": "Make a precise minimal consistency edit to this seated fashion photograph, preserving all other pixels and design as closely as possible. Preserve the same adult model, face, hair, hands, pose, trousers, shoes, stool, background, light and shirt fabric, shape, pockets and cuffs. The front central shirt placket currently has SIX brown buttons. Add exactly ONE additional matching small brown four-hole button on the existing front placket just below the sixth/lowest existing button and before the hem, approximately x=512,y=797 in this 1024x1536 image. Place it on the beige placket fabric, not on trousers, not on the open white gap. Keep ALL SIX existing front buttons and the TWO separate chest-pocket buttons. Result: exactly SEVEN front placket buttons plus two pocket buttons. Do not change the hem, pose or folds to hide the result; do not add seams or other hardware. Keep the image crisp and preserve all anatomy. No text or watermark. Output one same-size portrait photograph.",
+            "reason": "Initial six placket buttons corrected to seven",
+            "seconds": 41.2
+          }
+        ],
+        "sha256": "5be91c6b17dcd8633cba3bbdd1796a80009680e0149014fca3334a9311d7fa8e",
+        "native_width": 1024,
+        "native_height": 1536
+      }
+    ],
+    "call_wall_times_seconds": {
+      "hero_initial": 27.9,
+      "hero_correction": 45.6,
+      "detail_lifestyle_parallel_batch": 95.5,
+      "detail_lifestyle_individual": "not separately reported",
+      "seated_initial": 44.0,
+      "seated_correction": 41.2
+    },
+    "formal_imagegen_calls": 6,
+    "project_seedream_calls": 0
+  },
+  "renderer": {
+    "file": "apps/web/server/apparel/apparel-renderer.ts",
+    "layout_version": "1.0.0",
+    "duration_seconds": 3.91,
+    "encoding": "JPEG quality 95, 4:4:4; thumbnails WebP quality 85 width 360"
+  },
+  "fictional_product_data": true,
+  "source_preparation": "Four separate 1024x1536 original images, each padded 64px on each side to 1152x1536 (3:4) without enlargement or stretching. Main JPEG outputs downsample to 750x1000. Fabric source crop 829x845 to 790x741, no upsampling. Reference flat garment normalized with contain. Smaller AI example watermark is deterministic typography.",
+  "plan": {
+    "engine": "apparel-catalog",
+    "scene": "apparel-catalog",
+    "layoutVersion": "1.0.0",
+    "brief": {
+      "name": "米白衬衫 · AI 示例",
+      "sku": "AI-DEMO-01",
+      "color": "米白（虚构示例）",
+      "composition": "100 棉（虚构示例）",
+      "care": "示例文案：冷水手洗，阴凉处晾干。",
+      "size": "M 示例",
+      "measurements": {
+        "length": "65",
+        "chest": "100",
+        "shoulder": "40",
+        "sleeve": "58"
+      },
+      "weightRecommendation": "45–55kg",
+      "design": "原创 AI 虚构女装示例。翻领、双胸袋与自然落肩，用于展示商品排版，不代表真实商品资料。",
+      "fabric": "示例展示米白织物纹理。成分、尺码与养护资料均为虚构，实际商品请填写真实信息。"
+    },
+    "fabricCrop": [
+      0.16,
+      0.29,
+      0.88,
+      0.84
+    ]
+  },
+  "pages": [
+    {
+      "file": "main-1.jpg",
+      "thumbnail": "main-1.webp",
+      "original_name": "主图/1.jpg",
+      "width": 750,
+      "height": 1000,
+      "format": "jpeg",
+      "bytes": 197291,
+      "sha256": "5bf6a1536f23836b950da5cbf1c1cdd76ca99eab369ac021f75f801f25edf538"
+    },
+    {
+      "file": "main-2.jpg",
+      "thumbnail": "main-2.webp",
+      "original_name": "主图/2.jpg",
+      "width": 750,
+      "height": 1000,
+      "format": "jpeg",
+      "bytes": 276028,
+      "sha256": "e8c9f4e05a81d21fff7c0019425fc9d5d7a7cce10a39f55d0c3948655e33c7d1"
+    },
+    {
+      "file": "main-3.jpg",
+      "thumbnail": "main-3.webp",
+      "original_name": "主图/3.jpg",
+      "width": 750,
+      "height": 1000,
+      "format": "jpeg",
+      "bytes": 229367,
+      "sha256": "649d57137e3de3318ac642bd3361b4fbc0313ddeddba56819f6fcadfb24835b3"
+    },
+    {
+      "file": "main-4.jpg",
+      "thumbnail": "main-4.webp",
+      "original_name": "主图/4.jpg",
+      "width": 750,
+      "height": 1000,
+      "format": "jpeg",
+      "bytes": 197704,
+      "sha256": "19d9df5c5eded96271bf6b582fc08a3335ff71b96d2f45110f9ac39dc8f18953"
+    },
+    {
+      "file": "main-5.jpg",
+      "thumbnail": "main-5.webp",
+      "original_name": "主图/5.jpg",
+      "width": 750,
+      "height": 1000,
+      "format": "jpeg",
+      "bytes": 176238,
+      "sha256": "9a53a7b8237be6b51ad3a647233762259dedc7ed5ec310cf6e7f567110471523"
+    },
+    {
+      "file": "detail-01.jpg",
+      "thumbnail": "detail-01.webp",
+      "original_name": "images/详情2_01.jpg",
+      "width": 790,
+      "height": 1227,
+      "format": "jpeg",
+      "bytes": 217622,
+      "sha256": "79afe4e1118e94b11b9a11b44db5cef0cfefa9b48fe2cb3eb811e30c6367421f"
+    },
+    {
+      "file": "detail-03.jpg",
+      "thumbnail": "detail-03.webp",
+      "original_name": "images/详情2_03.jpg",
+      "width": 790,
+      "height": 574,
+      "format": "jpeg",
+      "bytes": 26201,
+      "sha256": "bb7e75ecb3cdb65ca7fc9abd45ef928a39c9dbc09cc4728425ab82206f644f6d"
+    },
+    {
+      "file": "detail-04.jpg",
+      "thumbnail": "detail-04.webp",
+      "original_name": "images/详情2_04.jpg",
+      "width": 790,
+      "height": 631,
+      "format": "jpeg",
+      "bytes": 30263,
+      "sha256": "103393b893cd27e1aaa099f116a99a2858c6db42f8f39b6a7bdef26c77eb54a2"
+    },
+    {
+      "file": "detail-05.jpg",
+      "thumbnail": "detail-05.webp",
+      "original_name": "images/详情2_05.jpg",
+      "width": 790,
+      "height": 1555,
+      "format": "jpeg",
+      "bytes": 241372,
+      "sha256": "c19d054e7a0f8a31b53ea3a027615c5296bb5743f34cd1c75c8b6ecc1a7833f0"
+    },
+    {
+      "file": "detail-06.jpg",
+      "thumbnail": "detail-06.webp",
+      "original_name": "images/详情2_06.jpg",
+      "width": 790,
+      "height": 1243,
+      "format": "jpeg",
+      "bytes": 348821,
+      "sha256": "126b95dbac0cbcbe61bfe002913e95e8f15c038b38913823ae53a86bfa081a6c"
+    },
+    {
+      "file": "detail-07.jpg",
+      "thumbnail": "detail-07.webp",
+      "original_name": "images/详情2_07.jpg",
+      "width": 790,
+      "height": 1334,
+      "format": "jpeg",
+      "bytes": 231672,
+      "sha256": "3f8aa7ad8db762a15699b7033b14a62ced6aca35d647d61467919afa2c833413"
+    }
+  ]
+}
