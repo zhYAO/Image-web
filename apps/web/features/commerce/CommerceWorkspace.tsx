@@ -117,6 +117,7 @@ export function CommerceWorkspace({
   CommerceWizardProps,
   | "capabilities"
   | "references"
+  | "referencesPreparing"
   | "settings"
   | "onReferenceAdd"
   | "onReferenceRemove"

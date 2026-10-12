@@ -1,7 +1,10 @@
 import type { ChatEvent } from '@zimage/domain';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HttpWorkspaceGateway, resetAuthRequiredNotification } from '@/gateways/http-workspace-gateway';
+import { readReferenceBytes, referencePng, stubReferenceBitmap } from './reference-file-fixtures';
+beforeEach(() => stubReferenceBitmap());
+afterEach(() => vi.unstubAllGlobals());
 
 const sessionId = '10000000-0000-4000-8000-0000000000a1';
 const batchId = '30000000-0000-4000-8000-0000000000a1';
@@ -26,6 +29,25 @@ function sse(frames: string[]): Response {
 }
 
 describe('HttpWorkspaceGateway', () => {
+  it('normalizes the upload copy used by direct images while retaining the original reference', async () => {
+    const file = new File([referencePng], 'reference.jpg', { type: 'image/jpeg' });
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (path, init) => {
+      if (path === '/api/uploads') {
+        const uploaded = (init!.body as FormData).get('file') as File;
+        expect(uploaded.name).toBe('reference.png');
+        expect(uploaded.type).toBe('image/png');
+        expect(await readReferenceBytes(uploaded)).toEqual(referencePng);
+        return json({ id: generationId, name: uploaded.name, mimeType: uploaded.type, size: uploaded.size, width: 64, height: 48, expiresAt: '2026-11-01T00:00:00Z' }, 201);
+      }
+      if (path === '/api/image') return json({ batchId, sessionId, status: 'pending' }, 202);
+      return json({ batch: { id: batchId, sessionId, provider: 'seedream', model: 'doubao-seedream-5.0-pro', prompt: '商品图', source: 'direct', status: 'pending', config: { aspectRatio: '1:1', count: 1, resolution: '2K' }, createdAt: '2026-10-12T00:00:00Z', assets: [{ id: generationId, status: 'pending' }] } });
+    });
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+    await expect(gateway.submitImage({ sessionId, prompt: '商品图', aspectRatio: '1:1', resolution: '2K', count: 1, references: [{ file, name: file.name, mimeType: file.type, size: file.size }] })).resolves.toMatchObject({ id: batchId });
+    expect(file.name).toBe('reference.jpg');
+    expect(file.type).toBe('image/jpeg');
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
   it('stops at completion even if the same transport chunk contains a late failure', async () => {
     const completed: ChatEvent = { type: 'message.completed', messageId: crypto.randomUUID(), content: '完整回复' };
     const failure: ChatEvent = { type: 'stream.failed', error: { code: 'NETWORK', message: 'late failure', retryable: true } };
@@ -167,7 +189,7 @@ describe('HttpWorkspaceGateway', () => {
         status: 'pending',
       } }));
     const gateway = new HttpWorkspaceGateway({ fetcher });
-    const file = new File(['png'], 'reference.png', { type: 'image/png' });
+    const file = new File([referencePng], 'reference.png', { type: 'image/png' });
 
     await expect(gateway.submitImage({
       aspectRatio: '1:1',

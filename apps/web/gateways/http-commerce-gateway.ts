@@ -1,4 +1,5 @@
 import { HttpApparelGateway } from './http-apparel-gateway';
+import { normalizeReferenceUploadFile } from './reference-upload-file';
 import {
   commerceTaskSchema,
   commercePromoteResultSchema,
@@ -153,7 +154,7 @@ export class HttpCommerceGateway implements CommerceGateway {
       });
     const form = new FormData();
     form.set("sessionId", sessionId);
-    form.set("file", reference.file);
+    form.set("file", await normalizeReferenceUploadFile(reference.file));
     return (
       await this.json("/api/uploads", referenceUploadResponseSchema, {
         method: "POST",

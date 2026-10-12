@@ -8,6 +8,7 @@ import {
 } from "@zimage/domain";
 import { notifyCreditsChanged } from "./mock-credit-ledger";
 import { HttpCommerceGateway } from "./http-commerce-gateway";
+import { normalizeReferenceUploadFile } from './reference-upload-file';
 import {
   WorkspaceError,
   apiErrorSchema,
@@ -270,7 +271,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
               retryable: false,
             });
           const form = new FormData();
-          form.set("file", reference.file);
+          form.set("file", await normalizeReferenceUploadFile(reference.file));
           form.set("sessionId", state.sessionId);
           const uploaded = await this.json(
             "/api/uploads",
