@@ -256,6 +256,18 @@
   outline: 2px solid var(--z-focus);
   outline-offset: 2px;
 }
+.resultImage {
+  min-height: 160px;
+}
+.resultImage > button {
+  width: 100%;
+  min-height: 160px;
+  border: 1px solid var(--z-border);
+  border-radius: 12px;
+  background: var(--z-panel);
+  color: var(--z-text-muted);
+  cursor: pointer;
+}
 @media (max-width: 1150px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);

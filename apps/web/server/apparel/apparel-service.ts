@@ -13,6 +13,7 @@ import { z } from "zod";
 import { ApiRouteError } from "@/server/api-error";
 import { hashCanonicalRequest } from "@/server/image/image-service";
 import { renderApparelPages } from "./apparel-renderer";
+import { createApparelSourceReader } from "./apparel-source-reader";
 interface Client {
   rpc(
     name: string,
@@ -202,22 +203,51 @@ export function createApparelService(client: Client) {
             renewing = false;
           });
       }, 25000);
+      let sourceReader:
+        ReturnType<typeof createApparelSourceReader> | undefined;
       try {
         const sources = z
           .array(z.object({ id: z.uuid(), path: z.string() }))
           .parse(await rpc(userId, "sources", taskId, fence, correlationId));
-        const load = async (id: string) => {
+        const checkSource = (id: string) => {
           if (leaseError) throw leaseError;
-          const source = sources.find((item) => item.id === id);
-          if (!source) throw failure("reference_expired");
+          if (!sources.some((item) => item.id === id))
+            throw failure("reference_expired");
+        };
+        sourceReader = createApparelSourceReader(async (id: string) => {
+          const source = sources.find((item) => item.id === id)!;
           const response = await client.storage
             .from("uploads")
-            .download(source.path);
-          if (response.error || !response.data)
-            throw failure("reference_expired");
-          return new Uint8Array(await response.data.arrayBuffer());
-        };
-        for await (const page of renderApparelPages(claim.plan, load)) {
+            .download(source.path)
+            .catch(() => {
+              throw failure("storage_read_failed");
+            });
+          if (response.error || !response.data) {
+            const error = response.error as {
+              status?: unknown;
+              statusCode?: unknown;
+            } | null;
+            const httpStatus = Number(error?.status);
+            const status =
+              Number.isFinite(httpStatus) && httpStatus > 0
+                ? httpStatus
+                : Number(error?.statusCode);
+            throw failure(
+              status === 404 || (!response.error && !response.data)
+                ? "reference_expired"
+                : "storage_read_failed",
+            );
+          }
+          try {
+            return new Uint8Array(await response.data.arrayBuffer());
+          } catch {
+            throw failure("storage_read_failed");
+          }
+        }, checkSource);
+        for await (const page of renderApparelPages(
+          claim.plan,
+          sourceReader.read,
+        )) {
           await renew();
           const intent = z.object({ id: z.uuid(), path: z.string() }).parse(
             await rpc(
@@ -277,6 +307,7 @@ export function createApparelService(client: Client) {
           message,
         });
       } finally {
+        sourceReader?.dispose();
         clearInterval(timer);
       }
     },

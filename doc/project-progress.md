@@ -1,5 +1,16 @@
 # ZImage 项目进度
 
+### 2026-10-13 Free Plan 用量优化第一阶段（独立分支，尚未发布）
+
+- 开始时 `/workspace/Image-web`、`Image-web-plan-diagnostic`、`clone-web` 均干净；没有遗留未提交代码，没有创建空提交。PR #9 的上传兼容/轮播 `c274e14` 保留独立未合并。
+- 基线 main `1a3eba2`，现有隔离工作树新分支 `codex/free-plan-safe-optimizations-20261013`。已实现单授权 claim 内 8 MiB、单 Node 进程合计 32 MiB 的原图字节准入复用，结束/失败释放、超限走原读取；未改变 Sharp 排版和 ZIP 原始字节。临时 Storage/SDK/body 错误可重试 503，明确 HTTP404 过期 410，不自动重试。
+- 服装实际结果可见后挂载 AntD Image，原图导航按需；未生成派生缩略图，首次可见仍传输完整原图。原生 Chromium151 的实际组件合成检查：30 张，桌面首屏2/末尾累计4，窄屏5/10，末图可达。
+- Cron 私有归档/批准清理迁移仅准备：无 schedule、无新 grant、无顶层 DELETE，应用角色不能执行；具体 job/runID、UTC截止、准确条数与审批引用必须匹配，每批最多500，归档失败或100000行容量上限回滚。没有生产迁移、历史删除、权限变更、调度或 VACUUM FULL。
+- 独立方案/代码复核修正缓存抖动、AntD预取、派生资产计数风险及真实SDK错误路径；最终无剩余 Critical/Important 或 actionable Minor。相关 RED→GREEN 与限制见 `doc/qa/2026-10-13-free-plan-optimizations.md`。
+- 本地最终检查：Domain76、Web656全量通过，服装相关31、Worker80、运维20、预算5、lint/typecheck及隔离构建通过。本地 PostgreSQL17.6/真pgTAP27通过；Cron表为官方形状fixture，真实pg_cron/全迁移/生成类型以PR CI为发布门禁。真实负载和正式整页鉴权浏览器验收未完成，不宣称生产性能收益。
+- 串行合成对照（每路径10次）：小素材原图14→7次、P95 1686→984ms；20展示/10MiB超限52→52次、P95 4777→5071ms；11/30张输出SHA-256一致。小素材峰值RSS约227.8→237.7MiB，超限329.7→328.0MiB；不是缓存字节或真实负载SLA。
+- Log Query预算/有限查询、各Free额度区分、存储/历史快照与逐批生产批准规则已记录；当前扫描来源和历史超额对象仍未知。后续派生预览/ETag、短Cron包装器需独立生命周期/授权及Vault/调度核对。
+
 ## 2026-10-12 今日完整生产整合与 Plan 故障定位（发布准备中）
 
 - 用户明确授权今日剩余的液态玻璃、首页轮播、服装滚动和新版示例图发布生产。单一生产负责人在 `/workspace/Image-web-plan-diagnostic` 的 `codex/production-complete-20261012`，以已发布 main `b2cca96ea59bf53cecab9394a4508ba30dc7e8fa` 保留 Plan 接入，加入安全诊断 `0a8af926731a3787de1273393e57f53c4115ee44`、固定 Plan 地址修复 `99a4ccf`，整合已验收源分支 `5f4ae315c415c8832e2ceaf5c48e467c4d093335`。原 checkout 和 clone-web 改动保留。
