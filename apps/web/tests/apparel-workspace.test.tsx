@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fireEvent,
   render,
@@ -19,14 +19,83 @@ const props = {
   onTask: vi.fn(),
 };
 describe("apparel form in the shared commerce workspace", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
     sessionStorage.clear();
   });
+  it("excludes expired gallery URLs and resets visibility when the whole run changes", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true");
+    vi.stubGlobal(
+      "IntersectionObserver",
+      vi.fn(function () {
+        return { observe: vi.fn(), disconnect: vi.fn() };
+      }),
+    );
+    const asset = (id: string, name: string, expired = false) => ({
+      id,
+      name,
+      expired,
+      url: `/private/${id}`,
+      width: 750,
+      height: 1000,
+      mimeType: "image/jpeg",
+      expiresAt: "2026-10-14T00:00:00Z",
+    });
+    const task = apparelTaskSchema.parse({
+      id: apparelIds[7],
+      sessionId: "session",
+      engine: "apparel-catalog",
+      revision: 1,
+      plan: apparelFixture,
+      createdAt: "now",
+      updatedAt: "now",
+      runs: [
+        {
+          id: apparelIds[3],
+          requestId: apparelIds[4],
+          revision: 1,
+          status: "succeeded",
+          createdAt: "now",
+          assets: [
+            asset(apparelIds[0]!, "首图/1.jpg"),
+            asset(apparelIds[1]!, "末图.jpg"),
+            asset(apparelIds[2]!, "过期图.jpg", true),
+          ],
+        },
+      ],
+    });
+    const view = render(<ApparelWorkspace {...props} task={task} />);
+    expect(screen.getByText("结果已过期")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "加载 过期图.jpg" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "下载原始 JPEG ZIP" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "加载 首图/1.jpg" }));
+    fireEvent.click(screen.getByRole("img", { name: "首图/1.jpg" }));
+    await waitFor(() => expect(screen.getByText("1 / 2")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    const replacement = {
+      ...task,
+      runs: [{ ...task.runs[0]!, id: apparelIds[5]! }],
+    };
+    view.rerender(<ApparelWorkspace {...props} task={replacement} />);
+    expect(screen.queryByRole("img", { name: "首图/1.jpg" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "加载 首图/1.jpg" }),
+    ).toBeInTheDocument();
+  });
   it("shows inspectable AI layout examples without adopting fictional product data", () => {
     render(<ApparelWorkspace {...props} />);
-    const example = screen.getByRole("img", { name: "原创 AI 服装示例 · 主图 1" });
+    const example = screen.getByRole("img", {
+      name: "原创 AI 服装示例 · 主图 1",
+    });
     expect(screen.getByText(/虚构商品，仅展示排版/)).toBeInTheDocument();
     fireEvent.click(example);
     expect(screen.getByLabelText("商品名称")).toHaveValue("");
