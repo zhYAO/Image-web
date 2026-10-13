@@ -1,5 +1,6 @@
 import { creditConfirmationSchema } from "./credits";
 import { commerceArtDirection } from "./commerce-art-direction";
+import { commerceSafeAreaGuidance, kneeFramingGuidance } from './image-composition';
 import { z } from "zod";
 import { COMMERCE_SCENES, COMMERCE_TEMPLATES } from "./commerce-templates";
 import { resolveImageModel } from "./model-registry";
@@ -350,7 +351,9 @@ export function compileCommerceSlot(
     `文字：${textMode === 'auto' ? '仅从用户商品描述及已确认事实中提炼适合本张角色的简短标题与要点，不杜撰卖点、数字或承诺。信息不足时减少文字，不补造内容。' : textMode === 'exact' && slot.exactText ? `仅绘制以下确认文案：${slot.exactText}` : "不添加营销文字"}`,
     `文字排版：指定文案逐字准确，使用适合目标语言（${brief.language || "zh-CN"}）的清晰字体；自动文案遵循该语言，无文字模式不绘制文字。标题与说明有明显字号层级，四边留足安全距离。不把图片角色名、提示词字段或说明标签画进成品。不生成乱码占位文字。`,
     content ? "保留原文事实，只绘制本张准确文案。不得编造数据、引用、经历、认证或效果；不把通用内容强行画成商品广告。" : brief.cloneMode && !brief.productReferenceIds.length ? "保留当前参考图中商品的外观和可见标识，不得编造规格、价格、认证或效果。" : "保持商品颜色、外形轮廓、主要结构和可见标识；风格参考不得改变商品。不得编造规格、价格、认证或效果。不得因风格模板覆盖商品事实。",
-    "约束优先级：事实与商品外观 > 图片角色的硬性用途 > 模板视觉 > 调整要求。白底商品图保持纯白底无字；其他角色遵循模板配色、字体和留白。",
+    "约束优先级：事实与商品外观 > 用户明确的取景范围 > 图片角色的硬性用途 > 模板视觉 > 其他调整要求。白底商品图保持纯白底无字；其他角色遵循模板配色、字体和留白。",
+    commerceSafeAreaGuidance(template.visual.safeMarginPercent),
+    kneeFramingGuidance(slot.instruction.trim() || brief.visualStrategy || '', slot.aspectRatio),
     `输出：${slot.aspectRatio}，${slot.resolution}${slot.targetWidth && slot.targetHeight ? `；成品裁切为 ${slot.targetWidth}×${slot.targetHeight}，保留安全边距` : ''}。`,
   ].join("\n");
   if (Array.from(prompt).length > 8000)

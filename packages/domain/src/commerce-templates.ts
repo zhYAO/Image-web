@@ -102,7 +102,7 @@ export const COMMERCE_TEMPLATES = (
   name,
   guidance: `${guidance}。${VISUAL_DIRECTIONS[id]!.guidance}`,
   visual: VISUAL_DIRECTIONS[id]!,
-  version: "2.0.0",
+  version: "2.1.0",
   source,
   validation: "待真实模型评测",
   published: true,
