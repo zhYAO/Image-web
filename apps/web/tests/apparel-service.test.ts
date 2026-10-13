@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApparelService } from "@/server/apparel/apparel-service";
 import { apparelFixture, apparelIds } from "./apparel-fixtures";
 import sharp from "sharp";
@@ -16,6 +16,7 @@ const task = {
   archived: false,
 };
 describe("apparel service admission and storage", () => {
+  afterEach(() => vi.unstubAllEnvs());
   it.each(["blob", "download"])(
     "keeps a rejected Storage %s retryable and does not publish partial outputs",
     async (stage) => {
@@ -64,70 +65,79 @@ describe("apparel service admission and storage", () => {
       expect(download).toHaveBeenCalledTimes(1);
     },
   );
-  it("downloads each small authorized source once and preserves all rendered output hashes", async () => {
-    const photo = await sharp({
-      create: { width: 600, height: 800, channels: 3, background: "#bc8e66" },
-    })
-      .jpeg()
-      .toBuffer();
-    const logo = await sharp(
-      Buffer.from(
-        '<svg width="200" height="50"><rect x="10" y="10" width="180" height="30" fill="white"/></svg>',
-      ),
-    )
-      .png()
-      .toBuffer();
-    const source = (id: string) => (id === apparelIds[6] ? logo : photo);
-    const baseline: string[] = [];
-    for await (const page of renderApparelPages(apparelFixture, async (id) =>
-      source(id),
-    ))
-      baseline.push(createHash("sha256").update(page.bytes).digest("hex"));
-    const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
-      data:
-        args.p_operation === "submit"
-          ? {
-              claimed: true,
-              runId: apparelIds[2],
-              claimToken: apparelIds[3],
-              plan: apparelFixture,
-              task,
-            }
-          : args.p_operation === "sources"
-            ? apparelIds.slice(0, 7).map((id) => ({ id, path: id }))
-            : args.p_operation === "register"
-              ? { id: apparelIds[4], path: "synthetic/output.jpg" }
-              : task,
-      error: null,
-    }));
-    const download = vi.fn(async (id: string) => ({
-      data: { arrayBuffer: async () => source(id) },
-      error: null,
-    }));
-    const hashes: string[] = [];
-    const upload = vi.fn(async (_path: string, bytes: Uint8Array) => {
-      hashes.push(createHash("sha256").update(bytes).digest("hex"));
-      return { error: null };
-    });
-    await createApparelService({
-      rpc,
-      storage: { from: () => ({ download, upload }) },
-    }).dispatch(
-      apparelIds[0]!,
-      "submit",
-      task.id,
-      { requestId: apparelIds[1]!, revision: 1 },
-      apparelIds[2]!,
-    );
-    expect(download).toHaveBeenCalledTimes(7);
-    expect(new Set(download.mock.calls.map(([id]) => id)).size).toBe(7);
-    expect(hashes).toEqual(baseline);
-    expect(upload).toHaveBeenCalledTimes(11);
-    expect(
-      rpc.mock.calls.filter(([, args]) => args.p_operation === "renew"),
-    ).toHaveLength(11);
-    expect(rpc.mock.calls.at(-1)?.[1].p_operation).toBe("complete");
-  });
+  it.each([true, false])(
+    "switches reuse independently and preserves every output hash: %s",
+    async (reuse) => {
+      vi.stubEnv(
+        "ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED",
+        reuse ? "true" : "false",
+      );
+      const photo = await sharp({
+        create: { width: 600, height: 800, channels: 3, background: "#bc8e66" },
+      })
+        .jpeg()
+        .toBuffer();
+      const logo = await sharp(
+        Buffer.from(
+          '<svg width="200" height="50"><rect x="10" y="10" width="180" height="30" fill="white"/></svg>',
+        ),
+      )
+        .png()
+        .toBuffer();
+      const source = (id: string) => (id === apparelIds[6] ? logo : photo);
+      const baseline: string[] = [];
+      for await (const page of renderApparelPages(apparelFixture, async (id) =>
+        source(id),
+      ))
+        baseline.push(createHash("sha256").update(page.bytes).digest("hex"));
+      const rpc = vi.fn(
+        async (_name: string, args: Record<string, unknown>) => ({
+          data:
+            args.p_operation === "submit"
+              ? {
+                  claimed: true,
+                  runId: apparelIds[2],
+                  claimToken: apparelIds[3],
+                  plan: apparelFixture,
+                  task,
+                }
+              : args.p_operation === "sources"
+                ? apparelIds.slice(0, 7).map((id) => ({ id, path: id }))
+                : args.p_operation === "register"
+                  ? { id: apparelIds[4], path: "synthetic/output.jpg" }
+                  : task,
+          error: null,
+        }),
+      );
+      const download = vi.fn(async (id: string) => ({
+        data: { arrayBuffer: async () => source(id) },
+        error: null,
+      }));
+      const hashes: string[] = [];
+      const upload = vi.fn(async (_path: string, bytes: Uint8Array) => {
+        hashes.push(createHash("sha256").update(bytes).digest("hex"));
+        return { error: null };
+      });
+      await createApparelService({
+        rpc,
+        storage: { from: () => ({ download, upload }) },
+      }).dispatch(
+        apparelIds[0]!,
+        "submit",
+        task.id,
+        { requestId: apparelIds[1]!, revision: 1 },
+        apparelIds[2]!,
+      );
+      expect(download).toHaveBeenCalledTimes(reuse ? 7 : 14);
+      expect(new Set(download.mock.calls.map(([id]) => id)).size).toBe(7);
+      expect(hashes).toEqual(baseline);
+      expect(upload).toHaveBeenCalledTimes(11);
+      expect(
+        rpc.mock.calls.filter(([, args]) => args.p_operation === "renew"),
+      ).toHaveLength(11);
+      expect(rpc.mock.calls.at(-1)?.[1].p_operation).toBe("complete");
+    },
+  );
   it.each([
     [{ statusCode: "503" }, 503, true],
     [{ statusCode: "404" }, 410, false],

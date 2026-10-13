@@ -20,6 +20,11 @@ export function createSourceBudget(maxBytes: number) {
 }
 const processBudget = createSourceBudget(PROCESS_BYTES);
 
+/** Encoded bytes only; no account/source identity or native RSS is exposed. */
+export function getApparelRetainedSourceBytes() {
+  return processBudget.usedBytes;
+}
+
 // Construct inside one authorized dispatch claim; never share this reader across runs.
 // Keep early admitted sources instead of evicting them during preflight/render passes.
 export function createApparelSourceReader(
@@ -29,6 +34,7 @@ export function createApparelSourceReader(
 ) {
   const retained = new Map<string, Uint8Array>();
   const pending = new Map<string, Promise<Uint8Array>>();
+  const excluded = new Set<string>();
   let usedBytes = 0;
   let disposed = false;
   const active = (id: string) => {
@@ -36,8 +42,19 @@ export function createApparelSourceReader(
     check(id);
   };
   return {
+    get retainedBytes() {
+      return usedBytes;
+    },
+    get excludedSourceCount() {
+      return excluded.size;
+    },
     async read(id: string): Promise<Uint8Array> {
       active(id);
+      if (excluded.has(id)) {
+        const bytes = await load(id);
+        active(id);
+        return bytes;
+      }
       const hit = retained.get(id);
       if (hit) return hit;
       let promise = pending.get(id);
@@ -45,10 +62,12 @@ export function createApparelSourceReader(
         promise = (async () => {
           const bytes = await load(id);
           active(id);
-          if (
-            bytes.byteLength <= maxBytes - usedBytes &&
-            budget.reserve(bytes.byteLength)
-          ) {
+          if (bytes.byteLength > maxBytes - usedBytes) {
+            // Immutable sources cannot fit later in this claim; skip bookkeeping
+            // on subsequent serial renderer reads. Transient process contention
+            // is not an exclusion, so capacity can recover after another claim.
+            excluded.add(id);
+          } else if (budget.reserve(bytes.byteLength)) {
             retained.set(id, bytes);
             usedBytes += bytes.byteLength;
           }
@@ -69,6 +88,7 @@ export function createApparelSourceReader(
       disposed = true;
       retained.clear();
       pending.clear();
+      excluded.clear();
       budget.release(usedBytes);
       usedBytes = 0;
     },

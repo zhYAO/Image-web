@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Image } from "antd";
 import styles from "./apparel.module.css";
+import { isApparelVisibleLoadingEnabled } from "./apparel-display-config";
 
 export function ApparelResultImage({
   url,
@@ -10,6 +11,14 @@ export function ApparelResultImage({
   url: string;
   name: string;
 }) {
+  return isApparelVisibleLoadingEnabled() ? (
+    <VisibleApparelImage url={url} name={name} />
+  ) : (
+    <Image src={url} alt={name} />
+  );
+}
+
+function VisibleApparelImage({ url, name }: { url: string; name: string }) {
   const element = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {

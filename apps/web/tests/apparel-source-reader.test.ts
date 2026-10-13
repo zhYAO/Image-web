@@ -5,6 +5,34 @@ import {
 } from "@/server/apparel/apparel-source-reader";
 
 describe("claim-scoped source admission", () => {
+  it("remembers only successful overbudget exclusions and keeps fallback guarded", async () => {
+    const load = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockResolvedValue(new Uint8Array(3));
+    let active = true;
+    const budget = createSourceBudget(8);
+    const reader = createApparelSourceReader(
+      load,
+      () => {
+        if (!active) throw new Error("lease_lost");
+      },
+      { maxBytes: 2, budget },
+    );
+    await expect(reader.read("large")).rejects.toThrow("temporary");
+    expect(reader.excludedSourceCount).toBe(0);
+    await reader.read("large");
+    expect(reader.excludedSourceCount).toBe(1);
+    expect(reader.retainedBytes).toBe(0);
+    await reader.read("large");
+    expect(load).toHaveBeenCalledTimes(3);
+    active = false;
+    await expect(reader.read("large")).rejects.toThrow("lease_lost");
+    expect(load).toHaveBeenCalledTimes(3);
+    reader.dispose();
+    expect(reader.excludedSourceCount).toBe(0);
+    expect(budget.usedBytes).toBe(0);
+  });
   it("reuses admitted bytes but checks authorization and lease on every hit", async () => {
     const load = vi.fn(async () => new Uint8Array(3));
     const check = vi.fn();

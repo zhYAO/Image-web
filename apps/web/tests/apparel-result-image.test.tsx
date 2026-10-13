@@ -5,14 +5,32 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApparelResultImage } from "@/features/commerce/ApparelResultImage";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 describe("private apparel result visibility", () => {
+  beforeEach(() =>
+    vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true"),
+  );
+  it.each([undefined, "false"])(
+    "mounts the original without observer when disabled: %s",
+    (value) => {
+      vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", value);
+      const Observer = vi.fn();
+      vi.stubGlobal("IntersectionObserver", Observer);
+      render(<ApparelResultImage url="/private/baseline" name="原图" />);
+      expect(screen.getByRole("img", { name: "原图" })).toHaveAttribute(
+        "src",
+        "/private/baseline",
+      );
+      expect(Observer).not.toHaveBeenCalled();
+    },
+  );
   it("keeps the original URL out of images until the nested preview becomes visible", () => {
     let intersect!: IntersectionObserverCallback;
     const observe = vi.fn(),

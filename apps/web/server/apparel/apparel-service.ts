@@ -14,6 +14,7 @@ import { ApiRouteError } from "@/server/api-error";
 import { hashCanonicalRequest } from "@/server/image/image-service";
 import { renderApparelPages } from "./apparel-renderer";
 import { createApparelSourceReader } from "./apparel-source-reader";
+import { isApparelSourceReuseEnabled } from "./apparel-config";
 interface Client {
   rpc(
     name: string,
@@ -214,7 +215,7 @@ export function createApparelService(client: Client) {
           if (!sources.some((item) => item.id === id))
             throw failure("reference_expired");
         };
-        sourceReader = createApparelSourceReader(async (id: string) => {
+        const downloadSource = async (id: string) => {
           const source = sources.find((item) => item.id === id)!;
           const response = await client.storage
             .from("uploads")
@@ -243,10 +244,19 @@ export function createApparelService(client: Client) {
           } catch {
             throw failure("storage_read_failed");
           }
-        }, checkSource);
+        };
+        const directLoad = async (id: string) => {
+          checkSource(id);
+          const bytes = await downloadSource(id);
+          checkSource(id);
+          return bytes;
+        };
+        // Sample once per claim. Disabled is the baseline guarded download path.
+        if (isApparelSourceReuseEnabled())
+          sourceReader = createApparelSourceReader(downloadSource, checkSource);
         for await (const page of renderApparelPages(
           claim.plan,
-          sourceReader.read,
+          sourceReader ? sourceReader.read : directLoad,
         )) {
           await renew();
           const intent = z.object({ id: z.uuid(), path: z.string() }).parse(
