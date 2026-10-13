@@ -15,7 +15,7 @@ digests match across modes/processes; inputs remain byte-identical; retained
 encoded bytes return to zero after success/failure/disposal; each claim stays
 within 8 MiB and each module instance within 32 MiB. These are cache accounting
 limits, **not RSS limits**. Concurrent admission must fall back and recover.
-SDK/HTTP 404 is expired (410); transport/body/503 is retryable (503); malformed
+Input-download SDK/HTTP 404 is expired (410); transport/body/503 is retryable (503); malformed
 image/layout stays a validation error. Lease/owner checks apply to cached hits.
 
 Offline latency screening uses fixed synthetic JPEGs and the actual service and
@@ -146,15 +146,19 @@ it is not a native memory fix. The default-off path creates no reader/maps.
 
 Visible loading delays original result image requests until partial intersection
 or explicit user action while keeping all unexpired URLs in the preview group.
-It does not reduce signing RPCs already performed by service hydration, nor
-change export/original bytes. Missing IntersectionObserver loads automatically;
+Hydration emits stable authenticated proxy URLs without signing RPCs. Deferring
+an image postpones that endpoint's asset RPC and private Storage download until
+needed; actual browser request savings remain unmeasured. Export/original bytes
+stay unchanged. Missing IntersectionObserver loads automatically;
 URL/owner/task/run identity prevents old visibility from carrying forward.
 
 Both are candidates for later bounded staging activation, not approved for
 production now. Reuse still needs the complete fixed latency gate, real-network
 verification, and sustained concurrent RSS headroom evidence. Visible loading
 needs desktop native scrolling/clipping and request-count checks with a new
-build; jsdom checks prove state/gallery behavior only. No production flag was
+build; jsdom checks prove state/gallery behavior only. Inputs above 12 MP,
+20 high-pixel displays together, and maximum allowed decoded-pixel boundaries
+were not exercised. No production flag was
 changed in this task.
 
 The coordinating session reports Free / ACTIVE_HEALTHY at 12:45 UTC and database
