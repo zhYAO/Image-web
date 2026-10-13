@@ -1,5 +1,23 @@
 # ZImage 项目进度
 
+## 2026-10-12 上传400兼容修复与首页三张分组轮播（独立分支，未发布）
+
+- 最新生产与远程main均为 `1a3eba2891ff0c659a530eed01bcdde67e4f9ea6`。本轮独立分支 `codex/uploads-carousel-fix-20261012`，仅授权提交和推送代码；未合并、部署或触发生图。旧证据分支与原checkout改动保留。生产Worker v25的固定Plan地址、安全准入和旧批量退役保护均未回退。
+- 用户原始报错位于 `/create/product-set` 点击“一键生成”。代码确认“保存草稿”与“一键生成”先执行同一个 `preparePlan()`、同一会话及参考图multipart上传；保存草稿为 `save(false)`，不会进入 `submitCommerceOnce()`。共享HTTP客户端仅给字符串JSON正文设置Content-Type，FormData保留浏览器自动boundary。
+- 主会话已登录dot云浏览器于14:02:42.291 UTC对公开虚构WebP（175908字节、1024×1024）执行一次保存草稿，14:02:53成功。会话 `c465f554-1065-432b-b915-af05e170001f`，任务 `cd4d5c5d-d937-4760-a18d-5e000b3ef067`，v1待确认。脱敏Supabase日志确认会话及参考元数据201、Storage200、写入意图和方案RPC200；只读数据库确认参考active/ready，runs=0、generations=0、creditOperations=0。
+- 用户随后提供原始400 JSON：`bad_request`、`details.field=file`，correlation ID `d688c7ad-bc04-4465-9b4d-6fb436445a61`，message为“仅支持内容与扩展名一致的 PNG、JPEG 或 WebP 图片。”主会话于14:55:13.466–14:57:07 UTC用用户原文件保存草稿重现同一错误。Library文件 `libfile_462dbd10920481919a94fe6d369f9df9` 的权威文件名为 `微信图片_20260831201450_3011_4.jpg`，MIME为PNG、2484415字节、1536×2048；主会话已完整解码为RGBA PNG。对应严格服务端校验在Storage或模型调用前拒绝PNG内容与JPG文件名/类型不一致。
+- 当前执行环境官方Library材料化失败，未取得用户原图字节，不能宣称本容器已独立逐字节验证该原图，也不能证明上传到Library前文件名/编码未被转换。停止重复下载；此处原图解码和原失败来自主会话证据，本地修复回归使用明确标记的独立合成图片。
+- 用户明确要求可读图片由应用处理，不需手动校验编码、重命名或改MIME。共享HTTP上传先检测PNG/JPEG/WebP内容并用浏览器完整解码，再创建仅修正上传文件名和MIME的副本；原始字节、EXIF和透明度不重编码。普通创建图片与电商/服装共享上传复用适配；后端所有权、大小、尺寸、静态图片和内容一致性校验保持原样，SVG、未知及损坏图片不能靠改名通过。服装照片必须JPEG、Logo必须透明PNG的既有排版规则仍保留。
+- 电商与工作区选图入口不再把缺失/不支持的声明MIME直接当作不可读图片：对这类文件进行内容准备并补充参考元数据，保留原File/name及角色键。准备期间只禁用当前账号、会话和路由的提交；切换范围后旧解码不能附图、禁用新编辑器或修改新范围计数。两项并发边界均先RED后修复，独立最终静态复核无剩余Critical/Important。
+- 首页五张卡片桌面按1–3、4–5不重叠分组，尾组保留两张，每六秒自动回到下一组；移除箭头、播放/暂停及卡片箭头。窄窗口单卡可访问全部五项，保留键盘Home/End/左右、横向手势，悬停/焦点/触摸/隐藏页暂停，减少动态偏好关闭自动播放。独立审查发现竖向触摸时过早恢复播放，补充先失败回归后修复；最终无剩余Critical/Important/Minor。
+- 轮播提交 `69b6784fecd70719ceed2fcfba3fcd5204b687c8` 的完整单次Domain76/76、Web646/646、Worker80/80、预算5/5、lint、typecheck与构建通过；PR #9 的CI #56成功，生产构建/部署/回滚均跳过。此旧CI不替代新增上传代码的验证。
+- 上传修复最终专项48/48、Worker80/80、预算5/5、lint、typecheck、运维20/20与标准构建通过；最终单次全量及新提交完整SHA的quality/database终态详见PR #9和本节保持身份的Library总报告，新CI通过前不得合并。曾有测试环境缺少URL API造成一项测试失败，修正测试桩后通过；迭代中为修复实际并发问题取消的全量不计通过，不修改检查门槛。
+- 本地Chromium 151实际调用应用适配函数的8项验证全部通过：PNG/JPEG/WebP错误后缀、缺失MIME、Image兼容路径以及SVG/损坏拒绝。正常输出64×48，上传前后字节逐个一致并保留SHA256；仅有本地验证页和Blob访问，没有上传或模型请求。验证页Library `libfile_777f93658020819195143819e76d20ba` 可供主会话选择用户原图检查；该结果不等同生产HTTP上传/Storage或Plan质量验收。
+- 本地桌面Chromium实看首组三张、尾组两张、无按钮、悬停与焦点暂停、减少动态、窄窗五项可达；无横向溢出，共七张截图，明确为mock前端预览，不代表真实模型质量或生产新UI。首组Library `libfile_05642112137c81919bcb5590a08b0612`，尾组 `libfile_a699fb16380481918e8cfb5a4983defe`，窄窗最后卡 `libfile_0a6e74369bf48191b6545c268f8d7597`。
+- 合并与发布仍需这轮新批准；独立PR为 https://github.com/zhYAO/Image-web/pull/9 。最新SHA的CI及脱敏验证总报告按原Library身份 `libfile_bac0ef3ceeb8819180a5f110f6ffe25d` 更新。原用户图片的修复后生产上传仍待新代码发布后验证，Plan原图质量仍未获得，不因本次上传/轮播回归而判定合格。
+
+以下为此前发布与验收的历史快照；当前交付及阻碍以上述最新节为准。
+
 ## 2026-10-12 今日完整生产整合与 Plan 故障定位（发布准备中）
 
 - 用户明确授权今日剩余的液态玻璃、首页轮播、服装滚动和新版示例图发布生产。单一生产负责人在 `/workspace/Image-web-plan-diagnostic` 的 `codex/production-complete-20261012`，以已发布 main `b2cca96ea59bf53cecab9394a4508ba30dc7e8fa` 保留 Plan 接入，加入安全诊断 `0a8af926731a3787de1273393e57f53c4115ee44`、固定 Plan 地址修复 `99a4ccf`，整合已验收源分支 `5f4ae315c415c8832e2ceaf5c48e467c4d093335`。原 checkout 和 clone-web 改动保留。

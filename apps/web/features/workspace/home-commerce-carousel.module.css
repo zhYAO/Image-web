@@ -14,44 +14,10 @@
   font-size: 16px;
   font-weight: 600;
 }
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .counter {
   color: var(--z-muted);
   font-size: 12px;
-  margin-right: 8px;
   font-variant-numeric: tabular-nums;
-}
-.controls button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--z-glass-overlay);
-  border: 1px solid var(--z-border);
-  color: var(--z-text);
-  cursor: pointer;
-  box-shadow: var(--z-glass-shadow);
-  backdrop-filter: blur(12px) saturate(120%);
-  -webkit-backdrop-filter: blur(12px) saturate(120%);
-  transition:
-    background 160ms ease,
-    border-color 160ms ease;
-}
-.controls button:hover:not(:disabled) {
-  background: var(--z-primary-soft);
-  color: var(--z-primary);
-}
-.controls button:disabled {
-  cursor: default;
-  color: var(--z-disabled);
-  background: var(--z-disabled-bg);
-  box-shadow: none;
-  backdrop-filter: none;
 }
 .carousel:focus-visible {
   outline: 3px solid var(--z-focus);
@@ -117,11 +83,7 @@
   font-size: 14px;
   font-weight: 500;
 }
-.caption svg {
-  color: var(--z-primary);
-}
-.card:focus-visible,
-.controls button:focus-visible {
+.card:focus-visible {
   outline: 3px solid var(--z-focus);
   outline-offset: -3px;
 }
@@ -137,26 +99,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cards,
-  .controls button {
+  .cards {
     transition: none;
-  }
-}
-@media (prefers-reduced-transparency: reduce),
-  (prefers-contrast: more),
-  (forced-colors: active) {
-  .controls button {
-    background: var(--z-panel);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow: none;
-  }
-}
-@supports not (
-  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-) {
-  .controls button {
-    background: var(--z-panel);
-    box-shadow: none;
   }
 }

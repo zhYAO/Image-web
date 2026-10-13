@@ -1,6 +1,10 @@
 import { buildCommerceSlots } from "@zimage/domain";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpWorkspaceGateway } from "@/gateways/http-workspace-gateway";
+import { validateReferenceUpload } from '@/server/assets/reference-upload-service';
+import { readReferenceBytes, referencePng, stubReferenceBitmap } from './reference-file-fixtures';
+beforeEach(() => stubReferenceBitmap());
+afterEach(() => vi.unstubAllGlobals());
 const settings = {
   provider: "seedream",
   model: "seedream-5.0-flash",
@@ -30,6 +34,30 @@ const task = {
   selections: [],
 };
 describe("HTTP commerce contract", () => {
+  it.each(['commerce', 'apparel'] as const)('uploads readable PNG bytes via %s through the strict server validator without altering bytes', async entry => {
+    const file = new File([referencePng], '微信图片_20260831201450_3011_4.jpg', { type: 'image/jpeg' });
+    const id = crypto.randomUUID();
+    let uploaded: File | undefined;
+    const fetcher = vi.fn<typeof fetch>(async (_path, init) => {
+      uploaded = (init!.body as FormData).get('file') as File;
+      const bytes = await readReferenceBytes(uploaded);
+      try {
+        const metadata = await validateReferenceUpload({ bytes, name: uploaded.name, mimeType: uploaded.type, size: uploaded.size });
+        return Response.json({ id, name: uploaded.name, mimeType: uploaded.type, size: uploaded.size, width: metadata.width, height: metadata.height, expiresAt: '2026-11-01T00:00:00Z' });
+      } catch {
+        return Response.json({ code: 'bad_request', message: '仅支持内容与扩展名一致的 PNG、JPEG 或 WebP 图片。', retryable: false, correlationId: crypto.randomUUID() }, { status: 400 });
+      }
+    });
+    const gateway = new HttpWorkspaceGateway({ fetcher });
+    const uploader = entry === 'apparel' ? gateway.commerce.apparel : gateway.commerce;
+    await expect(uploader.upload(task.sessionId, { file, name: file.name, mimeType: file.type, size: file.size, status: 'ready' })).resolves.toBe(id);
+    expect(uploaded!.name).toBe('微信图片_20260831201450_3011_4.png');
+    expect(uploaded!.type).toBe('image/png');
+    expect(await readReferenceBytes(uploaded!)).toEqual(referencePng);
+    expect(file.name).toMatch(/\.jpg$/);
+    expect(file.type).toBe('image/jpeg');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
   it("submits one atomic group and preserves the exact request id, revision and selections on retry", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
@@ -195,7 +223,7 @@ describe("HTTP commerce contract", () => {
     );
     const gateway = new HttpWorkspaceGateway({ fetcher });
     await gateway.commerce.upload(task.sessionId, {
-      file: new File(["abc"], "p.png", { type: "image/png" }),
+      file: new File([referencePng], "p.png", { type: "image/png" }),
       name: "p.png",
       mimeType: "image/png",
       size: 3,

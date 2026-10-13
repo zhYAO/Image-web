@@ -60,6 +60,7 @@ export interface CommerceWizardProps {
   sessionId: string;
   gateway?: CommerceGateway;
   references: UploadReference[];
+  referencesPreparing?: boolean;
   capabilities: ProviderCapability[];
   settings: Pick<
     CommerceSlot,
@@ -93,6 +94,7 @@ export function CommerceWizard({
   sessionId,
   gateway,
   references,
+  referencesPreparing = false,
   capabilities,
   settings,
   onReferenceAdd,
@@ -199,7 +201,8 @@ export function CommerceWizard({
     setStep(1);
   }
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [operationBusy, setBusy] = useState(false);
+  const busy = operationBusy || referencesPreparing;
   const [collapsed, setCollapsed] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState(seedPlan?.slots[0]?.id);
   const showPlan = step === 3 && plan && previewPanel !== "examples";
@@ -497,7 +500,7 @@ export function CommerceWizard({
     addFiles={(files, role) => {
       const incoming = Array.from(files);
       const max = role === 'style' && scene === 'clone' ? 20 : 6;
-      if (incoming.some(file => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024)) { setError('请选择每张不超过 10 MB 的 PNG、JPG 或 WebP 图片。'); return; }
+      if (incoming.some(file => file.size > 10 * 1024 * 1024)) { setError('请选择每张不超过 10 MB 的 PNG、JPG 或 WebP 图片。'); return; }
       if (references.filter(ref => roleOf(ref) === role).length + incoming.length > max) { setError(`此类图片最多 ${max} 张。`); return; }
       invalidatePreview(); setError(undefined);
       setRoles(current => ({ ...current, ...Object.fromEntries(incoming.map(file => [`${file.name}:${file.size}:${file.lastModified}`, role])) }));

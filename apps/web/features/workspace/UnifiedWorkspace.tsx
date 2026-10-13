@@ -35,6 +35,7 @@ import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce
 
 import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
+import { normalizeReferenceUploadFile } from '@/gateways/reference-upload-file';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
 import { NavGlassFilter } from './NavGlassFilter';
@@ -61,6 +62,12 @@ interface UnifiedWorkspaceProps {
   route?: WorkspaceRoute;
   ownerKey?: string;
   onNavigate?: (url: string, replace?: boolean) => void;
+}
+
+interface ReferencePreparationScope {
+  ownerKey: string;
+  source?: string;
+  route?: WorkspaceRoute;
 }
 
 interface OptimisticImageTurn extends OptimisticImageTurnView {
@@ -149,12 +156,19 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const deletionLock = useRef(false);
   const firstSubmissionLock = useRef(false);
   const selectionVersion = useRef(0);
+  useLayoutEffect(() => { selectionVersion.current++; }, [ownerKey]);
+  const [referencePreparation, setReferencePreparation] = useState<{
+    version: number; scope: ReferencePreparationScope; count: number;
+  }>();
   const [pendingFirstMessage, setPendingFirstMessage] = useState<MessageTimelineItem>();
   const sessionsRef = useRef<Session[]>([]);
   const [activeSessionId, setActiveSessionState] = useState<string>();
+  const referenceScope = useMemo(() => ({ ownerKey, source: activeSessionId, route }), [ownerKey, activeSessionId, route]);
+  const preparingReferences = referencePreparation?.scope === referenceScope ? referencePreparation.count : 0;
   const composerDefaults = useRef<Partial<ComposerState>>({});
   const setActiveSessionId = useCallback((id?: string, inheritCurrent = false) => {
     selectionVersion.current++;
+    setReferencePreparation(undefined);
     activateComposer(id, composerDefaults.current, inheritCurrent);
     setActiveSessionState(id);
   }, [activateComposer]);
@@ -404,6 +418,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   useEffect(
     () => () => {
+      selectionVersion.current++;
       for (const previewUrl of localPreviewUrls.current) URL.revokeObjectURL(previewUrl);
       localPreviewUrls.current.clear();
       for (const controller of chatControllers.current.values()) controller.abort();
@@ -471,7 +486,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const pendingOnHome = Boolean(pendingFirstMessage && !activeSessionId);
   const activeBusy = Boolean(pendingOnHome || activeRuntime?.chatBusy || activeRuntime?.optimisticImages.some((turn) => turn.submitting));
   const composerDisabled = (initializing && (!route || route.kind === 'session')) || Boolean(activeSessionId && restoringAttachments[activeSessionId])
-    || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
+    || preparingReferences > 0 || activeRuntime?.loadStatus === 'loading' || activeRuntime?.loadStatus === 'error';
   const busySessionIds = useMemo(() => new Set(Object.entries(runtimes).flatMap(([sessionId, runtime]) => (
     runtime.chatBusy
       || runtime.optimisticImages.some((turn) => turn.submitting)
@@ -925,26 +940,50 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     } catch { setFeedback({ message: '进度暂时无法刷新，请稍后重试。' }); }
   };
 
-  const addReferences = (files: FileList) => {
-    const validFiles: File[] = [];
+  const addReferences = async (files: FileList) => {
+    const incoming = Array.from(files);
+    const version = selectionVersion.current;
+    const source = useWorkspaceStore.getState().activeComposerSessionId;
+    const sourceRoute = routeRef.current;
+    const needsPreparation = incoming.some(file => !ALLOWED_REFERENCE_TYPES.has(file.type) && file.size <= MAX_UPLOAD_BYTES);
+    if (needsPreparation) setReferencePreparation(current => ({
+      version, scope: referenceScope,
+      count: current?.version === version && current.scope === referenceScope ? current.count + 1 : 1,
+    }));
+    const validFiles: Array<{ file: File; mimeType: string }> = [];
     let validationError: SafeError | undefined;
-    for (const file of Array.from(files)) {
-      if (!ALLOWED_REFERENCE_TYPES.has(file.type)) {
-        validationError ??= { code: 'VALIDATION_UPLOAD_TYPE', message: `${file.name} 格式不支持，仅支持 JPG、PNG 或 WebP。`, retryable: false };
-      } else if (file.size > MAX_UPLOAD_BYTES) {
-        validationError ??= { code: 'VALIDATION_UPLOAD_SIZE', message: `${file.name} 超过 10 MB。`, retryable: false };
-      } else validFiles.push(file);
+    try {
+      for (const file of incoming) {
+        if (file.size > MAX_UPLOAD_BYTES) {
+          validationError ??= { code: 'VALIDATION_UPLOAD_SIZE', message: `${file.name} 超过 10 MB。`, retryable: false };
+        } else if (ALLOWED_REFERENCE_TYPES.has(file.type)) validFiles.push({ file, mimeType: file.type });
+        else {
+          try {
+            const prepared = await normalizeReferenceUploadFile(file);
+            validFiles.push({ file, mimeType: prepared.type });
+          } catch {
+            validationError ??= { code: 'VALIDATION_UPLOAD_TYPE', message: `${file.name} 无法读取，仅支持 JPG、PNG 或 WebP。`, retryable: false };
+          }
+        }
+      }
+      // Decoding can finish after navigation or logout. Never attach its result to
+      // a different composer or account, and enforce the limit against fresh state.
+      const current = useWorkspaceStore.getState();
+      if (selectionVersion.current !== version || current.activeComposerSessionId !== source || routeRef.current !== sourceRoute) return;
+      const remaining = Math.max(0, maxActiveReferences - current.references.length);
+      const acceptedFiles = validFiles.slice(0, remaining);
+      if (validFiles.length > remaining) validationError = { code: 'VALIDATION_IMAGE_COUNT', message: `当前最多可添加 ${maxActiveReferences} 张参考图。`, retryable: false };
+      const additions = acceptedFiles.map(({ file, mimeType }): UploadReference => {
+        const previewUrl = URL.createObjectURL(file);
+        localPreviewUrls.current.add(previewUrl);
+        return { file, mimeType, name: file.name, previewUrl, size: file.size, status: 'ready' };
+      });
+      if (validationError) setFeedback({ error: validationError, message: validationError.message });
+      setReferences((current) => [...current, ...additions]);
+    } finally {
+      if (needsPreparation) setReferencePreparation(current => current?.version === version && current.scope === referenceScope
+        ? { ...current, count: current.count - 1 } : current);
     }
-    const remaining = Math.max(0, maxActiveReferences - references.length);
-    const acceptedFiles = validFiles.slice(0, remaining);
-    if (validFiles.length > remaining) validationError = { code: 'VALIDATION_IMAGE_COUNT', message: `当前最多可添加 ${maxActiveReferences} 张参考图。`, retryable: false };
-    const additions = acceptedFiles.map((file): UploadReference => {
-      const previewUrl = URL.createObjectURL(file);
-      localPreviewUrls.current.add(previewUrl);
-      return { file, mimeType: file.type, name: file.name, previewUrl, size: file.size, status: 'ready' };
-    });
-    if (validationError) setFeedback({ error: validationError, message: validationError.message });
-    setReferences((current) => [...current, ...additions]);
   };
 
   const removeReference = (index: number) => {
@@ -1050,7 +1089,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               items={activeRuntime?.timeline ?? []} references={references} capabilities={commerceCapabilities}
               timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'}
               settings={{ provider: selectedProvider ?? 'seedream', model: selectedModelId ?? 'doubao-seedream-5.0-pro', aspectRatio, resolution }}
-              onReferenceAdd={addReferences} onReferenceRemove={removeReference}
+              onReferenceAdd={addReferences} onReferenceRemove={removeReference} referencesPreparing={preparingReferences > 0}
               onReferencesAdopt={(next, sessionId) => {
                 const current = useWorkspaceStore.getState();
                 if (current.activeComposerSessionId !== sessionId) return false;
