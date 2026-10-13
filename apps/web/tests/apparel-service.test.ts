@@ -77,9 +77,15 @@ describe.each([false, true])(
         expect(download).toHaveBeenCalledTimes(1);
       },
     );
-    it.each([true, false])(
-      "switches reuse independently and preserves every output hash: %s",
-      async (reuse) => {
+    it.each([
+      ["test", true, 7],
+      ["test", false, 14],
+      ["development", true, 7],
+      ["production", true, 14],
+    ] as const)(
+      "preserves every output hash in %s with reuse=%s and %s reads",
+      async (mode, reuse, expectedReads) => {
+        vi.stubEnv("NODE_ENV", mode);
         vi.stubEnv(
           "ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED",
           reuse ? "true" : "false",
@@ -146,7 +152,7 @@ describe.each([false, true])(
           { requestId: apparelIds[1]!, revision: 1 },
           apparelIds[2]!,
         );
-        expect(download).toHaveBeenCalledTimes(reuse ? 7 : 14);
+        expect(download).toHaveBeenCalledTimes(expectedReads);
         expect(new Set(download.mock.calls.map(([id]) => id)).size).toBe(7);
         expect(hashes).toEqual(baseline);
         expect(upload).toHaveBeenCalledTimes(11);

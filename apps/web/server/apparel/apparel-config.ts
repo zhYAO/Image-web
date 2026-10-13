@@ -1,4 +1,5 @@
-/** Runtime opt-in, sampled once per authorized claim. No credential is involved. */
+/** Unaccepted optimization: production stays off until an explicit code review. */
 export function isApparelSourceReuseEnabled() {
+  if (process.env.NODE_ENV === "production") return false;
   return process.env.ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED === "true";
 }

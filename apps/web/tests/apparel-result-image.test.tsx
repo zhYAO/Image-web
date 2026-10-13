@@ -19,6 +19,17 @@ describe("private apparel result visibility", () => {
   beforeEach(() =>
     vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true"),
   );
+  it("keeps the original image path in production despite a true public opt-in", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const Observer = vi.fn();
+    vi.stubGlobal("IntersectionObserver", Observer);
+    render(<ApparelResultImage url="/private/production" name="生产原图" />);
+    expect(screen.getByRole("img", { name: "生产原图" })).toHaveAttribute(
+      "src",
+      "/private/production",
+    );
+    expect(Observer).not.toHaveBeenCalled();
+  });
   it("keeps deferred originals in the full gallery without mounting their thumbnails", async () => {
     vi.stubGlobal(
       "IntersectionObserver",

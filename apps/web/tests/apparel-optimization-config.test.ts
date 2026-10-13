@@ -4,6 +4,26 @@ import { isApparelVisibleLoadingEnabled } from "@/features/commerce/apparel-disp
 
 afterEach(() => vi.unstubAllEnvs());
 describe("independent opt-in apparel controls", () => {
+  it("locks both controls off in production even when both opt-ins are true", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true");
+    expect(isApparelSourceReuseEnabled()).toBe(false);
+    expect(isApparelVisibleLoadingEnabled()).toBe(false);
+  });
+  it.each(["development", "test"])(
+    "preserves explicit independent opt-ins in %s",
+    (mode) => {
+      vi.stubEnv("NODE_ENV", mode);
+      vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "true");
+      vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true");
+      expect(isApparelSourceReuseEnabled()).toBe(true);
+      expect(isApparelVisibleLoadingEnabled()).toBe(true);
+      vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "false");
+      expect(isApparelSourceReuseEnabled()).toBe(false);
+      expect(isApparelVisibleLoadingEnabled()).toBe(true);
+    },
+  );
   it.each([undefined, "false", "TRUE", "1", "invalid"])(
     "keeps both baseline paths for %s",
     (value) => {

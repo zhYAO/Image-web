@@ -1,5 +1,21 @@
 # Apparel input reuse and visible loading acceptance
 
+## Production release lock (2026-10-13 follow-up)
+
+Both feature getters return false when `NODE_ENV=production`, before reading
+either opt-in. Next production builds replace that environment condition, so
+the browser flag cannot override the compiled lock; standalone production
+runtime is also locked. `development` and `test` retain independent opt-ins.
+This preserves the original download/image path in production even if machine
+or build feature flags are accidentally true. Future production activation
+requires an explicit reviewed code change as well as the acceptance below;
+changing environment settings or restarting alone cannot activate it.
+
+No systemd, credential, permission or security configuration change is needed.
+The earlier standalone benchmark fingerprints/results below predate this
+production-lock follow-up and remain historical screening, not acceptance of
+the new release tree. No additional performance experiment was run.
+
 ## Scope and fixed decision rules (written before measurements)
 
 Base: main `880391e64a8796efec8c523a64aa0625578a2325` (PR9 and PR12).
