@@ -3,7 +3,7 @@ create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 select plan(31);
 select ok(not has_table_privilege(current_user,'cron.job','UPDATE'),'tests do not rely on extra job update privileges');
-select ok(not has_table_privilege(current_user,'cron.job_run_details','UPDATE'),'tests do not rely on extra history update privileges');
+select ok(has_table_privilege(current_user,'cron.job_run_details','SELECT') and has_table_privilege(current_user,'cron.job_run_details','DELETE'),'owner has required native history read/delete privileges');
 
 -- Synthetic history is seeded by the local CI administrator fixture.
 

@@ -9,7 +9,7 @@
 - 独立方案/代码复核修正缓存抖动、AntD预取、派生资产计数风险及真实SDK错误路径；最终无剩余 Critical/Important 或 actionable Minor。相关 RED→GREEN 与限制见 `doc/qa/2026-10-13-free-plan-optimizations.md`。
 - 本地最终检查：Domain76、Web656全量通过，服装相关31、Worker80、运维20、预算5、lint/typecheck及隔离构建通过。本地 PostgreSQL17.6/真pgTAP31通过；Cron表为官方形状+原生RLS/SELECT/DELETE权限fixture，真实pg_cron/全迁移/生成类型以PR CI为发布门禁。真实负载和正式整页鉴权浏览器验收未完成，不宣称生产性能收益。
 - 串行合成对照（每路径10次）：小素材原图14→7次、P95 1686→984ms；20展示/10MiB超限52→52次、P95 4777→5071ms；11/30张输出SHA-256一致。小素材峰值RSS约227.8→237.7MiB，超限329.7→328.0MiB；不是缓存字节或真实负载SLA。
-- CI58发现原生pg_cron不允许普通postgres直接插入/显式行锁；改为隔离admin仅准备inactive样本，测试与函数保持普通RLS/SELECT/DELETE权限。归档后DELETE重新匹配job/全部元数据、变化整批回滚；普通权限原函数42501 RED→修正31项GREEN。未增加生产grant，真实CI待复跑。
+- CI58发现原生pg_cron不允许普通postgres直接插入/显式行锁；改为隔离admin仅准备inactive样本，测试与函数保持普通RLS/SELECT/DELETE权限。归档后DELETE重新匹配job/全部元数据、变化整批回滚；普通权限原函数42501 RED→修正31项GREEN。未增加生产grant，CI59实际函数/其余1035项通过，仅历史权限假设断言改为验证必需SELECT/DELETE；CI60待完成。
 - Log Query预算/有限查询、各Free额度区分、存储/历史快照与逐批生产批准规则已记录；当前扫描来源和历史超额对象仍未知。后续派生预览/ETag、短Cron包装器需独立生命周期/授权及Vault/调度核对。
 
 ## 2026-10-12 今日完整生产整合与 Plan 故障定位（发布准备中）

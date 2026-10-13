@@ -65,8 +65,8 @@ Free 的 cached/uncached egress 各有独立 5 GB 额度，不能合并视为可
 
 ### CI #58 发现并修正的原生权限差异
 
-真实 pg_cron 的 job 表只有 SELECT、历史表只有 SELECT/DELETE；普通 postgres 不能直接 INSERT 或使用需要 UPDATE 权限的 FOR KEY SHARE/FOR UPDATE。[pg_cron job 定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron.sql)、[历史表定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron--1.2--1.3.sql)
+上游 pg_cron 默认授予 job 表 SELECT、历史表 SELECT/DELETE；普通 postgres 不能直接 INSERT 或使用需要 UPDATE 权限的 FOR KEY SHARE/FOR UPDATE。[pg_cron job 定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron.sql)、[历史表定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron--1.2--1.3.sql)
 
-原 CI58 的新测试在直接插入 job fixture 时失败，旧 29 文件/1005 项通过。没有放宽权限。样本仅由隔离 CI 的 supabase_admin 初始化，job inactive，username=postgres；测试和实际函数始终以普通 postgres 的 RLS/SELECT/DELETE 权限执行。函数在归档之后的 DELETE 中重新匹配当前 job 和所有归档元数据，改变或不可见的行导致条数不符并整批回滚；不再请求额外 UPDATE/行锁权限。归档事务/advisory串行/lock_timeout/500条上限和权限撤销均保留。
+原 CI58 的新测试在直接插入 job fixture 时失败，旧 29 文件/1005 项通过。没有放宽权限。样本仅由隔离 CI 的 supabase_admin 初始化，job inactive，username=postgres；测试和实际函数以普通 postgres 执行，只依赖 SELECT/DELETE，不变更既有权限。函数在归档之后的 DELETE 中重新匹配当前 job 和所有归档元数据，改变或不可见的行导致条数不符并整批回滚；不再请求额外 UPDATE/行锁权限。归档事务/advisory串行/lock_timeout/500条上限和权限撤销均保留。
 
-以无额外 UPDATE 权限的普通角色复现原函数 42501 RED，再验证修正后的 31 项 GREEN；新增断言确认 job/history 均无 UPDATE，元数据不匹配时保留原行。CI59 将再次验证真实扩展、全迁移和生成类型。生产迁移/权限/调度均未改变。
+以无额外 UPDATE 权限的普通角色复现原函数 42501 RED，再验证修正后的 31 项 GREEN；本地最小权限角色确认 job/history 均无 UPDATE，平台测试确认所需 SELECT/DELETE，元数据不匹配时保留原行。CI59 的真实函数/其余1035项通过，仅“历史无UPDATE”平台假设断言失败：Supabase既有历史UPDATE权限保留，断言改为验证必需SELECT/DELETE。CI60再次验证真实扩展、全迁移和生成类型。生产迁移/权限/调度均未改变。
