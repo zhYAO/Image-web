@@ -2,6 +2,7 @@ import {
   MODEL_REGISTRY_VERSION,
   imageRequestSchema,
   imageSubmissionResponseSchema,
+  kneeFramingGuidance,
   resolveImageModel,
   resolveSkill,
   type ImageApiRequest,
@@ -114,17 +115,26 @@ export async function prepareImageSubmission(
     ...request.params,
     registryVersion: MODEL_REGISTRY_VERSION,
   };
+  const framing = source === 'direct' && !request.skillId
+    ? kneeFramingGuidance(request.prompt, request.params.aspectRatio) : '';
+  const prompt = framing ? `${request.prompt}\n${framing}` : request.prompt;
+  if (prompt.length > 8000) {
+    throw new ApiRouteError({ code: 'bad_request', status: 400, retryable: false,
+      message: '提示词与构图要求合计过长，请精简后再提交（最多 8000 字符）。' });
+  }
   return {
     config,
     billing: request.billing,
     correlationId: parsedCorrelationId,
     idempotencyKey: parsedIdempotencyKey,
     model: resolvedModel.model,
-    prompt: request.prompt,
+    prompt,
     provider: resolvedModel.provider,
     requestHash: await hashCanonicalRequest({
       config,
       model: resolvedModel.model,
+      // Hash the user's material so committed requests remain recoverable across
+      // prompt compiler changes. Recovery never recompiles or buys another image.
       prompt: request.prompt,
       provider: resolvedModel.provider,
       sessionId: request.sessionId,

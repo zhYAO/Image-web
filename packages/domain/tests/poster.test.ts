@@ -27,7 +27,7 @@ describe('content posters', () => {
     const templates = COMMERCE_TEMPLATES.filter(t => t.id.startsWith('xhs-'));
     expect(templates).toHaveLength(6);
     expect(new Set(templates.map(t => t.guidance)).size).toBe(6);
-    expect(templates.every(t => t.version === '2.0.0')).toBe(true);
+    expect(templates.every(t => t.version === '2.1.0')).toBe(true);
   });
   it('explains per-card capacity without silently cutting supplied text', () => {
     expect(() => buildCommerceSlots({ ...brief, facts: '字'.repeat(1100) }, 'xhs-poster', 1, settings)).toThrow('每张文案最多 1000');

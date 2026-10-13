@@ -186,13 +186,13 @@ async function compile(plan: CommercePlan) {
         provider: slot.provider,
         model: slot.model,
         templateVersion: template.version,
-        compilerVersion: "commerce-3",
+        compilerVersion: "commerce-4",
         hash: await hashCanonicalRequest({
           slot,
           prompt,
           template: template.id,
           version: template.version,
-          compiler: "commerce-3",
+          compiler: "commerce-4",
         }),
       };
     }),

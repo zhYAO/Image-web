@@ -14,3 +14,4 @@ export * from "./commerce-workflows";
 export * from "./commerce-batch";
 export * from "./credits";
 export * from "./apparel";
+export * from "./image-composition";
