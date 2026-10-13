@@ -37,7 +37,7 @@ Free 的 cached/uncached egress 各有独立 5 GB 额度，不能合并视为可
 - UTC 截止时间、总候选数、每批准确 runID/条数及清单哈希；不得用实时 `now()` 不断扩大批准范围。
 - 脱敏归档字段 runid/jobid/status/start/end/archived_at/approval_reference；**不保留 command 和原始 return_message**，删除后无法恢复这些敏感原始字段，须明确接受这一限制。
 - 独立批准迁移应用与实际 DELETE；本轮的代码批准不包含上述生产执行。
-- 管理员每批独立事务，调用前设置 `SET LOCAL statement_timeout='5s'`；函数 lock_timeout 500ms、事务 advisory lock 串行、锁定当前映射/具体历史行。归档与删除同一事务、条数一致；归档失败全部回滚。归档最多 100000 行，达到上限停止，需另行审阅外部归档/迁出；不安装自动归档删除。
+- 管理员每批独立事务，调用前设置 `SET LOCAL statement_timeout='5s'`；函数 lock_timeout 500ms、事务 advisory lock 串行、遵循原生 SELECT/DELETE 权限，以 DELETE 重核当前映射、归档元数据并取得行锁。归档与删除同一事务、条数一致；归档失败全部回滚。归档最多 100000 行，达到上限停止，需另行审阅外部归档/迁出；不安装自动归档删除。
 - 标准 VACUUM 是否回收可复用空间需另行测量；不执行 VACUUM FULL，不承诺文件大小/数据库账单即时下降。
 
 ## 验收证据与限制
@@ -46,7 +46,7 @@ Free 的 cached/uncached egress 各有独立 5 GB 额度，不能合并视为可
 
 - 来源/cache/service/renderer/私有下载单测：包括读取去重、每次命中租约检查、claim/进程预算、超限回退、失败不缓存、pending 后释放及输出 SHA-256 对照。
 - 原生 Chromium 151 + 实际 ApparelResultImage/AntD 合成 harness：30 张图，1280×720 首屏 2 请求、滚到末尾累计 4；600×720 首屏 5、末尾累计 10，末图可达、隐藏图未预取。此证据不代表已登录生产整页验收。
-- 本地 PostgreSQL 17.6 + 真 pgTAP 27 项全部通过。因本地 pg_cron 安装源不可达，使用官方形状的 Cron 表 fixture；真实 Supabase/pg_cron 与全迁移/类型检查由 PR CI 执行。CLI 2.115.0 migration-new 因 `/home/agent/.supabase` 只读失败，文件名使用 UTC 时间戳手工创建；没有绕过凭据或连接生产。
+- 本地 PostgreSQL 17.6 + 真 pgTAP 31 项全部通过。因本地 pg_cron 安装源不可达，使用官方形状和原生 SELECT/DELETE/RLS 的 Cron 表 fixture；真实 Supabase/pg_cron 与全迁移/类型检查由 PR CI 执行。CLI 2.115.0 migration-new 因 `/home/agent/.supabase` 只读失败，文件名使用 UTC 时间戳手工创建；没有绕过凭据或连接生产。
 - 原图传输性能：每读取注入 25ms，仅为可重复的延迟 fixture。记录 P50/P95、读取次数/字节、fresh-process maxRSS 和逐页 SHA-256；缓存计量不是 RSS。首轮并行构建/全量单测干扰了时间，不能据此宣称 P95 通过；最终串行对照另附结果。
 - 最终自动检查：lint/typecheck、Domain 76、Web 656、Worker 80、运维 20、预算 5、隔离构建全部通过。单独最终服装相关 31 项通过；输出哈希等价及 ZIP 原字节校验通过。独立复核无剩余 Critical/Important 或 actionable Minor。真实 pg_cron/全迁移/生成类型仍以 PR CI 为门禁。
 
@@ -62,3 +62,11 @@ Free 的 cached/uncached egress 各有独立 5 GB 额度，不能合并视为可
 | 20 张展示，照片 10 MiB 超限 复用 | 52 | 4303 | 5071 | 328.0 | 一致 |
 
 小素材读取减半；超限照片不缓存，读取数和原路径一致。本轮超限 P95 上升约 6.1%，小样本不能判断真实负载的延迟变化，不承诺线上 SLA。小素材峰值 RSS 上升约 4.3%，超限约下降 0.5%；这是进程观测值，含 Sharp/字体/输入 fixture，不是缓存占用。超限 fixture 是带尾部填充的合法 600×800 JPEG，用于验证字节预算回退，不代表大像素图的解码内存。P95 使用 nearest rank，10 次中包括各进程首张字体初始化。所有 11/30 张输出逐页 SHA-256 完全一致，未改变输出编码、尺寸或 ZIP。
+
+### CI #58 发现并修正的原生权限差异
+
+真实 pg_cron 的 job 表只有 SELECT、历史表只有 SELECT/DELETE；普通 postgres 不能直接 INSERT 或使用需要 UPDATE 权限的 FOR KEY SHARE/FOR UPDATE。[pg_cron job 定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron.sql)、[历史表定义](https://github.com/citusdata/pg_cron/blob/v1.6.7/pg_cron--1.2--1.3.sql)
+
+原 CI58 的新测试在直接插入 job fixture 时失败，旧 29 文件/1005 项通过。没有放宽权限。样本仅由隔离 CI 的 supabase_admin 初始化，job inactive，username=postgres；测试和实际函数始终以普通 postgres 的 RLS/SELECT/DELETE 权限执行。函数在归档之后的 DELETE 中重新匹配当前 job 和所有归档元数据，改变或不可见的行导致条数不符并整批回滚；不再请求额外 UPDATE/行锁权限。归档事务/advisory串行/lock_timeout/500条上限和权限撤销均保留。
+
+以无额外 UPDATE 权限的普通角色复现原函数 42501 RED，再验证修正后的 31 项 GREEN；新增断言确认 job/history 均无 UPDATE，元数据不匹配时保留原行。CI59 将再次验证真实扩展、全迁移和生成类型。生产迁移/权限/调度均未改变。

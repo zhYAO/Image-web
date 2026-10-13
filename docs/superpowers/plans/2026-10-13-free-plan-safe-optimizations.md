@@ -25,3 +25,7 @@ Spec: doc/requirements.md, 2026-10-13 optimization scope. User authorized implem
 ## Review focus
 
 Authorization on cache hits and lease loss; dispose while downloading; aggregate accounting and oversized fallback; failure classification without automatic model retry; native memory vs source-byte budget; nested scroll visibility and AntD preload; private original revocation/ZIP fidelity; Cron exact IDs, job mapping, race/locks, rollback and inaccessible roles; migration must not execute cleanup or install schedules; no performance claims for real users without load evidence.
+
+## Native Cron compatibility ruling after CI58
+
+Native tables expose SELECT (job), SELECT/DELETE (history) with owner RLS. Explicit FOR UPDATE/KEY SHARE requires unauthorized UPDATE grants. Keep native privileges: archive first, then DELETE using current mapping and identical archived metadata; row/count changes abort the transaction. Only the disposable CI administrator seeds inactive rows; pgTAP and the function use normal postgres. Verify the old function RED under these permissions and the new 31 checks GREEN. No production permission or schedule change.

@@ -62,6 +62,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec supabase start
+      # Native pg_cron history cannot be INSERTed by ordinary postgres. Seed only
+      # inactive synthetic fixtures as the disposable local DB administrator;
+      # tests themselves keep normal postgres/RLS/SELECT+DELETE privileges.
+      - run: docker exec -i supabase_db_zimage psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/tests/fixtures/cron-retention-history.sql
       - run: pnpm exec supabase test db supabase/tests/database
       - run: pnpm exec supabase gen types typescript --local > database.generated.ts
       - run: diff --strip-trailing-cr --unified apps/web/lib/supabase/database.generated.ts database.generated.ts

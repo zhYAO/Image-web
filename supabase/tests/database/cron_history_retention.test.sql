@@ -1,19 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
-select plan(27);
+select plan(31);
+select ok(not has_table_privilege(current_user,'cron.job','UPDATE'),'tests do not rely on extra job update privileges');
+select ok(not has_table_privilege(current_user,'cron.job_run_details','UPDATE'),'tests do not rely on extra history update privileges');
 
--- Entire transaction uses only disposable synthetic Cron jobs/history.
-insert into cron.job(jobid, schedule, command, nodename, nodeport, database, username, active, jobname)
-values (990001, '* * * * *', 'select 1', 'localhost', 5432, current_database(), current_user, false, 'retention-fixture');
-insert into cron.job_run_details(jobid,runid,status,start_time,end_time,command) values
-(990001,990001,'succeeded',now()-interval '20 days',now()-interval '20 days','synthetic-sensitive-command'),
-(990001,990002,'failed',now()-interval '40 days',now()-interval '40 days','synthetic-sensitive-command'),
-(990001,990003,'running',now()-interval '40 days',null,'synthetic-sensitive-command'),
-(990001,990004,'unknown',now()-interval '40 days',now()-interval '40 days','synthetic-sensitive-command'),
-(990001,990005,'succeeded',now()-interval '2 days',now()-interval '2 days','synthetic-sensitive-command'),
-(990001,990006,'succeeded',now()-interval '40 days',null,'synthetic-sensitive-command'),
-(990002,990007,'succeeded',now()-interval '40 days',now()-interval '40 days','synthetic-sensitive-command');
+-- Synthetic history is seeded by the local CI administrator fixture.
 
 select has_function('private','prune_approved_cron_history',array['bigint[]','bigint[]','timestamp with time zone','timestamp with time zone','integer','text'],'approved cleanup exists');
 select ok(not has_function_privilege('anon','private.prune_approved_cron_history(bigint[],bigint[],timestamptz,timestamptz,integer,text)','EXECUTE'),'anon cannot prune');
@@ -41,13 +33,18 @@ create trigger fixture_archive_failure before insert on private.cron_history_arc
 select throws_ok($$select private.prune_approved_cron_history('{990001}','{990001}',now()-interval '14 days',now()-interval '30 days',1,'approval-test')$$,'P0001','archive_fixture_failure','archive error aborts cleanup');
 select is((select count(*) from cron.job_run_details where runid=990001),1::bigint,'original retained on archive failure');
 drop trigger fixture_archive_failure on private.cron_history_archive;
+-- Optimistic metadata fencing aborts if the archived snapshot no longer matches.
+create function pg_temp.change_archive() returns trigger language plpgsql as $$begin new.status := 'failed'; return new; end$$;
+create trigger fixture_archive_change before insert on private.cron_history_archive for each row execute function pg_temp.change_archive();
+select throws_ok($$select private.prune_approved_cron_history('{990001}','{990001}',now()-interval '14 days',now()-interval '30 days',1,'approval-test')$$,'22023','cron_retention_scope_changed','metadata mismatch rolls back rather than pruning changed rows');
+select is((select count(*) from cron.job_run_details where runid=990001),1::bigint,'mismatched metadata preserves original');
+drop trigger fixture_archive_change on private.cron_history_archive;
 select is(private.prune_approved_cron_history('{990001}','{990001,990002}',now()-interval '14 days',now()-interval '30 days',2,'approval-test'),2,'deletes exactly two approved terminal rows');
 select is((select count(*) from cron.job_run_details where runid between 990003 and 990007),5::bigint,'unapproved and excluded rows retained');
 select is((select count(*) from private.cron_history_archive where runid in (990001,990002)),2::bigint,'whitelist metadata archived');
 select ok(not exists(select 1 from information_schema.columns where table_schema='private' and table_name='cron_history_archive' and column_name in ('command','return_message')),'archive excludes credential-bearing fields');
 insert into private.cron_history_archive(runid,jobid,status,end_time,approval_reference)
 select 1000000+n,990001,'succeeded',now()-interval '40 days','capacity-fixture' from generate_series(1,99998) n;
-insert into cron.job_run_details(jobid,runid,status,end_time) values(990001,990008,'succeeded',now()-interval '40 days');
 select throws_ok($$select private.prune_approved_cron_history('{990001}','{990008}',now()-interval '14 days',now()-interval '30 days',1,'approval-test')$$,'54000','cron_archive_capacity_exceeded','archive capacity requires external review');
 select is((select count(*) from cron.job_run_details where runid=990008),1::bigint,'archive capacity failure preserves original');
 select * from finish();
