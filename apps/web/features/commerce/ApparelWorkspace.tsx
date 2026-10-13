@@ -18,6 +18,7 @@ import {
   type ApparelDraft,
 } from "./apparel-draft-storage";
 import styles from "./apparel.module.css";
+import { ApparelResultImage } from "./ApparelResultImage";
 const examplePages = [
   ...Array.from({ length: 5 }, (_, index) => ({
     file: `main-${index + 1}`,
@@ -596,14 +597,24 @@ export function ApparelWorkspace({
               <Download size={16} />
               下载原始 JPEG ZIP
             </button>
-            <Image.PreviewGroup>
+            <Image.PreviewGroup
+              items={run?.assets
+                .filter((asset) => !asset.expired && asset.url)
+                .map((asset) => asset.url!)}
+            >
               <div className={styles.results}>
                 {run?.assets.map((asset) => (
-                  <figure key={asset.id}>
+                  <figure key={`${ownerKey}:${task.id}:${run.id}:${asset.id}`}>
                     {asset.expired ? (
                       <p>结果已过期</p>
                     ) : (
-                      asset.url && <Image src={asset.url} alt={asset.name} />
+                      asset.url && (
+                        <ApparelResultImage
+                          key={asset.url}
+                          url={asset.url}
+                          name={asset.name}
+                        />
+                      )
                     )}
                     <figcaption>
                       {asset.name}
