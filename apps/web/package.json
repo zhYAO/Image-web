@@ -11,6 +11,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage --testTimeout=60000",
     "test:acceptance-budget": "node --test scripts/real-acceptance-budget.test.mjs",
+    "test:apparel-performance": "node --test scripts/apparel-performance-statistics.test.mjs scripts/apparel-performance-safety.test.mjs",
     "setup:langgraph": "node scripts/setup-langgraph.mjs"
   },
   "dependencies": {
