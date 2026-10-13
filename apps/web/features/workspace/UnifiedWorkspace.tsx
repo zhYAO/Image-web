@@ -1105,6 +1105,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 if (tail && hasCommerce && !loading && !activeRuntime?.loadError && !activeRuntime?.streamingText && !activeRuntime?.awaitingFirstDelta && !activeRuntime?.optimisticImages.length) return null;
                 return (
                   <WorkspaceTimeline
+                    key={`${ownerKey}:${activeSessionId ?? 'home'}`}
                     resolveAssetUrl={resolveAssetUrl}
                     onRefreshBatch={(batch) => void refreshGenerationBatch(batch)}
                     awaitingFirstDelta={pendingOnHome || (tail && activeRuntime?.awaitingFirstDelta)}

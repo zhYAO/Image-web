@@ -1,7 +1,7 @@
 import type { GenerationBatch, RecreateScope, TimelineItem } from '@zimage/domain';
 import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { zhCN } from '@/i18n';
 
@@ -39,38 +39,75 @@ function VisibleAsset({ id, initialUrl, alt, resolveAssetUrl }: {
   resolveAssetUrl?: (id: string, refresh?: boolean) => Promise<string | undefined>;
 }) {
   const element = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [url, setUrl] = useState<string>();
-  const renderedUrl = url ?? initialUrl;
-  const retried = useRef(false);
+  const scope = useMemo(() => ({ id, resolveAssetUrl }), [id, resolveAssetUrl]);
+  const [intersection, setIntersection] = useState<{ scope: typeof scope; visible: boolean }>();
+  const visible = intersection?.scope === scope && intersection.visible;
+  const [tabVisible, setTabVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  const [result, setResult] = useState<{
+    scope: typeof scope; url?: string; error?: boolean; version: number;
+    request?: 'check' | 'refresh'; replaceInitial?: boolean;
+  }>({ scope, version: 0 });
+  const current = result.scope === scope ? result : { scope, version: 0 };
+  const renderedUrl = current.url ?? (current.replaceInitial ? undefined : initialUrl);
+  const automaticRefreshScope = useRef<typeof scope | undefined>(undefined);
+  const pending = useRef<{ scope: typeof scope; refresh: boolean; promise: Promise<string | undefined> } | undefined>(undefined);
   useEffect(() => {
-    if (visible || !resolveAssetUrl) return;
+    const change = () => setTabVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', change);
+    return () => document.removeEventListener('visibilitychange', change);
+  }, []);
+  useEffect(() => {
+    if (!resolveAssetUrl) return;
     if (typeof IntersectionObserver === 'undefined') {
-      const timer = window.setTimeout(() => setVisible(true), 0);
+      const timer = window.setTimeout(() => setIntersection({ scope, visible: true }), 0);
       return () => window.clearTimeout(timer);
     }
+    // The empty inner div has zero height until an image mounts. Observe the
+    // reserved frame so its visible lower half can trigger signing as well.
+    const frame = element.current?.parentElement;
+    let active = true;
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
+      if (active) setIntersection({ scope, visible: entries.some(entry => entry.isIntersecting) });
     });
-    if (element.current) observer.observe(element.current);
-    return () => observer.disconnect();
-  }, [visible, resolveAssetUrl]);
+    if (frame) observer.observe(frame);
+    return () => { active = false; observer.disconnect(); };
+  }, [scope, resolveAssetUrl]);
   useEffect(() => {
-    if (!visible || renderedUrl || !resolveAssetUrl) return;
+    if (!visible || !tabVisible || !resolveAssetUrl || current.error || (renderedUrl && !current.request)) return;
     let cancelled = false;
-    void resolveAssetUrl(id).then(next => { if (!cancelled) setUrl(next); }).catch(() => undefined);
+    const refresh = current.request === 'refresh';
+    let request = pending.current;
+    if (!request || request.scope !== scope || request.refresh !== refresh) {
+      const next = { scope, refresh, promise: resolveAssetUrl(id, refresh) };
+      next.promise = next.promise.finally(() => { if (pending.current === next) pending.current = undefined; });
+      request = next;
+      pending.current = next;
+    }
+    void request.promise.then(url => {
+      if (!cancelled) setResult({ scope, version: current.version, url, error: !url, replaceInitial: true });
+    }).catch(() => {
+      if (!cancelled) setResult({ scope, version: current.version, url: current.request === 'check' ? renderedUrl : undefined,
+        error: current.request !== 'check', replaceInitial: true });
+    });
     return () => { cancelled = true; };
-  }, [id, visible, renderedUrl, resolveAssetUrl]);
-  const refresh = () => {
-    if (retried.current || !resolveAssetUrl) return;
-    retried.current = true;
-    void resolveAssetUrl(id, true).then(next => { if (next) setUrl(next); }).catch(() => undefined);
+  }, [scope, id, visible, tabVisible, renderedUrl, resolveAssetUrl, current.error, current.request, current.version]);
+  const requestPreview = (refresh: boolean, automatic = false) => {
+    if (!resolveAssetUrl) return;
+    if (automatic && automaticRefreshScope.current === scope) {
+      setResult({ scope, version: current.version, error: true, replaceInitial: true });
+      return;
+    }
+    if (automatic) automaticRefreshScope.current = scope;
+    setResult(previous => ({ scope, version: previous.scope === scope ? previous.version + 1 : 1,
+      url: refresh ? undefined : renderedUrl, request: refresh ? 'refresh' : 'check', replaceInitial: true }));
   };
-  return <div ref={element}>{renderedUrl && <AntdImage alt={alt} className={styles.assetPreview}
+  return <div ref={element} className={styles.assetPreview}>{renderedUrl ? <AntdImage alt={alt} className={styles.assetPreview}
     preview={{ mask: false }} rootClassName={styles.assetPreview} src={renderedUrl}
-    onError={refresh} onClick={() => { if (resolveAssetUrl) void resolveAssetUrl(id).then(next => {
-      if (next && next !== renderedUrl) setUrl(next);
-    }).catch(() => undefined); }} />}</div>;
+    onError={() => requestPreview(true, true)} onClick={() => requestPreview(false)} /> :
+    <div className={styles.assetState} role={current.error ? 'alert' : 'status'}>
+      <span>{current.error ? '图片预览暂时不可用。' : '正在加载图片预览…'}</span>
+      {current.error && resolveAssetUrl && <Button size="small" onClick={() => requestPreview(true)}>重试图片预览</Button>}
+    </div>}</div>;
 }
 
 export interface OptimisticImageTurnView {
