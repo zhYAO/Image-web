@@ -68,3 +68,7 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 登录后只读健康检查：在可信机器上将测试账号当前会话的完整 Cookie 放入 `ZIMAGE_AUTH_COOKIE` 环境变量，然后执行 `python3 ops/aliyun/authenticated_health.py`。它检查账号、会话列表和积分接口，不创建任务或消耗图片额度；脚本不会输出 Cookie。会话过期会返回失败，需用测试账号重新登录。不要将 Cookie 写入命令历史、工单或仓库。
 
 证书续期演练：先检查 `/etc/letsencrypt/renewal/www.zimage.store.conf` 的 authenticator；若仍为 manual DNS，不应把 `certbot.timer` 视为自动续期成功。备案和公网 HTTP 验证可用后切换为 webroot，运行 `certbot renew --dry-run`，再核对 Nginx reload hook 和公网证书到期日期。`dry-run` 成功与配置记录应写入项目进度；演练前证书自动续期状态仍为待完成。
+
+## Free Plan 运维查询与历史保留
+
+日志扫描预算、有限时间窗/投影、Cron 脱敏归档与逐批批准规则见 [2026-10-13 用量优化验收](../../doc/qa/2026-10-13-free-plan-optimizations.md)。新 Cron 保留函数默认没有应用角色权限，也没有调度；迁移和实际生产删除均需另行批准具体清单。保留生成每分钟、清理每十五分钟，不执行 VACUUM FULL。

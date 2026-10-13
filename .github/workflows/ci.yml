@@ -42,6 +42,7 @@ jobs:
           pnpm --filter @zimage/domain test:coverage
           pnpm --filter @zimage/web exec vitest run --coverage --maxWorkers=1 --testTimeout=120000
       - run: pnpm --filter @zimage/web test:acceptance-budget
+      - run: pnpm --filter @zimage/web test:apparel-performance
       - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
       - run: pnpm exec vitest run supabase/functions/generation-worker supabase/functions/cleanup-worker
       - run: pnpm build
@@ -62,6 +63,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec supabase start
+      # Native pg_cron history cannot be INSERTed by ordinary postgres. Seed only
+      # inactive synthetic fixtures as the disposable local DB administrator;
+      # tests themselves keep normal postgres/RLS/SELECT+DELETE privileges.
+      - run: docker exec -i supabase_db_zimage psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < supabase/tests/fixtures/cron-retention-history.sql
       - run: pnpm exec supabase test db supabase/tests/database
       - run: pnpm exec supabase gen types typescript --local > database.generated.ts
       - run: diff --strip-trailing-cr --unified apps/web/lib/supabase/database.generated.ts database.generated.ts
@@ -92,6 +97,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           NEXT_PUBLIC_DATA_MODE: http
           NEXT_PUBLIC_PHASE2_AUTH: 'true'
+          NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED: ${{ vars.NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED }}
           ZIMAGE_DEPLOYMENT_ENV: production
           ZIMAGE_BUILD_SHA: ${{ github.sha }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}

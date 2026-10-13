@@ -1,5 +1,33 @@
 # ZImage 项目进度
 
+### 2026-10-13 本地 Next 内存诊断（阶段交付，根因未完全定位）
+
+- 测试容器单个Next16.3/Webpack dev进程PID14601的RSS约12.58→13.11GiB，16GiB cgroup当时仅余约0.593GiB；不是生产指标。用户批准本地重启已执行；重启后的首次普通页面编译仍可达到约6.13GiB，无模型/Sharp/素材复用。
+- 旧main与PR10临时checkout均复现8次注释重编译：HMR第2→8次GC后heap平均每间隔+20.209/+19.924MiB，native contexts27→33，恢复源码到34。allocation sampling关闭仍可复现，存在开发热更新保留迹象；没有retainer证明，不外推15小时或生产泄漏。
+- main预热20GET heap+4.834MiB；PR10仍受后台编译影响、同段下降99.280MiB，不能称完全相同稳态。已有旧standalone构建单路由1+20GET最终RSS122.02MiB、采样峰值145.08MiB，仅局部证据。OOM/oom_kill均0，06:38断连不直接归因内存。
+- 全部临时HMR源码逐字恢复，诊断dev/standalone及Inspector停止；原3015当前暂停，浏览器登录态未清除，生产不受影响。按最新要求优先交付诊断，完整性能/最新全量检查和CI暂缓。原始记录、口径、生命周期风险与下一步见 `doc/qa/2026-10-13-local-next-memory-diagnosis.md`。没有生产写入、部署、合并或新模型调用。
+
+### 2026-10-13 服装优化开关与性能验收补正（in_progress，未发布）
+
+- 用户授权独立开关、超预算快速回退及合理配对/冷启动/大像素/RSS/并发复验；本轮不部署、合并、生产写入或模型调用，PR9保持独立。
+- 私有运行时 `ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED` 与公共构建时 `NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED` 独立，只有字符串`true`开启，默认关闭。前者修改需服务重启/新claim；后者需新构建并发布，重启不能变更。关闭复用保留来源/租约前后检查、404/503分类及原字节。
+- 开关、服务两路径输出哈希、UI关闭无observer、超预算读取守卫相关RED→GREEN，5文件28项通过；统计/资源/波次哈希与fingerprint助手8项通过。脚本预审修正额外Buffer复制、每子进程准入/监控、并发必须对比串行参考；最新助手严格拒绝空/无效资源计数，部分结果JSONL按独立run标识保存。
+- 合成输入固定SHA/尺寸：750×1000、10MiB编码超预算、真实3000×4000/12MP，试运行各1对完成，11/30张哈希相同。正常类120配对受旧dev竞争、后续冷进程被资源门槛阻断；已单独归档且accepted=false，不合并新条件数据。用户随后批准重启并优先内存诊断；全系列当前暂缓。无性能通过或线上收益结论，开关保持关闭。
+- 用户随后授权仅收尾原draft PR10。针对性5文件34项、助手8项、预算5项及lint/typecheck通过，独立最终只读复核无阻断；本轮未新增本地高负载构建，最新完整覆盖/构建/数据库/生成类型证据见[PR10正常CI](https://github.com/zhYAO/Image-web/pull/10/checks)，PR事件跳过生产作业。提交不含临时诊断路由/端口、凭据、JSONL或大原始文件。
+- 默认关闭因此当前配置没有素材复用或首屏请求减少收益；真实负载尾延迟/RSS/账单收益仍未知。完整性能、最新组件浏览器与隔离PR9组合仍待后续，方法、生效语义与限制见 `doc/qa/2026-10-13-apparel-performance-controls.md`。不合并、不部署。
+
+### 2026-10-13 Free Plan 用量优化第一阶段（独立分支，尚未发布）
+
+- 开始时 `/workspace/Image-web`、`Image-web-plan-diagnostic`、`clone-web` 均干净；没有遗留未提交代码，没有创建空提交。PR #9 的上传兼容/轮播 `c274e14` 保留独立未合并。
+- 基线 main `1a3eba2`，现有隔离工作树新分支 `codex/free-plan-safe-optimizations-20261013`。已实现单授权 claim 内 8 MiB、单 Node 进程合计 32 MiB 的原图字节准入复用，结束/失败释放、超限走原读取；未改变 Sharp 排版和 ZIP 原始字节。临时 Storage/SDK/body 错误可重试 503，明确 HTTP404 过期 410，不自动重试。
+- 服装实际结果可见后挂载 AntD Image，原图导航按需；未生成派生缩略图，首次可见仍传输完整原图。原生 Chromium151 的实际组件合成检查：30 张，桌面首屏2/末尾累计4，窄屏5/10，末图可达。
+- Cron 私有归档/批准清理迁移仅准备：无 schedule、无新 grant、无顶层 DELETE，应用角色不能执行；具体 job/runID、UTC截止、准确条数与审批引用必须匹配，每批最多500，归档失败或100000行容量上限回滚。没有生产迁移、历史删除、权限变更、调度或 VACUUM FULL。
+- 独立方案/代码复核修正缓存抖动、AntD预取、派生资产计数风险及真实SDK错误路径；最终无剩余 Critical/Important 或 actionable Minor。相关 RED→GREEN 与限制见 `doc/qa/2026-10-13-free-plan-optimizations.md`。
+- 本地最终检查：Domain76、Web656全量通过，服装相关31、Worker80、运维20、预算5、lint/typecheck及隔离构建通过。本地 PostgreSQL17.6/真pgTAP31通过；Cron表为官方形状+原生RLS/SELECT/DELETE权限fixture，真实pg_cron/全迁移30文件1036项及生成类型核对在[CI60](https://github.com/zhYAO/Image-web/actions/runs/38345374202)通过；正式发布仍需单独批准。真实负载和正式整页鉴权浏览器验收未完成，不宣称生产性能收益。
+- 串行合成对照（每路径10次）：小素材原图14→7次、P95 1686→984ms；20展示/10MiB超限52→52次、P95 4777→5071ms；11/30张输出SHA-256一致。小素材峰值RSS约227.8→237.7MiB，超限329.7→328.0MiB；不是缓存字节或真实负载SLA。
+- CI58发现原生pg_cron不允许普通postgres直接插入/显式行锁；改为隔离admin仅准备inactive样本，测试与函数保持普通RLS/SELECT/DELETE权限。归档后DELETE重新匹配job/全部元数据、变化整批回滚；普通权限原函数42501 RED→修正31项GREEN。未增加生产grant，CI59实际函数/其余1035项通过，历史权限假设断言改为验证必需SELECT/DELETE。CI60真实数据库30文件/1036项及生成类型核对已通过；Web代码与已通过质量作业的CI58一致。最终门禁见 [PR10最新检查](https://github.com/zhYAO/Image-web/pull/10/checks)。
+- Log Query预算/有限查询、各Free额度区分、存储/历史快照与逐批生产批准规则已记录；当前扫描来源和历史超额对象仍未知。后续派生预览/ETag、短Cron包装器需独立生命周期/授权及Vault/调度核对。
+
 ## 2026-10-12 今日完整生产整合与 Plan 故障定位（发布准备中）
 
 - 用户明确授权今日剩余的液态玻璃、首页轮播、服装滚动和新版示例图发布生产。单一生产负责人在 `/workspace/Image-web-plan-diagnostic` 的 `codex/production-complete-20261012`，以已发布 main `b2cca96ea59bf53cecab9394a4508ba30dc7e8fa` 保留 Plan 接入，加入安全诊断 `0a8af926731a3787de1273393e57f53c4115ee44`、固定 Plan 地址修复 `99a4ccf`，整合已验收源分支 `5f4ae315c415c8832e2ceaf5c48e467c4d093335`。原 checkout 和 clone-web 改动保留。
