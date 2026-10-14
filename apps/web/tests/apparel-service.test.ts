@@ -3,7 +3,7 @@ import { createApparelService } from "@/server/apparel/apparel-service";
 import { apparelFixture, apparelIds } from "./apparel-fixtures";
 import sharp from "sharp";
 import { createHash } from "node:crypto";
-import { getApparelRetainedSourceBytes } from "@/server/apparel/apparel-source-reader";
+import * as sourceReaders from "@/server/apparel/apparel-source-reader";
 import { renderApparelPages } from "@/server/apparel/apparel-renderer";
 const task = {
   id: apparelIds[7]!,
@@ -17,16 +17,19 @@ const task = {
   archived: false,
 };
 describe.each([false, true])(
-  "apparel service admission and storage (reuse=%s)",
+  "apparel service admission and storage (legacy reuse request=%s)",
   (enabled) => {
-    beforeEach(() =>
+    beforeEach(() => {
+      vi.spyOn(sourceReaders, "createApparelSourceReader");
       vi.stubEnv(
         "ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED",
         enabled ? "true" : "false",
-      ),
-    );
+      );
+    });
     afterEach(() => {
-      expect(getApparelRetainedSourceBytes()).toBe(0);
+      expect(sourceReaders.createApparelSourceReader).not.toHaveBeenCalled();
+      expect(sourceReaders.getApparelRetainedSourceBytes()).toBe(0);
+      vi.restoreAllMocks();
       vi.unstubAllEnvs();
     });
     it.each(["blob", "download"])(
@@ -78,12 +81,12 @@ describe.each([false, true])(
       },
     );
     it.each([
-      ["test", true, 7],
+      ["test", true, 14],
       ["test", false, 14],
-      ["development", true, 7],
+      ["development", true, 14],
       ["production", true, 14],
     ] as const)(
-      "preserves every output hash in %s with reuse=%s and %s reads",
+      "preserves every baseline output hash in %s with legacy reuse request=%s and %s reads",
       async (mode, reuse, expectedReads) => {
         vi.stubEnv("NODE_ENV", mode);
         vi.stubEnv(

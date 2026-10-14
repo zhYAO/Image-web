@@ -5,6 +5,173 @@ import {
 } from "@/server/apparel/apparel-source-reader";
 
 describe("claim-scoped source admission", () => {
+  it("uses uncached reads after a large first input instead of retaining one low-coverage source", async () => {
+    const large = new Uint8Array(4 * 1024 * 1024 + 1);
+    large[0] = 27;
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(
+      async (id) =>
+        id === "large" ? large.slice() : new Uint8Array([1, 2, 3]),
+      () => {},
+      { budget },
+    );
+    expect((await reader.read("large"))[0]).toBe(27);
+    expect(reader.retainedBytes).toBe(0);
+    const first = await reader.read("small");
+    const second = await reader.read("small");
+    expect(second).toEqual(first);
+    expect(second).not.toBe(first);
+    expect(reader.excludedSourceCount).toBe(0);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("does not admit another pending input after large-input fallback starts", async () => {
+    const finishes = new Map<string, (bytes: Uint8Array) => void>();
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(
+      (id) => new Promise((resolve) => finishes.set(id, resolve)),
+      () => {},
+      { budget },
+    );
+    const large = reader.read("large"),
+      small = reader.read("small");
+    finishes.get("large")!(new Uint8Array(4 * 1024 * 1024 + 1));
+    await large;
+    finishes.get("small")!(new Uint8Array([8, 9]));
+    expect(await small).toEqual(new Uint8Array([8, 9]));
+    expect(reader.retainedBytes).toBe(0);
+    expect(budget.usedBytes).toBe(0);
+    reader.dispose();
+  });
+  it("keeps reuse when a small source is admitted before a pending large source finishes", async () => {
+    const finishes = new Map<string, (bytes: Uint8Array) => void>();
+    const load = vi.fn(
+      (id: string) =>
+        new Promise<Uint8Array>((resolve) => finishes.set(id, resolve)),
+    );
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(load, () => {}, { budget });
+    const large = reader.read("large"),
+      small = reader.read("small");
+    finishes.get("small")!(new Uint8Array([8, 9]));
+    const admittedSmall = await small;
+    finishes.get("large")!(new Uint8Array(4 * 1024 * 1024 + 1));
+    const admittedLarge = await large;
+    expect(await reader.read("small")).toBe(admittedSmall);
+    expect(await reader.read("large")).toBe(admittedLarge);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(reader.retainedBytes).toBe(4 * 1024 * 1024 + 3);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("deduplicates the initial large read and keeps later fallback reads uncached and retryable", async () => {
+    let finish!: (bytes: Uint8Array) => void;
+    const load = vi
+      .fn<(id: string) => Promise<Uint8Array>>()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (finish = resolve)),
+      )
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockImplementation(async () => new Uint8Array([5, 6]));
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(load, () => {}, { budget });
+    const a = reader.read("large"),
+      b = reader.read("large");
+    finish(new Uint8Array(4 * 1024 * 1024 + 1));
+    expect(await a).toBe(await b);
+    expect(load).toHaveBeenCalledTimes(1);
+    await expect(reader.read("large")).rejects.toThrow("temporary");
+    const retry = await reader.read("large");
+    const again = await reader.read("large");
+    expect(again).toEqual(retry);
+    expect(again).not.toBe(retry);
+    expect(load).toHaveBeenCalledTimes(4);
+    expect(reader.retainedBytes).toBe(0);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("rejects loss of lease during an uncached fallback read without retaining bytes", async () => {
+    let authorized = true;
+    let finish!: (bytes: Uint8Array) => void;
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(
+      async (id) =>
+        id === "large"
+          ? new Uint8Array(4 * 1024 * 1024 + 1)
+          : new Promise((resolve) => (finish = resolve)),
+      () => {
+        if (!authorized) throw new Error("lease_lost");
+      },
+      { budget },
+    );
+    await reader.read("large");
+    const pending = reader.read("small");
+    authorized = false;
+    finish(new Uint8Array([7]));
+    await expect(pending).rejects.toThrow("lease_lost");
+    expect(reader.retainedBytes).toBe(0);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("keeps the first-source cutoff at 4 MiB even with a larger custom claim budget", async () => {
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(
+      async () => new Uint8Array(4 * 1024 * 1024 + 1),
+      () => {},
+      { maxBytes: 16 * 1024 * 1024, budget },
+    );
+    await reader.read("large");
+    expect(reader.retainedBytes).toBe(0);
+    expect(reader.excludedSourceCount).toBe(0);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("keeps failed first reads retryable before choosing a cache policy", async () => {
+    let failed = false;
+    const budget = createSourceBudget(32 * 1024 * 1024);
+    const reader = createApparelSourceReader(
+      async () => {
+        if (!failed) {
+          failed = true;
+          throw new Error("temporary");
+        }
+        return new Uint8Array([3, 4]);
+      },
+      () => {},
+      { budget },
+    );
+    await expect(reader.read("source")).rejects.toThrow("temporary");
+    expect(await reader.read("source")).toBe(await reader.read("source"));
+    expect(reader.retainedBytes).toBe(2);
+    reader.dispose();
+    expect(budget.usedBytes).toBe(0);
+  });
+  it("guards fallback before and after loading and rejects disposal through a Promise", async () => {
+    let authorized = true;
+    let finish!: (bytes: Uint8Array) => void;
+    const reader = createApparelSourceReader(
+      async (id) =>
+        id === "large"
+          ? new Uint8Array(4 * 1024 * 1024 + 1)
+          : new Promise((resolve) => {
+              finish = resolve;
+            }),
+      () => {
+        if (!authorized) throw new Error("lease_lost");
+      },
+    );
+    await reader.read("large");
+    authorized = false;
+    await expect(reader.read("small")).rejects.toThrow("lease_lost");
+    authorized = true;
+    const pending = reader.read("small");
+    reader.dispose();
+    finish(new Uint8Array([7]));
+    await expect(pending).rejects.toThrow("source_reader_disposed");
+    await expect(reader.read("large")).rejects.toThrow(
+      "source_reader_disposed",
+    );
+  });
   it("deduplicates an in-flight read and releases its reservation once", async () => {
     let finish!: (value: Uint8Array) => void;
     const load = vi.fn(
@@ -33,12 +200,19 @@ describe("claim-scoped source admission", () => {
     const budget = createSourceBudget(4 * size);
     const readers = Array.from({ length: 5 }, () =>
       createApparelSourceReader(
-        async () => new Uint8Array(size),
+        async () => new Uint8Array(size / 2),
         () => {},
         { maxBytes: size, budget },
       ),
     );
-    await Promise.all(readers.map((reader) => reader.read("same-source-id")));
+    await Promise.all(
+      readers.slice(0, 4).map(async (reader) => {
+        await reader.read("source1");
+        await reader.read("source2");
+      }),
+    );
+    await readers[4]!.read("source1");
+    await readers[4]!.read("source2");
     expect(budget.usedBytes).toBe(4 * size);
     expect(readers.map((reader) => reader.retainedBytes)).toEqual([
       size,
@@ -48,7 +222,8 @@ describe("claim-scoped source admission", () => {
       0,
     ]);
     readers[0]!.dispose();
-    await readers[4]!.read("same-source-id");
+    await readers[4]!.read("source1");
+    await readers[4]!.read("source2");
     expect(readers[4]!.retainedBytes).toBe(size);
     readers.forEach((reader) => reader.dispose());
     expect(budget.usedBytes).toBe(0);
