@@ -1,5 +1,11 @@
 # Apparel source fallback investigation and implementation plan
 
+**Current closeout:** the failed candidate's runtime source opt-in is withdrawn
+in all environments. The measurements below belong to commit
+`e6d041bc906e03e1e91df416126b4e8a640df11c`; their failure is unchanged. Reader code
+and independent tests remain available for research. See the retirement section
+for the separately bounded functional verification; it is not latency acceptance.
+
 **Goal:** Remove unnecessary source-reader work for large initial inputs without
 activating either production optimization or weakening the frozen latency gate.
 
@@ -128,12 +134,13 @@ chronology, order and resource records belong in the new Library artifact
 `ZImage-2026-10-14-apparel-source-fallback-evidence.zip`. Historical v9 is preserved
 independently, including the original failed oversized window and 12MP order group.
 
-### Follow-up and activation boundary
+### Historical follow-up and activation boundary at e6d041b
 
-No optimization is approved for production activation in this round. Both
-published production getters remain byte-identical to main and forced off,
-regardless of opt-in values or future Supabase plan changes. Development/test
-can exercise the candidate; normal mock Storage reads halve, while the fixed
+No optimization was approved for production activation at the measured commit
+e6d041b. Both published production getters were byte-identical to main and forced
+off, regardless of opt-in values or future Supabase plan changes. At that commit,
+development/test could exercise the candidate; normal mock Storage reads
+halved, while the fixed
 large-input policy sacrifices the old 12MP fixture's one saved read and possible
 mixed/duplicate benefits. Storage pricing or capacity changes cannot relax the
 performance decision rules.
@@ -181,3 +188,89 @@ resource/competition blockers; this does not erase B's preparation rejection or
 the historical v9 failed windows. The final Library archive must retain all three
 directories' provenance; raw files stay outside Git. No production or paid model
 work occurred.
+
+## Runtime source-reuse retirement after review
+
+The source getter now returns false in development/test as well as production;
+the production guard remains unchanged. The existing submit service therefore
+always selects its guarded `directLoad`; it never constructs a Reader for a
+claim. No new Storage/RPC APIs or call sites, normalization cache, selector state, migration
+or security/export changes were added. Visible loading keeps its original
+development/test opt-in and production lock. The legacy source env variable is
+retained but ignored, and its example comment now explains that behavior.
+
+This withdraws an unaccepted optimization; it does not make the previous P95
+failure pass. Current production already used `directLoad`, so its source
+reads, authorization/lease checks and outputs do not change. Development/test
+lose the normal fixture's 14 -> 7 read benefit and return to 14; there is no new
+throttling, bandwidth or latency gain. Encoding retention from a runtime Reader
+is zero because none is constructed; native RSS remains a separate concern.
+
+The retained Reader implementation and its independent tests are historical
+research material. Narrowing eligibility before construction would require
+more information: the current authorized sources RPC exposes id/path, not
+encoded size or dimensions, and normal/12MP have the same plan shape. No
+photo-count heuristic or unverified metadata shortcut is introduced.
+
+Historical off/on performance comparisons belong to the measured e6d041b
+commit. The existing service benchmark's legacy env flag is also ignored at
+the retirement commit; running it here cannot establish a reuse comparison.
+Restoring a runtime entry requires a separate reviewed change and a fresh
+frozen acceptance protocol.
+
+### Frozen retirement verification budget (before verification)
+
+- Zero new latency pairs or extensions of the old measurement directories.
+- At most six new independent local mock functional renders: normal, padded
+  oversized and true 12MP each once with the legacy opt-in off and once requesting
+  it on. No warmup or render retries. No elapsed time/P95 acceptance is collected.
+- Expect reads 14/14, 52/52 and 14/14; local authorization/lease callback counts
+  28, 104 and 28; byte-identical inputs and output names/dimensions/hashes;
+  retained encoded peak/after bytes zero; Reader factory calls zero.
+- Instrument only the in-memory diagnostic bundle to count callbacks/factory
+  calls; production service/Reader files remain unchanged in this closeout.
+  Raw diagnostic scripts, records and logs stay outside Git and go to Library.
+- Existing deterministic guard/error/lease/disposal tests and required local
+  lint/typecheck/test/budget/build checks each run one quality round. Existing
+  unit-suite renders remain unit checks, separate from the six-process diagnostic
+  budget. New exact-head CI is required. Any failed functional check stops the
+  six-render round; no replacement samples.
+
+The six functional renders cannot establish latency, real-network savings or
+sustained concurrent RSS safety. Historical v9, PR18's measured e6d041b evidence
+and its confidence failure remain preserved. No production flag change, merge
+or deployment is part of this closeout.
+
+### Retirement verification outcome
+
+Exactly six new independent processes completed, with zero warmups, retries or
+new latency pairs. The legacy false/true pairs produced:
+
+| Case | Storage reads | Local guard callbacks | Outputs | Reader factory / encoded retained peak and after |
+| --- | --- | --- | --- | --- |
+| Normal | 14 / 14 | 28 / 28 | 11 / 11 | 0 calls; 0 / 0 bytes |
+| Padded oversized | 52 / 52 | 104 / 104 | 30 / 30 | 0 calls; 0 / 0 bytes |
+| True 12MP | 14 / 14 | 28 / 28 | 11 / 11 | 0 calls; 0 / 0 bytes |
+
+All original input hashes remained unchanged. Every output name, dimensions and
+hash matched the immutable e6d041b baseline; no network fetch was attempted.
+Both exact in-memory counter hooks loaded once; source files were not patched.
+The resource checks did not reject or abort a child, and the owned lock was
+released. Callback counts are local authorization/lease checks, not RPC counts.
+This is functional verification of the direct path, not a new performance pass.
+
+One local quality round passed: lint/typecheck, Domain 106, Web 733 and
+acceptance-budget 5 tests, plus the isolated mock Webpack build. The earlier
+config-only TDD RED check had the expected three failing opt-in assertions;
+it rendered no pages. No additional targeted GREEN round ran. Generated
+`next-env` changes were restored and owned QA build artifacts removed. Read-only
+independent review found no code blockers; its two historical-document wording
+corrections were applied. Standard Turbopack, coverage, Worker and local database
+checks remain the exact-head draft-PR CI verification, recorded on PR18 before
+delivery. There is no browser or real-environment acceptance claim.
+
+New raw scripts, fingerprints, functional results, resource records, logs and
+the exact-head CI snapshot belong to the separate Library archive
+`ZImage-2026-10-14-apparel-source-retirement-evidence.zip`. The finalized fallback
+archive remains unchanged and is included byte-for-byte; neither archive enters
+Git or changes the original failed performance conclusion.

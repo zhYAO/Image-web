@@ -3,7 +3,7 @@ import { isApparelSourceReuseEnabled } from "@/server/apparel/apparel-config";
 import { isApparelVisibleLoadingEnabled } from "@/features/commerce/apparel-display-config";
 
 afterEach(() => vi.unstubAllEnvs());
-describe("independent opt-in apparel controls", () => {
+describe("retired source reuse and independent visible loading", () => {
   it("locks both controls off in production even when both opt-ins are true", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "true");
@@ -12,12 +12,12 @@ describe("independent opt-in apparel controls", () => {
     expect(isApparelVisibleLoadingEnabled()).toBe(false);
   });
   it.each(["development", "test"])(
-    "preserves explicit independent opt-ins in %s",
+    "ignores the retired source opt-in and preserves visible loading in %s",
     (mode) => {
       vi.stubEnv("NODE_ENV", mode);
       vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "true");
       vi.stubEnv("NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED", "true");
-      expect(isApparelSourceReuseEnabled()).toBe(true);
+      expect(isApparelSourceReuseEnabled()).toBe(false);
       expect(isApparelVisibleLoadingEnabled()).toBe(true);
       vi.stubEnv("ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED", "false");
       expect(isApparelSourceReuseEnabled()).toBe(false);
@@ -34,7 +34,7 @@ describe("independent opt-in apparel controls", () => {
     },
   );
   it.each([true, false])(
-    "can enable reuse independently of display: %s",
+    "keeps source reuse off independently of display: %s",
     (reuse) => {
       vi.stubEnv(
         "ZIMAGE_APPAREL_SOURCE_REUSE_ENABLED",
@@ -44,7 +44,7 @@ describe("independent opt-in apparel controls", () => {
         "NEXT_PUBLIC_APPAREL_VISIBLE_LOADING_ENABLED",
         reuse ? "false" : "true",
       );
-      expect(isApparelSourceReuseEnabled()).toBe(reuse);
+      expect(isApparelSourceReuseEnabled()).toBe(false);
       expect(isApparelVisibleLoadingEnabled()).toBe(!reuse);
     },
   );
