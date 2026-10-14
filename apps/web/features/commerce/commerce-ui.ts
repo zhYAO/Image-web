@@ -12,6 +12,7 @@ import {
 } from "@zimage/domain";
 import { downloadImages } from "@/features/workspace/download-images";
 import { HttpCommerceGateway } from '@/gateways/http-commerce-gateway';
+import { canExportCommerceSafePng } from './commerce-safe-export';
 
 export function resolveCommerceLaunch(search: string) {
   const params = new URLSearchParams(search);
@@ -104,7 +105,8 @@ export async function exportCommerceImages(
   return `已发起 ${result.downloaded} 张下载${expired ? `，${expired} 张已到期或不可用` : ""}${result.failed ? `，${result.failed} 张下载失败，请重试` : ""}。`;
 }
 
-export async function downloadCommerceFile(gateway: CommerceGateway, task: CommerceTask, slotIds: string[], mode: 'single' | 'zip' | 'long', format: 'jpg' | 'png', focus = { x: 0.5, y: 0.5 }) {
+export async function downloadCommerceFile(gateway: CommerceGateway, task: CommerceTask, slotIds: string[], mode: 'single' | 'zip' | 'long', format: 'jpg' | 'png', focus = { x: 0.5, y: 0.5 }, safeExport?: 'ec03-white-8') {
+  if (safeExport && (!(gateway instanceof HttpCommerceGateway) || mode !== 'single' || format !== 'png' || slotIds.length !== 1 || !canExportCommerceSafePng(task, slotIds[0]!))) throw new Error('安全导出仅支持正式下载接口中详情模块模板的当前有效单张 PNG 选图。');
   if (!(gateway instanceof HttpCommerceGateway)) return exportCommerceImages(gateway, task, slotIds);
   const selections = task.slots.filter(slot => slotIds.includes(slot.id)).flatMap(slot => {
     const selection = task.selections.find(item => item.slotId === slot.id);
@@ -113,7 +115,7 @@ export async function downloadCommerceFile(gateway: CommerceGateway, task: Comme
   if (!selections.length) throw new Error('当前没有已选图片。');
   const response = await fetch(`/api/creative-tasks/${task.id}/download`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ requestId: crypto.randomUUID(), revision: task.revision, selections, mode, format, focus }),
+    body: JSON.stringify({ requestId: crypto.randomUUID(), revision: task.revision, selections, mode, format, focus, ...(safeExport ? { safeExport } : {}) }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
@@ -121,7 +123,7 @@ export async function downloadCommerceFile(gateway: CommerceGateway, task: Comme
   }
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
-  const name = mode === 'zip' ? 'commerce-images.zip' : mode === 'long' ? `commerce-long.${format}` : `commerce-image.${format}`;
+  const name = safeExport ? 'commerce-safe-image.png' : mode === 'zip' ? 'commerce-images.zip' : mode === 'long' ? `commerce-long.${format}` : `commerce-image.${format}`;
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
   return `已下载 ${name}。`;

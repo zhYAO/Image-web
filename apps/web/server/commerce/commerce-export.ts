@@ -1,9 +1,15 @@
 import sharp from 'sharp';
+import { ApiRouteError } from '@/server/api-error';
+import { renderCommerceSafePng } from './commerce-safe-export';
 
 export type ExportFormat = 'jpg' | 'png';
 export interface ExportImage { name: string; bytes: Uint8Array; width: number; height: number }
 
-export async function renderCommerceImage(source: Uint8Array, format: ExportFormat, target?: { width: number; height: number }, focus = { x: 0.5, y: 0.5 }): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+export async function renderCommerceImage(source: Uint8Array, format: ExportFormat, target?: { width: number; height: number }, focus = { x: 0.5, y: 0.5 }, safeExport?: 'ec03-white-8'): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+  if (safeExport) {
+    if (format !== 'png' || target) throw new ApiRouteError({ code: 'bad_request', status: 400, retryable: false, message: '安全导出只支持无裁切的单张 PNG。' });
+    return renderCommerceSafePng(source);
+  }
   const image = sharp(source, { limitInputPixels: 100_000_000 }).rotate();
   const meta = await image.metadata();
   if (!meta.width || !meta.height) throw new Error('invalid_image_dimensions');
