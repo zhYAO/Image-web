@@ -28,6 +28,8 @@ import {
 import styles from "./commerce.module.css";
 import { commerceGenerationPreset, hasCommerceModel } from './commerce-presets';
 import { aPlusAspectRatio, COMMERCE_PRIMARY_SCENE_IDS } from '@zimage/domain';
+import { HttpCommerceGateway } from '@/gateways/http-commerce-gateway';
+import { canExportCommerceSafePng, COMMERCE_SAFE_EXPORT_NOTICE } from './commerce-safe-export';
 
 export interface CommerceEditRequest {
   id: string;
@@ -730,7 +732,18 @@ export function CommerceTaskCard({
                     下载第 {index + 1} 张
                   </button>
                 )}
+                {gateway instanceof HttpCommerceGateway && canExportCommerceSafePng(task, slot.id) && (
+                  <button
+                    disabled={busy || !image || image.expired}
+                    onClick={() => void perform(async () => setMessage(
+                      await downloadCommerceFile(gateway, task, [slot.id], 'single', 'png', undefined, 'ec03-white-8'),
+                    ))}
+                  >
+                    安全导出第 {index + 1} 张 PNG
+                  </button>
+                )}
               </div>
+              {gateway instanceof HttpCommerceGateway && canExportCommerceSafePng(task, slot.id) && <p>{COMMERCE_SAFE_EXPORT_NOTICE}</p>}
             </VisibleCommerceSlot>
           );
         })}
