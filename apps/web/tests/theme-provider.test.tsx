@@ -4,12 +4,6 @@ import { useTheme } from "antd-style";
 import { afterEach, expect, it, vi } from "vitest";
 import { AppProviders } from "@/app/providers";
 
-// Load the actual provider without the unrelated fluent-emoji barrel's Node ESM directory import.
-vi.mock("@lobehub/ui", async () => ({
-  ThemeProvider: (await import("@lobehub/ui/es/ThemeProvider/ThemeProvider"))
-    .default,
-}));
-
 function PaletteProbe() {
   const lobe = useTheme();
   const { token } = antdTheme.useToken();
