@@ -1,6 +1,6 @@
 "use client";
 
-import { ThemeProvider } from "@lobehub/ui";
+import ThemeProvider from "@lobehub/ui/es/ThemeProvider/ThemeProvider";
 import { ConfigProvider } from "antd";
 import type { PropsWithChildren } from "react";
 import { useLayoutEffect } from "react";
