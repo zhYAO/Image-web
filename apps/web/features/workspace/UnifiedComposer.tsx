@@ -16,7 +16,8 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import type { ChangeEvent, KeyboardEvent } from "react";
+import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { ComposerOrbs } from "./ComposerOrbs";
 
 import { zhCN } from "@/i18n";
 
@@ -104,8 +105,10 @@ export function UnifiedComposer({
     event.target.value = "";
   };
 
+  const [focused, setFocused] = useState(false);
   return (
     <div className={styles.composer}>
+      <ComposerOrbs focused={focused} />
       <div className={styles.composerBody}>
         {imageCreationEnabled && (
           <div
@@ -176,6 +179,8 @@ export function UnifiedComposer({
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder={
             imageCreationEnabled
               ? zhCN.composer.imagePlaceholder

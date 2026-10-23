@@ -46,7 +46,7 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 
 `zimage-deploy` 仅能上传 incoming，并通过 sudo 调用 root 拥有的 `/usr/local/sbin/zimage-release`（源码 `ops/aliyun/release.py`）；不能修改 helper。helper 校验 SHA-256、拒绝路径穿越/外部链接/凭据文件，将版本放入 `/opt/zimage/releases/<commit SHA>`，原子切换 current 后重启。GitHub 部署串行，发布前核对 main SHA，服务端工作流序号拒绝过期任务。Next 缓存独立放在 `/opt/zimage/cache`。
 
-健康检查包含 `/api/health/ready` 的构建版本、登录页、静态资源与未登录 `/api/account` 的 401，分别检查回环和公网 HTTPS。失败自动切回原版本并再次检查。`/opt/zimage/previous` 记录上次正常版本。单实例发布和回滚均有短暂重启。
+健康检查包含 `/api/health/ready` 的构建版本、登录页、静态资源与未登录 `/api/account` 的 401，分别检查回环和公网 HTTPS。 随后的 `verify-release.py` 在同两处还核验 `/`、`/home`、`/assets`、`/create` 与五个场景，以及登录/邮箱认证/验证/恢复页面均返回 200；全部为不带 Cookie 或 Authorization 的 GET，不提交登录、上传或生成，任何意外重定向均失败。失败自动切回原版本并再次检查。部署工作流在激活前还通过同一受限 SSH 只读记录 `current` 的精确 40 位保留版本 SHA，无法读取或路径不符则停在发布前。若后续完整路由验证失败，`deployment-health.sh` 仅在 current 仍为本次发布 SHA 时调用既有 helper 回退到该精确原版本；同 SHA 重发不回退更老版本。回退使用 helper 原有健康检查，不要求旧版存在新页面；初始发布 job 始终保留失败状态。`/opt/zimage/previous` 仍记录上次正常版本，手动回滚入口保留。单实例发布和回滚均有短暂重启。
 
 手动重发：Actions → ZImage CI and Deploy → Run workflow → 分支 `main`、action=`deploy`。同一 SHA 重发复用已验证的不可变产物。手动回滚：同一入口 action=`rollback`、release=`previous` 或已保留版本目录名。回滚不撤销代码历史或数据库。回滚后恢复最新版可再次运行 deploy。
 

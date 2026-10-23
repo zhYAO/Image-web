@@ -1,0 +1,217 @@
+/*
+ * React Bits GlassSurface material, adapted for the ZImage application.
+ * Copyright (c) 2026 David Haz. MIT + Commons Clause; retain licenses/react-bits-LICENSE.md.
+ * Upstream 43591e8b3fa327d45633b4e8239ff6742ef706ef, GlassSurface.css.
+ * Retains frosted blur/saturation/brightness and inset top/bottom highlights.
+ * App changes: scoped light/dark tint, one paint layer, geometry owned by callers,
+ * opaque/forced-color fallbacks. No upstream flex wrapper or clipping of popovers.
+ */
+:root {
+  --glass-surface: rgba(255, 255, 255, 0.28);
+  --glass-sheen: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0) 48%,
+    rgba(255, 255, 255, 0.02)
+  );
+  --glass-border: rgba(21, 20, 15, 0.08);
+  --glass-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 85%),
+    inset 0 -1px 0 0 rgb(255 255 255 / 35%), inset 0 0 2px 1px rgb(0 0 0 / 12%),
+    inset 0 0 12px 3px rgb(255 255 255 / 28%), 0 4px 16px rgb(70 70 86 / 3%),
+    0 8px 24px rgb(70 70 86 / 3%), 0 16px 56px rgb(70 70 86 / 3%);
+  --glass-blur: 12px;
+  --glass-refraction-blur: 7px;
+  --glass-saturation: 1.4;
+  --glass-fallback: #fff;
+  --glass-text: var(--text, #262626);
+  --glass-focus-border: var(--primary, #7050b5);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-z-theme="light"]) {
+    --glass-surface: rgba(37, 32, 48, 0.4);
+    --glass-sheen: linear-gradient(
+      145deg,
+      rgba(229, 207, 255, 0.035),
+      rgba(229, 207, 255, 0) 48%,
+      rgba(229, 207, 255, 0.015)
+    );
+    --glass-border: rgba(232, 214, 255, 0.2);
+    --glass-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 30%),
+      inset 0 -1px 0 0 rgb(255 255 255 / 8%),
+      inset 0 0 2px 1px rgb(255 255 255 / 28%),
+      inset 0 0 12px 3px rgb(255 255 255 / 10%), 0 4px 16px rgb(24 22 30 / 6%),
+      0 8px 24px rgb(24 22 30 / 6%), 0 16px 56px rgb(24 22 30 / 6%);
+    --glass-fallback: #25212d;
+  }
+}
+:root[data-z-theme="dark"] {
+  --glass-surface: rgba(37, 32, 48, 0.4);
+  --glass-sheen: linear-gradient(
+    145deg,
+    rgba(229, 207, 255, 0.035),
+    rgba(229, 207, 255, 0) 48%,
+    rgba(229, 207, 255, 0.015)
+  );
+  --glass-border: rgba(232, 214, 255, 0.2);
+  --glass-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 30%),
+    inset 0 -1px 0 0 rgb(255 255 255 / 8%),
+    inset 0 0 2px 1px rgb(255 255 255 / 28%),
+    inset 0 0 12px 3px rgb(255 255 255 / 10%), 0 4px 16px rgb(24 22 30 / 6%),
+    0 8px 24px rgb(24 22 30 / 6%), 0 16px 56px rgb(24 22 30 / 6%);
+  --glass-fallback: #25212d;
+}
+/* A light editorial page can keep its material and text together on a dark OS. */
+.liquid-glass-theme-light,
+[data-glass-theme="light"] {
+  --glass-surface: rgba(255, 255, 255, 0.28);
+  --glass-sheen: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0) 48%,
+    rgba(255, 255, 255, 0.02)
+  );
+  --glass-border: rgba(21, 20, 15, 0.08);
+  --glass-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 85%),
+    inset 0 -1px 0 0 rgb(255 255 255 / 35%), inset 0 0 2px 1px rgb(0 0 0 / 12%),
+    inset 0 0 12px 3px rgb(255 255 255 / 28%), 0 4px 16px rgb(70 70 86 / 3%),
+    0 8px 24px rgb(70 70 86 / 3%), 0 16px 56px rgb(70 70 86 / 3%);
+  --glass-fallback: #fff;
+  --glass-text: #292630;
+  --glass-focus-border: #7050b5;
+}
+/* Legacy selectors are adapters, not independent recipes. Pseudo-tooltips
+   share the same paint and accessibility fallbacks without a second layer. */
+:is(
+    .liquid-glass,
+    .glass,
+    .composer,
+    .sidebar-tooltip,
+    .scene-tag,
+    .zp-tool-index,
+    .zp-preview-panel,
+    .zp-result-loading
+  ):not(.surface-white):not([data-liquid-glass="off"]),
+.zp-ai-help::after {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-surface);
+  background-image: var(--glass-sheen);
+  color: var(--glass-text);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur))
+    saturate(var(--glass-saturation)) brightness(1.04);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation))
+    brightness(1.04);
+}
+/* The filter affects only the backdrop; text/icons never pass through it. */
+@supports (backdrop-filter: url(#liquid-glass-support) blur(7px)) {
+  .liquid-glass.is-liquid-refracted:not(.surface-white):not(
+      [data-liquid-glass="off"]
+    ) {
+    backdrop-filter: var(--liquid-glass-filter)
+      blur(var(--glass-refraction-blur)) saturate(var(--glass-saturation));
+  }
+}
+.liquid-glass-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.liquid-glass--interactive {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.liquid-glass--interactive:focus-visible {
+  outline: 2px solid var(--glass-focus-border);
+  outline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .liquid-glass--interactive:hover {
+    border-color: var(--glass-focus-border);
+  }
+}
+/* White commerce menus are an intentional separate material. */
+.surface-white {
+  background: #fff;
+  background-image: none;
+  color: #292630;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  :is(
+      .liquid-glass,
+      .glass,
+      .composer,
+      .sidebar-tooltip,
+      .scene-tag,
+      .zp-tool-index,
+      .zp-preview-panel,
+      .zp-result-loading
+    ):not(.surface-white):not([data-liquid-glass="off"]),
+  .zp-ai-help::after {
+    background: var(--glass-fallback);
+    background-image: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-glass--interactive {
+    transition: none;
+  }
+  .liquid-glass.is-liquid-refracted:not(.surface-white):not(
+      [data-liquid-glass="off"]
+    ) {
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation))
+      brightness(1.04);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :is(
+      .liquid-glass,
+      .glass,
+      .composer,
+      .sidebar-tooltip,
+      .scene-tag,
+      .zp-tool-index,
+      .zp-preview-panel,
+      .zp-result-loading
+    ):not(.surface-white):not([data-liquid-glass="off"]),
+  .zp-ai-help::after {
+    background: var(--glass-fallback);
+    background-image: none;
+    border-color: var(--control-border, #736d7d);
+    box-shadow: none;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+@media (forced-colors: active) {
+  :is(
+    .liquid-glass,
+    .glass,
+    .composer,
+    .sidebar-tooltip,
+    .scene-tag,
+    .zp-tool-index,
+    .zp-preview-panel,
+    .zp-result-loading
+  ):not([data-liquid-glass="off"]),
+  .zp-ai-help::after,
+  .surface-white {
+    background: Canvas;
+    background-image: none;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}

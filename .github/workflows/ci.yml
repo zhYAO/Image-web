@@ -118,6 +118,7 @@ jobs:
         with:
           name: production-${{ github.sha }}
           path: /tmp/production
+      - uses: actions/checkout@v4
       - name: Verify this is still main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -133,6 +134,16 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Record exact original release before activation
+        id: rollback-point
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          original=$(bash ops/aliyun/deployment-health.sh record)
+          printf 'release=%s\n' "$original" >> "$GITHUB_OUTPUT"
+          printf 'Verified rollback point: %s\n' "$original"
       - name: Upload and activate immutable release
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -144,15 +155,15 @@ jobs:
           digest=$(sha256sum /tmp/production/zimage-release.tgz | cut -d ' ' -f1)
           scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/zimage-release.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.tgz"
           ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
-      - uses: actions/checkout@v4
       - name: Verify published version and retired batch endpoints
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
           RELEASE_SHA: ${{ github.sha }}
+          ORIGINAL_SHA: ${{ steps.rollback-point.outputs.release }}
         run: |
           set -euo pipefail
-          ssh -T -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "python3 - $RELEASE_SHA" < ops/aliyun/verify-release.py
+          bash ops/aliyun/deployment-health.sh verify "$RELEASE_SHA" "$ORIGINAL_SHA"
       - name: Remove runner key
         if: always()
         run: rm -f ~/.ssh/zimage

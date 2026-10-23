@@ -1,0 +1,105 @@
+/* Source design tokens alias the existing application theme; no second theme state. */
+:root {
+  --bg: var(--z-bg);
+  --panel: var(--z-panel);
+  --text: var(--z-text);
+  --muted: var(--z-muted);
+  --subtle: var(--z-placeholder);
+  --primary: var(--z-primary);
+  --primary-hover: var(--z-primary-hover);
+  --soft: var(--z-primary-soft);
+  --border: var(--z-border);
+  --control-border: var(--z-border-control);
+  --overlay-glass: var(--z-glass-overlay);
+  --rim: rgba(255, 255, 255, 0.85);
+  --shadow: var(--z-shadow-soft);
+  --ease: var(--z-ease);
+  --font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+}
+.zl-root {
+  font-family: var(--font);
+}
+.zl-root :is(button, input, select, textarea) {
+  font: inherit;
+}
+.zl-root button {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+.zl-root a {
+  color: inherit;
+  text-decoration: none;
+}
+.zl-root img {
+  max-width: 100%;
+}
+.zl-root .skip-link {
+  position: fixed;
+  left: 20px;
+  top: 12px;
+  z-index: 999;
+  padding: 12px 20px;
+  background: white;
+  transform: translateY(-160%);
+}
+.zl-root .skip-link:focus {
+  transform: none;
+}
+.zl-root :is(button, a):focus-visible {
+  outline: 3px solid #7050b5;
+  outline-offset: 4px;
+}
+
+.zi-auth-scroll > .glass-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  width: 100%;
+  max-width: none;
+  margin: 30px 0 0;
+}
+.zi-auth-scroll .glass-form h1 {
+  font-size: 32px;
+  letter-spacing: -0.04em;
+}
+.zi-auth-scroll .glass-form input {
+  border-radius: 14px;
+  min-height: 48px;
+}
+.zi-auth-scroll .auth-story {
+  display: none;
+}
+.zi-account {
+  width: min(1120px, 100%);
+  margin: 48px auto;
+}
+.zi-account-main.glass-card,
+.zi-account-settings.glass-card {
+  padding: 28px;
+  min-width: 0;
+}
+.zi-account-settings form {
+  padding: 12px 0 24px;
+  border-bottom: 1px solid var(--z-border);
+}
+.zi-account-settings .glass-muted {
+  overflow-wrap: anywhere;
+}
+.glass-brand > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.zi-account .credit-account { margin: 0; padding: 0; border: 0; }
+.zi-account .credit-account > h2 { font-size: 16px; font-weight: 550; }
+.zi-account .credit-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 24px 0; }
+.zi-account .credit-overview > span { padding: 14px 16px; border: 1px solid var(--z-border); border-radius: 14px; background: var(--z-bg); }
+.zi-account .credit-overview > span:first-child { grid-column: 1 / -1; padding: 0; border: 0; background: none; }
+.zi-account .credit-overview > span:first-child strong { font-size: 54px; line-height: 1.2; font-weight: 500; letter-spacing: -2px; margin-top: 7px; }
+.zi-account .credit-overview > span:not(:first-child) strong { font-size: 24px; font-weight: 500; margin-top: 5px; }
+.zi-account .credit-account > p { color: var(--z-muted); font-size: 12px; }
+.zi-account .credit-table { font-size: 12px; }

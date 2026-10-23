@@ -1,5 +1,6 @@
 """Read-only release checks streamed over the existing deployment SSH connection.
 
+Public page checks are anonymous GETs and never submit authentication or generation.
 No application credentials are accepted. The three retired POST requests carry
 synthetic IDs and an empty task list; an old authenticated route cannot buy work.
 """
@@ -21,6 +22,19 @@ CHECKS = (
     ('POST', '/api/internal/creative-batch-worker', 410, True),
     ('GET', '/create/batch', 404, False),
     ('GET', '/api/account', 401, False),
+    ('GET', '/', 200, False),
+    ('GET', '/home', 200, False),
+    ('GET', '/assets', 200, False),
+    ('GET', '/create', 200, False),
+    ('GET', '/create/product-set', 200, False),
+    ('GET', '/create/detail', 200, False),
+    ('GET', '/create/clone', 200, False),
+    ('GET', '/create/product-main', 200, False),
+    ('GET', '/create/apparel-catalog', 200, False),
+    ('GET', '/login', 200, False),
+    ('GET', '/auth', 200, False),
+    ('GET', '/auth/verify', 200, False),
+    ('GET', '/auth/reset', 200, False),
 )
 EMPTY_BATCH = json.dumps({
     'requestId': '00000000-0000-4000-8000-000000000001',

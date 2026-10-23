@@ -10,7 +10,7 @@ import { catalogueRuntimeAllowed } from '@/features/workspace/catalogue-runtime'
 export function WorkspaceHost({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { status, ownerId } = useAuthStatus();
-  const active = pathname === '/' || pathname.startsWith('/sessions/') || pathname.startsWith('/create/') || (pathname === '/create' && catalogueRuntimeAllowed(status));
+  const active = pathname === '/' || pathname.startsWith('/sessions/') || pathname.startsWith('/create/') || ((pathname === '/create' || pathname === '/assets') && catalogueRuntimeAllowed(status));
   const [visited, setVisited] = useState(active);
   if (active && !visited) setVisited(true);
   return <>

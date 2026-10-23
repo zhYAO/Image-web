@@ -2013,3 +2013,15 @@ button.primary:active:not(:disabled) {
 .detailPreviewColumns li > span { display:block; padding:6px 10px; font-size:12px; }
 .detailPreviewColumns :global(.ant-image) { width:100%; display:block; }
 .detailPreviewPlaceholder { display:grid; place-items:center; min-height:140px; color:var(--z-image-text); background:var(--z-image-bg); }
+
+/* Shared material for saved task details and the apparel configuration workspace. */
+.wizardEmbedded .wizardSettings,.wizardEmbedded .wizardPreview,.savedBrief,.savedOutput { border-radius: 23px; border-top-color: var(--rim); box-shadow: var(--z-shadow-soft); }
+.wizardEmbedded .wizardColumns,.savedWorkbench { gap: 22px; }
+.wizardEmbedded label { font-size: 12px; }
+.wizardEmbedded input:not([type="checkbox"]):not([type="file"]),.wizardEmbedded textarea { border-radius: 12px; border-color: var(--z-border); }
+.wizardEmbedded .wizardControls { border-top: 1px solid var(--z-border); }
+@media(max-width:767px) { .wizardEmbedded .wizardColumns,.savedWorkbench { gap: 18px; } }
+
+.refreshTask { flex: none; padding: 7px 12px; border: 1px solid var(--z-border); border-radius: 10px; background: var(--z-panel); color: var(--z-muted); cursor: pointer; font: inherit; font-size: 11px; }
+.refreshTask:hover { color: var(--z-primary); background: var(--z-primary-soft); }
+.refreshTask:focus-visible { outline: 2px solid var(--z-focus); outline-offset: 3px; }

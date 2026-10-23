@@ -1,6 +1,6 @@
 'use client';
 
-import { WebPageShell } from '@/features/shell/WebPageShell';
+import { AuthShell } from '@/features/brand/AuthShell';
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,6 +15,7 @@ type Mode = 'login' | 'register' | 'recovery';
 export function AuthPanel({ legalVersion = null }: { legalVersion?: string | null } = {}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('login');
+  const [channel, setChannel] = useState<'email' | 'phone'>('email');
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -22,7 +23,7 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
   const { captcha, captchaToken, captchaPending, resetCaptcha } = useAuthCaptcha();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || captchaPending) return;
+    if (channel !== 'email' || pending || captchaPending) return;
     if (mode === 'login') prefetchWorkspace();
     setMessage(''); setFailed(false); setNextStep(null);
     const data = new FormData(event.currentTarget);
@@ -55,8 +56,14 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
   }
   function changeMode(value: Mode) { setMode(value); setMessage(''); setFailed(false); setNextStep(null); resetCaptcha(); }
 
-  return <WebPageShell className="auth-page"><div className="auth-layout">
-    <section className="glass-card glass-form"><p className="glass-kicker">ZIMAGE · 中国大陆公开 BETA</p><h1>{mode === 'login' ? '登录' : mode === 'register' ? '创建账号' : '找回密码'}</h1>
+  return <AuthShell>
+    <section className="glass-card glass-form"><p className="glass-kicker">ZIMAGE · 中国大陆公开 BETA</p>
+    <nav aria-label="登录方式">
+      <button type="button" aria-pressed={channel === 'email'} disabled={pending} onClick={() => setChannel('email')}>邮箱登录</button>
+      <button type="button" aria-pressed={channel === 'phone'} disabled={pending} onClick={() => setChannel('phone')}>手机号验证码</button>
+    </nav>
+    <div hidden={channel !== 'email'}>
+    <h1>{mode === 'login' ? '登录' : mode === 'register' ? '创建账号' : '找回密码'}</h1>
     <p className="glass-muted">{mode === 'login' ? '登录后继续你的图片创作。' : mode === 'register' ? '创建账号，跨设备保留会话与生成记录。' : '输入邮箱，我们会发送找回密码指引。'}</p>
     <form onSubmit={submit}><label>邮箱<input autoComplete="email" name="email" required type="email" /></label>
       {mode !== 'recovery' && <label>密码<input autoComplete={mode === 'login' ? 'current-password' : 'new-password'} name="password" required type="password" /></label>}
@@ -67,5 +74,17 @@ export function AuthPanel({ legalVersion = null }: { legalVersion?: string | nul
       {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
       {nextStep && <a href={nextStep}>输入邮箱验证码</a>}<button disabled={pending || captchaPending || (mode === 'register' && !legalVersion)} type="submit">{mode === 'login' ? '登录' : mode === 'register' ? '注册' : '发送重置邮件'}</button></form>
     <nav aria-label="账号操作"><button aria-pressed={mode === 'login'} disabled={pending} onClick={() => changeMode('login')} type="button">登录</button><button aria-pressed={mode === 'register'} disabled={pending} onClick={() => changeMode('register')} type="button">注册</button><button aria-pressed={mode === 'recovery'} disabled={pending} onClick={() => changeMode('recovery')} type="button">忘记密码</button></nav>
-  </section></div></WebPageShell>;
+    </div>
+    {channel === 'phone' && <section aria-label="手机号验证码登录">
+      <h1>手机号验证码登录</h1>
+      <p id="phone-login-unavailable" className="glass-muted">短信服务尚未接入，暂不支持发送验证码或手机号登录。请使用邮箱登录。</p>
+      <fieldset className="auth-phone-placeholder" disabled aria-describedby="phone-login-unavailable">
+        <legend className="glass-muted">暂未开放</legend>
+        <label>手机号<input name="phone" type="tel" autoComplete="tel" placeholder="请输入手机号" /></label>
+        <label>验证码<input name="phoneCode" inputMode="numeric" autoComplete="one-time-code" placeholder="请输入验证码" /></label>
+        <button type="button">获取验证码</button>
+        <button type="button">手机号登录暂未开放</button>
+      </fieldset>
+    </section>}
+  </section></AuthShell>;
 }

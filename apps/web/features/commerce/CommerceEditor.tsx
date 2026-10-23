@@ -104,7 +104,8 @@ export function CommerceExample({ scene }: { scene: CommerceScene }) {
       src={`/commerce/meitu-v1/${name}.webp`}
       width={720}
       height={720}
-      sizes="(max-width: 1400px) 24vw, 30vw"
+      sizes={scene === "product-set" && name !== "kit-product" ? "(max-width: 767px) 38vw, 180px" : "(max-width: 767px) 44vw, 320px"}
+      loading={name.endsWith("-product") || name === "clone-reference" ? "eager" : "lazy"}
       alt={alt}
     />
   );

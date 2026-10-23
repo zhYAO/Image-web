@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 import path from 'node:path';
-import { withSentryConfig } from '@sentry/nextjs';
+import { withSentryConfig } from '@sentry/nextjs/config';
 
 const dataMode = process.env.NEXT_PUBLIC_DATA_MODE ?? 'mock';
 const deploymentEnvironment = process.env.VERCEL_ENV ?? process.env.ZIMAGE_DEPLOYMENT_ENV;

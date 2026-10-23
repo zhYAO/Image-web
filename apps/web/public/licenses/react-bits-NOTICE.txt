@@ -1,0 +1,22 @@
+React Bits attribution for the ZImage application
+
+Copyright (c) 2026 David Haz
+
+This application includes adapted FadeContent and GlassSurface source from the
+free React Bits repository, https://github.com/DavidHDev/react-bits.
+FadeContent revision: 496968c4117e21278f13917201b7d615bc5e7450.
+GlassSurface revision: 43591e8b3fa327d45633b4e8239ff6742ef706ef.
+
+Licensed under MIT + Commons Clause License Condition v1.0.
+The full copyright, permission notice, restriction, and warranty disclaimer
+are supplied alongside this file as react-bits-LICENSE.md.
+
+Imported via ZImage React Bits source revision
+4516d423803ab2923083610d75f2326c033984fe. Application-specific adaptations retain
+SVG refraction channels, frosted paint, native browser reveal animations,
+a semantic host, reduced-motion fallbacks and bounded lifecycle cleanup.
+Further integration aliases the existing application theme and tightens
+TypeScript optional-entry handling. No React Bits Pro content is used.
+
+These components are included as part of this application only. They are not
+offered as a standalone component library or component pack.

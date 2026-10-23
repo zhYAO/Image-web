@@ -2,6 +2,8 @@
 
 import { COMMERCE_SCENES, COMMERCE_PRIMARY_SCENE_IDS } from "@zimage/domain";
 import Image from "next/image";
+import { ArrowUpRight } from "lucide-react";
+import { scenes } from "@/features/brand/scenes";
 import Link from "next/link";
 import {
   useEffect,
@@ -265,10 +267,12 @@ export function HomeCommerceCarousel() {
                     height={512}
                     sizes="(max-width: 767px) 85vw, 260px"
                   />
+                  <span className={styles.tag}>{scenes.find(item => item.id === scene.id)?.tag}</span>
                 </div>
                 <div className={styles.caption}>
-                  <span>{scene.name}</span>
+                  <span>{scene.name}</span><ArrowUpRight size={15} aria-hidden/>
                 </div>
+                <p className={styles.description}>{scene.description}</p>
               </Link>
             );
           })}

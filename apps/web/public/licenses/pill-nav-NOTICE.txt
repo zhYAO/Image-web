@@ -1,0 +1,13 @@
+React Bits Pill Nav — homepage CTA adaptation
+Copyright (c) 2026 David Haz
+License: MIT + Commons Clause License Condition v1.0
+Full license: pill-nav-LICENSE.md (in this directory)
+Upstream: https://github.com/DavidHDev/react-bits
+Revision: c2a1408d9219a5bd7a2d9c93c9c499042f5fa34a
+Sources: src/ts-default/Components/PillNav/PillNav.tsx and PillNav.css
+Official component: https://reactbits.dev/components/pill-nav
+
+Modified for this application's two homepage Start Creating links: scoped CSS
+circular fill and rolling labels, existing Next Link/geometry, violet palette,
+keyboard focus, static reduced-motion and forced-colors fallbacks. No full navbar,
+active indicator, mobile menu or animation engine is distributed by this adapter.

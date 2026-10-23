@@ -8,7 +8,7 @@
 
 业务以 [requirements.md](doc/requirements.md) 为准，状态以 [project-progress.md](doc/project-progress.md) 为准，前端实施遵守 [AGENTS.md](apps/web/AGENTS.md)。本规范不改变认证、数据库、API、积分、模型准入、任务恢复和发布规则。保留当前服装页左右滚动及 Plan 逻辑。
 
-不照搬营销首页的大标题、整屏留白、物理模拟、视频、字体或品牌资产。参考 `clone-web/open-design-home-clone/zh/index.html` 中的 `enhanceHeader` / `#nav-liquid-glass`，该代码注明借鉴 Inspira UI `LiquidGlass.vue`，并非 Apple 官方实现。ZImage 仅借鉴材质构造，使用自己的组件、颜色与既有图片；不修改参考仓库。
+2026-10-22 用户授权移植 ZImage React Bits：`/home` 独立承载源品牌首页的大标题、画廊和滚动介绍，工作区继续保持工具信息密度。源版本与边界见 [整合映射](doc/plans/2026-10-22-react-bits-integration.md)。不引入物理模拟、视频、远程字体或新的业务状态框架。参考 `clone-web/open-design-home-clone/zh/index.html` 中的 `enhanceHeader` / `#nav-liquid-glass`，该代码注明借鉴 Inspira UI `LiquidGlass.vue`，并非 Apple 官方实现。ZImage 仅借鉴材质构造，使用自己的组件、颜色与既有图片；不修改参考仓库。
 
 ## 2. 语义颜色与系统主题
 

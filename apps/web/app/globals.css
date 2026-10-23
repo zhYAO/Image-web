@@ -336,10 +336,18 @@ body
   color: var(--z-muted);
   line-height: 1.6;
 }
-.glass-form form {
+.glass-form form,
+.auth-phone-placeholder {
   display: grid;
   gap: 16px;
   margin-top: 24px;
+}
+
+.auth-phone-placeholder {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
 }
 .glass-form label {
   display: grid;
@@ -429,7 +437,7 @@ body
 }
 .glass-form
   nav
-  button:is(:hover, :active, [aria-pressed="true"]):not(:disabled) {
+  button:is(:hover, :active, [aria-pressed="true"]):not(:disabled):not([aria-disabled="true"]) {
   background: var(--z-primary-soft);
   color: var(--z-primary);
 }
