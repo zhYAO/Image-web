@@ -3,6 +3,8 @@
 import { CreditAccount } from "@/features/credits/CreditsProvider";
 import { WebPageShell } from "@/features/shell/WebPageShell";
 
+import '@/features/brand/identity.css';
+
 import type { Account } from "../../../../packages/domain/src/auth-contracts";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -108,11 +110,9 @@ export function AccountPanel({ account }: { account: Account }) {
 
   return (
     <WebPageShell className="account-page">
-      <section aria-busy={pending} className="glass-card glass-form account-panel">
-        <a href="/">返回工作区</a>
-        <p className="glass-kicker">ZIMAGE · 账号中心</p>
-        <h1>账号</h1>
-        <CreditAccount />
+      <section aria-busy={pending} className="zi-account">
+        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><a className="zi-button" href="/">返回工作区</a></header>
+        <div className="zi-account-grid"><div className="zi-account-main glass-card"><CreditAccount /></div><div className="zi-account-settings glass-form glass-card">
         <p className="glass-muted">邮箱：{account.email}</p>
         <form onSubmit={patch}><label>显示名称<input defaultValue={account.displayName ?? ''} name="displayName" /></label><button disabled={pending} type="submit">保存资料</button></form>
         <form onSubmit={password}><label>新密码<input autoComplete="new-password" name="password" required type="password" /></label><button disabled={pending} type="submit">修改密码</button></form>
@@ -123,6 +123,7 @@ export function AccountPanel({ account }: { account: Account }) {
         )}
         <button className="glass-primary" disabled={pending} onClick={logout} type="button">退出登录</button>
         <form onSubmit={remove}><h2>注销账号</h2><p className="glass-muted">注销受理后，账号会立即停止访问；后台清理完成前状态为“删除中”。</p><label>重新输入密码<input autoComplete="current-password" name="password" required type="password" /></label><button className="glass-danger" disabled={pending} type="submit">永久注销账号</button></form>
+        </div></div>
       </section>
     </WebPageShell>
   );

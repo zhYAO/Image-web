@@ -20,14 +20,13 @@ describe('UnifiedWorkspace', () => {
     expect(window.location.search).toBe('');
   });
 
-  it('removes the fixed desktop config panel, collapses the sidebar and reports the asset-library placeholder', async () => {
+  it('removes the fixed desktop config panel, collapses the sidebar and links to the session asset library', async () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
 
     expect(screen.queryByRole('heading', { name: '生成配置' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '折叠会话侧栏' }));
     expect(screen.getByRole('button', { name: '展开会话侧栏' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '资产库' }));
-    expect(await screen.findByText('资产库暂未开放')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '资产库' })).toHaveAttribute('href', '/assets');
   });
 });

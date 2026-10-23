@@ -4,6 +4,7 @@ export type CommerceView = 'examples' | 'plan' | 'results';
 export type WorkspaceRoute =
   | { kind: 'home' }
   | { kind: 'catalogue' }
+  | { kind: 'assets' }
   | { kind: 'commerce'; scene: CommerceScene; platform?: CommerceBrief['platform']; template?: string }
   | { kind: 'session'; sessionId: string; taskId?: string; batchId?: string; view?: CommerceView }
   | { kind: 'invalid' }
@@ -11,6 +12,7 @@ export type WorkspaceRoute =
 
 export function workspaceRoute(pathname: string, search = ''): WorkspaceRoute {
   const query = new URLSearchParams(search);
+  if (pathname === '/assets' || pathname === '/assets/') return { kind: 'assets' };
   if (pathname === '/create' || pathname === '/create/') return { kind: 'catalogue' };
   if (pathname === '/' && !query.has('scene')) return { kind: 'home' };
   if (pathname === '/' || pathname.startsWith('/create/')) {

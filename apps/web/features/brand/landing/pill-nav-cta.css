@@ -1,0 +1,126 @@
+/* React Bits Pill Nav adaptation; copyright 2026 David Haz.
+ * MIT + Commons Clause; see docs/pill-nav-cta.md and licenses/pill-nav-LICENSE.md.
+ * Preserve landing button geometry; all three homepage CTA links get the fill/roll. */
+.zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta,
+.zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta:hover {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  white-space: nowrap;
+  background: #292532;
+  transform: none;
+}
+
+.zl-root .zl-pill-cta-fill {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #64448e;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 0.36s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.zl-root .zl-pill-cta-labels {
+  position: relative;
+  display: inline-grid;
+  gap: inherit;
+  overflow: hidden;
+}
+
+.zl-root .zl-pill-cta-label,
+.zl-root .zl-pill-cta-label-alt {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zl-root .zl-pill-cta-label-alt {
+  transform: translateY(100%);
+}
+
+.zl-root .zl-pill-cta:focus-visible {
+  outline: 2px solid #64448e;
+  outline-offset: 4px;
+}
+
+.zl-root .zl-pill-cta:focus-visible .zl-pill-cta-fill {
+  transform: translate(-50%, -50%) scale(1);
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zl-root .zl-pill-cta:focus-visible .zl-pill-cta-label {
+  transform: translateY(-100%);
+  transition-duration: 0.5s;
+}
+
+.zl-root .zl-pill-cta:focus-visible .zl-pill-cta-label-alt {
+  transform: translateY(0);
+  transition-duration: 0.5s;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .zl-root .zl-pill-cta:hover .zl-pill-cta-fill {
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .zl-root .zl-pill-cta:hover .zl-pill-cta-label {
+    transform: translateY(-100%);
+    transition-duration: 0.5s;
+  }
+
+  .zl-root .zl-pill-cta:hover .zl-pill-cta-label-alt {
+    transform: translateY(0);
+    transition-duration: 0.5s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta,
+  .zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta:is(:hover, :focus-visible),
+  .zl-root .zl-pill-cta .zl-pill-cta-fill,
+  .zl-root .zl-pill-cta:is(:hover, :focus-visible) .zl-pill-cta-fill,
+  .zl-root .zl-pill-cta .zl-pill-cta-label-alt {
+    transition: none;
+  }
+
+  .zl-root .zl-pill-cta .zl-pill-cta-label,
+  .zl-root .zl-pill-cta:is(:hover, :focus-visible) .zl-pill-cta-label {
+    transform: none;
+    transition: none;
+  }
+
+  .zl-root .zl-pill-cta .zl-pill-cta-label-alt {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta,
+  .zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta:hover {
+    background: ButtonFace;
+    color: ButtonText;
+    outline: 1px solid ButtonText;
+  }
+
+  .zl-root :is(.zl-button, .zl-nav-cta).zl-pill-cta:focus-visible {
+    outline: 2px solid Highlight;
+  }
+
+  .zl-root .zl-pill-cta-fill,
+  .zl-root .zl-pill-cta-label-alt {
+    display: none;
+  }
+
+  .zl-root .zl-pill-cta .zl-pill-cta-label,
+  .zl-root .zl-pill-cta:is(:hover, :focus-visible) .zl-pill-cta-label {
+    transform: none;
+    transition: none;
+  }
+}

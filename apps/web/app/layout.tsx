@@ -1,5 +1,7 @@
 import "antd/dist/reset.css";
 import "./globals.css";
+import '@/features/brand/bridge.css';
+import '@/features/brand/liquid-glass.css';
 
 import { CreditsProvider } from "@/features/credits/CreditsProvider";
 import type { Metadata } from "next";

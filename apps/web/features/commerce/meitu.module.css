@@ -1290,3 +1290,15 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Source React Bits editor surfaces; retain the real form and preview scroll owners. */
+.editor { gap: 22px; padding: 0 4px 16px; background: transparent; grid-template-columns: minmax(290px,360px) minmax(0,1fr); }
+.config { border: 1px solid var(--z-border); border-top-color: var(--rim); border-radius: 23px; box-shadow: var(--z-shadow-soft); overflow: hidden; }
+.configScroll { padding: 22px; }
+.sectionTitle h2 { font-size: 12px; font-weight: 600; }
+.editor label { font-size: 12px; }
+.editor textarea,.editor input:not([type="checkbox"]):not([type="file"]):not([type="number"]):not([role="combobox"]) { border-radius: 12px; border-color: var(--z-border); background: var(--z-control-bg); }
+.actionBar { border-top: 1px solid var(--z-border); padding: 18px 22px; }
+.preview { border: 1px solid var(--z-border); border-radius: 23px; overflow: auto; background: var(--z-panel); }
+@media(max-width:1100px) and (min-width:768px) { .editor { grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap: 16px; } .configScroll { padding: 16px; } }
+@media(max-width:767px) { .editor,.detailEditor { display: flex; flex-direction: column; height: auto; gap: 18px; padding: 0 0 20px; } .config { overflow: visible; } .configScroll { overflow: visible; padding: 18px; } .actionBar { border-radius: 0 0 23px 23px; } .preview { min-height: 360px; } }

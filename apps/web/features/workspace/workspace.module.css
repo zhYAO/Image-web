@@ -2248,3 +2248,153 @@
 .submitGroup { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .submitGroup .submitButton { flex-shrink: 0; }
 .submitGroup :global(.credit-fee) { min-width: 0; margin: 0; }
+
+/* Independently blurred light spots; only transforms and opacity animate, never blur. */
+.composerOrbs {
+  position: absolute;
+  z-index: 0;
+  inset: 1px;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.28;
+  transition: opacity 220ms ease;
+  container-type: size;
+}
+/* Responsive track bounds leave travel room; inner visuals enlarge independently. */
+.composerOrbX {
+  --orb-width: 360px;
+  --orb-ratio: 1.44;
+  --orb-color: 139, 92, 246;
+  --bounce-x: 24s;
+  --bounce-y: 17s;
+  --delay-x: -5s;
+  --delay-y: -9s;
+  --shimmer-duration: 6s;
+  --shimmer-delay: 0s;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(var(--orb-width), 70cqw, calc(65cqh * var(--orb-ratio)));
+  height: 100%;
+  transform: translateX(calc((100cqw - 100%) * 0.2));
+  animation: composerOrbBounceX var(--bounce-x) linear infinite alternate;
+  animation-delay: var(--delay-x);
+}
+.composerOrbX:nth-child(2) {
+  --orb-width: 250px;
+  --orb-ratio: 1.25;
+  --orb-color: 125, 165, 235;
+  --bounce-x: 31s;
+  --bounce-y: 21s;
+  --delay-x: -39s;
+  --delay-y: -7s;
+  --shimmer-duration: 7.5s;
+  --shimmer-delay: -2.5s;
+  transform: translateX(calc((100cqw - 100%) * 0.55));
+}
+.composerOrbX:nth-child(3) {
+  --orb-width: 270px;
+  --orb-ratio: 1.2857142857;
+  --orb-color: 221, 151, 195;
+  --bounce-x: 37s;
+  --bounce-y: 26s;
+  --delay-x: -29s;
+  --delay-y: -35s;
+  --shimmer-duration: 9s;
+  --shimmer-delay: -5s;
+  transform: translateX(calc((100cqw - 100%) * 0.85));
+}
+.composerOrbY {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--orb-ratio);
+  transform: translateY(calc((100cqh - 100%) * 0.5));
+  animation: composerOrbBounceY var(--bounce-y) linear infinite alternate;
+  animation-delay: var(--delay-y);
+}
+.composerOrb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Scale after responsive sizing so every visual stays 3× its previous size. */
+  transform: scale(3);
+  transform-origin: center;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse,
+    rgba(var(--orb-color), 1) 20%,
+    rgba(var(--orb-color), 0) 72%
+  );
+  filter: blur(18px);
+  animation: composerOrbShimmer var(--shimmer-duration) ease-in-out infinite;
+  animation-delay: var(--shimmer-delay);
+}
+.composerOrbs[data-focused='true'] {
+  opacity: 0;
+}
+.composerOrbs[data-running='false'] .composerOrbX,
+.composerOrbs[data-running='false'] .composerOrbY,
+.composerOrbs[data-running='false'] .composerOrb {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composerOrbs {
+    transition: none;
+  }
+  .composerOrbs .composerOrbX,
+  .composerOrbs .composerOrbY,
+  .composerOrbs .composerOrb {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .composerOrbs {
+    display: none;
+  }
+}
+@keyframes composerOrbBounceX {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(100cqw - 100%));
+  }
+}
+@keyframes composerOrbBounceY {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(100cqh - 100%));
+  }
+}
+@keyframes composerOrbShimmer {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* React Bits shell proportions, backed by the existing workspace runtime. */
+.workspace { grid-template-columns: 244px minmax(0,1fr); gap: 24px; padding: 24px; }
+.workspaceCollapsed { grid-template-columns: 76px minmax(0,1fr); }
+.sidebar { border-radius: 26px; }
+.header { min-height: 58px; border-radius: 20px; margin-bottom: 24px; padding-inline: 22px; }
+.brandRow { margin-bottom: 24px; }
+.sidebarHeading { font-size: 23px; font-weight: 650; letter-spacing: -.8px; text-decoration: none; color: var(--z-text); }
+.brandCaption { font-size: 9px; letter-spacing: .15px; font-weight: 400; }
+.heroHeading { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 0 0 38px; }
+.heroMark { display: flex; align-items: center; justify-content: center; width: 49px; height: 49px; flex-shrink: 0; border-radius: 16px; color: var(--z-primary); background: var(--z-primary-soft); border: 1px solid var(--z-border); box-shadow: inset 0 1px 2px #ffffffb0,0 8px 23px #7050b50c; transform: rotate(-7deg); }
+.heroMark svg { width: 31px; height: 31px; transform: rotate(7deg); }
+.heroTitle { margin: 0; font-size: clamp(25px,2.45vw,36px); line-height: 1.5; font-weight: 600; letter-spacing: -.7px; }
+.composer { isolation: isolate; }
+.composerBody,.composerActions { position: relative; z-index: 1; }
+@media (max-width: 1100px) { .workspace { gap: 16px; padding: 16px; grid-template-columns: 220px minmax(0,1fr); } .workspaceCollapsed { grid-template-columns: 76px minmax(0,1fr); } .header { padding-inline: 14px; } }
+@media (max-width: 767px) { .workspace,.workspaceCollapsed { display: flex; padding: 10px; gap: 0; } .header { margin-bottom: 12px; padding-inline: 10px; } .heroHeading { gap: 10px; margin-bottom: 28px; } .heroMark { width: 38px; height: 38px; border-radius: 12px; } .heroTitle { font-size: 24px; } }
+
+.sidebarHeading { display: flex; align-items: center; gap: 9px; }
+.sidebarHeading > svg { width: 32px; height: 32px; flex-shrink: 0; color: var(--z-primary); }

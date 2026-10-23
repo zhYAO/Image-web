@@ -9,6 +9,7 @@ import {
   X,
   MoreHorizontal,
 } from "lucide-react";
+import { BrandMark } from "@/features/brand/BrandMark";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { useState } from "react";
 
@@ -86,9 +87,9 @@ export function SessionSidebar({
     >
       <div className={styles.brandRow}>
         {!collapsed && (
-          <div className={styles.sidebarHeading}>
-            ZImage<span className={styles.brandCaption}>灵感，让创作发生</span>
-          </div>
+          <Link href="/home" className={styles.sidebarHeading}>
+            <BrandMark/><span>ZImage<span className={styles.brandCaption}>灵感，让创作发生</span></span>
+          </Link>
         )}
         {onCollapse && (
           <Tooltip

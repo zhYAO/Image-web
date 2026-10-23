@@ -3,6 +3,7 @@ import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { BrandMark } from '@/features/brand/BrandMark';
 import { zhCN } from '@/i18n';
 
 import { HomeCommerceCarousel } from './HomeCommerceCarousel';
@@ -34,7 +35,7 @@ interface WorkspaceTimelineProps {
   onInspiration?: (prompt: string) => void;
 }
 
-function VisibleAsset({ id, initialUrl, alt, resolveAssetUrl }: {
+export function VisibleAsset({ id, initialUrl, alt, resolveAssetUrl }: {
   id: string; initialUrl?: string; alt: string;
   resolveAssetUrl?: (id: string, refresh?: boolean) => Promise<string | undefined>;
 }) {
@@ -303,7 +304,7 @@ export function WorkspaceTimeline({
   if (items.length === 0 && optimisticImages.length === 0 && !streamingText && !awaitingFirstDelta) {
     return (
       <div className={styles.empty}>
-        <h1 className={styles.heroTitle}>你好，想创作什么？</h1>
+        <div className={styles.heroHeading}><span className={styles.heroMark} aria-hidden="true"><BrandMark/></span><h1 className={styles.heroTitle}>你好，想创作什么？</h1></div>
         <HomeCommerceCarousel />
       </div>
     );

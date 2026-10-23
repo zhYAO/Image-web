@@ -27,7 +27,7 @@ import {
 } from '@zimage/domain';
 import { Alert, Button, Drawer, Select, Space } from 'antd';
 import PreviewGroup from 'antd/es/image/PreviewGroup';
-import { Archive, ArrowDown, Menu } from 'lucide-react';
+import { ArrowDown, Menu } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
@@ -56,6 +56,8 @@ import styles from './workspace.module.css';
 import { CommerceCatalogue } from '@/features/commerce/CommerceCatalogue';
 import { WorkspaceFrame } from './WorkspaceFrame';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+const SessionAssets = dynamic(() => import('@/features/assets/SessionAssets').then(module => module.SessionAssets), { loading: () => <p role="status">正在打开资产库…</p> });
 
 interface UnifiedWorkspaceProps {
   gateway?: WorkspaceGateway;
@@ -197,6 +199,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [commerceMode, setCommerceMode] = useState<{ sessionId?: string; active: boolean; scene?: CommerceScene }>();
   const commerceActive = commerceMode?.sessionId === activeSessionId && Boolean(commerceMode?.active);
   const commerceShell = commerceActive || route?.kind === 'commerce';
+  const assetsActive = route?.kind === 'assets';
   const catalogueActive = route?.kind === 'catalogue';
   const maxActiveReferences = commerceActive || route?.kind === 'commerce' ? 26 : MAX_REFERENCES;
   const onCommerceModeChange = useCallback((sessionId: string | undefined, active: boolean, scene?: CommerceScene) => {
@@ -359,7 +362,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     if (cancelled) return;
     appliedRoute.current = routeScope;
     setRouteError(undefined);
-    if (route.kind === 'catalogue') {
+    if (route.kind === 'catalogue' || route.kind === 'assets') {
       setActivePopover(undefined);
       setConfigDrawerOpen(false);
       return;
@@ -1048,7 +1051,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     <WorkspaceFrame collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
           <header className={styles.header}>
           <NavGlassFilter />
-          <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
+          <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
           <Space>
             <CreditBalance /><Link href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
@@ -1056,11 +1059,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
               ]} size="small" value={scenario} />
             )}
-            <Button aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} icon={<Archive size={16} />} onClick={() => setFeedback({ message: zhCN.workspace.assetLibraryUnavailable })}>{zhCN.workspace.assetLibrary}</Button>
+            <Link aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} href="/assets">{zhCN.workspace.assetLibrary}</Link>
           </Space>
         </header>
       }>
         {catalogueActive && <CommerceCatalogue />}
+        {assetsActive && <SessionAssets key={ownerKey} gateway={gateway} sessions={sessions} ownerKey={ownerKey} loading={initializing} error={initializationError} onRetry={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }} />}
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
         {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">
@@ -1068,7 +1072,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           {modelsError ? <span>模型状态暂不可用 <button type="button" onClick={() => { setModelsLoading(true); setModelsAttempt(value => value + 1); }}>重试模型</button></span> : modelsLoading ? <span>正在加载模型配置…</span> : null}
         </div>}
         {routeError && <div className={styles.statusFeedback} role="alert">{routeError} <Link href="/create">返回创作目录</Link></div>}
-        <div className={styles.workspaceBody} hidden={Boolean(routeError) || catalogueActive}>
+        <div className={styles.workspaceBody} hidden={Boolean(routeError) || catalogueActive || assetsActive}>
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
         <PreviewGroup preview={{ motionName: '' }}>
           <div aria-label="对话时间线" className={`${styles.timelineScroll} ${commerceActive ? styles.commerceScroll : ""}`} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">

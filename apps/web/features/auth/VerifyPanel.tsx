@@ -1,6 +1,6 @@
 'use client';
 
-import { WebPageShell } from '@/features/shell/WebPageShell';
+import { AuthShell } from '@/features/brand/AuthShell';
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -58,7 +58,7 @@ export function VerifyPanel() {
     finally { setPending(false); resetCaptcha(); }
   }
 
-  return <WebPageShell><section className="glass-card glass-form">
+  return <AuthShell><section className="glass-card glass-form">
     <p className="glass-kicker">账号验证</p><h1>验证邮箱</h1>
     <p className="glass-muted">请手动输入邮件中的 6 位验证码继续。</p>
     <form onSubmit={submit}>
@@ -69,5 +69,5 @@ export function VerifyPanel() {
       {captcha}
       <button disabled={pending || cooldown > 0 || captchaPending || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
     </form><a href="/login">返回登录</a>
-  </section></WebPageShell>;
+  </section></AuthShell>;
 }
