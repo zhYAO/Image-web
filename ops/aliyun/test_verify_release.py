@@ -20,6 +20,19 @@ EXPECTED = {
     ('POST', '/api/internal/creative-batch-worker'): 410,
     ('GET', '/create/batch'): 404,
     ('GET', '/api/account'): 401,
+    ('GET', '/'): 200,
+    ('GET', '/home'): 200,
+    ('GET', '/assets'): 200,
+    ('GET', '/create'): 200,
+    ('GET', '/create/product-set'): 200,
+    ('GET', '/create/detail'): 200,
+    ('GET', '/create/clone'): 200,
+    ('GET', '/create/product-main'): 200,
+    ('GET', '/create/apparel-catalog'): 200,
+    ('GET', '/login'): 200,
+    ('GET', '/auth'): 200,
+    ('GET', '/auth/verify'): 200,
+    ('GET', '/auth/reset'): 200,
 }
 UNCACHED = {path for (method, path) in EXPECTED if path == '/api/health/ready' or method == 'POST'}
 
@@ -112,7 +125,7 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
     def test_loopback_checks_reach_the_origin_when_an_environment_proxy_redirects_http(self):
         result = self.run_check(env=self.redirecting_proxy_environment())
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.requests), 12)
+        self.assertEqual(len(self.requests), 38)
         self.assertEqual(self.proxy_requests, [])
 
     def test_public_checks_keep_the_environment_proxy_and_reject_its_redirect(self):
@@ -127,7 +140,7 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual(len(lines), 12)
+        self.assertEqual(len(lines), 38)
         self.assertEqual({line['base'] for line in lines}, set(self.bases))
         for line in lines:
             self.assertEqual(line['status'], EXPECTED[(line['method'], line['path'])])
@@ -199,6 +212,13 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
         result = self.run_check()
         self.assertEqual(result.returncode, 1)
         self.assertIn('expected HTTP 200', result.stderr)
+        self.assertFalse(any(path == '/unexpected-endpoint' for _, _, path, _, _ in self.requests))
+
+    def test_public_page_redirect_fails_without_following_an_unchecked_destination(self):
+        self.statuses[('GET', '/home')] = 302
+        result = self.run_check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('GET /home: expected HTTP 200, got 302', result.stderr)
         self.assertFalse(any(path == '/unexpected-endpoint' for _, _, path, _, _ in self.requests))
 
     def test_invalid_expected_sha_fails_before_any_http_request(self):
