@@ -87,6 +87,26 @@ class ReleaseSafety(unittest.TestCase):
                 release.activate(new)
                 self.assertEqual(previous.resolve(), old)
 
+    def test_failed_explicit_restoration_never_reactivates_the_rejected_release(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            releases = root / 'releases'
+            original = releases / ('a' * 40)
+            rejected = releases / ('b' * 40)
+            original.mkdir(parents=True)
+            rejected.mkdir()
+            current = root / 'current'
+            current.symlink_to(rejected)
+            with patch.multiple(release, ROOT=root, RELEASES=releases, CURRENT=current), \
+                 patch.object(release.os, 'geteuid', return_value=0), \
+                 patch.object(release.sys, 'argv', ['zimage-release', 'rollback', original.name]), \
+                 patch.object(release.subprocess, 'run') as systemctl, \
+                 patch.object(release, 'wait_healthy', side_effect=[RuntimeError('restoration TLS failed'), None]):
+                with self.assertRaisesRegex(RuntimeError, 'restoration TLS failed'):
+                    release.main()
+                self.assertEqual(current.resolve(), original)
+                self.assertEqual(systemctl.call_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -20,6 +20,7 @@ EXPECTED = {
     ('POST', '/api/internal/creative-batch-worker'): 410,
     ('GET', '/create/batch'): 404,
     ('GET', '/api/account'): 401,
+    ('GET', '/api/auth/session'): 401,
     ('GET', '/'): 200,
     ('GET', '/home'): 200,
     ('GET', '/assets'): 200,
@@ -44,6 +45,7 @@ class PublishedRelease(unittest.TestCase):
         self.caches = {path: 'no-store' for path in UNCACHED}
         self.version = SHA
         self.invalid_json = False
+        self.auth_code = 'unauthorized'
         self.delay = 0
         self.servers = []
         owner = self
@@ -56,6 +58,10 @@ class PublishedRelease(unittest.TestCase):
                 if self.path == '/api/health/ready':
                     time.sleep(owner.delay)
                     body = b'not JSON' if owner.invalid_json else json.dumps({'status': 'ok', 'version': owner.version}).encode()
+                elif self.path in ('/api/account', '/api/auth/session'):
+                    body = json.dumps({'code': owner.auth_code}).encode()
+                elif self.path == '/login':
+                    body = ''.join('<script src="' + path + '"></script>' for path in owner.assets).encode()
                 else:
                     body = b'{"code":"gone"}'
                 self.send_response(owner.statuses.get((self.command, self.path), 500))
@@ -81,13 +87,15 @@ class PublishedRelease(unittest.TestCase):
             threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.01}, daemon=True).start()
             self.servers.append(server)
         self.bases = [f'http://127.0.0.1:{server.server_port}' for server in self.servers]
+        self.assets = ('/_next/static/recovery.css', '/_next/static/recovery-a.js', '/_next/static/recovery-b.js')
+        self.statuses.update({('GET', path): 200 for path in self.assets})
 
     def tearDown(self):
         for server in self.servers:
             server.shutdown()
             server.server_close()
 
-    def run_check(self, sha=SHA, timeout=1, env=None, bases=None):
+    def run_check(self, sha=SHA, timeout=1, env=None, bases=None, public_only=False, recovery=False):
         # Run the actual CLI handler against real local HTTP servers. Replacing
         # only the two destinations avoids any production request in this suite.
         bootstrap = '''
@@ -96,9 +104,11 @@ spec = importlib.util.spec_from_file_location('verify_release', sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 module.BASES = tuple(sys.argv[2:4])
-raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
+module.PUBLIC_BASE = sys.argv[3]
+args = [sys.argv[4]] + (['--public-recovery'] if sys.argv[6] == 'recovery' else ['--public-only'] if sys.argv[6] == 'yes' else [])
+raise SystemExit(module.main(args, timeout=float(sys.argv[5])))
 '''
-        return subprocess.run([sys.executable, '-c', bootstrap, str(SCRIPT), *(self.bases if bases is None else bases), sha, str(timeout)],
+        return subprocess.run([sys.executable, '-c', bootstrap, str(SCRIPT), *(self.bases if bases is None else bases), sha, str(timeout), 'recovery' if recovery else 'yes' if public_only else 'no'],
                               capture_output=True, text=True, timeout=8, env=env)
 
     def redirecting_proxy_environment(self):
@@ -125,7 +135,7 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
     def test_loopback_checks_reach_the_origin_when_an_environment_proxy_redirects_http(self):
         result = self.run_check(env=self.redirecting_proxy_environment())
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.requests), 38)
+        self.assertEqual(len(self.requests), 40)
         self.assertEqual(self.proxy_requests, [])
 
     def test_public_checks_keep_the_environment_proxy_and_reject_its_redirect(self):
@@ -140,11 +150,11 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = [json.loads(line) for line in result.stdout.splitlines()]
-        self.assertEqual(len(lines), 38)
+        self.assertEqual(len(lines), 40)
         self.assertEqual({line['base'] for line in lines}, set(self.bases))
         for line in lines:
             self.assertEqual(line['status'], EXPECTED[(line['method'], line['path'])])
-            self.assertEqual(set(line), {'base', 'method', 'path', 'status', 'cacheControl'} |
+            self.assertEqual(set(line), {'base', 'method', 'path', 'status', 'cacheControl', 'source'} |
                              ({'expectedVersion', 'actualVersion'} if line['path'] == '/api/health/ready' else set()))
         for server in self.servers:
             observed = {(method, path) for port, method, path, _, _ in self.requests if port == server.server_port}
@@ -158,6 +168,45 @@ raise SystemExit(module.main([sys.argv[4]], timeout=float(sys.argv[5])))
                 self.assertEqual(uuid.UUID(payload['sessionId']).version, 4)
                 self.assertEqual(payload['tasks'], [])
                 self.assertNotIn('billing', payload)
+
+    def test_external_runner_checks_all_routes_without_touching_server_loopback(self):
+        result = self.run_check(public_only=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(lines), 23)
+        self.assertEqual({line['source'] for line in lines}, {'external'})
+        self.assertEqual({port for port, *_ in self.requests}, {self.servers[1].server_port})
+        self.assertEqual({(method, path) for _, method, path, _, _ in self.requests}, set(EXPECTED) | {('GET', p) for p in self.assets})
+
+    def test_recovery_checks_stable_legacy_routes_and_static_assets_without_new_pages(self):
+        self.statuses[('GET', '/home')] = 404
+        result = self.run_check(recovery=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        observed = {(method, path) for _, method, path, _, _ in self.requests}
+        self.assertEqual(observed, {('GET', p) for p in ('/api/health/ready', '/login', '/api/account', '/api/auth/session', *self.assets)})
+
+    def test_external_static_asset_failure_is_a_release_failure(self):
+        self.statuses[('GET', self.assets[0])] = 503
+        result = self.run_check(public_only=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('expected HTTP 200, got 503', result.stderr)
+
+    def test_an_arbitrary_401_does_not_prove_identity_dependency_health(self):
+        self.auth_code = 'network'
+        for public_only in (False, True):
+            with self.subTest(public_only=public_only):
+                result = self.run_check(public_only=public_only)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('requires unauthorized error', result.stderr)
+
+    def test_external_runner_still_rejects_wrong_sha_and_backend_unavailability(self):
+        self.version = 'b' * 40
+        self.assertEqual(self.run_check(public_only=True).returncode, 1)
+        self.version = SHA
+        self.statuses[('GET', '/api/auth/session')] = 503
+        result = self.run_check(public_only=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('GET /api/auth/session: expected HTTP 401, got 503', result.stderr)
 
     def test_wrong_actual_version_exits_nonzero(self):
         self.version = 'b' * 40

@@ -3,11 +3,14 @@
 import fcntl
 import hashlib
 import html
+import http.client
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import socket
+import ssl
 import stat
 import subprocess
 import sys
@@ -15,6 +18,7 @@ import tarfile
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ROOT = Path('/opt/zimage')
@@ -22,6 +26,30 @@ INCOMING = ROOT / 'incoming'
 RELEASES = ROOT / 'releases'
 CURRENT = ROOT / 'current'
 PREVIOUS = ROOT / 'previous'
+
+
+class LocalIngressHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to this server's Nginx while verifying the real public TLS name."""
+    def connect(self):
+        sock = socket.create_connection(('127.0.0.1', 443), self.timeout, self.source_address)
+        try:
+            self.sock = self._context.wrap_socket(sock, server_hostname='www.zimage.store')
+        except BaseException:
+            sock.close()
+            raise
+
+
+class LocalIngressHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, request):
+        origin = urllib.parse.urlsplit(request.full_url)
+        if origin.hostname != 'www.zimage.store' or origin.port not in (None, 443):
+            raise ValueError('Unexpected local ingress origin')
+        return self.do_open(LocalIngressHTTPSConnection, request, context=self._context)
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_):
+        return None
 
 
 def release_name(value):
@@ -87,11 +115,16 @@ def extract_release(archive, destination):
 
 def get(url):
     request = urllib.request.Request(url, headers={'Host': 'www.zimage.store'})
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), NoRedirect(),
+        LocalIngressHTTPSHandler(context=ssl.create_default_context()),
+    )
     try:
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with opener.open(request, timeout=12) as response:
             return response.status, response.read(2_000_000).decode('utf-8', errors='replace')
     except urllib.error.HTTPError as error:
-        return error.code, ''
+        with error:
+            return error.code, error.read(16384).decode('utf-8', errors='replace')
 
 
 def verify(base, expected=None):
@@ -108,8 +141,16 @@ def verify(base, expected=None):
     for asset in assets[:3]:
         if not asset.startswith('/_next/static/') or get(base + html.unescape(asset))[0] != 200:
             raise RuntimeError('Static asset health check failed')
-    if get(base + '/api/account')[0] != 401:
-        raise RuntimeError('Unauthenticated account route must return 401')
+    for path in ('/api/account', '/api/auth/session'):
+        status, body = get(base + path)
+        if status != 401:
+            raise RuntimeError(f'{path}: unauthenticated route must return 401')
+        try:
+            error = json.loads(body)
+        except (ValueError, UnicodeError):
+            error = None
+        if not isinstance(error, dict) or error.get('code') != 'unauthorized':
+            raise RuntimeError(f'{path}: requires unauthorized error')
 
 
 def switch(target):
@@ -130,17 +171,17 @@ def wait_healthy(target):
             return
         except (OSError, ValueError, RuntimeError) as error:
             if attempt == 11:
-                raise RuntimeError('Release failed local/public health checks') from error
+                raise RuntimeError('Release failed application/local TLS health checks') from error
             time.sleep(2)
 
 
-def activate(target):
+def activate(target, restore_previous_on_failure=True):
     old = CURRENT.resolve(strict=True)
     try:
         switch(target)
         wait_healthy(target)
     except Exception:
-        if old != target:
+        if old != target and restore_previous_on_failure:
             switch(old)
             wait_healthy(old)
             print('Rollback verified:', old.name, flush=True)
@@ -150,7 +191,7 @@ def activate(target):
         temp.unlink(missing_ok=True)
         temp.symlink_to(old)
         temp.replace(PREVIOUS)
-    print('Published and verified:', target.name, flush=True)
+    print('Activated and locally verified; external verification still required:', target.name, flush=True)
 
 
 def main():
@@ -164,7 +205,10 @@ def main():
             target = PREVIOUS.resolve(strict=True) if name == 'previous' else RELEASES / release_name(name)
             if target.parent != RELEASES or not target.is_dir() or target.is_symlink():
                 raise ValueError('Rollback target is not a retained release')
-            activate(target)
+            # A failed recovery must not reactivate the release just rejected
+            # by the external gate. Leave the exact requested original selected
+            # and report its failed verification for administrator follow-up.
+            activate(target, restore_previous_on_failure=False)
             return
         if mode != 'deploy' or len(sys.argv) != 5:
             raise ValueError('Usage: deploy SHA SHA256 RUN_NUMBER | rollback RELEASE_OR_previous')
