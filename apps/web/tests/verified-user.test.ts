@@ -14,9 +14,21 @@ describe('requireVerifiedUserId', () => {
   });
 
   it.each([
-    ['old token', null, null],
-    ['anonymous identity', null, { code: 'P0001' }],
-  ])('rejects %s', async (_name, data, error) => {
-    await expect(requireVerifiedUserId({ rpc: vi.fn().mockResolvedValue({ data, error }) } as never)).rejects.toMatchObject({ status: 401 });
+    { status: 400, data: null, error: { code: 'P0001', message: 'unauthorized' } },
+    { status: 401, data: null, error: { code: '42501', message: 'permission denied' } },
+    ...['PGRST301', 'PGRST302', 'PGRST303'].map(code => ({ status: 401, data: null, error: { code } })),
+  ])('reports a confirmed missing or revoked identity as unauthorized ($error.code)', async (result) => {
+    await expect(requireVerifiedUserId({ rpc: vi.fn().mockResolvedValue(result) } as never)).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+  });
+  it.each([
+    { status: 0, data: null, error: { code: '', message: 'TypeError: fetch failed' } },
+    { status: 503, data: null, error: { code: 'PGRST000' } },
+    { status: 500, data: null, error: { code: 'XX000' } },
+    { status: 403, data: null, error: { code: '42501' } },
+    { status: 400, data: null, error: { code: 'P0001', message: 'service failed' } },
+    { status: 200, data: null, error: null },
+    { status: 200, data: 'invalid uuid', error: null },
+  ])('never turns an unverified service failure into logout ($status/$error)', async (result) => {
+    await expect(requireVerifiedUserId({ rpc: vi.fn().mockResolvedValue(result) } as never)).rejects.toMatchObject({ status: 503, code: 'network' });
   });
 });

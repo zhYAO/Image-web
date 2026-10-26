@@ -1,8 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect } from 'react';
-import { loadWorkspace, prefetchWorkspace } from '@/features/workspace/load-workspace';
+import { loadWorkspace } from '@/features/workspace/load-workspace';
 
 import { AnonymousAuthGate } from './anonymous-auth-gate';
 import { WorkspaceLoading } from '@/features/workspace/WorkspaceLoading';
@@ -16,7 +15,6 @@ const WorkspaceApplication = dynamic(
 );
 
 export function ClientWorkspace() {
-  useEffect(prefetchWorkspace, []);
   return (
     <AnonymousAuthGate>
       <WorkspaceApplication />

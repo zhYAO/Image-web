@@ -13,7 +13,7 @@ export default async function AccountPage() {
   try {
     account = await readAccount(await createSupabaseServerClient());
   } catch (error) {
-    if (error instanceof ApiRouteError && error.status === 401) redirect('/login?returnTo=/account');
+    if (error instanceof ApiRouteError && error.status === 401) redirect('/home');
     return <main className="glass-page"><section className="glass-card glass-form account-panel">
       <p className="glass-kicker">ZIMAGE · 账号中心</p>
       <h1>账号服务暂时不可用</h1>

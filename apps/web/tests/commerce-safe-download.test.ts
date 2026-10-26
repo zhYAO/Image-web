@@ -123,7 +123,7 @@ describe('authorized EC03 safe download (local RPC/Storage mocks, real Sharp)', 
 
   it('preserves origin, login, ownership, session and revision guards before source reads', async () => {
     expect((await POST(request({}, 'https://foreign.invalid'), context())).status).toBe(403);
-    boundary.verified.mockResolvedValue({ data: null, error: { message: 'expired' } });
+    boundary.verified.mockResolvedValue({ data: null, error: { code: 'P0001', message: 'unauthorized' } });
     expect((await POST(request(), context())).status).toBe(401);
     boundary.verified.mockResolvedValue({ data: ids.user, error: null });
     for (const message of ['task_not_found', 'session_deleting', 'revision_conflict']) {

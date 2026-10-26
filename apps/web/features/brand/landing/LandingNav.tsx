@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { IntentLink } from "@/features/brand/IntentLink";
 import { PillNavCTA } from "./PillNavCTA";
 import { Glass } from "@/features/brand/Glass";
 import { BrandMark } from "./BrandMark";
@@ -84,28 +85,28 @@ export function LandingNav() {
           <button type="button" onClick={() => jump("landing-scenes")}>
             电商场景
           </button>
-          <Link href="/assets" onClick={() => setOpen(false)}>
+          <IntentLink href="/assets" onClick={() => setOpen(false)}>
             资产库
-          </Link>
+          </IntentLink>
           <button type="button" onClick={() => jump("landing-faq")}>
             常见问题
           </button>
-          <Link
+          <IntentLink
             href="/login"
             className="zl-mobile-login"
             onClick={() => setOpen(false)}
           >
             登录
-          </Link>
+          </IntentLink>
         </nav>
         <div className="zl-nav-actions">
-          <Link
+          <IntentLink
             href="/login"
             className="zl-login"
             onClick={() => setOpen(false)}
           >
             登录
-          </Link>
+          </IntentLink>
           <PillNavCTA variant="nav" onClick={() => setOpen(false)} />
           <button
             ref={menuRef}

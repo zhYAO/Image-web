@@ -35,7 +35,7 @@ describe('promotion protected HTTP boundary', () => {
     expect(mocks.admin).not.toHaveBeenCalled();
   });
   it('requires a verified live login', async () => {
-    mocks.user.mockResolvedValue({ rpc: vi.fn().mockResolvedValue({ data: null, error: { code: '42501' } }) });
+    mocks.user.mockResolvedValue({ rpc: vi.fn().mockResolvedValue({ status: 401, data: null, error: { code: '42501' } }) });
     expect((await promote(request(), context)).status).toBe(401);
     expect(mocks.promote).not.toHaveBeenCalled();
   });

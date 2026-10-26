@@ -15,7 +15,7 @@ describe('lightweight workspace identity', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('require_verified_user_id');
   });
   it('rejects revoked and unavailable accounts', async () => {
-    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'unauthorized' } });
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: 'P0001', message: 'unauthorized' } });
     expect((await GET()).status).toBe(401);
   });
 });

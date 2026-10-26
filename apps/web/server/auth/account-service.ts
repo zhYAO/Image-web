@@ -16,7 +16,7 @@ export async function readAccount(client: SupabaseClient): Promise<Account> {
     (client as ProfileClient).from('account_profiles').select('display_name,status').eq('user_id', id).single(),
   ]);
   const profile = profileResult.data as { display_name: string | null; status: 'active' | 'deleting' } | null;
-  if (userError || !userData.user?.email || profileResult.error || !profile) throw unauthorized();
+  if (userError || !userData.user?.email || profileResult.error || !profile) throw unavailable();
   return { id, email: userData.user.email, displayName: profile.display_name, status: profile.status };
 }
 
@@ -24,8 +24,8 @@ export async function updateDisplayName(client: SupabaseClient, displayName: str
   const id = await requireVerifiedUserId(client);
   const normalized = displayName === '' ? null : displayName;
   const { error } = await (client as ProfileClient).from('account_profiles').update({ display_name: normalized }).eq('user_id', id).select('user_id').single();
-  if (error) throw unauthorized();
+  if (error) throw unavailable();
   return readAccount(client);
 }
 
-function unauthorized() { return new ApiRouteError({ code: 'unauthorized', message: '账号不可用，请重新登录。', retryable: false, status: 401 }); }
+function unavailable() { return new ApiRouteError({ code: 'network', message: '账号服务暂时不可用，请稍后重试。', retryable: true, status: 503 }); }
