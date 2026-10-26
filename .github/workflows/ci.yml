@@ -176,6 +176,7 @@ jobs:
       group: zimage-production-release
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v4
       - name: Configure restricted SSH connection
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -192,8 +193,7 @@ jobs:
           RELEASE: ${{ inputs.release }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{6,79}$ ]] || exit 1
-          ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release rollback $RELEASE"
+          bash ops/aliyun/deployment-health.sh rollback "$RELEASE"
       - name: Remove runner key
         if: always()
         run: rm -f ~/.ssh/zimage

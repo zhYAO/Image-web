@@ -44,6 +44,18 @@
 
 GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_TURNSTILE_SITE_KEY`、可选 Sentry DSN/采样率；连接变量 `DEPLOY_HOST`、`DEPLOY_PORT`；Secrets 为独立的 `DEPLOY_SSH_KEY` 和已核验指纹的 `DEPLOY_KNOWN_HOSTS`。模型与数据库私密配置继续由 `/etc/zimage/environment` 提供，所有 `.env*` 排除在产物之外。
 
+### 2026-10-26 发布验证职责分离（待安装新版 helper 后启用）
+
+服务器的公网 DNS/出口不等于应用服务或外部浏览器的访问路径。发布 helper 先验证回环应用及本机 Nginx TLS：HTTPS 的 TCP 连接固定为 `127.0.0.1:443`，Host/SNI 仍为 `www.zimage.store`，证书和主机名正常验证，不改 DNS、代理或安全设置。流送的 `verify-release.py` 默认执行这两处共40项检查；随后同一 GitHub job 在 runner 执行 `--public-only`，独立访问真正公网的20个路由及最多3个登录页静态资源。不能以本机成功替代公网验收，任何一处失败仍使 job 失败并执行精确原版本回退。
+
+`/api/account` 与 `/api/auth/session` 不仅要求401，还要求 JSON `code=unauthorized`；新应用的真实身份依赖故障必须保持503，不能为了发布将其改成401。匿名门禁和CI不能代替已有登录会话的真实浏览器验收，也不调用付费模型。
+
+激活前 `deployment-health.sh record` 会比对服务器 `/usr/local/sbin/zimage-release` 与本提交 `release.py` 的 SHA256；不同则停在切换版本之前。root helper 必须经管理员明确批准安装，保持 `root:root 0755`，保留原文件备份；工作流不安装或修改sudo入口。安装不修改服务代理drop-in，普通切换及版本回退仍重启同一 `zimage.service` 并保留该覆盖配置。
+
+外部验证失败的恢复及手动回退都使用 runner 的 `--public-recovery`：检查精确SHA、登录页/静态资源、账户和身份拒绝，不要求旧版本包含新增页面。自动流程只接受40位保留版本；`previous` 在切换前解析并固定为精确SHA，无版本号历史目录会停止。若恢复检查本身失败，保留所选精确原版本并报告失败，绝不再次激活刚被拒绝的版本。没有外部恢复通过证据时不报告恢复成功。
+
+这些验证脚本变更需要新的提交SHA及其正常CI/生产构建，不能把旧 `10bae820` 的包改标签作为新版本发布。复用未变化的应用代码验证证据，不额外上传日志或测试产物；新增发布包沿用7天保留。
+
 `zimage-deploy` 仅能上传 incoming，并通过 sudo 调用 root 拥有的 `/usr/local/sbin/zimage-release`（源码 `ops/aliyun/release.py`）；不能修改 helper。helper 校验 SHA-256、拒绝路径穿越/外部链接/凭据文件，将版本放入 `/opt/zimage/releases/<commit SHA>`，原子切换 current 后重启。GitHub 部署串行，发布前核对 main SHA，服务端工作流序号拒绝过期任务。Next 缓存独立放在 `/opt/zimage/cache`。
 
 健康检查包含 `/api/health/ready` 的构建版本、登录页、静态资源与未登录 `/api/account` 的 401，分别检查回环和公网 HTTPS。 随后的 `verify-release.py` 在同两处还核验 `/`、`/home`、`/assets`、`/create` 与五个场景，以及登录/邮箱认证/验证/恢复页面均返回 200；全部为不带 Cookie 或 Authorization 的 GET，不提交登录、上传或生成，任何意外重定向均失败。失败自动切回原版本并再次检查。部署工作流在激活前还通过同一受限 SSH 只读记录 `current` 的精确 40 位保留版本 SHA，无法读取或路径不符则停在发布前。若后续完整路由验证失败，`deployment-health.sh` 仅在 current 仍为本次发布 SHA 时调用既有 helper 回退到该精确原版本；同 SHA 重发不回退更老版本。回退使用 helper 原有健康检查，不要求旧版存在新页面；初始发布 job 始终保留失败状态。`/opt/zimage/previous` 仍记录上次正常版本，手动回滚入口保留。单实例发布和回滚均有短暂重启。

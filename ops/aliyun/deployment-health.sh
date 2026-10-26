@@ -20,17 +20,58 @@ current_release() {
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
 
+verify_installed_helper() {
+  local expected actual
+  expected=$(sha256sum "$script_dir/release.py")
+  expected=${expected%% *}
+  if ! actual=$(ssh "${ssh_args[@]}" 'sha256sum /usr/local/sbin/zimage-release'); then
+    echo 'Cannot verify the installed release helper; refusing activation.' >&2
+    return 1
+  fi
+  actual=${actual%% *}
+  if [[ ! "$actual" =~ ^[a-f0-9]{64}$ || "$actual" != "$expected" ]]; then
+    echo 'Installed release helper differs from this revision; administrator installation is required before activation.' >&2
+    return 1
+  fi
+}
+
 if [[ "${1:-}" == record && $# == 1 ]]; then
+  verify_installed_helper
   current_release
   exit 0
 fi
+if [[ "${1:-}" == rollback && $# == 2 ]]; then
+  verify_installed_helper
+  target=$2
+  if [[ "$target" == previous ]]; then
+    target=$(ssh "${ssh_args[@]}" 'readlink -f /opt/zimage/previous')
+    if [[ ! "$target" =~ ^/opt/zimage/releases/([a-f0-9]{40})$ ]]; then
+      echo 'Cannot externally verify an unversioned rollback target; refusing activation.' >&2
+      exit 1
+    fi
+    target=${BASH_REMATCH[1]}
+  fi
+  if [[ ! "$target" =~ ^[a-f0-9]{40}$ ]]; then
+    echo 'Rollback target must be an exact retained SHA or versioned previous.' >&2
+    exit 1
+  fi
+  ssh "${ssh_args[@]}" "sudo /usr/local/sbin/zimage-release rollback $target"
+  restored=$(current_release)
+  if [[ "$restored" != "$target" ]]; then
+    echo 'Rollback selected an unexpected release; external verification refused.' >&2
+    exit 1
+  fi
+  python3 "$script_dir/verify-release.py" "$restored" --public-recovery
+  exit 0
+fi
 if [[ "${1:-}" != verify || $# != 3 || ! "$2" =~ ^[a-f0-9]{40}$ || ! "$3" =~ ^[a-f0-9]{40}$ ]]; then
-  echo 'Usage: deployment-health.sh record | verify EXPECTED_SHA ORIGINAL_SHA' >&2
+  echo 'Usage: deployment-health.sh record | verify EXPECTED_SHA ORIGINAL_SHA | rollback SHA_OR_previous' >&2
   exit 1
 fi
 expected=$2
 original=$3
-if ssh "${ssh_args[@]}" "python3 - $expected" < "$script_dir/verify-release.py"; then
+if ssh "${ssh_args[@]}" "python3 - $expected" < "$script_dir/verify-release.py" \
+  && python3 "$script_dir/verify-release.py" "$expected" --public-only; then
   exit 0
 fi
 
@@ -48,6 +89,10 @@ fi
 # anonymous account denial. New-page checks must not be applied to an old release.
 if ! ssh "${ssh_args[@]}" "sudo /usr/local/sbin/zimage-release rollback $original"; then
   echo 'Rollback failed; the original verification failure remains unresolved.' >&2
+  exit 1
+fi
+if ! python3 "$script_dir/verify-release.py" "$original" --public-recovery; then
+  echo 'Original release selected, but external recovery verification failed.' >&2
   exit 1
 fi
 echo "Restored original release: $original" >&2
