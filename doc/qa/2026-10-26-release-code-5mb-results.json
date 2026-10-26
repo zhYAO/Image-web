@@ -1,0 +1,243 @@
+{
+  "qaOnly": true,
+  "baseline": {
+    "qaOnly": true,
+    "baselineCommit": "18ffbd3e0682f62d5448de3ed65ef6d6b13ae097",
+    "tarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+    "tarBytes": 46172160,
+    "gzip9ArchiveBytes": 9776761,
+    "codeIndexBytes": 198384,
+    "manifestBytes": 2353,
+    "dailyCodeBytes": 9977498
+  },
+  "codecBenchmarks": [
+    {
+      "codec": "gzip9",
+      "compress": {
+        "operation": "compress",
+        "codec": "gzip9",
+        "bytes": 9776761,
+        "sha256": null,
+        "seconds": 2.0730863710004996,
+        "cpuSeconds": 2.0714292060000004,
+        "maxRssKiB": 74292
+      },
+      "decompress": {
+        "operation": "decompress",
+        "codec": "gzip9",
+        "bytes": 46172160,
+        "sha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+        "seconds": 0.17847963200074446,
+        "cpuSeconds": 0.178474296,
+        "maxRssKiB": 13032
+      },
+      "archiveBytes": 9776761,
+      "withUnchangedMetadataBytes": 9977498,
+      "sameTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+      "qaOnly": true
+    },
+    {
+      "codec": "xz6",
+      "compress": {
+        "operation": "compress",
+        "codec": "xz6",
+        "bytes": 5743352,
+        "sha256": null,
+        "seconds": 13.801648210000167,
+        "cpuSeconds": 13.790121346,
+        "maxRssKiB": 161528
+      },
+      "decompress": {
+        "operation": "decompress",
+        "codec": "xz6",
+        "bytes": 46172160,
+        "sha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+        "seconds": 0.3046385180005018,
+        "cpuSeconds": 0.304554719,
+        "maxRssKiB": 21564
+      },
+      "archiveBytes": 5743352,
+      "withUnchangedMetadataBytes": 5944089,
+      "sameTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+      "qaOnly": true
+    },
+    {
+      "codec": "xz9",
+      "compress": {
+        "operation": "compress",
+        "codec": "xz9",
+        "bytes": 3799552,
+        "sha256": null,
+        "seconds": 14.42794744799994,
+        "cpuSeconds": 14.426796739,
+        "maxRssKiB": 534232
+      },
+      "decompress": {
+        "operation": "decompress",
+        "codec": "xz9",
+        "bytes": 46172160,
+        "sha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+        "seconds": 0.19409691500004556,
+        "cpuSeconds": 0.19403901599999998,
+        "maxRssKiB": 57528
+      },
+      "archiveBytes": 3799552,
+      "withUnchangedMetadataBytes": 4000289,
+      "sameTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+      "qaOnly": true
+    },
+    {
+      "codec": "brotli11",
+      "compress": {
+        "operation": "compress",
+        "codec": "brotli11",
+        "bytes": 4991971,
+        "seconds": 58.400918239999996,
+        "cpuSeconds": 58.399266,
+        "maxRssKiB": 283184
+      },
+      "decompress": {
+        "operation": "decompress",
+        "codec": "brotli11",
+        "bytes": 46172160,
+        "sha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+        "seconds": 0.23388933000000003,
+        "cpuSeconds": 0.228897,
+        "maxRssKiB": 66228
+      },
+      "archiveBytes": 4991971,
+      "withUnchangedMetadataBytes": 5192708,
+      "sameTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+      "qaOnly": true
+    },
+    {
+      "codec": "zstd22",
+      "compress": {
+        "operation": "compress",
+        "codec": "zstd22",
+        "bytes": 4070132,
+        "seconds": 17.243663957,
+        "cpuSeconds": 17.249173,
+        "maxRssKiB": 782080
+      },
+      "decompress": {
+        "operation": "decompress",
+        "codec": "zstd22",
+        "bytes": 46172160,
+        "sha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+        "seconds": 0.24383225900000002,
+        "cpuSeconds": 0.202569,
+        "maxRssKiB": 94296
+      },
+      "archiveBytes": 4070132,
+      "withUnchangedMetadataBytes": 4270869,
+      "sameTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe",
+      "qaOnly": true
+    }
+  ],
+  "candidateFormatPrototype": {
+    "qaOnly": true,
+    "notAcceptedByCurrentAssembler": true,
+    "archiveBytes": 3799552,
+    "indexBytes": 198429,
+    "releaseManifestBytes": 2358,
+    "dailyCodeBytes": 4000339,
+    "firstRequiredBytes": 64084474,
+    "optionalDebugBytes": 11232847,
+    "codeArchiveSha256": "614f1f3d2398d938d78888e2acd42defdc48ce50c27446ff6c834a59d13677eb",
+    "codeIndexSha256": "a59902f0626108245f33eae6a3e651ca7a3d84ee9be524d532c2c908bc508409",
+    "releaseManifestSha256": "32cc216aabc3316b779a96fc25731bfb477398c8b16456c0cb61cdfbe9ef31d7",
+    "codeTarSha256": "092a26d969588caf1d33b3a597fb20fd39a74b7fca7f8ec19bac921892a28ebe"
+  },
+  "bundlePayloadAnalysis": {
+    "parsedJsFiles": 931,
+    "kinds": {
+      "grammar": {
+        "uniquePayloads": 260,
+        "occurrences": 708,
+        "decodedDataBytes": 16686228,
+        "repeatedDecodedDataBytes": 9020319,
+        "largest": [
+          {
+            "kind": "grammar",
+            "bytes": 788819,
+            "paths": [
+              "apps/web/.next/server/chunks/6163.js",
+              "apps/web/.next/static/chunks/17bb598f.925ed1a58965d6dd.js"
+            ]
+          },
+          {
+            "kind": "grammar",
+            "bytes": 476145,
+            "paths": [
+              "apps/web/.next/server/chunks/999.js",
+              "apps/web/.next/static/chunks/f9c96c1e.50363fe0f2509f28.js"
+            ]
+          },
+          {
+            "kind": "grammar",
+            "bytes": 270396,
+            "paths": [
+              "apps/web/.next/server/chunks/999.js",
+              "apps/web/.next/static/chunks/3d24939b.cbf247dad77b14fd.js"
+            ]
+          },
+          {
+            "kind": "grammar",
+            "bytes": 260666,
+            "paths": [
+              "apps/web/.next/server/chunks/9751.js",
+              "apps/web/.next/static/chunks/c1b5d289.1d11576453d057a9.js"
+            ]
+          }
+        ]
+      },
+      "theme": {
+        "uniquePayloads": 65,
+        "occurrences": 130,
+        "decodedDataBytes": 2646544,
+        "repeatedDecodedDataBytes": 1323272,
+        "largest": [
+          {
+            "kind": "theme",
+            "bytes": 53688,
+            "paths": [
+              "apps/web/.next/server/chunks/8363.js",
+              "apps/web/.next/static/chunks/7434.7c87b72d25e604ef.js"
+            ]
+          },
+          {
+            "kind": "theme",
+            "bytes": 53685,
+            "paths": [
+              "apps/web/.next/server/chunks/4669.js",
+              "apps/web/.next/static/chunks/5480.980a644a8d753eea.js"
+            ]
+          },
+          {
+            "kind": "theme",
+            "bytes": 50798,
+            "paths": [
+              "apps/web/.next/server/chunks/1703.js",
+              "apps/web/.next/static/chunks/9406.3ca8191d451a93e4.js"
+            ]
+          },
+          {
+            "kind": "theme",
+            "bytes": 50793,
+            "paths": [
+              "apps/web/.next/server/chunks/8436.js",
+              "apps/web/.next/static/chunks/7641.bc8d14512793a037.js"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "exactDuplicateFiles": 44,
+  "exactDuplicateRedundantRawBytes": 1139340,
+  "exactDuplicateRedundantIndividualGzipBytes": 104079,
+  "boundedDecoder96MiBPassed": true,
+  "boundedDecoder32MiBRefused": true,
+  "currentAssemblerRejectsCandidateSchema": true
+}
