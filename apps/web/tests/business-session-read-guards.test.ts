@@ -52,7 +52,7 @@ function fixture(options: { status?: string; owner?: string; verified?: boolean;
   const progress = { id: batchId, createdAt, updatedAt: createdAt,
     items: [{ id: batch.items[0]!.id, status: 'submitted', total: 1, succeeded: 1, failed: 0, processing: 0, review: 0 }] };
   const rpc = vi.fn(async (name: string) => name === 'require_verified_user_id'
-    ? options.verified === false ? { data: null, error: { message: 'unauthorized' } } : { data: userId, error: null }
+    ? options.verified === false ? { data: null, error: { code: 'P0001', message: 'unauthorized' } } : { data: userId, error: null }
     : { data: progress, error: null });
   const client = { rpc, from: (table: string) => {
     const filters: Record<string, unknown> = {};

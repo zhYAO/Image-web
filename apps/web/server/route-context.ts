@@ -7,22 +7,20 @@ import { ApiRouteError } from './api-error';
 import { reportServerError } from './observability';
 
 export async function requireVerifiedUserId(client: SupabaseClient) {
-  const { data, error } = await client.rpc('require_verified_user_id');
-  if (error?.code === 'PGRST202') {
-    throw new ApiRouteError({
-      code: 'network',
-      message: '身份验证服务暂时不可用，请稍后重试。',
-      retryable: true,
-      status: 503,
-    });
-  }
+  const { data, error, status } = await client.rpc('require_verified_user_id');
   const parsed = z.uuid().safeParse(data);
   if (error || !parsed.success) {
+    // The RPC explicitly raises P0001/unauthorized for revoked identities.
+    // PostgREST uses 401 for missing/invalid JWTs and anonymous EXECUTE denial;
+    // authenticated permission errors are 403. Transport, schema and database
+    // failures must remain unavailable, never evidence that a user signed out.
+    const unauthenticated = (error?.code === 'P0001' && error.message === 'unauthorized')
+      || (status === 401 && ['42501', 'PGRST301', 'PGRST302', 'PGRST303'].includes(error?.code ?? ''));
     throw new ApiRouteError({
-      code: 'unauthorized',
-      message: '登录状态无效或已过期，请重新登录。',
+      code: unauthenticated ? 'unauthorized' : 'network',
+      message: unauthenticated ? '登录状态无效或已过期，请重新登录。' : '身份验证服务暂时不可用，请稍后重试。',
       retryable: true,
-      status: 401,
+      status: unauthenticated ? 401 : 503,
     });
   }
   return parsed.data;

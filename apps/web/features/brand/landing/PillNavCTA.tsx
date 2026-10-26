@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { IntentLink } from "@/features/brand/IntentLink";
 import type { MouseEventHandler } from "react";
 import { ArrowUpRight } from "lucide-react";
 import "./pill-nav-cta.css";
@@ -16,7 +16,7 @@ export function PillNavCTA({
   onClick?: MouseEventHandler<HTMLAnchorElement>;
 }) {
   return (
-    <Link
+    <IntentLink
       href="/"
       className={`${variant === "nav" ? "zl-nav-cta" : "zl-button zl-button-primary"} zl-pill-cta`}
       onClick={onClick}
@@ -30,6 +30,6 @@ export function PillNavCTA({
           开始创作 <ArrowUpRight aria-hidden="true" />
         </span>
       </span>
-    </Link>
+    </IntentLink>
   );
 }

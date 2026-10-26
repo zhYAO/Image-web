@@ -24,7 +24,7 @@ describe('stateless field optimization route', () => {
     expect(mocks.user).not.toHaveBeenCalled();
   });
   it('requires verified auth', async () => {
-    mocks.user.mockResolvedValue({ rpc: async () => ({ data: null, error: null }) });
+    mocks.user.mockResolvedValue({ rpc: async () => ({ data: null, error: { code: 'P0001', message: 'unauthorized' } }) });
     expect((await POST(request())).status).toBe(401);
     expect(mocks.admin).not.toHaveBeenCalled();
   });

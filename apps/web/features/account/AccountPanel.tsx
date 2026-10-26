@@ -6,19 +6,36 @@ import { WebPageShell } from "@/features/shell/WebPageShell";
 import '@/features/brand/identity.css';
 
 import type { Account } from "../../../../packages/domain/src/auth-contracts";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { notifyAuthChange } from "@/features/auth/AuthStatusProvider";
+import { notifyAuthChange, useAuthStatus } from "@/features/auth/AuthStatusProvider";
 
 export function AccountPanel({ account }: { account: Account }) {
   const router = useRouter();
+  const { status: identityStatus, ownerId, refresh: refreshIdentity } = useAuthStatus();
+  const formalAuth = process.env.NEXT_PUBLIC_PHASE2_AUTH === 'true';
+  const guest = formalAuth && identityStatus === 'guest';
+  const mismatchedOwner = formalAuth && identityStatus === 'authorized' && ownerId !== account.id;
+  useEffect(() => {
+    if (guest) router.replace('/home');
+    else if (mismatchedOwner) router.refresh();
+  }, [guest, mismatchedOwner, ownerId, account.id, router]);
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
 
-  function redirectIfExpired(response: Response) {
+  async function redirectIfExpired(response: Response) {
     if (response.status !== 401) return false;
-    router.replace(`/login?returnTo=${encodeURIComponent('/account')}`);
+    // Action failures (including provider signOut failures) historically share
+    // 401. Only the dedicated identity check can confirm a guest transition.
+    try {
+      const identity = await fetch('/api/auth/session', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+      if (identity.status !== 401) return false;
+    } catch {
+      return false;
+    }
+    notifyAuthChange(false);
+    router.replace('/home');
     return true;
   }
 
@@ -45,7 +62,7 @@ export function AccountPanel({ account }: { account: Account }) {
         method: 'PATCH', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ displayName: String(data.get('displayName')) }),
       });
-      if (!redirectIfExpired(response)) setMessage(response.ok ? '已保存。' : '保存失败。');
+      if (!await redirectIfExpired(response)) setMessage(response.ok ? '已保存。' : '保存失败。');
     });
   }
 
@@ -61,7 +78,7 @@ export function AccountPanel({ account }: { account: Account }) {
           recovery: false,
         }),
       });
-      if (redirectIfExpired(response)) return;
+      if (await redirectIfExpired(response)) return;
       const result = (await response.json()) as { updated?: boolean };
       setMessage(
         response.ok && result.updated === true
@@ -76,8 +93,9 @@ export function AccountPanel({ account }: { account: Account }) {
       const response = await fetch('/api/auth/logout', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
       });
-      if (response.ok) { notifyAuthChange(false); router.push('/login'); }
-      else if (!redirectIfExpired(response)) setMessage('退出失败，请稍后重试。');
+      const result = response.ok ? await response.json().catch(() => null) : null;
+      if (response.ok && result?.signedOut === true) { notifyAuthChange(false); router.replace('/home'); }
+      else if (!await redirectIfExpired(response)) setMessage('退出失败，请稍后重试。');
     });
   }
 
@@ -98,7 +116,7 @@ export function AccountPanel({ account }: { account: Account }) {
           confirmation: "DELETE",
         }),
       });
-      if (redirectIfExpired(response)) return;
+      if (await redirectIfExpired(response)) return;
       const result = (await response.json()) as { accepted?: boolean };
       setMessage(
         response.ok && result.accepted === true
@@ -106,6 +124,16 @@ export function AccountPanel({ account }: { account: Account }) {
           : "密码验证失败，注销未受理。",
       );
     });
+  }
+
+  // Router back/forward can reuse authenticated SSR props. They are not proof
+  // of the current owner after logout, an account switch or a failed check.
+  if (formalAuth && (identityStatus !== 'authorized' || mismatchedOwner)) {
+    return <main className="glass-page"><section className="glass-card glass-form">
+      <p role="status">{guest ? '尚未登录，正在返回首页…' : identityStatus === 'error' ? '暂时无法检查登录状态，请重试。' : '正在确认账号…'}</p>
+      {identityStatus === 'error' && <button type="button" onClick={refreshIdentity}>重新检查</button>}
+      <a href="/home">返回首页</a>
+    </section></main>;
   }
 
   return (

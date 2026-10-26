@@ -25,6 +25,14 @@ function hasAuthCookie(request: NextRequest) {
 }
 
 export async function updateSupabaseSession(request: NextRequest) {
+  // The public brand document has no private data or anonymous bootstrap.
+  // Keep it available when identity refresh/configuration is unavailable;
+  // every application route and protected API keeps the normal auth path.
+  if (process.env.NEXT_PUBLIC_PHASE2_AUTH === 'true'
+    && request.nextUrl.pathname === '/home'
+    && (request.method === 'GET' || request.method === 'HEAD')) {
+    return NextResponse.next({ request });
+  }
   const dataMode = (process.env.NEXT_PUBLIC_DATA_MODE ?? 'mock') as DataMode;
   const environment = readSupabasePublicEnv(dataMode);
   if (!environment) return NextResponse.next({ request });

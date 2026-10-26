@@ -462,7 +462,7 @@ describe('workspace presentation components', () => {
     expect(screen.queryByText('你好，想创作什么？')).not.toBeInTheDocument();
   });
 
-  it('replaces the typing indicator with streaming text once the first delta arrives', () => {
+  it('replaces the typing indicator with streaming text once the first delta arrives', async () => {
     render(
       <WorkspaceTimeline
         isChatStreaming
@@ -483,13 +483,13 @@ describe('workspace presentation components', () => {
       />,
     );
     expect(screen.queryByTestId('chat-typing-indicator')).not.toBeInTheDocument();
-    expect(screen.getByText((_text, element) => (
+    expect(await screen.findByText((_text, element) => (
       element?.tagName === 'P' && element.textContent === '好的，先聊聊'
     ))).toBeInTheDocument();
     expect(screen.getByLabelText('AI 正在输入')).toBeInTheDocument();
   });
 
-  it('hides the trailing cursor the instant the chat stream ends', () => {
+  it('hides the trailing cursor the instant the chat stream ends', async () => {
     const { rerender } = render(
       <WorkspaceTimeline
         isChatStreaming
@@ -533,7 +533,7 @@ describe('workspace presentation components', () => {
 
     // Cursor must be gone and only one assistant bubble may remain.
     expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument();
-    expect(screen.getAllByText('已生成的回复文本')).toHaveLength(1);
+    expect(await screen.findAllByText('已生成的回复文本')).toHaveLength(1);
   });
 
   it('renders completed assistant messages as standard chat Markdown with image preview', async () => {
@@ -579,7 +579,7 @@ describe('workspace presentation components', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { level: 1, name: '回复标题' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: '回复标题' })).toBeInTheDocument();
     expect(screen.getByText('粗体').tagName).toBe('STRONG');
     expect(screen.getByText('斜体').tagName).toBe('EM');
     expect(screen.getByText('行内代码').tagName).toBe('CODE');
@@ -637,7 +637,7 @@ describe('workspace presentation components', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { level: 2, name: '流式标题' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: '流式标题' })).toBeInTheDocument();
     expect(await screen.findByRole('list')).toHaveTextContent('第一项');
     expect(await screen.findByText((_text, element) => (
       element?.tagName === 'STRONG' && element.textContent === '未完成'
@@ -645,7 +645,7 @@ describe('workspace presentation components', () => {
     expect(screen.getByTestId('chat-stream-cursor')).toBeInTheDocument();
   });
 
-  it('does not execute raw HTML or load unsafe Markdown URLs', () => {
+  it('does not execute raw HTML or load unsafe Markdown URLs', async () => {
     render(
       <WorkspaceTimeline
         items={[
@@ -670,13 +670,14 @@ describe('workspace presentation components', () => {
       />,
     );
 
+    await screen.findByText('危险链接');
     expect(document.querySelector('script')).not.toBeInTheDocument();
     expect(screen.queryByRole('img', { name: '原始图片' })).not.toBeInTheDocument();
     expect(screen.getByText('危险链接').closest('a')).not.toHaveAttribute('href', 'javascript:alert(1)');
     expect(screen.queryByRole('img', { name: '危险图片' })).not.toBeInTheDocument();
   });
 
-  it('expands streaming reasoning and collapses it after completion', () => {
+  it('expands streaming reasoning and collapses it after completion', async () => {
     const { rerender } = render(
       <WorkspaceTimeline
         isChatStreaming
@@ -687,7 +688,7 @@ describe('workspace presentation components', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: '正在思考' })).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('button', { name: '正在思考' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('构图').closest('strong')).toBeInTheDocument();
 
     rerender(
@@ -715,7 +716,7 @@ describe('workspace presentation components', () => {
     expect(screen.getByText('最终答案')).toBeInTheDocument();
   });
 
-  it('renders tool calls and results as inert collapsible blocks', () => {
+  it('renders tool calls and results as inert collapsible blocks', async () => {
     render(
       <WorkspaceTimeline
         items={[{
@@ -733,7 +734,7 @@ describe('workspace presentation components', () => {
       />,
     );
 
-    const toolCall = screen.getByRole('button', { name: '调用工具 · search' });
+    const toolCall = await screen.findByRole('button', { name: '调用工具 · search' });
     const toolResult = screen.getByRole('button', { name: '工具结果 · ok' });
     expect(toolCall).toHaveAttribute('aria-expanded', 'false');
     expect(toolResult).toHaveAttribute('aria-expanded', 'false');

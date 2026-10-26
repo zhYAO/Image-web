@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountPanel } from '../features/account/AccountPanel';
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
-afterEach(() => vi.unstubAllGlobals());
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => navigation }));
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); vi.restoreAllMocks(); });
 const account = { id: 'd9428888-122b-11e1-b85c-61cd3cbb3210', email: 'audit@example.com', displayName: null, status: 'active' as const };
 describe('account feedback', () => {
   it('reports a network failure and lets the user retry saving their profile', async () => {
@@ -14,10 +15,63 @@ describe('account feedback', () => {
     expect(await screen.findByText('已保存。')).toBeInTheDocument();
   });
   it('reports an unsuccessful logout instead of leaving the user without feedback', async () => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 'network' }, { status: 503 })));
     render(<AccountPanel account={account} />);
     fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
     expect(await screen.findByRole('status')).toHaveTextContent('退出失败');
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(dispatched.mock.calls.some(([event]) => event.type === 'zimage:auth-changed')).toBe(false);
+  });
+  it('returns a confirmed logout to the homepage and clears only the known signed-out presentation', async () => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ signedOut: true })));
+    render(<AccountPanel account={account} />);
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/home'));
+    const changed = dispatched.mock.calls.find(([event]) => event.type === 'zimage:auth-changed')?.[0] as CustomEvent;
+    expect(changed.detail).toBe(false);
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+  it('returns an explicitly expired account action to the homepage', async () => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 'unauthorized' }, { status: 401 })));
+    render(<AccountPanel account={account} />);
+    fireEvent.submit(screen.getByLabelText('显示名称').closest('form')!);
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/home'));
+    expect(dispatched.mock.calls.some(([event]) => event.type === 'zimage:auth-changed' && (event as CustomEvent).detail === false)).toBe(true);
+  });
+  it('does not treat a profile service failure as logout or redirect a valid account', async () => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code: 'network' }, { status: 503 })));
+    render(<AccountPanel account={account} />);
+    fireEvent.submit(screen.getByLabelText('显示名称').closest('form')!);
+    await screen.findByText('保存失败。');
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(dispatched.mock.calls.some(([event]) => event.type === 'zimage:auth-changed')).toBe(false);
+    expect(screen.getByText(`邮箱：${account.email}`)).toBeVisible();
+  });
+  it.each([200, 503])('does not clear a valid session after an ambiguous logout 401 when the identity probe returns %s', async (identityStatus) => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ code: 'unauthorized', message: '认证请求失败' }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json(identityStatus === 200 ? { id: account.id } : { code: 'network' }, { status: identityStatus }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AccountPanel account={account} />);
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('退出失败');
+    expect(fetcher).toHaveBeenCalledWith('/api/auth/session', expect.objectContaining({ cache: 'no-store' }));
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(dispatched.mock.calls.some(([event]) => event.type === 'zimage:auth-changed')).toBe(false);
+  });
+  it('requires the actual signedOut success contract before clearing a session', async () => {
+    const dispatched = vi.spyOn(window, 'dispatchEvent');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ signedOut: false })));
+    render(<AccountPanel account={account} />);
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('退出失败');
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(dispatched.mock.calls.some(([event]) => event.type === 'zimage:auth-changed')).toBe(false);
   });
   it('does not report a rejected password update as successful', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ updated: false })));

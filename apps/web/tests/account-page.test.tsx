@@ -14,8 +14,8 @@ describe('account page service failures', () => {
     expect(screen.queryByText('private backend detail')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '重新加载' })).toHaveAttribute('href', '/account');
   });
-  it('redirects an expired login to the account return path', async () => {
+  it('redirects an expired account login to the public homepage', async () => {
     mocks.readAccount.mockRejectedValue(new ApiRouteError({ code: 'unauthorized', status: 401, retryable: true, message: 'expired' }));
-    await expect(AccountPage()).rejects.toThrow('redirect:/login?returnTo=/account');
+    await expect(AccountPage()).rejects.toThrow('redirect:/home');
   });
 });

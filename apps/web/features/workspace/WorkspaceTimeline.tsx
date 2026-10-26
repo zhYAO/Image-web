@@ -2,14 +2,18 @@ import type { GenerationBatch, RecreateScope, TimelineItem } from '@zimage/domai
 import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 
 import { BrandMark } from '@/features/brand/BrandMark';
 import { zhCN } from '@/i18n';
 
 import { HomeCommerceCarousel } from './HomeCommerceCarousel';
-import { AssistantMessageContent } from './AssistantMessageContent';
 import styles from './workspace.module.css';
 import { nextPollingDelay } from './bounded-polling';
+
+const AssistantMessageContent = dynamic(() => import('./AssistantMessageContent').then(module => module.AssistantMessageContent), {
+  loading: () => <p role="status">正在载入消息格式…</p>,
+});
 
 const statusLabels: Record<GenerationBatch['status'], string> = {
   ...zhCN.timeline.status,

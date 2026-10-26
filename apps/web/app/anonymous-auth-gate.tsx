@@ -7,7 +7,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { resetAuthRequiredNotification } from '@/gateways/http-workspace-gateway';
-import { safeReturnTo } from '@/features/auth/return-to';
 import { useAuthStatus } from '@/features/auth/AuthStatusProvider';
 import { WorkspaceLoading } from '@/features/workspace/WorkspaceLoading';
 
@@ -134,20 +133,20 @@ function FormalAuthGate({ children }: { children: ReactNode }) {
   const { status, refresh } = useAuthStatus();
   const [redirecting, setRedirecting] = useState(false);
   const redirectingRef = useRef(false);
-  const redirectToLogin = useCallback(() => {
+  const redirectToHome = useCallback(() => {
+    const pathname = window.location.pathname;
+    if (pathname === '/home' || pathname === '/login' || pathname.startsWith('/auth')) return;
     if (redirectingRef.current) return;
     redirectingRef.current = true;
     setRedirecting(true);
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (window.location.pathname === '/login' || window.location.pathname.startsWith('/auth')) return;
-    router.replace(`/login?returnTo=${encodeURIComponent(safeReturnTo(current))}`);
+    router.replace('/home');
   }, [router]);
   useEffect(() => {
-    if (status === 'guest') redirectToLogin();
+    if (status === 'guest') redirectToHome();
     if (status === 'authorized') resetAuthRequiredNotification();
-  }, [status, redirectToLogin]);
+  }, [status, redirectToHome]);
   if (status === 'checking') return <WorkspaceLoading />;
-  if (redirecting || status === 'guest') return <GateMessage>登录已失效，正在跳转登录页…</GateMessage>;
+  if (redirecting || status === 'guest') return <GateMessage>尚未登录，正在返回首页…</GateMessage>;
   if (status === 'error') return <GateMessage><p>暂时无法检查登录状态，请重试。</p><button onClick={refresh} type="button">重新检查</button></GateMessage>;
   return <>{children}</>;
 }

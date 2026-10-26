@@ -19,7 +19,7 @@ describe('UnifiedWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
     await screen.findByText('回复连接已中断');
     await waitFor(() => expect(screen.queryByTestId('chat-stream-cursor')).not.toBeInTheDocument());
-    expect(screen.getByText('已收到的部分回复')).toBeInTheDocument();
+    expect(await screen.findByText('已收到的部分回复')).toBeInTheDocument();
     expect(screen.getByText('回复连接已中断')).toBeInTheDocument();
   });
 
