@@ -1,5 +1,8 @@
 # Release slimming: local prototype, current production size unverified
 
+Historical initial old-sample stage. Later matching-version build/measurements:
+[current QA evidence](2026-10-26-release-slim-current-qa.md).
+
 Baseline source: `51cc0a953c7582fe19663d8afc497cca9e8cfbf5`.
 Work is isolated on `codex/release-slim-51cc0a9`; original checkout is unchanged.
 
@@ -7,7 +10,7 @@ The official artifact `12645402037` was not downloaded or changed. Its supplied
 outer ZIP is 90,907,063 bytes and SHA256
 `403b1d6e5da0a82ca77db48f34a2a282a654ccaa0305109f7da4bb2987ba58ad`.
 Its inner tgz size/digest remain unknown. Earlier Forbidden/download failures were
-not retried or bypassed. No build, dependency installation, push, PR, Actions,
+not retried or bypassed. In this initial stage there was no build, dependency installation, push, PR, Actions,
 upload, Nginx edit, restart, deployment, or existing-artifact deletion occurred.
 
 ## Exact packaging change

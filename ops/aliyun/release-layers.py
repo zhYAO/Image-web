@@ -24,6 +24,7 @@ MAX_ENTRIES = 100_000
 FONT_ROOT = 'apps/web/server/apparel/fonts/'
 POLICY = json.loads(Path(__file__).with_name('release-public-policy.json').read_text())
 EXCLUDED = {'apps/web/public/' + name for name in POLICY['excludedSourceFiles']}
+GENERATED_MAP_ROOTS = tuple(POLICY['generatedSourcemapRoots'])
 
 
 def canonical(value):
@@ -102,6 +103,8 @@ def inventory(root):
         for name in sorted(dirs + files):
             path = Path(directory) / name
             relative = path.relative_to(root).as_posix()
+            if relative.endswith('.map') and relative.startswith(GENERATED_MAP_ROOTS):
+                continue  # Kept in the packager's separate debug archive/input.
             safe_name(relative)
             if path.is_symlink():
                 target = os.readlink(path)
@@ -142,13 +145,13 @@ def publish_bytes(path, data, reuse=False):
         pending.unlink()
 
 
-def make_archive(root, target, entries):
+def make_archive(root, target, entries, compression_level=6):
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix='.pending-', dir=target.parent)
     pending = Path(name)
     try:
         with os.fdopen(descriptor, 'wb') as stream:
-            with gzip.GzipFile(fileobj=stream, filename='', mode='wb', mtime=0, compresslevel=6) as compressed:
+            with gzip.GzipFile(fileobj=stream, filename='', mode='wb', mtime=0, compresslevel=compression_level) as compressed:
                 with tarfile.open(fileobj=compressed, mode='w', format=tarfile.PAX_FORMAT) as archive:
                     for entry in entries:
                         item = tarfile.TarInfo(entry['path'])
@@ -228,11 +231,14 @@ def pack(source, store, project, release_id, expected_sha, sample_label, budget)
             raise ValueError('Required layer is empty: ' + kind)
         binding = {'lockSha256': manifest['lockSha256'], 'runtime': runtime} if kind == 'dependencies' else {}
         index = {'schema': 1, 'kind': kind, 'binding': binding, 'entries': members}
+        compression_level = 9 if kind == 'code' else 6
+        if kind == 'code':
+            index['encoding'] = {'archive': 'tar-pax', 'compression': 'gzip', 'level': compression_level}
         index_bytes = canonical(index)
         identity = digest(index_bytes)
         base = f'layers/{kind}-{identity}'
         archive_path, index_path = base + '.tgz', base + '.json'
-        archive_sha, archive_bytes = make_archive(source, store / archive_path, members)
+        archive_sha, archive_bytes = make_archive(source, store / archive_path, members, compression_level)
         publish_bytes(store / index_path, index_bytes, reuse=True)
         manifest['layers'][kind] = {'identity': identity, 'archive': archive_path, 'archiveSha256': archive_sha,
                                    'archiveBytes': archive_bytes, 'index': index_path, 'indexBytes': len(index_bytes),

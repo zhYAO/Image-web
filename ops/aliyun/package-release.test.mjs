@@ -65,3 +65,27 @@ test('refuses to overwrite an existing release archive', async t => {
   assert.notEqual(f.run().status, 0);
   assert.equal(await readFile(`${f.destination}.tgz`, 'utf8'), 'existing archive');
 });
+test('generated Next maps stay in a separate debug archive while runtime code and unrelated maps stay intact', async t => {
+  const f = await fixture(t);
+  const maps = ['apps/web/.next/server/chunks/a.js.map', 'apps/web/.next/server/app/api/[id]/route.js.map', 'apps/web/.next/static/chunks/a.css.map'];
+  for (const name of maps.slice(0, 2)) await f.put(`dist/standalone/${name}`, 'original map');
+  await f.put('dist/static/chunks/a.css.map', 'original map');
+  await f.put('dist/standalone/apps/web/.next/server/chunks/a.js', 'runtime js');
+  await f.put('dist/standalone/apps/web/.next/server/app/world.map/page.js', 'runtime route under map-suffixed directory');
+  await f.put('dist/static/chunks/a.css', 'runtime css');
+  await f.put('dist/standalone/node_modules/pkg/dist/library.js.map', 'dependency map');
+  await f.put('apps/web/public/notes.map', 'public map');
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const runtime = spawnSync('tar', ['-tzf', `${f.destination}.tgz`], { encoding: 'utf8' });
+  const debug = spawnSync('tar', ['-tzf', `${f.destination}.debug-maps.tgz`], { encoding: 'utf8' });
+  assert.equal(runtime.status, 0, runtime.stderr);
+  assert.equal(debug.status, 0, debug.stderr);
+  assert.deepEqual(debug.stdout.trim().split('\n').sort(), maps.map(name => `./${name}`).sort());
+  for (const name of maps) {
+    assert.ok(!runtime.stdout.includes(`./${name}\n`));
+    assert.equal(await readFile(path.join(f.destination, name), 'utf8'), 'original map');
+  }
+  for (const name of ['apps/web/.next/server/chunks/a.js', 'apps/web/.next/server/app/world.map/page.js', 'apps/web/.next/static/chunks/a.css', 'node_modules/pkg/dist/library.js.map', 'apps/web/public/notes.map'])
+    assert.ok(runtime.stdout.includes(`./${name}\n`), name);
+});

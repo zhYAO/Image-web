@@ -154,6 +154,18 @@ console.log(JSON.stringify([require('./node_modules/next/package.json').version,
         index = json.loads((self.store / b['code']['index']).read_text())
         self.assertIn('apps/web/.next/static/chunks/main.js', [entry['path'] for entry in index['entries']])
 
+    def test_generated_next_maps_are_optional_debug_files_not_daily_runtime_code(self):
+        self.put(self.source, 'apps/web/.next/server/main.js.map', 'server debug map')
+        self.put(self.source, 'apps/web/.next/static/chunks/main.js.map', 'client debug map')
+        self.put(self.source, 'apps/web/node_modules/sharp/library.js.map', 'dependency map')
+        report = self.packed()
+        destination = self.root / 'installed'
+        self.assemble(report, destination)
+        for name in ('apps/web/.next/server/main.js.map', 'apps/web/.next/static/chunks/main.js.map'):
+            self.assertFalse((destination / name).exists())
+            self.assertTrue((self.source / name).is_file())
+        self.assertTrue((destination / 'apps/web/node_modules/sharp/library.js.map').is_file())
+
     def test_lockfile_or_dependency_content_change_invalidates_dependency_layer(self):
         first = self.manifest(self.packed())['layers']['dependencies']['identity']
         self.put(self.project, 'pnpm-lock.yaml', 'changed lockfile')

@@ -5,5 +5,9 @@
     "commerce/apparel-v2/source-detail.png",
     "commerce/apparel-v2/source-lifestyle.png",
     "commerce/apparel-v2/source-seated.png"
+  ],
+  "generatedSourcemapRoots": [
+    "apps/web/.next/server/",
+    "apps/web/.next/static/"
   ]
 }

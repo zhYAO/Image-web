@@ -40,6 +40,14 @@ Generated `.next/static` JS/CSS belongs to the daily code layer. The reusable st
 
 ## Progress
 
+- Authorized follow-up: user explicitly approved isolated frozen dependency install and one matching QA build. Install used ignore-scripts and a private scratch store; lock/input manifests unchanged. Single Next16.4.1 webpack build passed in131.953seconds.
+- Current QA budget RED:21,250,446bytes with generated maps; still RED:10,045,307 after separate debug archive; GREEN:9,977,498 with gzip9 code plus index/manifest. All JS/CSS retained; first required layers70,061,633bytes, optional debug11,232,847bytes.
+- New map split regressions RED then GREEN; Node4/4 and Python76/76, renderer8/8, actual assembled Next/native/static/font33 checks passed. Two placeholder-RPC503s remain explicitly unverified business/auth boundaries.
+- Follow-up independent review: no present-build major finding. Regraded map-suffixed-directory exclusion as a required-code preservation concern; reproduced RED and fixed with literal collected-file tar patterns, GREEN4/4.
+- Ruling: generated source maps remain in original build/staging and separate debug artifact; no Sentry upload/symbolication claim. Cost if debug retention is ignored on adoption: lost production diagnostics.
+- Ruling: current QA passes code budget with22,502bytes headroom only; real settings/future builds must pass again. Cost if ignored: false general <=10MB guarantee.
+- Ruling: retained protected API503 as QA limitation because placeholder RPC cannot verify identity; production401 gates unchanged. Cost if ignored: false authentication-readiness claim.
+
 - Baseline and worktree established; original checkout untouched. Implementation has not started.
 - Ruling: use a sibling worktree to avoid modifying the original checkout's ignore rules.
 - Ruling: prototype authorization permits implementation without another design approval; no deployable infrastructure change is being made.

@@ -96,6 +96,19 @@ behavior as described in the audit.
 
 ## Validation
 
+Generated Next map files under `.next/server` and `.next/static` are preserved in
+the input and in a separate `<destination>.debug-maps.tgz`; they are omitted from
+runtime archives/indexes. Public/dependency maps and map-suffixed directories are
+retained. The sidecar is optional at runtime but must be kept privately for
+debugging and associated with the exact build before production adoption. This
+prototype does not upload it or establish Sentry online symbolication.
+
+Code layers use gzip9 with encoding settings bound into the index identity;
+other layers use gzip6. Current matching-version QA daily code is9,977,498bytes,
+including client JS/CSS/index/manifest, with only22,502bytes of headroom. First
+required download remains70,061,633bytes, plus11,232,847bytes if debug is fetched.
+See [current QA evidence](../../doc/qa/2026-10-26-release-slim-current-qa.md).
+
 ```sh
 node --test ops/aliyun/package-release.test.mjs
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
