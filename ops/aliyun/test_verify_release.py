@@ -2,6 +2,7 @@ import http.server
 import json
 import os
 import pathlib
+import socket
 import subprocess
 import sys
 import threading
@@ -255,6 +256,17 @@ raise SystemExit(module.main(args, timeout=float(sys.argv[5])))
         result = self.run_check(timeout=0.03)
         self.assertEqual(result.returncode, 1)
         self.assertIn('request failed', result.stderr)
+        self.assertIn('"category": "timeout"', result.stderr)
+
+    def test_connection_refusal_reports_os_code_and_safe_type(self):
+        with socket.socket() as reserved:
+            reserved.bind(('127.0.0.1', 0))
+            base = f'http://127.0.0.1:{reserved.getsockname()[1]}'
+            result = self.run_check(bases=[base, self.bases[1]])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('"category": "connection_refused"', result.stderr)
+        self.assertIn('"reasonType": "ConnectionRefusedError"', result.stderr)
+        self.assertIn('"errno":', result.stderr)
 
     def test_redirect_does_not_follow_an_unchecked_endpoint(self):
         self.statuses[('GET', '/api/health/ready')] = 302

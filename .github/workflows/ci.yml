@@ -47,6 +47,8 @@ jobs:
       - run: pnpm build
         env:
           NEXT_PUBLIC_DATA_MODE: mock
+      - name: Verify retired route HTTP status on the built application
+        run: node apps/web/scripts/verify-built-retired-route.mjs
 
   database:
     if: github.event.inputs.action != 'rollback'
@@ -99,6 +101,8 @@ jobs:
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${{ vars.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE }}
+      - name: Verify retired route HTTP status before packaging
+        run: node apps/web/scripts/verify-built-retired-route.mjs
       - run: node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-release
       - uses: actions/upload-artifact@v4
         with:

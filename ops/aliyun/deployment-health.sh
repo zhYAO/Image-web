@@ -37,7 +37,12 @@ verify_installed_helper() {
 
 if [[ "${1:-}" == record && $# == 1 ]]; then
   verify_installed_helper
-  current_release
+  original=$(current_release)
+  if ! python3 "$script_dir/verify-release.py" "$original" --public-recovery >&2; then
+    echo 'Current public release is not verified; stopping before activation.' >&2
+    exit 1
+  fi
+  printf '%s\n' "$original"
   exit 0
 fi
 if [[ "${1:-}" == rollback && $# == 2 ]]; then

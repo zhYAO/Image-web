@@ -74,6 +74,16 @@ os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), OLD)
         self.assertEqual(self.commands(), ['sha256sum /usr/local/sbin/zimage-release', 'readlink -f /opt/zimage/current'])
+        self.assertEqual(self.events()[-1], ['runner-public', OLD, '--public-recovery'])
+
+    def test_unreachable_public_original_stops_before_recording_or_activation(self):
+        result = self.run_health('record', SSH_TEST_CURRENT='/opt/zimage/releases/' + OLD,
+                                 RUNNER_TEST_RECOVERY_EXIT='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('before activation', result.stderr)
+        self.assertEqual(self.events()[-1], ['runner-public', OLD, '--public-recovery'])
+        self.assertFalse(any(c.startswith('sudo ') for c in self.commands()))
 
     def test_old_root_helper_stops_before_any_activation_or_rollback(self):
         result = self.run_health('record', SSH_TEST_HELPER_SHA='0' * 64)

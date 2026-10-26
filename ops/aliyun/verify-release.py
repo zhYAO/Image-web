@@ -14,6 +14,7 @@ import re
 import socket
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -81,6 +82,32 @@ class LocalIngressHTTPSHandler(urllib.request.HTTPSHandler):
         return self.do_open(LocalIngressHTTPSConnection, request, context=self._context)
 
 
+def transport_details(error):
+    """Only types and numeric codes: exception text may contain URLs/secrets."""
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        category = 'tls_certificate'
+    elif isinstance(reason, ssl.SSLError):
+        category = 'tls'
+    elif isinstance(reason, socket.gaierror):
+        category = 'dns'
+    elif isinstance(reason, TimeoutError):
+        category = 'timeout'
+    elif isinstance(reason, ConnectionRefusedError):
+        category = 'connection_refused'
+    elif isinstance(reason, ConnectionResetError):
+        category = 'connection_reset'
+    else:
+        category = 'transport'
+    details = {'errorType': type(error).__name__, 'reasonType': type(reason).__name__,
+               'category': category}
+    for attribute, key in (('errno', 'errno'), ('verify_code', 'verifyCode')):
+        value = getattr(reason, attribute, None)
+        if isinstance(value, int):
+            details[key] = value
+    return details
+
+
 def verify(base, expected_sha, timeout=12, public_only=False, recovery=False):
     handlers = [NoRedirect()]
     origin = urllib.parse.urlsplit(base)
@@ -100,6 +127,7 @@ def verify(base, expected_sha, timeout=12, public_only=False, recovery=False):
             headers['Content-Type'] = 'application/json'
         request = urllib.request.Request(base + path, method=method, headers=headers,
                                          data=EMPTY_BATCH if method == 'POST' else None)
+        started = time.monotonic()
         try:
             try:
                 response = opener.open(request, timeout=timeout)
@@ -113,7 +141,9 @@ def verify(base, expected_sha, timeout=12, public_only=False, recovery=False):
                 needs_body = (path == '/api/health/ready' and status == 200) or (path in ('/api/account', '/api/auth/session') and status == 401) or (public_only and path == '/login' and status == 200)
                 body = response.read(16384) if needs_body else b''
         except (urllib.error.URLError, OSError, TimeoutError) as error:
-            raise RuntimeError(f'{method} {path}: request failed ({type(error).__name__})') from error
+            details = transport_details(error)
+            details['elapsedMs'] = round((time.monotonic() - started) * 1000)
+            raise RuntimeError(f'{method} {path}: request failed {json.dumps(details)}') from error
         if status != expected_status:
             raise RuntimeError(f'{method} {path}: expected HTTP {expected_status}, got {status}')
         if uncached and not no_store:

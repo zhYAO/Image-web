@@ -136,6 +136,28 @@ class LocalIngressTLS(unittest.TestCase):
         self.assertEqual(set(self.addresses), {('127.0.0.1', 443)})
         self.assertEqual(self.requests, [])
 
+    def test_route_validator_reports_safe_tls_certificate_failure_details(self):
+        module = MODULES[1]
+        connect, context = self.start_server('wrong.invalid')
+        with patch.object(socket, 'create_connection', connect), patch.object(ssl, 'create_default_context', return_value=context):
+            with self.assertRaises(RuntimeError) as failure:
+                self.invoke(module)
+        self.assertIn('"category": "tls_certificate"', str(failure.exception))
+        self.assertIn('"reasonType": "SSLCertVerificationError"', str(failure.exception))
+        self.assertIn('"verifyCode":', str(failure.exception))
+        self.assertEqual(self.requests, [])
+
+    def test_external_dns_failure_reports_type_and_code_without_raw_error_text(self):
+        module = MODULES[1]
+        with patch.object(socket, 'getaddrinfo', side_effect=socket.gaierror(socket.EAI_NONAME, 'private-token-do-not-log')), patch.dict(os.environ, {'HTTPS_PROXY': '', 'https_proxy': '', 'ALL_PROXY': '', 'all_proxy': ''}):
+            with self.assertRaises(RuntimeError) as failure:
+                module.verify(ORIGIN, SHA, timeout=1, public_only=True)
+        message = str(failure.exception)
+        self.assertIn('"category": "dns"', message)
+        self.assertIn('"reasonType": "gaierror"', message)
+        self.assertIn(f'"errno": {socket.EAI_NONAME}', message)
+        self.assertNotIn('private-token-do-not-log', message)
+
     def test_external_mode_keeps_normal_public_resolution_instead_of_pinning_loopback(self):
         module = MODULES[1]
         attempts = []
