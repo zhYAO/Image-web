@@ -9,5 +9,8 @@
   "generatedSourcemapRoots": [
     "apps/web/.next/server/",
     "apps/web/.next/static/"
+  ],
+  "generatedBuildTraceRoots": [
+    "apps/web/.next/server/"
   ]
 }

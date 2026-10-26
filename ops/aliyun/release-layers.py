@@ -25,6 +25,7 @@ FONT_ROOT = 'apps/web/server/apparel/fonts/'
 POLICY = json.loads(Path(__file__).with_name('release-public-policy.json').read_text())
 EXCLUDED = {'apps/web/public/' + name for name in POLICY['excludedSourceFiles']}
 GENERATED_MAP_ROOTS = tuple(POLICY['generatedSourcemapRoots'])
+GENERATED_TRACE_ROOTS = tuple(POLICY['generatedBuildTraceRoots'])
 
 
 def canonical(value):
@@ -116,6 +117,8 @@ def inventory(root):
                     raise ValueError('Unsafe external symlink: ' + relative)
                 entries.append({'path': relative, 'type': 'symlink', 'target': target, 'mode': 0o777})
             elif path.is_file():
+                if relative.endswith('.js.nft.json') and relative.startswith(GENERATED_TRACE_ROOTS):
+                    continue  # Build-copy metadata retained in its separate archive/input.
                 entries.append({'path': relative, 'type': 'file', 'bytes': path.stat().st_size,
                                 'sha256': file_digest(path), 'mode': 0o755 if path.stat().st_mode & 0o111 else 0o644})
             elif not path.is_dir():

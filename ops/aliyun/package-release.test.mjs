@@ -89,3 +89,33 @@ test('generated Next maps stay in a separate debug archive while runtime code an
   for (const name of ['apps/web/.next/server/chunks/a.js', 'apps/web/.next/server/app/world.map/page.js', 'apps/web/.next/static/chunks/a.css', 'node_modules/pkg/dist/library.js.map', 'apps/web/public/notes.map'])
     assert.ok(runtime.stdout.includes(`./${name}\n`), name);
 });
+test('retains generated route traces separately without removing runtime files or similarly named resources', async t => {
+  const f = await fixture(t);
+  const traces = ['apps/web/.next/server/app/api/[id]/route.js.nft.json', 'apps/web/.next/server/app/home/page.js.nft.json'];
+  for (const name of traces) await f.put(`dist/standalone/${name}`, '{"version":1,"files":[]}');
+  const kept = ['apps/web/.next/server/app/api/[id]/route.js',
+    'apps/web/.next/server/app/route.js.nft.json/page.js',
+    'apps/web/.next/server/unknown.nft.json',
+    'node_modules/pkg/route.js.nft.json'];
+  for (const name of kept) await f.put(`dist/standalone/${name}`, 'runtime file');
+  await f.put('apps/web/public/route.js.nft.json', 'public file');
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const runtime = spawnSync('tar', ['-tzf', `${f.destination}.tgz`], { encoding: 'utf8' });
+  const traceArchive = spawnSync('tar', ['-tzf', `${f.destination}.build-traces.tgz`], { encoding: 'utf8' });
+  assert.equal(runtime.status, 0, runtime.stderr);
+  assert.equal(traceArchive.status, 0, traceArchive.stderr);
+  assert.deepEqual(traceArchive.stdout.trim().split('\n').sort(), traces.map(name => `./${name}`).sort());
+  for (const name of traces) {
+    assert.ok(!runtime.stdout.includes(`./${name}\n`));
+    assert.equal(await readFile(path.join(f.destination, name), 'utf8'), '{"version":1,"files":[]}');
+  }
+  for (const name of [...kept, 'apps/web/public/route.js.nft.json'])
+    assert.ok(runtime.stdout.includes(`./${name}\n`), name);
+});
+test('refuses to overwrite an existing build-trace archive', async t => {
+  const f = await fixture(t);
+  await f.put('release.build-traces.tgz', 'existing trace archive');
+  assert.notEqual(f.run().status, 0);
+  assert.equal(await readFile(`${f.destination}.build-traces.tgz`, 'utf8'), 'existing trace archive');
+});

@@ -166,6 +166,23 @@ console.log(JSON.stringify([require('./node_modules/next/package.json').version,
             self.assertTrue((self.source / name).is_file())
         self.assertTrue((destination / 'apps/web/node_modules/sharp/library.js.map').is_file())
 
+    def test_generated_route_traces_are_not_runtime_but_similar_paths_are_preserved(self):
+        trace = 'apps/web/.next/server/app/api/[id]/route.js.nft.json'
+        self.put(self.source, trace, '{"version":1,"files":[]}')
+        kept = ('apps/web/.next/server/app/route.js.nft.json/page.js',
+                'apps/web/.next/server/unknown.nft.json',
+                'apps/web/public/route.js.nft.json',
+                'apps/web/node_modules/sharp/route.js.nft.json')
+        for name in kept:
+            self.put(self.source, name, 'runtime file')
+        report = self.packed()
+        destination = self.root / 'installed'
+        self.assemble(report, destination)
+        self.assertFalse((destination / trace).exists())
+        self.assertTrue((self.source / trace).is_file())
+        for name in kept:
+            self.assertEqual((destination / name).read_text(), 'runtime file')
+
     def test_lockfile_or_dependency_content_change_invalidates_dependency_layer(self):
         first = self.manifest(self.packed())['layers']['dependencies']['identity']
         self.put(self.project, 'pnpm-lock.yaml', 'changed lockfile')

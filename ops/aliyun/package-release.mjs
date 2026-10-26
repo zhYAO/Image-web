@@ -2,11 +2,12 @@ import { cp, mkdir, readdir, lstat, readFile, open } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const [dist = 'apps/web/.next', destination = '/tmp/zimage-release'] = process.argv.slice(2);
-const { excludedSourceFiles, generatedSourcemapRoots } = JSON.parse(await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
+const { excludedSourceFiles, generatedSourcemapRoots, generatedBuildTraceRoots } = JSON.parse(await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
 const excluded = new Set(excludedSourceFiles.map(file => `apps/web/public/${file}`));
 const archive = path.resolve(destination + '.tgz');
 const debugArchive = path.resolve(destination + '.debug-maps.tgz');
-for (const output of [archive, debugArchive]) {
+const traceArchive = path.resolve(destination + '.build-traces.tgz');
+for (const output of [archive, debugArchive, traceArchive]) {
   try {
     await lstat(output);
     throw new Error('Release archive already exists');
@@ -24,6 +25,7 @@ await cp('apps/web/public', path.join(destination, 'apps/web/public'), { recursi
   filter: source => !excluded.has(`apps/web/public/${relative('apps/web/public', source)}`) });
 await cp(path.join(dist, 'static'), path.join(destination, 'apps/web/.next/static'), { recursive: true });
 const maps = [];
+const traces = [];
 async function inspect(directory) {
   for (const name of await readdir(directory)) {
     if (name.startsWith('.env')) throw new Error('Environment file in release');
@@ -33,6 +35,7 @@ async function inspect(directory) {
     const stat = await lstat(full);
     if (stat.isDirectory()) await inspect(full);
     else if (entry.endsWith('.map') && generatedSourcemapRoots.some(root => entry.startsWith(root))) maps.push(`./${entry}`);
+    else if (stat.isFile() && entry.endsWith('.js.nft.json') && generatedBuildTraceRoots.some(root => entry.startsWith(root))) traces.push(`./${entry}`);
   }
 }
 await inspect(destination);
@@ -54,8 +57,12 @@ if (maps.length) {
   await writeArchive(debugArchive, ['--null', '-T', '-'], Buffer.from(maps.sort().join('\0') + '\0'));
   console.log(`Retained ${maps.length} generated source maps in separate debug archive.`);
 }
+if (traces.length) {
+  await writeArchive(traceArchive, ['--null', '-T', '-'], Buffer.from(traces.sort().join('\0') + '\0'));
+  console.log(`Retained ${traces.length} generated route traces in separate build-trace archive.`);
+}
 // Exclude the collected files, not whole .map-suffixed route directories.
 // GNU tar exclusion arguments are patterns, so quote literal glob characters.
 const literalPattern = entry => [...entry].map(character => '*?[]\\'.includes(character) ? '\\' + character : character).join('');
-await writeArchive(archive, [...maps.map(entry => `--exclude=${literalPattern(entry)}`), '.']);
-console.log('Standalone runtime package ready; environment files excluded, generated source maps retained separately.');
+await writeArchive(archive, [...[...maps, ...traces].map(entry => `--exclude=${literalPattern(entry)}`), '.']);
+console.log('Standalone runtime package ready; environment files excluded, generated maps and route traces retained separately.');

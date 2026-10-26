@@ -103,11 +103,24 @@ retained. The sidecar is optional at runtime but must be kept privately for
 debugging and associated with the exact build before production adoption. This
 prototype does not upload it or establish Sentry online symbolication.
 
+Generated regular `.js.nft.json` files under `.next/server` are likewise retained
+in the input and a separate `<destination>.build-traces.tgz`, then omitted from
+runtime archives/indexes. They are build-copy/diagnostic metadata, not modules.
+Use the original build/staging for offline Next diagnostics. Trace-suffixed
+directories and symlinks and public/dependency lookalikes remain untouched.
+
+**The budget above measures compressed transfer, not uncompressed `dist`.**
+The user's clarified5,000,000-byte uncompressed goal is not met: current QA
+business output is42,545,964bytes and complete runtime files155,934,878bytes
+after separating70 trace files (2,751,629bytes). All necessary client output,
+dependencies and fonts are counted. See [raw-size evidence and limitations](../../doc/qa/2026-10-26-release-uncompressed-budget.md).
+
 Code layers use gzip9 with encoding settings bound into the index identity;
-other layers use gzip6. Current matching-version QA daily code is9,977,498bytes,
-including client JS/CSS/index/manifest, with only22,502bytes of headroom. First
-required download remains70,061,633bytes, plus11,232,847bytes if debug is fetched.
-See [current QA evidence](../../doc/qa/2026-10-26-release-slim-current-qa.md).
+other layers use gzip6. Current matching-version QA after trace separation has
+daily code9,559,119bytes, including client JS/CSS/index/manifest. First required
+download is69,643,254bytes, plus11,233,126bytes if source maps and175,628bytes if
+traces are fetched. Earlier [QA evidence](../../doc/qa/2026-10-26-release-slim-current-qa.md)
+records the preserved pre-trace-exclusion baseline.
 
 ```sh
 node --test ops/aliyun/package-release.test.mjs
