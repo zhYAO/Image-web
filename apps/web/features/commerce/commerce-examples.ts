@@ -1,4 +1,5 @@
 import type { CommerceScene } from "@zimage/domain";
+import { publicAssetUrl } from "@/lib/public-assets";
 
 const sceneImages: Record<CommerceScene, string> = {
   "apparel-catalog": "product-main",
@@ -12,7 +13,7 @@ const sceneImages: Record<CommerceScene, string> = {
   "xhs-poster": "social-cover",
 };
 export const commerceExampleForScene = (scene: CommerceScene) =>
-  ({ "apparel-catalog": "/commerce/apparel-v2/main-1.webp", "product-set": "/commerce/meitu-v1/kit-scene.webp", detail: "/commerce/meitu-v1/detail-hero.webp", clone: "/commerce/meitu-v1/clone-result.webp", "product-main": "/commerce/meitu-v1/shoot-botanical.webp" } as Partial<Record<CommerceScene, string>>)[scene] ?? `/commerce/examples/womenswear/${sceneImages[scene]}.webp`;
+  publicAssetUrl(({ "apparel-catalog": "/commerce/apparel-v2/main-1.webp", "product-set": "/commerce/meitu-v1/kit-scene.webp", detail: "/commerce/meitu-v1/detail-hero.webp", clone: "/commerce/meitu-v1/clone-result.webp", "product-main": "/commerce/meitu-v1/shoot-botanical.webp" } as Partial<Record<CommerceScene, string>>)[scene] ?? `/commerce/examples/womenswear/${sceneImages[scene]}.webp`);
 
 export const templatePreviewUrl = (templateId: string) =>
-  `/commerce/templates/${templateId}-womenswear-v1.webp`;
+  publicAssetUrl(`/commerce/templates/${templateId}-womenswear-v1.webp`);

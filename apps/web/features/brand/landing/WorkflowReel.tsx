@@ -1,5 +1,7 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
+
 import Image from "next/image";
 
 import { useEffect, useRef, useState } from "react";
@@ -221,7 +223,7 @@ export function WorkflowReel() {
             </div>
             <div className="zl-scene-stack">
               <Image
-                src="/commerce/meitu-v1/shoot-studio.webp"
+                src={publicAssetUrl("/commerce/meitu-v1/shoot-studio.webp")}
                 alt="香氛影棚场景示例"
                 loading="lazy"
                 decoding="async"
@@ -230,7 +232,7 @@ export function WorkflowReel() {
                 height="1254"
               />
               <Image
-                src="/commerce/meitu-v1/shoot-botanical.webp"
+                src={publicAssetUrl("/commerce/meitu-v1/shoot-botanical.webp")}
                 alt="香氛自然场景示例"
                 loading="lazy"
                 decoding="async"
@@ -259,7 +261,7 @@ export function WorkflowReel() {
               {library.map(([src, label]) => (
                 <div key={src}>
                   <Image
-                    src={src}
+                    src={publicAssetUrl(src)}
                     alt={`${label}示例`}
                     loading="lazy"
                     decoding="async"

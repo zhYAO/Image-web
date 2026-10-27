@@ -1,5 +1,7 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
+
 import Image from "next/image";
 
 import { useEffect, useRef, useState } from "react";
@@ -116,7 +118,7 @@ export function HeroGallery() {
     >
       <div className="zl-float-card zl-float-left" aria-hidden="true">
         <Image
-          src="/commerce/meitu-v1/kit-scene.webp"
+          src={publicAssetUrl("/commerce/meitu-v1/kit-scene.webp")}
           alt=""
           sizes="280px"
           width="280"
@@ -129,7 +131,7 @@ export function HeroGallery() {
       </div>
       <div className="zl-float-card zl-float-right" aria-hidden="true">
         <Image
-          src="/commerce/apparel-v2/main-1.webp"
+          src={publicAssetUrl("/commerce/apparel-v2/main-1.webp")}
           alt=""
           sizes="280px"
           width="280"
@@ -159,7 +161,7 @@ export function HeroGallery() {
             >
               {(position === index || visited.includes(position)) && (
                 <Image
-                  src={item.image}
+                  src={publicAssetUrl(item.image)}
                   alt={item.alt}
                   sizes="(max-width: 760px) 90vw, 630px"
                   width="1254"

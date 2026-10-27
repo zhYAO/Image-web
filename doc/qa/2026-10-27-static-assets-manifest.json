@@ -1,0 +1,1239 @@
+{
+  "schema": 1,
+  "productionReady": false,
+  "files": [
+    {
+      "path": "commerce/apparel-v1/detail-01.jpg",
+      "kind": "public",
+      "bytes": 196863,
+      "sha256": "cbf3c30d6937b0830fd2935876bfe80252404cf9e52121855d8761fd4db486b3",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1227,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-01.webp",
+      "kind": "public",
+      "bytes": 15122,
+      "sha256": "c960b4ed1f5eb2616bc028857ee4bab1d8fb0f4efce567b1e7aa0a847c5db962",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 559,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-03.jpg",
+      "kind": "public",
+      "bytes": 26201,
+      "sha256": "bb7e75ecb3cdb65ca7fc9abd45ef928a39c9dbc09cc4728425ab82206f644f6d",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 574,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-03.webp",
+      "kind": "public",
+      "bytes": 3452,
+      "sha256": "32760212535a753401e9de3e034d10afcc6eb70fff7844bdff8bfe8ed5793486",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 262,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-04.jpg",
+      "kind": "public",
+      "bytes": 30263,
+      "sha256": "103393b893cd27e1aaa099f116a99a2858c6db42f8f39b6a7bdef26c77eb54a2",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 631,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-04.webp",
+      "kind": "public",
+      "bytes": 3454,
+      "sha256": "cc36f20ea6a9db1ab46535303d6cfbb7814c1c306886e12d04ee2cdcacdf8e07",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 288,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-05.jpg",
+      "kind": "public",
+      "bytes": 215942,
+      "sha256": "931d73329c975f10c6137230f0d9f935adc27513c407fed49c2f3622575b6de4",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1555,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-05.webp",
+      "kind": "public",
+      "bytes": 17640,
+      "sha256": "6d6fc645b22046af0a6df7a775503efe55d542233f818f0bc1b767d87d39aaeb",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 709,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-06.jpg",
+      "kind": "public",
+      "bytes": 203873,
+      "sha256": "70be0ebb50c719a7d9169da7398d402c994713e189676426cdd210aaee75e7b4",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1243,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-06.webp",
+      "kind": "public",
+      "bytes": 26920,
+      "sha256": "e062f7e0b4b08020e3da297c4365ca17ed036edb3b17eeaa4d14e6dd73461c70",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 566,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-07.jpg",
+      "kind": "public",
+      "bytes": 218947,
+      "sha256": "41a22a51ed37caee97dfbd44836d5a198950c06e310ad21017f1a533beed3563",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1334,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/detail-07.webp",
+      "kind": "public",
+      "bytes": 17718,
+      "sha256": "6cec1708550fa740f3df40a10496aa91c222081ce84fa83f9bd3bf054ddd6c23",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 608,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-1.jpg",
+      "kind": "public",
+      "bytes": 178807,
+      "sha256": "47b35e2ab5d7f5184a5379e124db0aa188b27b00e2fa427f49513a0152bfcb95",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-1.webp",
+      "kind": "public",
+      "bytes": 15008,
+      "sha256": "d27aa55296c3d488f0ffac922b61c5f0edc009b3cdd8fb6e51f3527f246ad0f3",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-2.jpg",
+      "kind": "public",
+      "bytes": 285366,
+      "sha256": "02c9c60f62c2d4dfb6c8e30828edc02098b60830bf844a497c1876d673425feb",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-2.webp",
+      "kind": "public",
+      "bytes": 31254,
+      "sha256": "6e95aca7bcc549bd7fa36aed4f7974f2bbe067b3b34418b34f0cb123c0af4878",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-3.jpg",
+      "kind": "public",
+      "bytes": 180430,
+      "sha256": "274e2765cc482e52bfa2505a629dcdc5de96e437554c0762c7973ac815522169",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-3.webp",
+      "kind": "public",
+      "bytes": 14948,
+      "sha256": "389a69065a33fd4e1e3784eff1020713d49dbb0121eb0da10bc10138640c811b",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-4.jpg",
+      "kind": "public",
+      "bytes": 190818,
+      "sha256": "573fd0ab1259de38632c62a1e6828b039de1dfc21c664ee5f30fe47cda32eb07",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-4.webp",
+      "kind": "public",
+      "bytes": 17406,
+      "sha256": "fd784471312258036ec99ece7dcc46dc95d2607121aa87bea585e55c91e8fbb5",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-5.jpg",
+      "kind": "public",
+      "bytes": 151611,
+      "sha256": "bd89b03a04f4f80b48dd3d000a76d64ed3b84968dbc2979354189c7e16026ca3",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/main-5.webp",
+      "kind": "public",
+      "bytes": 13884,
+      "sha256": "a128f8600073b1414471ed2ae8c16f6a313547d4b52e07bea510b66b42167d47",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v1/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v1/manifest.json",
+      "kind": "public",
+      "bytes": 6813,
+      "sha256": "00f9269c97d6dac635566d3f50c66534c9ca7e656d4897351d367f33218dce75",
+      "mime": "application/json"
+    },
+    {
+      "path": "commerce/apparel-v2/detail-01.jpg",
+      "kind": "public",
+      "bytes": 217622,
+      "sha256": "79afe4e1118e94b11b9a11b44db5cef0cfefa9b48fe2cb3eb811e30c6367421f",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1227,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-01.webp",
+      "kind": "public",
+      "bytes": 16924,
+      "sha256": "816fe264a954349d57ddca405b3fac19e9a1fc1ac76005f270a2203fabfb3c22",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 559,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-03.jpg",
+      "kind": "public",
+      "bytes": 26201,
+      "sha256": "bb7e75ecb3cdb65ca7fc9abd45ef928a39c9dbc09cc4728425ab82206f644f6d",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 574,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-03.webp",
+      "kind": "public",
+      "bytes": 3452,
+      "sha256": "32760212535a753401e9de3e034d10afcc6eb70fff7844bdff8bfe8ed5793486",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 262,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-04.jpg",
+      "kind": "public",
+      "bytes": 30263,
+      "sha256": "103393b893cd27e1aaa099f116a99a2858c6db42f8f39b6a7bdef26c77eb54a2",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 631,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-04.webp",
+      "kind": "public",
+      "bytes": 3454,
+      "sha256": "cc36f20ea6a9db1ab46535303d6cfbb7814c1c306886e12d04ee2cdcacdf8e07",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 288,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-05.jpg",
+      "kind": "public",
+      "bytes": 241372,
+      "sha256": "c19d054e7a0f8a31b53ea3a027615c5296bb5743f34cd1c75c8b6ecc1a7833f0",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1555,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-05.webp",
+      "kind": "public",
+      "bytes": 19810,
+      "sha256": "98c68b9ca4a0735f4a255a75ab75bbd45bc48b415a596d8e8e6a44c0caa03b75",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 709,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-06.jpg",
+      "kind": "public",
+      "bytes": 348821,
+      "sha256": "126b95dbac0cbcbe61bfe002913e95e8f15c038b38913823ae53a86bfa081a6c",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1243,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-06.webp",
+      "kind": "public",
+      "bytes": 30066,
+      "sha256": "c1b511bdb0e24c720aeb83a8faad7726bc8ff7d3e8a5535eabcf4d39eb78e7d0",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 566,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-07.jpg",
+      "kind": "public",
+      "bytes": 231672,
+      "sha256": "3f8aa7ad8db762a15699b7033b14a62ced6aca35d647d61467919afa2c833413",
+      "mime": "image/jpeg",
+      "width": 790,
+      "height": 1334,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/detail-07.webp",
+      "kind": "public",
+      "bytes": 17628,
+      "sha256": "8dd40358268ff6040342ce5906f14ba40fbbc59d340913dad9c0d1d2cf179e29",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 608,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/lookbook-contact-sheet.webp",
+      "kind": "public",
+      "bytes": 121666,
+      "sha256": "27a2384466d199ecb23bd28bf244b00d94bca6b1ff2a99c73c98d09e5658cfad",
+      "mime": "image/webp",
+      "width": 1560,
+      "height": 400,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-1.jpg",
+      "kind": "public",
+      "bytes": 197291,
+      "sha256": "5bf6a1536f23836b950da5cbf1c1cdd76ca99eab369ac021f75f801f25edf538",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-1.webp",
+      "kind": "public",
+      "bytes": 16632,
+      "sha256": "362248310f3b02f1c8181d6246ce436d92b93a4e32a8a5536db8be0e11a58974",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-2.jpg",
+      "kind": "public",
+      "bytes": 276028,
+      "sha256": "e8c9f4e05a81d21fff7c0019425fc9d5d7a7cce10a39f55d0c3948655e33c7d1",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-2.webp",
+      "kind": "public",
+      "bytes": 21956,
+      "sha256": "6425056f2944c6a0267c82fd34ff5aa7c7a52ef4ba3381c5ef568a8c5f44a92c",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-3.jpg",
+      "kind": "public",
+      "bytes": 229367,
+      "sha256": "649d57137e3de3318ac642bd3361b4fbc0313ddeddba56819f6fcadfb24835b3",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-3.webp",
+      "kind": "public",
+      "bytes": 20112,
+      "sha256": "79993c6b61655a4b6abf1cd0fe02f64f48929be25284484140d51eea06f2d5c1",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-4.jpg",
+      "kind": "public",
+      "bytes": 197704,
+      "sha256": "19d9df5c5eded96271bf6b582fc08a3335ff71b96d2f45110f9ac39dc8f18953",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-4.webp",
+      "kind": "public",
+      "bytes": 16768,
+      "sha256": "c61b1994c847afb96df4c75e538eea1376103199e00f4f3cc36c272372555b1e",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-5.jpg",
+      "kind": "public",
+      "bytes": 176238,
+      "sha256": "9a53a7b8237be6b51ad3a647233762259dedc7ed5ec310cf6e7f567110471523",
+      "mime": "image/jpeg",
+      "width": 750,
+      "height": 1000,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/main-5.webp",
+      "kind": "public",
+      "bytes": 15208,
+      "sha256": "09c1dbdf4e1a85326419c8d7ea2a842dbaea0561c605ade1df0908deac408c44",
+      "mime": "image/webp",
+      "width": 360,
+      "height": 480,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null,
+      "provenance": [
+        "commerce/apparel-v2/manifest.json"
+      ]
+    },
+    {
+      "path": "commerce/apparel-v2/manifest.json",
+      "kind": "public",
+      "bytes": 16026,
+      "sha256": "7336a03e5f7ff9c2512ea60bf6d83995714176650e1083a214dee2f9382e5233",
+      "mime": "application/json"
+    },
+    {
+      "path": "commerce/examples/womenswear/model.webp",
+      "kind": "public",
+      "bytes": 96264,
+      "sha256": "7bccfdb2d0bf7fd2e8f160de6892d518d3fcef5bc9ba3e90d39639c081b6aa4f",
+      "mime": "image/webp",
+      "width": 1024,
+      "height": 1024,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/examples/womenswear/product-main.webp",
+      "kind": "public",
+      "bytes": 175908,
+      "sha256": "66901a2c2a16a20fb2045a2e663d72cc547ef87f65c58243795e4e516436920e",
+      "mime": "image/webp",
+      "width": 1024,
+      "height": 1024,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/examples/womenswear/selling-point.webp",
+      "kind": "public",
+      "bytes": 137428,
+      "sha256": "341108fc897d4e9a127ffc02d35a7c10ced3f161115ea6ec2de0944215951e87",
+      "mime": "image/webp",
+      "width": 1024,
+      "height": 1024,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/examples/womenswear/social-cover.webp",
+      "kind": "public",
+      "bytes": 192428,
+      "sha256": "ae64e08b09e6268c425a5f9922c9aada3115838a609014141a780d0ae901e6b5",
+      "mime": "image/webp",
+      "width": 1024,
+      "height": 1024,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/clone-product.webp",
+      "kind": "public",
+      "bytes": 31420,
+      "sha256": "15247348e034c5968a66601ca7a9aed25f9c95e1adee01fcdad497f5e8a3ca9f",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/clone-reference.webp",
+      "kind": "public",
+      "bytes": 88222,
+      "sha256": "8a633576f45b44517c9db7f012fa3a8b669c20a2877181dd20f75302e34e888f",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/clone-result.webp",
+      "kind": "public",
+      "bytes": 88656,
+      "sha256": "fabd7a47b719f5b094d782290ce4bb24d0517261ccffb945237f3f29bfd729c5",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-angle.webp",
+      "kind": "public",
+      "bytes": 67828,
+      "sha256": "79a18db8cef631f984148908668ae56b04862e8ad7fea7282386ae7770e87e94",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-atmosphere.webp",
+      "kind": "public",
+      "bytes": 84988,
+      "sha256": "2b900058b7b4a589968e1408631ef2110f344d3d80c810c6255b83168feb7e13",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-hero.webp",
+      "kind": "public",
+      "bytes": 72206,
+      "sha256": "d7ae1ec9aa5e775d1fa6f398b76f6d1d083f5db1365922deaed0e0ca74481cdb",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-product.webp",
+      "kind": "public",
+      "bytes": 54114,
+      "sha256": "59735080b53ad5fed7797d9c1280c90051dbb4b5dbe1f2af8dea2dfd76e7c544",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-scene.webp",
+      "kind": "public",
+      "bytes": 114246,
+      "sha256": "ca73d28233aca7fded6057754205d9f82f4ed21bf32fe74202e578347406bfa4",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-selling.webp",
+      "kind": "public",
+      "bytes": 63976,
+      "sha256": "944bd3ccf2b608274a67bad7ded65b1dc818981e2e6dff6f663c4a6d828715ab",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/detail-texture.webp",
+      "kind": "public",
+      "bytes": 84580,
+      "sha256": "9990f9ee9f803137f25bb0e3d73b3b1c2375fc1f22bbb8e1a8ee761b74956adb",
+      "mime": "image/webp",
+      "width": 1672,
+      "height": 941,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/kit-detail.webp",
+      "kind": "public",
+      "bytes": 150118,
+      "sha256": "e0fe75373f08338a94e0cd199bceacc413a4713b036bc8374b328b09ad78fe85",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/kit-model.webp",
+      "kind": "public",
+      "bytes": 140476,
+      "sha256": "723d1bba66781f15e11d0710fc329c3b6e44d42b552cdca5582f295ca527f14d",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/kit-product.webp",
+      "kind": "public",
+      "bytes": 95786,
+      "sha256": "9a15b4a64ce4886450fc1e642eef247cc10396dcecf3c9f4b62855914223b759",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/kit-scene.webp",
+      "kind": "public",
+      "bytes": 193326,
+      "sha256": "2137aee64e156d0ef0aa8bad9bfb92c5960deedfaebbe8945bf92fe58a4a0cea",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/kit-selling.webp",
+      "kind": "public",
+      "bytes": 103174,
+      "sha256": "bb5c5ad62fd0a43f3495e7b53c6df411c5c11c689b41743f55b445d31d7d1444",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/shoot-botanical.webp",
+      "kind": "public",
+      "bytes": 97628,
+      "sha256": "875b2c11050c8d3c74d2f8ee744d3daf94a1d7957422ee0f0d8e515f7280f268",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/shoot-product.webp",
+      "kind": "public",
+      "bytes": 42046,
+      "sha256": "021a05aa62ad3ea26c0ccbbf32e46b1ee7f19e00b95e63cb57f7323808371d57",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/meitu-v1/shoot-studio.webp",
+      "kind": "public",
+      "bytes": 122378,
+      "sha256": "bda97f48fba41b2e58702736f03b40a9af16ef6132e9e7ed8c3a0689f6d3e0d3",
+      "mime": "image/webp",
+      "width": 1254,
+      "height": 1254,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/brand-hero-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 105028,
+      "sha256": "d6a4e4957bc831b94fdc4f4022664ef24a578a71894e5683060a1514a6937d05",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/daily-scene-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 193026,
+      "sha256": "204b94e6cc8d89914309b69721aed5fc8eacb2124d048cbf4829dd2db9d936a2",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/detail-hero-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 140868,
+      "sha256": "5bc4c28e7d73d19a216350ce35b8b95deb1f6c19a908797ebdcbd97e58f9fb45",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/detail-module-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 241632,
+      "sha256": "0ce9ea1fe726159cb02cb988adc4c6701ed0aa97ab9292eae11393e8d7a74d7c",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/handheld-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 151298,
+      "sha256": "719c87d90544a5e8cf020cc07cd6a2233200dbca1623d42cc39f706a18a0c033",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/lifestyle-collage-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 209562,
+      "sha256": "6cbfb2e378f8b771f047d849b0e7550eaf84b9ad81cf8a40b7a66480f392c4ee",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/material-detail-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 263504,
+      "sha256": "f8401ac8f4d90aab090a429d725fb4fe48edda3d3c26fd2c0d351aca6a356eef",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/selling-point-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 175218,
+      "sha256": "90716192ee5bf2ab0643511c09d7c9126d26cc1d0abd44eebf87f40402073ed8",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/social-cover-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 213662,
+      "sha256": "0bae18767cfbf3d28fbfe5578ea6a46385e27fca86f8d22a9f49d77eefc58b00",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/soft-studio-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 157178,
+      "sha256": "7d6f18f07ea1788999b10bf831e28836bd202ad1e4cefe6015931ccf55cbe681",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/spec-layout-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 155788,
+      "sha256": "6599aa5d52a892cd57e938dae379ae55af60ad47b259cb9f3dc484ef14503e29",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1080,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/white-main-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 175908,
+      "sha256": "66901a2c2a16a20fb2045a2e663d72cc547ef87f65c58243795e4e516436920e",
+      "mime": "image/webp",
+      "width": 1024,
+      "height": 1024,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-checklist-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 147946,
+      "sha256": "438412dedb205efb9586b54e48ccc9344388218b3ac19a4a63b3e33fee166774",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-collage-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 178906,
+      "sha256": "d294245ee32e7997bb0114d8581b43a3e22a880f4224522cbf8c8e080bd082a0",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-fresh-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 137966,
+      "sha256": "714be97cb8d98df9d25df7935a04b24b3f9f3046473d9b87c3a798adb753580f",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-minimal-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 78750,
+      "sha256": "3de343fe2e8ad77d4f8a738eed3a9cc7fb8c0a4b09a2403b3bd77d0322dc621e",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-retro-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 491816,
+      "sha256": "fcb33ae69371c89c567accf10f1492eb85b8bc1432fecbf230387b85b8bdd05b",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "commerce/templates/xhs-sketch-womenswear-v1.webp",
+      "kind": "public",
+      "bytes": 198040,
+      "sha256": "098972068acb84c05247df420479e49ce9314365508ed66ebac895e210d6cd8d",
+      "mime": "image/webp",
+      "width": 1080,
+      "height": 1440,
+      "hasAlpha": false,
+      "orientation": null,
+      "blurDataURL": null
+    },
+    {
+      "path": "fonts/LICENSE.txt",
+      "kind": "font",
+      "bytes": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "mime": "text/plain"
+    },
+    {
+      "path": "fonts/NotoSansCJKsc-Bold.otf",
+      "kind": "font",
+      "bytes": 17002248,
+      "sha256": "b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a",
+      "mime": "font/otf",
+      "license": "fonts/LICENSE.txt",
+      "provenance": [
+        "fonts/README.md"
+      ]
+    },
+    {
+      "path": "fonts/NotoSansCJKsc-Regular.otf",
+      "kind": "font",
+      "bytes": 16437364,
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "mime": "font/otf",
+      "license": "fonts/LICENSE.txt",
+      "provenance": [
+        "fonts/README.md"
+      ]
+    },
+    {
+      "path": "fonts/README.md",
+      "kind": "font",
+      "bytes": 541,
+      "sha256": "3b297276cc7e75d355f251bb301105d4558a55660598b7e77e83635e3985ea4f",
+      "mime": "text/markdown"
+    },
+    {
+      "path": "licenses/pill-nav-LICENSE.md",
+      "kind": "public",
+      "bytes": 2060,
+      "sha256": "4bdd1fa59a6b7d5954bc3b213dbc34e455c635a94bbcecf9293553797d0fad02",
+      "mime": "text/markdown"
+    },
+    {
+      "path": "licenses/pill-nav-NOTICE.txt",
+      "kind": "public",
+      "bytes": 741,
+      "sha256": "861103f805ba9136ffdc055b3091f8a752c3a83eefbf55584c1344bcea5c5158",
+      "mime": "text/plain"
+    },
+    {
+      "path": "licenses/react-bits-LICENSE.md",
+      "kind": "public",
+      "bytes": 1303,
+      "sha256": "f4c33af6739191537738662d223b68d77bc226f4b57ea883e16481d8cc5c73c9",
+      "mime": "text/markdown"
+    },
+    {
+      "path": "licenses/react-bits-NOTICE.txt",
+      "kind": "public",
+      "bytes": 1113,
+      "sha256": "04510898196ae6379ee13d061674695df11b3f09d8f6e8c12abecdb354653f8e",
+      "mime": "text/plain"
+    }
+  ]
+}

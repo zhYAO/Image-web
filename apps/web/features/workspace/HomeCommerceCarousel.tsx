@@ -1,5 +1,7 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
+
 import { COMMERCE_SCENES, COMMERCE_PRIMARY_SCENE_IDS } from "@zimage/domain";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
@@ -261,7 +263,7 @@ export function HomeCommerceCarousel() {
                 <div className={styles.cover}>
                   <Image
                     draggable={false}
-                    src={commerceExampleForScene(scene.id)}
+                    src={publicAssetUrl(commerceExampleForScene(scene.id))}
                     alt={`${scene.name} · AI 风格示例`}
                     width={512}
                     height={512}

@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import path from 'node:path';
 import { withSentryConfig } from '@sentry/nextjs/config';
 import { createMarkdownBuildProfile } from './build/markdown-profile.mjs';
+import { publicAssetRemotePatterns } from './build/static-assets-config.mjs';
 
 const dataMode = process.env.NEXT_PUBLIC_DATA_MODE ?? 'mock';
 const deploymentEnvironment = process.env.VERCEL_ENV ?? process.env.ZIMAGE_DEPLOYMENT_ENV;
@@ -17,6 +18,9 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   output: 'standalone',
+  ...(process.env.NEXT_PUBLIC_STATIC_ASSET_BASE_URL ? {
+    images: { remotePatterns: publicAssetRemotePatterns(process.env.NEXT_PUBLIC_STATIC_ASSET_BASE_URL) },
+  } : {}),
   env: { ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development' },
   generateBuildId: async () => process.env.ZIMAGE_BUILD_SHA ?? null,
   outputFileTracingRoot: path.join(__dirname, '../..'),

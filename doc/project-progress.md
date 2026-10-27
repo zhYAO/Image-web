@@ -1,5 +1,13 @@
 # ZImage 项目进度
 
+## 2026-10-27 独立资源与三层发布（第二QA通过，10MB未达、未发布）
+
+- 用户确认生产目标仍为阿里云`www.zimage.store`，优化验收后手动发布、不走GitHub CI；实际服务器切换由主会话协调，本分支未推送/部署或改服务器。用户选择业务dist＋共享runtime＋独立字体/public三层，10,000,000原始字节业务门禁不得靠移动业务chunks伪达标。
+- HTTPS摘要URL helper已覆盖公开示例、品牌、模板和原始JPEG预览，私有/签名/API/blob路径不改；缺配置开发继续仓库资源。Sharp共享字体走本地绝对路径并验证manifest、固定两字体SHA和许可，未每次网络下载/裁字形。资源95文件43,753,251字节（含35,267清单），原图/字体字节及许可不变；umask077下目录755/文件644。
+- 第二次明确批准的QA webpack构建98.556秒成功、锁文件不变。业务文件**24,811,988**（server9,997,004/client14,679,012/config135,972），runtime32,873,294，fonts/public43,717,984，全运行**101,403,266**；加资源manifest后101,438,533，尚未加三层业务索引/发布清单。整体和业务10MB目标均未达。
+- 第二实际组装132项通过，包含95个经独立CA真实TLS的资源SHA/MIME/CORS/cache、旧本地与新远端Image优化器及Sharp/CJK；DNS/transport仅测试注入，不代替公网/Nginx。TLS不信任/错host被拒、privateDNS400且不抓取；认证两项占位503仍未验证。资源URL19、font27+renderer8、真实资源包renderer8、相关UI26、pack/release15，lint/typecheck通过；全Web最新源回归进行中。
+- 独立审查已关闭域名glob与umask权限P2，无当前原型P0/P1/P2；新三层装配13项＋原分层28项41/41，真实打包/装配与独立复审继续。全部原型productionReady:false，编译的asset域为QA fixture，不能上传冒充生产构建。详见[资源/分类报告](qa/2026-10-27-static-resource-prototype.md)。
+
 ## 2026-10-27 未压缩10MB继续瘦身（一次QA净减，整体未达标）
 
 - 沿用隔离分支，完整分类/top20生成文件及模块、官方资料与引入链已记录。用户目标为10,000,000未压缩字节，保留所有功能/语言字体/画质/安全。显式默认关闭的`ZIMAGE_BUILD_SLIM=1` webpack候选清理原本禁用Markdown分支、SSR未执行Shiki实现及Next两个仅dev入口追踪，不做压缩/移层假达标。

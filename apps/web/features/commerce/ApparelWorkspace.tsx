@@ -1,4 +1,6 @@
 "use client";
+
+import { publicAssetUrl } from "@/lib/public-assets";
 import {
   APPAREL_LAYOUT_VERSION,
   apparelBriefSchema,
@@ -636,10 +638,10 @@ export function ApparelWorkspace({
                 {examplePages.map((example) => (
                   <figure key={example.file}>
                     <Image
-                      src={`/commerce/apparel-v2/${example.file}.webp`}
+                      src={publicAssetUrl(`/commerce/apparel-v2/${example.file}.webp`)}
                       alt={`原创 AI 服装示例 · ${example.title}`}
                       loading="lazy"
-                      preview={{ src: `/commerce/apparel-v2/${example.file}.jpg` }}
+                      preview={{ src: publicAssetUrl(`/commerce/apparel-v2/${example.file}.jpg`) }}
                     />
                     <figcaption>{example.title}<br />{example.width} × {example.height}</figcaption>
                   </figure>

@@ -1,5 +1,7 @@
 "use client";
 
+import { publicAssetUrl } from "@/lib/public-assets";
+
 import { useState, type ReactNode } from "react";
 import { Image as Preview, Modal } from "antd";
 import Image from "next/image";
@@ -101,7 +103,7 @@ export function CommerceExample({ scene }: { scene: CommerceScene }) {
     <Image
       key={name}
       className={className}
-      src={`/commerce/meitu-v1/${name}.webp`}
+      src={publicAssetUrl(`/commerce/meitu-v1/${name}.webp`)}
       width={720}
       height={720}
       sizes={scene === "product-set" && name !== "kit-product" ? "(max-width: 767px) 38vw, 180px" : "(max-width: 767px) 44vw, 320px"}
@@ -802,7 +804,7 @@ export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
                   template.id,
                 ) && (
                   <Image
-                    src={`/commerce/meitu-v1/shoot-${template.id === "white-main" ? "product" : template.id === "daily-scene" ? "botanical" : "studio"}.webp`}
+                    src={publicAssetUrl(`/commerce/meitu-v1/shoot-${template.id === "white-main" ? "product" : template.id === "daily-scene" ? "botanical" : "studio"}.webp`)}
                     width={240}
                     height={240}
                     alt={`${template.name}场景示意`}
@@ -950,7 +952,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
           <div className={styles.uploadWelcome}>
             <div className={styles.welcomeArt}>
               <Image
-                src="/commerce/meitu-v1/shoot-product.webp"
+                src={publicAssetUrl("/commerce/meitu-v1/shoot-product.webp")}
                 alt="原创商品摄影示例"
                 width={140}
                 height={140}

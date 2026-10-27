@@ -1,7 +1,6 @@
 import { apparelPlanSchema, type ApparelPlan } from "@zimage/domain";
 import sharp, { type OverlayOptions } from "sharp";
-import path from "node:path";
-import { existsSync } from "node:fs";
+import { resolveApparelFont } from "./font-files";
 const JPEG = {
   quality: 95,
   progressive: true,
@@ -11,17 +10,6 @@ const LIMIT = 16384 * 16384;
 const punctuation = "，。；：、）】》！？";
 type Page = { name: string; bytes: Uint8Array; width: number; height: number };
 type Source = (id: string) => Promise<Uint8Array>;
-function fontFile(bold: boolean) {
-  for (const root of [process.cwd(), path.join(process.cwd(), "apps/web")]) {
-    const file = path.join(
-      root,
-      "server/apparel/fonts",
-      `NotoSansCJKsc-${bold ? "Bold" : "Regular"}.otf`,
-    );
-    if (existsSync(file)) return file;
-  }
-  throw new Error("缺少随应用打包的中文字体。");
-}
 const escape = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 async function textImage(
@@ -34,7 +22,7 @@ async function textImage(
     text: {
       text: `<span foreground="${color}">${escape(value)}</span>`,
       font: `Noto Sans CJK SC ${bold ? "Bold " : ""}${size}`,
-      fontfile: fontFile(bold),
+      fontfile: resolveApparelFont(bold),
       dpi: 72,
       rgba: true,
     },
