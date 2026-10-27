@@ -79,12 +79,14 @@ function MarkdownContent({ children, streaming }: { children: string; streaming:
       className={styles.markdown}
       componentProps={markdownComponentProps}
       components={markdownComponents}
+      enableGithubAlert={false}
       enableHtmlPreview={false}
       enableImageGallery={false}
       enableLatex={false}
       enableMermaid={false}
       enableStream={streaming}
       fontSize={15}
+      fullFeaturedCodeBlock={false}
       lineHeight={1.7}
       reactMarkdownProps={markdownParserProps}
       streamAnimationGranularity="word"

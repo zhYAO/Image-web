@@ -1,6 +1,11 @@
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vitest/config';
+import { createMarkdownBuildProfile } from './build/markdown-profile.mjs';
+
+const profileAliases = process.env.ZIMAGE_BUILD_SLIM === '1'
+  ? createMarkdownBuildProfile(fileURLToPath(new URL('./', import.meta.url)), false).aliases
+  : {};
 
 export default defineConfig({
   esbuild: {
@@ -9,6 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./', import.meta.url)),
+      ...profileAliases,
     },
   },
   test: {
