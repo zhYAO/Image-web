@@ -166,6 +166,8 @@ def make_archive(root, target, entries, compression_level=6):
                             source = root / entry['path']
                             item.size = entry['bytes']
                             before = source.stat()
+                            if before.st_size != entry['bytes']:
+                                raise ValueError('Input size changed since inventory: ' + entry['path'])
                             with source.open('rb') as content:
                                 archive.addfile(item, content)
                             after = source.stat()
