@@ -2,6 +2,27 @@
 
 生产目标为阿里云 `https://www.zimage.store`。用户已取消10MB硬门槛，允许完成检查后手动发布，禁止触发GitHub CI。临时OSS中转、Windows固定HTTP验收及一次性自动回退已批准；实际外部操作由主会话/服务器管理员协调。本文不执行上传、改Nginx、改凭据、切换或重启。
 
+## 当前实际实现与阻塞
+
+新增 `release-three-layer.py` 管理员适配器和回归测试，接入原 `release.py` 的严格健康检查/精确恢复，旧完整包入口未修改。它提供本地 `bundle`、固定路径root `deploy/rollback` 及纯输出 `systemd-template`；不是只有方案。所有现有QA包仍被真实source/build SHA、规范.next、精确www资源URL等生产门禁拒绝，原清单/productionReady:false不改写。
+
+真实匹配环境现已通过：官方固定摘要Ubuntu22.04容器内Node24.19.0/ABI137/Node-API10/glibc2.35，现有pnpm、SWC、Sharp、两字体/六次编解码及49项分层回归成功。复用现成Python并隔离site-packages，不需要继续尝试DNS失败的apt安装。详见[平台执行证据](../../doc/qa/2026-10-27-production-platform-plan.md)。
+
+五项公开变量在一次Library物化download failed后，已由父会话另作受控原文件字节交付，387bytes/SHA及五键白名单验真，0600存仓库外、不输出值。文件名中的2a4298ad仅是交付名称；构建标记必须使用包含新适配代码的最终commit，不能沿用旧SHA。现存Turnstile值为官方always-pass测试sitekey，候选按原生产变量保留，不创建/换key或关闭校验；真实后端CAPTCHA行为未验证，生产激活前须明确报告/处置这一既有风险，不能声称真实挑战通过。
+
+## 管理员适配器的最小安装与调用
+
+以下全部是**待主会话协调确认的服务器操作**，本分支未执行安装：
+
+1. 固定共享根 `/opt/zimage/layer-cache`、业务 `/opt/zimage/releases/<40位SHA>`、可信store `/opt/zimage/layer-store`（管理员预建root:root0700）；共享依赖和业务尽量同文件系统。新目录root管理，不递归修改旧目录权限，runtime/assets不可变且不暴露runtime/store。
+2. 将这5个已核对源码SHA256的文件安装到root管理、无group/world写权限的 `/usr/local/libexec/zimage-three-layer/`：`release-three-layer.py`、`release.py`、`release-layers.py`、`three-layer-release.py`、`release-public-policy.json`。目录0755，源码/JSON0644即可，root:root。使用 `/usr/bin/python3 -I` 调用；不添加任意Python/root shell sudo入口。CLI在导入邻接模块前验证完整工具闭包及祖先信任。
+3. 运行可信适配器的 `systemd-template` 只生成待审内容，再由管理员安装为 `/etc/systemd/system/zimage.service.d/three-layer-assets.conf`、root:root0644。内容只追加 `[Service]` 和 `EnvironmentFile=-/opt/zimage/current/.runtime-assets.env`；保留原User/Group=zimage、私密EnvironmentFile、ExecStart、代理、内存与沙箱。检查最终EnvironmentFiles顺序，新资产文件不得被后来配置覆盖。管理员审核后daemon-reload；适配器不会安装/重载/重写服务。
+4. 生产包通过 `bundle STORE MANIFEST NEW_OUTPUT --manifest-sha256 TRUSTED_SHA` 生成单个传输tgz。外层严格只有三层归档、三个索引及一个full-SHA发布清单，共7个普通文件。Windows和ECS分别核对外层及manifest摘要；仅最终生产包送入 `/opt/zimage/incoming/<SHA>.layers.tgz`。
+5. 管理员以固定参数调用：`/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py deploy FULL_SHA OUTER_SHA256 MANIFEST_SHA256 RUN_NUMBER`。RUN_NUMBER取已记录的last-deployment-run后继值，不猜workflow编号。CLI不接收任意根目录或任意命令；在既有deploy.lock内有界复制并校验外层、严格装配、检查完整生产身份、生成逐release字体环境和受控Nextcache链接，以runuser zimage/env-i/固定Node做离线native，再复用原activate/严格HTTP与TLS健康检查。相同SHA也从可信层重新装配后逐文件/链接比较，不只信marker。
+6. 自动恢复和管理员手动恢复都固定为切换前捕获的完整旧SHA。适配器支持 `rollback FULL_SHA`，不接受previous/任意路径；不借rollback安装新版本。保留旧完整release及旧资源。任何helper非零都要重新读取current：只有current仍为本次新SHA、且与old不同，才执行获准的一次精确回退；若已恢复old则只做恢复验收，若是第三个版本则停止，避免覆盖并发发布。原因是健康激活后仍可能发生状态文件写入失败，非零不等于从未切换。
+
+新资源HTTP alias不由适配器安装。管理员按下面顺序完成Nginx及外部严格验收；root适配器只声称本地内容/native/原health验收，返回externalVerificationRequired:true。Windows必须对**确切资源manifest实际SHA及全部95文件HTTPS字节/摘要/类型**做最终硬门，同时验证版本、原公开路由/静态和真实匿名401。任一失败都按上面的current/old约束精确回退，再验证旧版恢复，不能只看首页200或把本地fixture当公网通过。
+
 ## 构建前公开配置接口
 
 交付一个当前云环境可读、仓库外的临时UTF-8 JSON文件，顶层仅包含下列5个字符串键。不使用shell拼接、不回显值、不提交文件、不把JSON加入产物。Supabase密钥只允许公开publishable/anon，禁止service_role或其他服务秘密。
@@ -51,7 +72,7 @@ NEXT_PUBLIC_STATIC_ASSET_BASE_URL=https://www.zimage.store/static-assets/e68a455
 4. 使用 `three-layer-release.py pack`，传入真实production staging、不可变资源目录、项目、最终commit、新release ID及ECS精确cache根。省略 `--code-raw-budget`即无硬门槛。保存trusted release-manifest SHA、每层archive/index SHA和精确raw/transfer报告。禁止覆盖已有ID或修改旧QA包。
 5. 本工具始终报告 `productionReady:false`，表示**未进行生产激活/验收的装配器产物**；assemble要求显式 `--allow-sample`。即使源是正确生产构建，也不能靠把该字段改true取得放行。主会话必须明确审核这一工具边界、实际路径权限与生产装配后独立验收；当前QA包任何时候均不允许上传部署。
 
-打包/装配命令参数见 [THREE-LAYERS.md](THREE-LAYERS.md)。不能把code+runtime层归档直接交给旧 `release.py` 当完整自包含包：旧helper不认识共享层协议，且受控public外链需要新装配过程。若服务器仅允许原helper，先阻断切换并明确集成步骤；不得绕过其归档安全检查。
+打包/装配命令参数见 [THREE-LAYERS.md](THREE-LAYERS.md)。不能把code+runtime层归档直接交给旧 `release.py` 当完整自包含包：旧helper不认识共享层协议，且受控public外链需要新装配过程。须先完成上述新适配器的管理员安装与验收；不得绕过旧归档安全检查或把未安装的代码称为已上线。
 
 ## 传输、装配与验收顺序
 

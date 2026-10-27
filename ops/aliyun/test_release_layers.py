@@ -340,6 +340,26 @@ console.log(JSON.stringify([require('./node_modules/next/package.json').version,
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(Path(first['manifest']).read_bytes(), before)
 
+    def test_file_hashing_works_without_python311_file_digest(self):
+        # Ubuntu 22.04's standard Python 3.10 lacks hashlib.file_digest.
+        # A runtime call to that newer API breaks pack/assemble before any gate.
+        for data in (b'', b'abc', bytes(range(256)) * 8193):
+            with self.subTest(bytes=len(data)):
+                source = self.root / 'hash-input'
+                source.write_bytes(data)
+                result = subprocess.run([sys.executable, '-c', '''
+import hashlib, importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('layers_under_test', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+if hasattr(hashlib, 'file_digest'):
+    del hashlib.file_digest
+print(module.file_digest(Path(sys.argv[2])))
+''', str(SCRIPT), str(source)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), hashlib.sha256(data).hexdigest())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,178 @@
+{
+  "scope": "Matching environment and local adapter validation; not production build/deployment",
+  "ecsFromParent": {
+    "kernel": "Linux5.15.0-173-generic",
+    "node": "24.19.0",
+    "abi": "137",
+    "napi": "10",
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc-2.35",
+    "source": "CloudAssistant t-sh0719pffua0buo exit0"
+  },
+  "image": {
+    "Id": "sha256:cee13550f97b8a595506e8e4ca74263ba44924248779a4ba4f942e197652acff",
+    "RepoDigests": [
+      "ubuntu@sha256:98510ac07bb4545e389be502a8918b385c018bfe4ceeb5ac7e0375c782268b04"
+    ],
+    "Os": "linux",
+    "Architecture": "amd64",
+    "Size": 78093105
+  },
+  "nodeNativePreflight": {
+    "runtime": {
+      "node": "24.19.0",
+      "abi": "137",
+      "napi": "10",
+      "platform": "linux",
+      "arch": "x64",
+      "libc": "glibc-2.35"
+    },
+    "next": "16.4.1",
+    "pnpm": "11.19.0",
+    "sharp": "0.35.5",
+    "nextSwcLoaded": true,
+    "fonts": [
+      {
+        "weight": "Regular",
+        "width": 313,
+        "height": 25,
+        "pngBytes": 3386,
+        "pngSha256": "0e6ad359ecfc9030e61d90798e9f082f656202d15cf5b1979abd15b5167d37f4",
+        "codecs": [
+          {
+            "format": "jpeg",
+            "bytes": 326,
+            "sha256": "bbf30707b760be2646379f300328565c227da9374b24036dd0e3785f699cb5de"
+          },
+          {
+            "format": "webp",
+            "bytes": 2240,
+            "sha256": "6b91d9e17513eacaced7dc1a78c1dcc050e91afa6c578574ac406ad6c06bb00a"
+          },
+          {
+            "format": "avif",
+            "bytes": 2021,
+            "sha256": "64971cc938c6d6df62663befec39f587731c94699d997a1454b88a496d45e110"
+          }
+        ]
+      },
+      {
+        "weight": "Bold",
+        "width": 318,
+        "height": 26,
+        "pngBytes": 3406,
+        "pngSha256": "4f621ba8ab37ebac744a64785b9245413a8b581cfeddd50befce176ef8f9e165",
+        "codecs": [
+          {
+            "format": "jpeg",
+            "bytes": 326,
+            "sha256": "73dc496e8e08cf609f1eeade8fc67037e99892596f8b0de819cc74b8c5a6adab"
+          },
+          {
+            "format": "webp",
+            "bytes": 2276,
+            "sha256": "ee283b2bbcd1a29801daea847d73480430bde35f78d3822ed7a4de38cab2cd8f"
+          },
+          {
+            "format": "avif",
+            "bytes": 2013,
+            "sha256": "706b9f004abcda2e474171023183adfeab29b14d6790d5234ac6ae2a8010b931"
+          }
+        ]
+      }
+    ],
+    "network": "none",
+    "privileged": false,
+    "paidRequests": 0
+  },
+  "nativePreflightWarnings": [
+    "Fontconfig error: Cannot load default config file: File not found",
+    "Fontconfig error: Cannot load default config file: File not found"
+  ],
+  "existingPythonPreflight": {
+    "python": "3.12.14",
+    "runtimeIdentity": {
+      "node": "24.19.0",
+      "abi": "137",
+      "platform": "linux",
+      "arch": "x64",
+      "libc": "glibc-2.35"
+    },
+    "toolImport": true,
+    "canonicalSha256": true,
+    "gzip": true,
+    "linuxRenameNoReplace": true,
+    "network": "none",
+    "installedPackages": 0,
+    "isolatedPython": 1,
+    "siteEnabled": false
+  },
+  "actualAdapterNativeInMatchedContainer": {
+    "uid": 1000,
+    "probeResult": {
+      "native": true,
+      "fonts": 2,
+      "codecs": 6
+    },
+    "stderr": "Fontconfig error: Cannot load default config file: File not foundFontconfig error: Cannot load default config file: File not found\n\n",
+    "wrapperUsedRunuser": false,
+    "network": "none",
+    "actualSource": "release-three-layer.py NATIVE_PROBE"
+  },
+  "layerTestsInMatchedContainer": {
+    "passed": 49,
+    "seconds": 6.754,
+    "logSummary": ".................................................\n----------------------------------------------------------------------\nRan 49 tests in 6.754s\n\nOK"
+  },
+  "officialAptAttempt": {
+    "installedPython": false,
+    "retryPerformed": false,
+    "failure": "Temporary failure resolving archive.ubuntu.com and security.ubuntu.com; unable to locate python3",
+    "resolution": "Use the preinstalled trusted Python runtime via readonly mounts; no network, -I -B -S, site-packages hidden. No DNS/proxy/host-network/security changes."
+  },
+  "publicConfig": {
+    "libraryFileId": "libfile_067a68e2a49c8191a45c48fa16cd5ba3",
+    "fileId": "file_000000003db88211a8acb7d9d0d90b5d",
+    "filename": "zimage-public-build-vars-2a4298ad-20261027.json",
+    "version": 0,
+    "expectedBytes": 387,
+    "expectedSha256": "6179525465d0edd265a532944ac6bb61693d5492515dd8a912090cdb853e5eff",
+    "prepareSucceeded": true,
+    "materializeSucceeded": false,
+    "localConfigurationPresent": false,
+    "error": "download failed",
+    "attemptsForThisFile": 1,
+    "valuesPrinted": false,
+    "expectedHashVerified": false,
+    "controlledByteTransfer": {
+      "received": true,
+      "bytesVerified": 387,
+      "sha256Verified": "6179525465d0edd265a532944ac6bb61693d5492515dd8a912090cdb853e5eff",
+      "exactFiveKeyWhitelistVerified": true,
+      "publicPublishablePrefixVerified": true,
+      "valuesPrinted": false,
+      "fileOutsideRepository": true,
+      "mode": "0600",
+      "turnstileOfficialAlwaysPassTestKey": true
+    }
+  },
+  "productionBuildStarted": false,
+  "productionBuildBlocker": null,
+  "productionBuildNextStep": "Freeze final adapter commit, then one matching-platform production build with unchanged supplied public values",
+  "adapterValidation": {
+    "operationsSuitePassed": 114,
+    "operationsSuiteSeconds": 13.325,
+    "python310GrammarChecked": true,
+    "actualPython310ExecutionClaimed": false,
+    "independentReview": "READY; no Critical/Important",
+    "independentTests": 7,
+    "maliciousSevenMemberPayloadKindsRejected": 4,
+    "foreignOwnerRejectedByTargetedStatSimulation": true,
+    "actualForeignUidChownFailed": "EINVAL in isolated fixture; no retry or production change",
+    "nonblockingBoundaries": [
+      "Windows exact asset-version manifest and all95resource HTTPS bytes/hash/MIME gate remains required",
+      "Any helper nonzero must inspect current and restore exact old only if current is still this new release; state write can fail after activation"
+    ]
+  }
+}

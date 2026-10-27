@@ -1,5 +1,14 @@
 # ZImage 项目进度
 
+## 2026-10-27 三层管理员适配与生产平台匹配（本地完成，已收生产公开配置，待最终构建）
+
+- 用户要求的实际管理员适配器已实现：独立bundle、固定路径root deploy/rollback及systemd-template，旧完整包helper未修改。沿用同一部署锁、严格本机HTTP/TLS健康检查和精确原版本回退；root导入闭包/安全Node路径、有界7成员传输、真实生产SHA/.next/www资源门禁、逐release字体环境、nonroot字体/native与sameSHA完整重验均有回归。未安装到ECS或修改sudoers/Nginx/服务。
+- 最终完整运维Python套件**114/114**、13.325s通过；Python3.10语法检查和缺新API摘要回归通过，未声称真实Python3.10运行。应用源码/锁文件与已验证第二QA一致，不重复887项应用回归或占位构建。独立审查无Critical/Important；额外验证7项用例、4类七成员恶意包及异UID拒绝。运维边界：helper任何非零都须核查current并按捕获oldSHA回退；新95资源HTTPS是外部硬门，失败必须精确恢复。
+- 父会话CloudAssistant `t-sh0719pffua0buo`退出0：ECS Linux5.15 x64、Node24.19.0/ABI137/Node-API10、glibc2.35。官方固定摘要Ubuntu22.04容器已实际拉取/启动，真实Node元组与ECS一致；严格指纹未放宽。只读/非root/无网络/不privileged环境中现有pnpm、SWC、Sharp、两字体和JPEG/WebP/AVIF通过。复用预装Python隔离运行，49项分层测试6.754s通过，adapter原生JS实际返回fonts2/codecs6；未挂载主机凭据或敏感系统目录。详见[平台方案及证据](qa/2026-10-27-production-platform-plan.md)。
+- 官方Python apt安装仅尝试一次，因容器DNS无法解析Ubuntu源失败，无包安装；已停止，不改DNS/代理/host网络/安全配置。随后使用现成可信Python并屏蔽site-packages，无需继续下载。基础镜像78,093,105字节；原有QA/正式产物保留。
+- **公开配置已受控收到并验真**：Library物化download failed后没有重试，父会话另交付原始字节，387bytes及可信SHA完全匹配、仅5个公开键，文件0600置仓库外且未输出值。下一步锁定含新适配器的最终commit，做一次规范.next/glibc2.35正式候选构建。配置中的Turnstile key已确认是Cloudflare官方always-pass测试key；保留现存值/校验而不静默替换，后端secret/真实验证码未读未测，不能据候选构建宣称防机器人通过。详情见平台报告。Library报告保存network故障保留，不编造身份或链接；旧QA包绝不上传冒充生产。
+- 用户已批准的生产安装/临时OSS表单中转、Windows严格验收和一次自动回退仍由主会话协调。当前没有可用的OSS API签名请求，不假定浏览器表单等同PUT URL、不创建凭据。Windows公网ConnectionReset仍未通过，所有生产安装/验收/切换待完成；没有把本地READY称为发布成功。
+
 ## 2026-10-27 独立资源与三层发布（本地验证完成，生产构建/发布待交接）
 
 - 用户已取消10MB硬门槛，保留精确报告/可选预算；生产目标阿里云 `www.zimage.store`，完成检查后手动发布、不走GitHub CI。临时OSS中转、Windows固定HTTP验收、一次性自动回退已有明确授权；实际服务器操作由主会话协调。本分支未push/CI/上传/部署/改生产。
