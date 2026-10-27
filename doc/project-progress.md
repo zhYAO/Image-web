@@ -1,12 +1,12 @@
 # ZImage 项目进度
 
-## 2026-10-27 独立资源与三层发布（第二QA通过，10MB未达、未发布）
+## 2026-10-27 独立资源与三层发布（本地验证完成，生产构建/发布待交接）
 
-- 用户确认生产目标仍为阿里云`www.zimage.store`，优化验收后手动发布、不走GitHub CI；实际服务器切换由主会话协调，本分支未推送/部署或改服务器。用户选择业务dist＋共享runtime＋独立字体/public三层，10,000,000原始字节业务门禁不得靠移动业务chunks伪达标。
-- HTTPS摘要URL helper已覆盖公开示例、品牌、模板和原始JPEG预览，私有/签名/API/blob路径不改；缺配置开发继续仓库资源。Sharp共享字体走本地绝对路径并验证manifest、固定两字体SHA和许可，未每次网络下载/裁字形。资源95文件43,753,251字节（含35,267清单），原图/字体字节及许可不变；umask077下目录755/文件644。
-- 第二次明确批准的QA webpack构建98.556秒成功、锁文件不变。业务文件**24,811,988**（server9,997,004/client14,679,012/config135,972），runtime32,873,294，fonts/public43,717,984，全运行**101,403,266**；加资源manifest后101,438,533，尚未加三层业务索引/发布清单。整体和业务10MB目标均未达。
-- 第二实际组装132项通过，包含95个经独立CA真实TLS的资源SHA/MIME/CORS/cache、旧本地与新远端Image优化器及Sharp/CJK；DNS/transport仅测试注入，不代替公网/Nginx。TLS不信任/错host被拒、privateDNS400且不抓取；认证两项占位503仍未验证。资源URL19、font27+renderer8、真实资源包renderer8、相关UI26、pack/release15，lint/typecheck通过；全Web最新源回归进行中。
-- 独立审查已关闭域名glob与umask权限P2，无当前原型P0/P1/P2；新三层装配13项＋原分层28项41/41，真实打包/装配与独立复审继续。全部原型productionReady:false，编译的asset域为QA fixture，不能上传冒充生产构建。详见[资源/分类报告](qa/2026-10-27-static-resource-prototype.md)。
+- 用户已取消10MB硬门槛，保留精确报告/可选预算；生产目标阿里云 `www.zimage.store`，完成检查后手动发布、不走GitHub CI。临时OSS中转、Windows固定HTTP验收、一次性自动回退已有明确授权；实际服务器操作由主会话协调。本分支未push/CI/上传/部署/改生产。
+- 第二轮QA构建98.556秒成功；普通运行文件101,403,266字节，比基准155,934,878少54,531,612（34.97%）。业务24,811,988、runtime32,873,294、字体/public43,717,984；图像/字体原字节、许可、完整语法语言与安全能力保留。
+- 真实三层冷/暖/回退目录已装配。含metadata未压缩业务24,955,607＋共享runtime33,180,123＋资源43,753,251＝101,888,981字节；gzip仅传输55,838,637。暖装配与可信同一QA清单重新装配均复用两层，987文件hardlink、无拷贝；不同代码回退由fixture覆盖，未恢复线上旧版。业务未移进runtime凑数。
+- 最终Web887/887（119文件），Domain106/106（未改源码），原分层28/28＋三层20/20，真实额度保护5/5，lint/typecheck通过；原型独立审核无当前范围Critical/Important。冷与回退实际Next/HTTPS/static/Sharp/CJK各132项通过；CA/hostname/privateDNS拒绝保持。
+- **仍in_progress的发布边界**：所有现有包为QA假Supabase＋test HTTPS域，productionReady:false，不能发布。两个认证API占位503未算真实401。等待5项公开生产变量、ECS共享cache路径和Node/ABI/glibc/libstdc++确认，才作规范.next的最终生产构建并输出新hash。真实公网/Nginx、服务UID、认证/业务、回退安全由正式发布验收；未用fixture替代。详见[最终验证报告](qa/2026-10-27-three-layer-validation.md)和[手动交接](../ops/aliyun/MANUAL-THREE-LAYER-RELEASE.md)。
 
 ## 2026-10-27 未压缩10MB继续瘦身（一次QA净减，整体未达标）
 
