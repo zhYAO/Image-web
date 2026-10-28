@@ -182,7 +182,18 @@ test('rejects a held output lock and unknown or duplicate CLI arguments', async 
     assert.notEqual(f.run(args).status, 0);
   await missing(f.output);
 });
-
+test('policy exclusions point at files that still exist in the repository', async () => {
+  // A stale exclusion silently stops protecting anything and hides real dead assets,
+  // so every policy path must resolve against the working tree.
+  const project = fileURLToPath(new URL('../../', import.meta.url));
+  for (const file of policy.excludedSourceFiles) {
+    const target = path.join(project, 'apps/web/public', file);
+    const stat = await lstat(target).catch(error => {
+      assert.fail(`release-public-policy.json references a missing file: apps/web/public/${file} (${error.code})`);
+    });
+    assert.ok(stat.isFile(), `excluded source must be a regular file: apps/web/public/${file}`);
+  }
+});
 test('Nginx example limits immutable assets to hash paths, exact origins and public read methods', async () => {
   const config = await readFile(new URL('./static-assets.nginx.example.conf', import.meta.url), 'utf8');
   assert.match(config, /map \$http_origin \$zimage_asset_cors_origin/);

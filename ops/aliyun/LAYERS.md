@@ -10,7 +10,7 @@ archive; it does not accept a layer or a release manifest.
 | --- | --- | --- |
 | code | Standalone application/server output, generated `.next/static` JS/CSS, application packages and build metadata | Changes with the application build |
 | dependencies | Every `node_modules` path, including internal pnpm links/native libraries | Exact lockfile SHA + Node version/ABI + Linux architecture/libc + content/index digest |
-| static | `apps/web/public` except the five precise source PNG exclusions | Exact content/index digest |
+| static | `apps/web/public` except the four precise source PNG exclusions | Exact content/index digest |
 | fonts | `apps/web/server/apparel/fonts`, including license/provenance | Exact content/index digest |
 
 Daily code bytes include the code tgz, its file index, and the entire release
@@ -113,14 +113,16 @@ directories and symlinks and public/dependency lookalikes remain untouched.
 The user's clarified5,000,000-byte uncompressed goal is not met: current QA
 business output is42,545,964bytes and complete runtime files155,934,878bytes
 after separating70 trace files (2,751,629bytes). All necessary client output,
-dependencies and fonts are counted. See [raw-size evidence and limitations](../../doc/qa/2026-10-26-release-uncompressed-budget.md).
+dependencies and fonts are counted. These figures are measured, not estimated;
+re-measure with `apps/web/scripts/measure-dist.mjs` on a Linux build of the
+commit under review instead of trusting this snapshot.
 
 Code layers use gzip9 with encoding settings bound into the index identity;
 other layers use gzip6. Current matching-version QA after trace separation has
 daily code9,559,119bytes, including client JS/CSS/index/manifest. First required
 download is69,643,254bytes, plus11,233,126bytes if source maps and175,628bytes if
-traces are fetched. Earlier [QA evidence](../../doc/qa/2026-10-26-release-slim-current-qa.md)
-records the preserved pre-trace-exclusion baseline.
+traces are fetched. The preserved pre-trace-exclusion baseline is the same
+figures above before trace separation.
 
 ```sh
 node --test ops/aliyun/package-release.test.mjs

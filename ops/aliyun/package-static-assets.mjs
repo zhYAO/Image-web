@@ -103,7 +103,8 @@ async function packageAssets(project, output) {
     await mustNotExist(output);
     const policy = JSON.parse(await checkedRead(fileURLToPath(new URL('./release-public-policy.json', import.meta.url))));
     const excluded = new Set(policy.excludedSourceFiles.map(safePath));
-    if (excluded.size !== 5 || policy.excludedSourceFiles.length !== 5) throw new Error('Expected exactly five source exclusions');
+    // Any change to the exclusion list must be a deliberate policy edit, not a typo.
+    if (excluded.size !== 4 || policy.excludedSourceFiles.length !== 4) throw new Error('Expected exactly four source exclusions');
     const publicFiles = (await walk(publicRoot)).filter(file => !excluded.has(file));
     const fonts = await walk(fontRoot);
     if (JSON.stringify(fonts) !== JSON.stringify(fontNames)) throw new Error('Font directory must contain exactly the two fonts, LICENSE.txt and README.md');

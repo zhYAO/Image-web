@@ -11,6 +11,8 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage --testTimeout=60000",
     "test:acceptance-budget": "node --test scripts/real-acceptance-budget.test.mjs",
+    "test:build-profile": "node --test scripts/markdown-build-profile.test.mjs",
+    "measure:dist": "node scripts/measure-dist.mjs",
     "setup:langgraph": "node scripts/setup-langgraph.mjs"
   },
   "dependencies": {

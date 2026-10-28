@@ -8,7 +8,6 @@ import { spawnSync } from 'node:child_process';
 
 const script = fileURLToPath(new URL('./package-release.mjs', import.meta.url));
 const excluded = [
-  'commerce/apparel-v1/source-contact-sheet.png',
   'commerce/apparel-v2/source-hero.png',
   'commerce/apparel-v2/source-detail.png',
   'commerce/apparel-v2/source-lifestyle.png',
@@ -30,16 +29,15 @@ async function fixture(t) {
     await put(`apps/web/public/${name}`);
     await put(`dist/standalone/apps/web/public/${name}`);
   }
-  const kept = ['commerce/apparel-v1/manifest.json', 'commerce/apparel-v2/manifest.json',
+  const kept = ['commerce/apparel-v2/manifest.json',
     'commerce/apparel-v2/source-hero-extra.png', 'other/source-hero.png'];
-  for (const version of ['apparel-v1', 'apparel-v2'])
-    for (const file of ['main-1', 'main-2', 'main-3', 'main-4', 'main-5', 'detail-01', 'detail-03', 'detail-04', 'detail-05', 'detail-06', 'detail-07'])
-      for (const extension of ['jpg', 'webp']) kept.push(`commerce/${version}/${file}.${extension}`);
+  for (const file of ['main-1', 'main-2', 'main-3', 'main-4', 'main-5', 'detail-01', 'detail-03', 'detail-04', 'detail-05', 'detail-06', 'detail-07'])
+    for (const extension of ['jpg', 'webp']) kept.push(`commerce/apparel-v2/${file}.${extension}`);
   for (const name of kept) await put(`apps/web/public/${name}`);
   const destination = path.join(root, 'release');
   return { root, put, kept, destination, run: () => spawnSync(process.execPath, [script, 'dist', destination], { cwd: root, encoding: 'utf8' }) };
 }
-test('excludes precisely five source PNGs from both copy paths, retaining originals and public outputs', async t => {
+test('excludes precisely four source PNGs from both copy paths, retaining originals and public outputs', async t => {
   const f = await fixture(t), result = f.run();
   assert.equal(result.status, 0, result.stderr);
   for (const name of excluded) {

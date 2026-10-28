@@ -42,6 +42,9 @@ jobs:
           pnpm --filter @zimage/domain test:coverage
           pnpm --filter @zimage/web exec vitest run --coverage --maxWorkers=1 --testTimeout=120000
       - run: pnpm --filter @zimage/web test:acceptance-budget
+      # Guards the release-slimming module aliases against dependency drift:
+      # the profile throws if @lobehub/ui / next / shiki versions move.
+      - run: node --test apps/web/scripts/markdown-build-profile.test.mjs
       - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
       - run: pnpm exec vitest run supabase/functions/generation-worker supabase/functions/cleanup-worker
       - run: pnpm build
@@ -96,6 +99,10 @@ jobs:
           NEXT_PUBLIC_PHASE2_AUTH: 'true'
           ZIMAGE_DEPLOYMENT_ENV: production
           ZIMAGE_BUILD_SHA: ${{ github.sha }}
+          # Release slimming. Webpack is required: the profile rewrites modules
+          # via NormalModuleReplacementPlugin, which Turbopack does not apply.
+          ZIMAGE_BUILD_SLIM: '1'
+          NEXT_PUBLIC_STATIC_ASSET_BASE_URL: ${{ vars.NEXT_PUBLIC_STATIC_ASSET_BASE_URL }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
@@ -103,12 +110,36 @@ jobs:
           NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${{ vars.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE }}
       - name: Verify retired route HTTP status before packaging
         run: node apps/web/scripts/verify-built-retired-route.mjs
+      - name: Assert release slimming took effect
+        run: node apps/web/scripts/measure-dist.mjs --assert-slim --json /tmp/zimage-dist-report.json
       - run: node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dist-size-report
+          path: /tmp/zimage-dist-report.json
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: production-${{ github.sha }}
           path: /tmp/zimage-release.tgz
           retention-days: 7
+      # Debug-only sidecars. They never reach the server, but losing them means
+      # no source maps for a bad production release.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-debug-maps-${{ github.sha }}
+          path: /tmp/zimage-release.debug-maps.tgz
+          retention-days: 7
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-build-traces-${{ github.sha }}
+          path: /tmp/zimage-release.build-traces.tgz
+          retention-days: 7
+          if-no-files-found: ignore
 
   deploy:
     environment: production

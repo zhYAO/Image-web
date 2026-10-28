@@ -6,7 +6,7 @@
 
 新增 `release-three-layer.py` 管理员适配器和回归测试，接入原 `release.py` 的严格健康检查/精确恢复，旧完整包入口未修改。它提供本地 `bundle`、固定路径root `deploy/rollback` 及纯输出 `systemd-template`；不是只有方案。所有现有QA包仍被真实source/build SHA、规范.next、精确www资源URL等生产门禁拒绝，原清单/productionReady:false不改写。
 
-真实匹配环境现已通过：官方固定摘要Ubuntu22.04容器内Node24.19.0/ABI137/Node-API10/glibc2.35，现有pnpm、SWC、Sharp、两字体/六次编解码及49项分层回归成功。复用现成Python并隔离site-packages，不需要继续尝试DNS失败的apt安装。详见[平台执行证据](../../doc/qa/2026-10-27-production-platform-plan.md)。
+真实匹配环境现已通过：官方固定摘要Ubuntu22.04容器内Node24.19.0/ABI137/Node-API10/glibc2.35，现有pnpm、SWC、Sharp、两字体/六次编解码及49项分层回归成功。复用现成Python并隔离site-packages，不需要继续尝试DNS失败的apt安装。该平台证据来自本分支的本地容器执行，尚未附可独立复核的报告文件；生产激活前须按第 4 节重新在同规格主机上复跑并留档。
 
 五项公开变量在一次Library物化download failed后，已由父会话另作受控原文件字节交付，387bytes/SHA及五键白名单验真，0600存仓库外、不输出值。文件名中的2a4298ad仅是交付名称；构建标记必须使用包含新适配代码的最终commit，不能沿用旧SHA。现存Turnstile值为官方always-pass测试sitekey，候选按原生产变量保留，不创建/换key或关闭校验；真实后端CAPTCHA行为未验证，生产激活前须明确报告/处置这一既有风险，不能声称真实挑战通过。
 
@@ -68,7 +68,7 @@ NEXT_PUBLIC_STATIC_ASSET_BASE_URL=https://www.zimage.store/static-assets/e68a455
 
 1. 冻结最终commit，确认工作区业务源/锁文件无未记录修改，保存确切SHA、公开配置摘要和构建平台。检查旧构建不被活跃进程占用，保留所有旧QA及正式产物；必要时先移出已验证QA输出，不直接删除。
 2. 用正确公开配置执行一次有目的的 `next build --webpack`，规范 `.next`。检查退出码、BUILD_ID和编译配置中的完整commit、HTTP/auth模式、精确资源URL；不泄漏私密runtime配置。
-3. 从该产物staging完整standalone、client static和精确public清单；现有 `package-release.mjs`支持规范.next并把maps/NFT归档独立保留。保留本生产版本调试资料，不因尚未上传Sentry而声称线上符号化通过。原始5张PNG仅从发布清单排除，源码及来源manifest保留。
+3. 从该产物staging完整standalone、client static和精确public清单；现有 `package-release.mjs`支持规范.next并把maps/NFT归档独立保留。保留本生产版本调试资料，不因尚未上传Sentry而声称线上符号化通过。原始4张PNG仅从发布清单排除，源码及来源manifest保留。
 4. 使用 `three-layer-release.py pack`，传入真实production staging、不可变资源目录、项目、最终commit、新release ID及ECS精确cache根。省略 `--code-raw-budget`即无硬门槛。保存trusted release-manifest SHA、每层archive/index SHA和精确raw/transfer报告。禁止覆盖已有ID或修改旧QA包。
 5. 本工具始终报告 `productionReady:false`，表示**未进行生产激活/验收的装配器产物**；assemble要求显式 `--allow-sample`。即使源是正确生产构建，也不能靠把该字段改true取得放行。主会话必须明确审核这一工具边界、实际路径权限与生产装配后独立验收；当前QA包任何时候均不允许上传部署。
 
@@ -86,4 +86,4 @@ NEXT_PUBLIC_STATIC_ASSET_BASE_URL=https://www.zimage.store/static-assets/e68a455
 
 回滚资源与运行依赖必须跟旧清单保留；不更新latest、不覆盖hash目录、不提前GC。原线上完整release可独立回退，不强迫它使用新共享层。首次部署共享层总量必须完整报告，日常复用层省传输不等于资源消失。
 
-当前QA的实测、独立审核和未验证项见 [最终本地验证](../../doc/qa/2026-10-27-three-layer-validation.md)。
+当前QA的实测、独立审核和未验证项没有单独报告文件；以本机重跑 `three-layer-release.py` 与 `release-layers.py` 的输出、各层 archive/index SHA 及 raw/transfer 报告为唯一证据，不得引用已删除的历史QA文档，也不得把本地Mock结果当作生产验收。

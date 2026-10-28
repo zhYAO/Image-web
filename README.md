@@ -10,7 +10,7 @@ Phase 1 Web 统一图片工作台：在同一个可恢复时间线中流式聊�
 
 `/` 和 `/home` 共用品牌介绍首页；`/workspace` 是唯一聊天与生图工作区，`/chat`、`/image` 兼容入口重定向到 `/workspace`。`/create` 进入电商工具目录，`/assets` 按当前账号的会话查看生成图片，`/account` 管理账号及积分。资产页目前是会话记录视图，不提供全局资产索引或收藏服务。
 
-本轮视觉来源、许可证及真实服务映射见 [整合记录](doc/plans/2026-10-22-react-bits-integration.md)。邮箱认证保留原流程；手机号入口明确未接入短信且禁用。
+本轮视觉来源、许可证及真实服务映射见 `apps/web/public/licenses/react-bits-NOTICE.txt` 与 [DESIGN.md](DESIGN.md)。邮箱认证保留原流程；手机号入口明确未接入短信且禁用。
 
 ## 本地开发
 

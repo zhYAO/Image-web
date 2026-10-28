@@ -23,7 +23,7 @@ The tool detects exactly one `apps/web/.next/required-server-files.json` or `app
 
 Compiled image `remotePatterns` under `/static-assets/` must use HTTPS, an exact hostname/port, empty query, and exactly `/static-assets/ASSET_MANIFEST_SHA256/commerce/**`. Pack records the single `compiledAssetBaseUrl`, and assemble revalidates the actual extracted config. Identical resource payload with different manifest metadata is a different version and cannot be bound to stale compiled URLs. Builds without these patterns retain legacy local URL support.
 
-All staged public/font files must match the independent asset manifest before being excluded. Missing public/font directories in standalone output are supported; the independent asset package must still be complete. The five original source PNG exclusions were already applied by resource/staging packaging; an unexpected staged source PNG is rejected, not silently discarded.
+All staged public/font files must match the independent asset manifest before being excluded. Missing public/font directories in standalone output are supported; the independent asset package must still be complete. The four original source PNG exclusions were already applied by resource/staging packaging; an unexpected staged source PNG is rejected, not silently discarded.
 
 `assets` uses the original `asset-manifest.json` bytes as its file index and SHA identity. Its archive contains the 95 resource files, with the original manifest stored alongside the extracted cache for verification/font consumers. Fonts, licenses and provenance are public by explicit choice; private Storage content is excluded.
 

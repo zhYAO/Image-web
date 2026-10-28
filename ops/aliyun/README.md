@@ -16,6 +16,8 @@
 
 使用锁定版本执行 `pnpm install --frozen-lockfile` 和 `pnpm build`。构建环境必须设置 `NEXT_PUBLIC_DATA_MODE=http`、`ZIMAGE_DEPLOYMENT_ENV=production`；所有 `NEXT_PUBLIC_*` 必须在构建前确定。小内存实例使用 `ZIMAGE_BUILD_CPUS=1 pnpm --filter @zimage/web exec next build --webpack`，并通过 systemd 构建单元限制内存、CPU 和交换空间，避免同时进行其他构建。V8 的堆上限不能限制 Turbopack 的全部原生内存。
 
+发布构建必须同时设置 `ZIMAGE_BUILD_SLIM=1`，并且只能用 `next build --webpack`：该开关通过 `NormalModuleReplacementPlugin` 和 `outputFileTracingExcludes` 生效，Turbopack 不会应用。它去掉 Next 静态追踪进来的开发入口（esbuild、`next-dev-server`、`setup-dev-bundler`、babel bundle 等约 37 MB），以及 SSR 从不执行的 Markdown 分支（Shiki、ELK、KaTeX、Octicons 等）。别名由 `apps/web/build/markdown-profile.mjs` 生成，该文件对 `@lobehub/ui` / `next` / `shiki` 有版本断言，升级依赖必须先更新 profile，否则构建直接失败。构建完成后执行 `node apps/web/scripts/measure-dist.mjs --assert-slim`，它会按 `package-release.mjs` 的同一输入集统计字节，并在发现开发入口残留时以退出码 1 阻断打包。
+
 将 `apps/web/.next/standalone/` 的内容复制到独立 release 目录，再将 `apps/web/public/` 和 `apps/web/.next/static/` 分别复制到 release 中的 `apps/web/public/` 和 `apps/web/.next/static/`。发布目录由 zimage 用户运行；不要复制构建时的 `.env.production`。检查产物不含服务端凭据后，再切换 current 并启动 `zimage.service`。
 
 `zimage.service` 和 `nginx.conf` 是部署模板；HTTPS 模板须在真实证书签发后才能启用。应用仅监听回环地址，Nginx 覆写可信代理头，关闭响应缓冲以支持流式聊天。
