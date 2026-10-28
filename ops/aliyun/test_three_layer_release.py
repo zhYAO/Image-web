@@ -52,8 +52,8 @@ class ThreeLayers(unittest.TestCase):
         self.assets = self.root / 'input-assets' / self.m.digest(body)
         for name, value in values.items():
             self.put(self.assets / name, value)
-            staged = self.source / ('apps/web/server/apparel/' + name if name.startswith('fonts/') else 'apps/web/public/' + name)
-            self.put(staged, value)
+            if not name.startswith('fonts/'):
+                self.put(self.source / ('apps/web/public/' + name), value)
         self.put(self.assets / 'asset-manifest.json', body)
 
     def put(self, path, value):

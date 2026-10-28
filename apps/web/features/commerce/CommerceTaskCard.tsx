@@ -1,3 +1,4 @@
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "./CommerceSelect";
 import { readPending, persistPending, type PendingSubmission } from "./commerce-submission";
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
@@ -15,7 +16,7 @@ import {
   type ProviderCapability,
   type UploadReference,
 } from "@zimage/domain";
-import { Image as AntdImage } from "antd";
+
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import { CommerceDetailPreview } from "./CommerceDetailPreview";
@@ -577,7 +578,7 @@ export function CommerceTaskCard({
               <h3>
                 第 {index + 1} 张 · {slot.role}
               </h3>
-              {task.scene === 'clone' && view !== 'plan' && <figure className={styles.cloneReference}>{cloneReferenceUrl ? <AntdImage src={cloneReferenceUrl}
+              {task.scene === 'clone' && view !== 'plan' && <figure className={styles.cloneReference}>{cloneReferenceUrl ? <PreviewImage src={cloneReferenceUrl}
                 onError={() => cloneReferenceId && renewReference(cloneReferenceId, true)}
                 onClick={() => cloneReferenceId && renewReference(cloneReferenceId)}
                 alt={`第 ${index + 1} 张复刻参考图`} /> : <span>参考图 {index + 1} · 预览暂不可用</span>}<figcaption>复刻参考 → 对应结果</figcaption></figure>}
@@ -587,10 +588,10 @@ export function CommerceTaskCard({
                 </span>
               ) : imageUrl && !image?.expired ? (
                 <div className={task.scene === 'product-main' && originalUrl ? styles.originalCompare : undefined}>
-                  {task.scene === 'product-main' && originalUrl && <figure><AntdImage src={originalUrl} onError={() => {
+                  {task.scene === 'product-main' && originalUrl && <figure><PreviewImage src={originalUrl} onError={() => {
                     if (!originalRetried.current) { originalRetried.current = true; setOriginalUrl(undefined); }
                   }} alt={`${task.brief.name} 原图`} /><figcaption>商品原图</figcaption></figure>}
-                  <figure><AntdImage src={imageUrl} onError={() => image && refreshImage(image.generationId)} onClick={() => image && gateway.assetUrl && void gateway.assetUrl(image.generationId).then(result => {
+                  <figure><PreviewImage src={imageUrl} onError={() => image && refreshImage(image.generationId)} onClick={() => image && gateway.assetUrl && void gateway.assetUrl(image.generationId).then(result => {
                     if (result.url && result.url !== imageUrl) setSignedUrls(current => ({ ...current, [image.generationId]: result.url! }));
                   }).catch(() => undefined)} alt={`${task.brief.name} 第 ${index + 1} 张当前选图`} /><figcaption>生成候选 {index + 1}</figcaption></figure>
                 </div>

@@ -31,6 +31,8 @@ async function inspect(directory) {
     if (name.startsWith('.env')) throw new Error('Environment file in release');
     const full = path.join(directory, name);
     const entry = relative(destination, full);
+    if (entry.startsWith('apps/web/server/apparel/fonts/') || /NotoSansCJKsc-(Regular|Bold)\.otf$/.test(entry))
+      throw new Error('Application packages require external font resources; rebuild without traced apparel fonts.');
     if (excluded.has(entry)) throw new Error('Excluded source image in release');
     const stat = await lstat(full);
     if (stat.isDirectory()) await inspect(full);

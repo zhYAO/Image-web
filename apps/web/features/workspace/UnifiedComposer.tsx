@@ -1,3 +1,5 @@
+import { TextArea, Hint, ActionButton } from '@/features/controls/NativeControls';
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
 import type {
@@ -8,7 +10,7 @@ import type {
   Quota,
   UploadReference,
 } from "@zimage/domain";
-import { Button, Image as AntdImage, Input, Tooltip } from "antd";
+
 import {
   ArrowUp,
   Image as ImageIcon,
@@ -134,10 +136,10 @@ export function UnifiedComposer({
               >
                 <div className={styles.referencePreview}>
                   {reference.previewUrl ? (
-                    <AntdImage
+                    <PreviewImage
                       alt={`参考图 ${reference.name}`}
                       className={styles.referencePreviewImage}
-                      preview={{ mask: false }}
+
                       rootClassName={styles.referencePreviewImage}
                       src={reference.previewUrl}
                     />
@@ -182,11 +184,11 @@ export function UnifiedComposer({
             )}
           </div>
         )}
-        <Input.TextArea
+        <TextArea
           aria-describedby="composer-help"
           aria-label="创作输入"
           id="creation-prompt"
-          autoSize={{ maxRows: 5, minRows: 3 }}
+          autoResize={{ maxRows: 5, minRows: 3 }}
           className={styles.composerInput}
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
@@ -199,7 +201,7 @@ export function UnifiedComposer({
               : zhCN.composer.chatPlaceholder
           }
           value={draft}
-          variant="borderless"
+          borderless
         />
       </div>
       <div className={styles.composerActions}>
@@ -241,8 +243,8 @@ export function UnifiedComposer({
               selectedModel={selectedChatModel}
             />
           )}
-          <Tooltip title="开启后，描述你想生成的图片">
-            <Button
+          <Hint title="开启后，描述你想生成的图片">
+            <ActionButton
               aria-label="创建图片"
               aria-pressed={imageCreationEnabled}
               className={`${styles.toolbarButton} ${imageCreationEnabled ? styles.toolbarButtonActive : ""}`}
@@ -251,9 +253,9 @@ export function UnifiedComposer({
               onClick={() => onImageCreationChange(!imageCreationEnabled)}
             >
               创建图片
-            </Button>
-          </Tooltip>
-          <Button
+            </ActionButton>
+          </Hint>
+          <ActionButton
             aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}
             icon={<Settings2 size={15} />}
@@ -289,15 +291,15 @@ export function UnifiedComposer({
               ✦ {Math.max(0, quota.limit - quota.used)} 张
             </span>
           )}
-          <Button
+          <ActionButton
             aria-label={zhCN.composer.submit}
             className={styles.submitButton}
             disabled={disabled || submitDisabled || !draft.trim()}
             icon={<ArrowUp size={18} strokeWidth={2.5} />}
-            loading={busy}
+            busy={busy}
             onClick={onSubmit}
             shape="circle"
-            type="primary"
+            variant="primary"
           />
         </div>
       </div>

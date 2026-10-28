@@ -27,7 +27,7 @@ class ReleaseSafety(unittest.TestCase):
 
     def test_rejects_traversal_credentials_and_external_links(self):
         for name, link in [('../escaped', None), ('/etc/file', None), ('apps/web/.env.local', None),
-                           ('node_modules/link', '../../../etc'), ('link', '/etc')]:
+                           ('.runtime-assets.env', None), ('node_modules/link', '../../../etc'), ('link', '/etc')]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
                 root = pathlib.Path(temp).resolve()
                 with self.assertRaises(ValueError):
@@ -70,7 +70,7 @@ class ReleaseSafety(unittest.TestCase):
             old.mkdir()
             current = root / 'current'
             current.symlink_to(old)
-            with patch.object(release, 'CURRENT', current), patch.object(release, 'switch') as switch, patch.object(release, 'wait_healthy', side_effect=[RuntimeError('unhealthy'), None]) as health:
+            with patch.object(release, 'CURRENT', current), patch.object(release, 'font_preflight'), patch.object(release, 'switch') as switch, patch.object(release, 'wait_healthy', side_effect=[RuntimeError('unhealthy'), None]) as health:
                 with self.assertRaisesRegex(RuntimeError, 'unhealthy'):
                     release.activate(new)
                 self.assertEqual(switch.call_args_list, [call(new), call(old)])
@@ -83,7 +83,7 @@ class ReleaseSafety(unittest.TestCase):
             old.mkdir()
             current, previous = root / 'current', root / 'previous'
             current.symlink_to(old)
-            with patch.object(release, 'ROOT', root), patch.object(release, 'CURRENT', current), patch.object(release, 'PREVIOUS', previous), patch.object(release, 'switch'), patch.object(release, 'wait_healthy'):
+            with patch.object(release, 'ROOT', root), patch.object(release, 'CURRENT', current), patch.object(release, 'PREVIOUS', previous), patch.object(release, 'font_preflight'), patch.object(release, 'switch'), patch.object(release, 'wait_healthy'):
                 release.activate(new)
                 self.assertEqual(previous.resolve(), old)
 
@@ -101,6 +101,7 @@ class ReleaseSafety(unittest.TestCase):
                  patch.object(release.os, 'geteuid', return_value=0), \
                  patch.object(release.sys, 'argv', ['zimage-release', 'rollback', original.name]), \
                  patch.object(release.subprocess, 'run') as systemctl, \
+                 patch.object(release, 'font_preflight'), \
                  patch.object(release, 'wait_healthy', side_effect=[RuntimeError('restoration TLS failed'), None]):
                 with self.assertRaisesRegex(RuntimeError, 'restoration TLS failed'):
                     release.main()

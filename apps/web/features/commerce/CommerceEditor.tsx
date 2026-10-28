@@ -1,9 +1,11 @@
 "use client";
 
+import { ContentDialog } from '@/features/controls/NativeControls';
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { publicAssetUrl } from "@/lib/public-assets";
 
 import { useState, type ReactNode } from "react";
-import { Image as Preview, Modal } from "antd";
+
 import Image from "next/image";
 import {
   ArrowRight,
@@ -254,7 +256,7 @@ function Uploader({
             {entries.map(({ ref, index }) => (
               <div key={`${ref.name}:${index}`}>
                 {ref.previewUrl ? (
-                  <Preview
+                  <PreviewImage
                     src={ref.previewUrl}
                     width={76}
                     height={76}
@@ -517,13 +519,13 @@ export function ProductSetFlow({ p }: { p: CommerceEditorProps }) {
           复制文案
         </button>
       </details>
-      <Modal
+      <ContentDialog
         title="选择卖点图版式参考"
         open={layoutOpen}
-        onCancel={() => setLayoutOpen(false)}
-        onOk={() => setLayoutOpen(false)}
-        okText="完成"
-        cancelButtonProps={{ style: { display: "none" } }}
+        onClose={() => setLayoutOpen(false)}
+        onConfirm={() => setLayoutOpen(false)}
+        confirmLabel="完成"
+        hideCancel
         width={720}
         className={styles.layoutModal}
       >
@@ -546,7 +548,7 @@ export function ProductSetFlow({ p }: { p: CommerceEditorProps }) {
             </CommerceSelect>
           </label>
         ))}
-      </Modal>
+      </ContentDialog>
     </>
   );
 }
@@ -976,7 +978,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
                   <span>原图预览 · {p.count} 张候选</span>
                 </div>
                 <div className={styles.productCanvas}>
-                  <Preview src={product.previewUrl} alt="商品原图" />
+                  <PreviewImage src={product.previewUrl} alt="商品原图" />
                 </div>
               </>
             ) : (

@@ -80,7 +80,7 @@ describe("apparel form in the shared commerce workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "加载 首图/1.jpg" }));
     fireEvent.click(screen.getByRole("img", { name: "首图/1.jpg" }));
     await waitFor(() => expect(screen.getByText("1 / 2")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "close" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭图片" }));
     const replacement = {
       ...task,
       runs: [{ ...task.runs[0]!, id: apparelIds[5]! }],

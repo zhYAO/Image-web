@@ -11,7 +11,7 @@
 // --assert-slim exits nonzero when the trace still contains Next development
 // entrypoints or esbuild, i.e. when ZIMAGE_BUILD_SLIM=1 did not take effect.
 
-import { lstat, readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, readFile, readdir, readlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,7 +65,7 @@ async function walk(root, prefix, files, links) {
     }
     if (entry.isSymbolicLink()) {
       // The runtime ships the link itself; only its target text has bytes.
-      links.push(relative);
+      links.push({ path: relative, bytes: Buffer.byteLength(await readlink(absolute), 'utf8') });
       continue;
     }
     const stat = await lstat(absolute);
@@ -132,9 +132,16 @@ const diagnostics = { files: 0, bytes: 0 };
 const seen = new Set();
 let excludedPublic = { files: 0, bytes: 0 };
 
-for (const file of files) {
-  // pnpm/workspace links can surface the same path twice; count once.
-  if (seen.has(file.path)) continue;
+// Later static/public copies replace standalone files, as in package-release.mjs.
+const finalFiles = new Map(files.map(file => [file.path, file]));
+const finalLinks = new Map(links.map(link => [link.path, link]));
+for (const name of finalLinks.keys()) {
+  if (finalFiles.has(name)) throw new Error('Conflicting file/link release inputs: ' + name);
+}
+const runtimeLinks = [...finalLinks.values()].filter(link => !EXCLUDED_PUBLIC.has(link.path) && !isDiagnostic(link.path));
+const symlinkTargetBytes = runtimeLinks.reduce((sum, link) => sum + link.bytes, 0);
+
+for (const file of finalFiles.values()) {
   seen.add(file.path);
   if (EXCLUDED_PUBLIC.has(file.path)) {
     excludedPublic.files += 1;
@@ -180,7 +187,7 @@ function seenEntries(set, marker) {
 }
 
 console.log(`Release inputs: ${path.relative(repoRoot, dist)} (standalone + static + public)`);
-console.log(`Regular files: ${seen.size}, symlinks: ${links.length} (not followed, ${links.reduce((sum, link) => sum + link.length, 0)} bytes of target text)`);
+console.log(`Regular files: ${seen.size}, symlinks: ${runtimeLinks.length} (not followed, ${symlinkTargetBytes} bytes of target text)`);
 console.log('');
 console.log(table(rows));
 console.log('');
@@ -191,9 +198,11 @@ console.log(`Slim trace check: ${leaked.length ? `FAIL — development output pr
 if (options.json) {
   await writeFile(path.resolve(repoRoot, options.json), JSON.stringify({
     dist: path.relative(repoRoot, dist).split(path.sep).join('/'),
-    regularFiles: seen.size + diagnostics.files,
-    symlinks: links.length,
-    symlinkTargetBytes: links.reduce((sum, link) => sum + link.length, 0),
+    // Unique input files include separately reported diagnostics and exclusions.
+    regularFiles: seen.size,
+    runtimeRegularFiles: Object.values(totals).reduce((sum, bucket) => sum + bucket.files, 0),
+    symlinks: runtimeLinks.length,
+    symlinkTargetBytes,
     categories: Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, { ...value }])),
     businessBytes: business,
     completeRuntimeBytes: total,

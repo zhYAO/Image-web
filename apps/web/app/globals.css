@@ -1,17 +1,17 @@
 :root {
-  --z-bg: #f7f6fa;
+  --z-bg: #f5f4f8;
   --z-bg-gradient:
     radial-gradient(
       ellipse at 85% 0%,
       rgba(197, 177, 230, 0.18),
       transparent 48%
     ),
-    linear-gradient(#f7f6fa, #f7f6fa);
+    linear-gradient(#f5f4f8, #f5f4f8);
   --z-panel: #fff;
   --z-panel-strong: #fff;
-  --z-text: #25232a;
-  --z-muted: #6f687a;
-  --z-placeholder: #6f687a;
+  --z-text: #292630;
+  --z-muted: #736d7d;
+  --z-placeholder: #736d7d;
   --z-focus: #7050b5;
   --z-control-bg: #fff;
   --z-disabled: #817a8a;
@@ -22,9 +22,9 @@
   --z-warning-soft: #fff3df;
   --z-error: #b42318;
   --z-error-soft: #fdeeeb;
-  --z-border: #e6e1ec;
+  --z-border: #e1dce8;
   --z-border-subtle: #eeeaf3;
-  --z-border-control: #8b819b;
+  --z-border-control: #aaa0b7;
   --z-primary: #7050b5;
   --z-primary-hover: #6243a3;
   --z-primary-active: #53368e;
@@ -92,15 +92,15 @@
       transparent 48%
     ),
     linear-gradient(#17141e, #17141e);
-  --z-panel: #211e29;
+  --z-panel: #25212d;
   --z-panel-strong: #292431;
-  --z-control-bg: #211e29;
-  --z-glass-control: #211e29;
-  --z-text: #f3eff8;
-  --z-muted: #beb3cc;
-  --z-placeholder: #beb3cc;
-  --z-primary: #b79be5;
-  --z-primary-hover: #c7aff0;
+  --z-control-bg: #25212d;
+  --z-glass-control: #25212d;
+  --z-text: #f2edf7;
+  --z-muted: #bdb2cb;
+  --z-placeholder: #bdb2cb;
+  --z-primary: #b99ae9;
+  --z-primary-hover: #cab1ed;
   --z-primary-active: #a98ad8;
   --z-primary-soft: #352a46;
   --z-focus: #c7aff0;
@@ -132,64 +132,6 @@
   --z-shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 /* Bridge server-rendered component variables until the coordinated dark provider hydrates. */
-html[data-z-theme="dark"] .zimage {
-  --ant-color-bg-layout: var(--z-bg);
-  --ant-color-bg-container: var(--z-panel);
-  --ant-color-bg-elevated: var(--z-panel-strong);
-  --ant-color-text: var(--z-text);
-  --ant-color-text-secondary: var(--z-muted);
-  --ant-color-text-heading: var(--z-text);
-  --ant-color-text-description: var(--z-muted);
-  --ant-color-text-tertiary: var(--z-muted);
-  --ant-color-text-quaternary: var(--z-muted);
-  --ant-color-text-disabled: var(--z-disabled);
-  --ant-color-text-placeholder: var(--z-placeholder);
-  --ant-color-border: var(--z-border-control);
-  --ant-color-border-secondary: var(--z-border);
-  --ant-color-primary: var(--z-primary);
-  --ant-color-primary-hover: var(--z-primary-hover);
-  --ant-color-primary-active: var(--z-primary-active);
-  --ant-color-primary-bg: var(--z-primary-soft);
-  --ant-color-text-light-solid: var(--z-on-primary);
-  --ant-color-link: var(--z-primary);
-  --ant-color-link-hover: var(--z-primary-hover);
-  --ant-color-link-active: var(--z-primary-active);
-  --ant-color-bg-container-disabled: var(--z-disabled-bg);
-  --ant-button-default-bg: var(--z-panel);
-  --ant-button-default-color: var(--z-text);
-  --ant-button-default-border-color: var(--z-border-control);
-  --ant-button-primary-color: var(--z-on-primary);
-  --ant-button-default-hover-bg: var(--z-primary-soft);
-  --ant-button-default-hover-color: var(--z-primary);
-  --ant-button-default-hover-border-color: var(--z-primary);
-  --ant-button-default-active-bg: var(--z-primary-soft);
-  --ant-button-default-active-color: var(--z-primary-active);
-  --ant-button-default-bg-disabled: var(--z-disabled-bg);
-  --ant-button-default-color-disabled: var(--z-disabled);
-  --ant-button-border-color-disabled: var(--z-border-subtle);
-  --ant-button-text-text-color: var(--z-text);
-  --ant-button-text-text-hover-color: var(--z-primary);
-  --ant-button-text-text-active-color: var(--z-primary-active);
-  --ant-button-text-hover-bg: var(--z-primary-soft);
-  --ant-button-text-active-bg: var(--z-primary-soft);
-  --ant-select-selector-bg: var(--z-control-bg);
-  --ant-select-option-selected-bg: var(--z-primary-soft);
-  --ant-select-option-selected-color: var(--z-primary);
-  --ant-select-option-active-bg: var(--z-primary-soft);
-  --ant-select-clear-bg: var(--z-control-bg);
-  --ant-select-hover-border-color: var(--z-primary);
-  --ant-select-active-border-color: var(--z-primary);
-  --ant-input-hover-bg: var(--z-control-bg);
-  --ant-input-active-bg: var(--z-control-bg);
-  --ant-input-hover-border-color: var(--z-primary);
-  --ant-input-active-border-color: var(--z-primary);
-  --ant-input-number-hover-bg: var(--z-control-bg);
-  --ant-input-number-active-bg: var(--z-control-bg);
-  --ant-input-number-handle-bg: var(--z-control-bg);
-  --ant-input-number-filled-handle-bg: var(--z-control-bg);
-  --ant-input-number-handle-border-color: var(--z-border-control);
-  --ant-input-number-handle-hover-color: var(--z-primary);
-}
 * {
   box-sizing: border-box;
 }
@@ -200,13 +142,8 @@ body {
   background: var(--z-bg-gradient);
   color: var(--z-text);
 }
-body .ant-app {
-  color: var(--z-text);
-  background: transparent;
-}
-/* Lobe's essential override also sets primary text; keep our paired foreground. */
 body
-  .ant-btn.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):not(
+  .zi-control-button.zi-control-button[data-variant="primary"]:not(:disabled):not([disabled]):not(
     [aria-disabled="true"]
   ) {
   color: var(--z-on-primary) !important;
@@ -252,7 +189,6 @@ textarea:disabled::placeholder {
 body :is(input, textarea, select):is(:user-invalid, [aria-invalid="true"]) {
   border-color: var(--z-error) !important;
 }
-/* Only the outer shell of composite controls draws the keyboard ring. */
 body
   :is(
     button,
@@ -262,32 +198,9 @@ body
     select,
     summary,
     [role="button"]
-  ):focus-visible:not(:disabled):not([aria-disabled="true"]),
-body
-  :is(
-    .ant-select,
-    .ant-input-affix-wrapper,
-    .ant-input-number,
-    .ant-checkbox,
-    .ant-radio
-  ):not(.ant-select-disabled):not(.ant-input-affix-wrapper-disabled):not(
-    .ant-input-number-disabled
-  ):not(.ant-checkbox-disabled):not(.ant-radio-disabled):has(
-    input:focus-visible:not(:disabled)
-  ) {
+  ):focus-visible:not(:disabled):not([aria-disabled="true"]) {
   outline: 3px solid var(--z-focus);
   outline-offset: 3px;
-}
-body
-  :is(
-    .ant-select,
-    .ant-input-affix-wrapper,
-    .ant-input-number,
-    .ant-checkbox,
-    .ant-radio
-  )
-  input:focus-visible:not(:disabled) {
-  outline: none;
 }
 body
   :is(button, a, input, textarea, select, [role="button"]):is(
@@ -368,8 +281,7 @@ body
 .glass-form input:not([type="checkbox"]) {
   height: 44px;
 }
-.glass-form :is(input, textarea):hover:not(:disabled),
-.glass-form :is(input, textarea):focus:not(:disabled) {
+.glass-form :is(input, textarea):hover:not(:disabled), .glass-form :is(input, textarea):focus:not(:disabled) {
   border-color: var(--z-focus);
   box-shadow: none;
 }
@@ -441,8 +353,7 @@ body
   background: var(--z-primary-soft);
   color: var(--z-primary);
 }
-.glass-form :is(button, input, textarea, select):disabled,
-.glass-primary:is(:disabled, [aria-disabled="true"]) {
+.glass-form :is(button, input, textarea, select):disabled, .glass-primary:is(:disabled, [aria-disabled="true"]) {
   background: var(--z-disabled-bg);
   color: var(--z-disabled);
   cursor: not-allowed;
@@ -548,45 +459,14 @@ body
 .account-panel > button {
   width: auto;
 }
-.workspaceDrawer .ant-drawer-content {
+.workspaceDrawer .zi-control-drawer-body {
   background: var(--z-panel);
 }
-.workspaceDrawer .ant-drawer-header {
+.workspaceDrawer .zi-control-dialog-heading {
   border-color: var(--z-border);
 }
-.ant-btn-primary {
+.zi-control-button[data-variant="primary"] {
   min-height: 44px;
-}
-.ant-tooltip .ant-tooltip-inner {
-  border-radius: 12px;
-  padding: 8px 12px;
-  font-size: 12px;
-}
-.ant-select-dropdown,
-.ant-popover .ant-popover-container,
-.ant-popover .ant-popover-inner {
-  background: var(--z-glass-overlay);
-  border: 1px solid var(--z-border);
-  box-shadow: var(--z-glass-shadow), var(--z-shadow);
-  border-radius: 18px;
-  backdrop-filter: blur(14px) saturate(120%);
-  -webkit-backdrop-filter: blur(14px) saturate(120%);
-}
-.ant-modal .ant-modal-container {
-  background: var(--z-panel-strong);
-  border: 1px solid var(--z-border);
-  box-shadow: var(--z-shadow);
-  border-radius: 24px;
-  padding: 24px;
-}
-.ant-image-preview .ant-image-preview-operations {
-  background: var(--z-panel-strong);
-  color: var(--z-text);
-  border: 1px solid var(--z-border-control);
-  border-radius: 12px;
-  box-shadow: var(--z-glass-shadow);
-  -webkit-backdrop-filter: blur(var(--z-glass-blur));
-  backdrop-filter: blur(var(--z-glass-blur));
 }
 /* Shared tactile feedback; semantic state never waits for an animation. */
 :where(button, a[role="button"], .glass-site-nav a) {
@@ -598,12 +478,6 @@ body
 ):active {
   transform: translateY(1px) scale(0.985);
   transition-duration: var(--z-duration-press);
-}
-.ant-select-dropdown,
-.ant-popover,
-.ant-modal {
-  --ant-motion-duration-mid: 0.18s;
-  --ant-motion-duration-slow: 0.22s;
 }
 
 /* Startup UI stays independent of hydration and provider initialization. */
@@ -753,9 +627,6 @@ body
   white-space: nowrap;
 }
 @media (max-width: 767px) {
-  .workspaceDrawer .ant-drawer-content-wrapper {
-    width: 100% !important;
-  }
   .workspace-loading > aside {
     display: none;
   }
@@ -802,8 +673,7 @@ body
     --z-glass-blur: 0px;
     --z-glass-highlight: 0 0 transparent;
   }
-  .glass-site-nav,
-  .ant-image-preview .ant-image-preview-operations {
+  .glass-site-nav {
     background: var(--z-panel-strong);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -822,8 +692,7 @@ body
     animation-iteration-count: 1 !important;
   }
   .loading-orbit,
-  .ant-spin-dot,
-  .anticon-loading {
+  .zi-control-spinner {
     animation: none !important;
   }
 }
@@ -860,8 +729,7 @@ body
     --z-shadow-soft: none;
     --z-glass-shadow: none;
   }
-  .glass-site-nav,
-  .ant-image-preview .ant-image-preview-operations {
+  .glass-site-nav {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -888,25 +756,10 @@ body
     --z-glass-rim: none;
     --z-glass-highlight: 0 0 transparent;
   }
-  .ant-select-dropdown,
-  .ant-popover .ant-popover-container,
-  .ant-popover .ant-popover-inner,
-  .glass-site-nav,
-  .ant-image-preview .ant-image-preview-operations {
+  .glass-site-nav {
     background: var(--z-panel-strong);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     box-shadow: none;
-  }
-}
-@supports not (
-  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
-) {
-  .ant-select-dropdown,
-  .ant-popover .ant-popover-container,
-  .ant-popover .ant-popover-inner {
-    background: var(--z-panel-strong);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 }

@@ -716,17 +716,6 @@ button.primary:hover:not(:disabled) {
   text-align: left;
   min-height: 44px;
 }
-.wizard :global(.commerce-select .ant-select-selector),
-.editPanel :global(.commerce-select .ant-select-selector) {
-  border-radius: 12px;
-  background: var(--z-panel);
-  border-color: var(--z-border-control);
-  box-shadow: none;
-}
-.wizard :global(.ant-select-selection-search-input),
-.editPanel :global(.ant-select-selection-search-input) {
-  caret-color: transparent;
-}
 .wizardControls > button:not(.primary) {
   flex: 1;
 }
@@ -1554,11 +1543,11 @@ button.primary {
   font-size: 12px;
   line-height: 1.7;
 }
-.templateGrid :global(.ant-image) {
+.templateGrid :global(.zi-control-image) {
   width: 100%;
   margin-block: 14px;
 }
-.templateGrid :global(.ant-image-img) {
+.templateGrid :global(.zi-control-image-img) {
   width: 100%;
   height: 250px;
   object-fit: contain;
@@ -1574,11 +1563,11 @@ button.primary {
   padding: 8px 0;
   color: var(--z-primary);
 }
-.structureCard :global(.ant-image) {
+.structureCard :global(.zi-control-image) {
   aspect-ratio: 1;
   width: 100%;
 }
-.structureCard :global(.ant-image-img) {
+.structureCard :global(.zi-control-image-img) {
   height: 100%;
   width: 100%;
   max-height: 380px;
@@ -1603,7 +1592,7 @@ button.primary:active:not(:disabled) {
   padding: 8px 12px;
   border-radius: 12px;
 }
-.result :global(.ant-image) {
+.result :global(.zi-control-image) {
   width: 100%;
   background: var(--z-image-bg);
   border-radius: 12px;
@@ -2011,7 +2000,7 @@ button.primary:active:not(:disabled) {
 .detailPreviewColumns ol { list-style:none; padding:0; margin:0; }
 .detailPreviewColumns li { margin:0; background:var(--z-panel); }
 .detailPreviewColumns li > span { display:block; padding:6px 10px; font-size:12px; }
-.detailPreviewColumns :global(.ant-image) { width:100%; display:block; }
+.detailPreviewColumns :global(.zi-control-image) { width:100%; display:block; }
 .detailPreviewPlaceholder { display:grid; place-items:center; min-height:140px; color:var(--z-image-text); background:var(--z-image-bg); }
 
 /* Shared material for saved task details and the apparel configuration workspace. */

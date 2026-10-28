@@ -1,3 +1,4 @@
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem, IMAGE_MODEL_UPGRADE_MESSAGE } from "@zimage/domain";
 import { CommerceEditor } from "./CommerceEditor";
@@ -28,7 +29,7 @@ import {
   type ProviderCapability,
   type UploadReference,
 } from "@zimage/domain";
-import { Image as AntdImage } from "antd";
+
 import { Layers3 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
@@ -593,7 +594,7 @@ export function CommerceWizard({
                     {references.map((reference, index) => (
                       <div key={referenceKey(reference)}>
                         {reference.previewUrl && (
-                          <AntdImage
+                          <PreviewImage
                             width={80}
                             height={80}
                             src={reference.previewUrl}

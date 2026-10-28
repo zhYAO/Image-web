@@ -26,6 +26,9 @@ INCOMING = ROOT / 'incoming'
 RELEASES = ROOT / 'releases'
 CURRENT = ROOT / 'current'
 PREVIOUS = ROOT / 'previous'
+FONT_ENV = Path('/etc/zimage/font-assets.env')
+NODE = ROOT / 'toolchain/node-v24.19.0-linux-x64/bin/node'
+SAFE_PATH = str(NODE.parent) + ':/usr/sbin:/usr/bin:/sbin:/bin'
 
 
 class LocalIngressHTTPSConnection(http.client.HTTPSConnection):
@@ -70,7 +73,7 @@ def extract_release(archive, destination):
             path = PurePosixPath(member.name)
             if path.is_absolute() or '..' in path.parts or any(p.startswith('.env') for p in path.parts):
                 raise ValueError('Unsafe archive path')
-            if str(path) in {'.release-sha', '.archive-sha256'}:
+            if str(path) in {'.release-sha', '.archive-sha256', '.runtime-assets.env'}:
                 raise ValueError('Reserved release metadata')
             if str(path) in names:
                 raise ValueError('Duplicate archive member')
@@ -153,6 +156,102 @@ def verify(base, expected=None):
             raise RuntimeError(f'{path}: requires unauthorized error')
 
 
+NATIVE_PROBE = r"""(async()=>{const sharp=require('sharp'),path=require('node:path'),fs=require('node:fs'),crypto=require('node:crypto');let codecs=0;
+const hash=b=>crypto.createHash('sha256').update(b).digest('hex'),dir=process.env.ZIMAGE_SHARED_FONT_DIR,sha=process.env.ZIMAGE_STATIC_ASSET_SHA256;
+if(!path.isAbsolute(dir)||!/^[a-f0-9]{64}$/.test(sha)||path.basename(dir)!=='fonts'||path.basename(path.dirname(dir))!==sha)throw Error('font version');
+const version=path.dirname(path.resolve(dir)),root=fs.realpathSync(version),fonts=fs.realpathSync(dir);
+if(root!==path.join(fs.realpathSync(path.dirname(version)),sha)||fonts!==path.join(root,'fonts'))throw Error('font directory alias');
+const contained=(base,file)=>{const real=fs.realpathSync(file),relative=path.relative(base,real);if(!relative||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative)||!fs.statSync(real).isFile())throw Error('font path escape');return real;};
+const body=fs.readFileSync(contained(root,path.join(version,'asset-manifest.json')));if(hash(body)!==sha)throw Error('manifest hash');
+const manifest=JSON.parse(body);if(manifest.schema!==1||!Array.isArray(manifest.files))throw Error('manifest schema');
+const seen=new Set();for(const entry of manifest.files){if(!entry||typeof entry.path!=='string'||!entry.path||entry.path.includes('\\')||path.posix.isAbsolute(entry.path)||entry.path.split('/').some(p=>!p||p==='.'||p==='..')||seen.has(entry.path)||!Number.isSafeInteger(entry.bytes)||entry.bytes<0||typeof entry.sha256!=='string'||!/^[a-f0-9]{64}$/.test(entry.sha256))throw Error('unsafe manifest entry');seen.add(entry.path);}
+for(const [name,expected] of Object.entries({
+'NotoSansCJKsc-Regular.otf':'2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b',
+'NotoSansCJKsc-Bold.otf':'b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a',
+'LICENSE.txt':'88f117575237307bdd86a17ef15e21790fc9a662fe4dfb103ca1ca077f0d9982',
+'README.md':'f314e6e822b03543d7403eb3f8331208d52356a27fe1391216d23d7599583c58'})){
+const bytes=fs.readFileSync(contained(fonts,path.join(dir,name))),entries=manifest.files.filter(e=>e.path==='fonts/'+name);
+if(entries.length!==1||entries[0].sha256!==expected||entries[0].bytes!==bytes.length||hash(bytes)!==expected)throw Error('font/license hash');
+}
+for(const [file,font] of [['NotoSansCJKsc-Regular.otf','Noto Sans CJK SC 24'],['NotoSansCJKsc-Bold.otf','Noto Sans CJK SC Bold 24']]){
+const buffer=await sharp({text:{text:'中文 Aa 123',font,fontfile:path.join(process.env.ZIMAGE_SHARED_FONT_DIR,file),rgba:true,dpi:72}}).png().toBuffer();
+const source=await sharp(buffer).metadata();if(source.format!=='png'||!source.width||!source.height)throw Error('native');
+for(const codec of ['jpeg','webp','avif']){
+const encoded=await sharp(buffer).toFormat(codec).toBuffer();const metadata=await sharp(encoded).metadata();
+if(metadata.width!==source.width||metadata.height!==source.height||metadata.format!==({jpeg:'jpeg',webp:'webp',avif:'heif'})[codec]||(codec==='avif'&&metadata.compression!=='av1'))throw Error('codec');codecs++;}}
+if(codecs!==6)throw Error('codec count');console.log(JSON.stringify({native:true,fonts:2,codecs}));
+})().catch(()=>{console.error('Native/font verification failed');process.exit(1)})"""
+
+
+def native_probe(candidate, environment, runner=subprocess.run):
+    command = ['/usr/sbin/runuser', '--user', 'zimage', '--', '/usr/bin/env', '-i', 'PATH=' + SAFE_PATH, 'NODE_ENV=production']
+    command += [key + '=' + environment[key] for key in ('ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256')]
+    command += [str(NODE), '-e', NATIVE_PROBE]
+    result = runner(command, cwd=candidate / 'apps/web', check=True, capture_output=True, text=True, timeout=90,
+                    env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'})
+    if result.returncode or json.loads(result.stdout) != {'native': True, 'fonts': 2, 'codecs': 6}:
+        raise RuntimeError('Non-root native/font candidate verification failed')
+
+
+def service_font_preflight():
+    """Query service metadata only; never read its credential environment."""
+    user = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage', '--property=User', '--value'], text=True).strip()
+    group = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage', '--property=Group', '--value'], text=True).strip()
+    files = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage', '--property=EnvironmentFiles', '--value'], text=True)
+    paths = re.findall(r'(/[^\s]+)', files)
+    if user != 'zimage' or group != 'zimage' or not paths or paths[-1] != (ROOT / 'current/.runtime-assets.env').as_posix():
+        raise ValueError('Service must use User/Group=zimage and load per-release .runtime-assets.env LAST; update reviewed systemd template')
+
+
+def read_font_environment(file):
+    try:
+        if file.is_symlink() or any(parent.is_symlink() for parent in file.parents):
+            raise ValueError('External font environment must not traverse symlinks')
+        descriptor = os.open(file, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+        with os.fdopen(descriptor, 'r') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 8192:
+                raise ValueError('Invalid external font environment file')
+            if os.name == 'posix' and (info.st_uid != os.geteuid() or info.st_mode & 0o022):
+                raise ValueError('External font environment must be root-owned and not group/world writable')
+            body = stream.read(8193)
+            after = os.fstat(stream.fileno())
+            if (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                raise ValueError('External font environment changed during preflight')
+    except OSError as error:
+        raise ValueError('Missing/unreadable external font environment: prepare /etc/zimage/font-assets.env or retained .runtime-assets.env; see FONTS.md') from error
+    values = {}
+    for line in body.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        key, separator, value = line.partition('=')
+        if not separator or key not in ('ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256') or key in values:
+            raise ValueError('Font environment accepts exactly one of each ZIMAGE_SHARED_FONT_DIR / ZIMAGE_STATIC_ASSET_SHA256; no other values')
+        values[key] = value
+    directory, sha = values.get('ZIMAGE_SHARED_FONT_DIR', ''), values.get('ZIMAGE_STATIC_ASSET_SHA256', '')
+    if (len(values) != 2 or not re.fullmatch('[a-f0-9]{64}', sha) or not Path(directory).is_absolute()
+            or Path(directory).name != 'fonts' or Path(directory).parent.name != sha
+            or any(char in directory for char in '\r\n\x00\"\'')):
+        raise ValueError('External font environment requires an absolute <manifestSHA>/fonts directory and matching SHA pair')
+    return values
+
+
+def font_preflight(target):
+    """Pin checked, non-secret resources before any current/restart mutation."""
+    binding = target / '.runtime-assets.env'
+    retained = os.path.lexists(binding)
+    environment = read_font_environment(binding if retained else FONT_ENV)
+    service_font_preflight()
+    native_probe(target, environment)
+    if not retained:
+        descriptor = os.open(binding, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        with os.fdopen(descriptor, 'w') as output:
+            output.write(''.join(key + '=' + environment[key] + '\n' for key in ('ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256')))
+            output.flush()
+            os.fsync(output.fileno())
+    return environment
+
+
 def switch(target):
     temporary = ROOT / 'current.next'
     temporary.unlink(missing_ok=True)
@@ -176,12 +275,14 @@ def wait_healthy(target):
 
 
 def activate(target, restore_previous_on_failure=True):
+    font_preflight(target)
     old = CURRENT.resolve(strict=True)
     try:
         switch(target)
         wait_healthy(target)
     except Exception:
         if old != target and restore_previous_on_failure:
+            font_preflight(old)
             switch(old)
             wait_healthy(old)
             print('Rollback verified:', old.name, flush=True)
@@ -222,7 +323,7 @@ def main():
         # Copy into a root-owned directory before verification to avoid staging-file races.
         with tempfile.TemporaryDirectory(prefix='release-', dir=ROOT) as temp:
             archive = Path(temp) / 'release.tgz'
-            descriptor = os.open(INCOMING / (sha + '.tgz'), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            descriptor = os.open(INCOMING / (sha + '.tgz'), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
             with os.fdopen(descriptor, 'rb') as source, archive.open('wb') as out:
                 if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                     raise ValueError('Incoming release must be a regular file')

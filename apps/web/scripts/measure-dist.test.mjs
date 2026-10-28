@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, symlinkSync, readlinkSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -113,4 +113,56 @@ test('refuses partial totals instead of under-reporting a missing input', () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function report(root, dist) {
+  const json = path.join(root, 'report.json');
+  run(root, dist, ['--json', json]);
+  return JSON.parse(readFileSync(json, 'utf8'));
+}
+
+test('counts unique input files once, including separately reported diagnostics', () => {
+  const { root, dist } = fixture();
+  try {
+    const result = report(root, dist);
+    assert.equal(result.regularFiles, 8);
+    assert.equal(result.diagnostics.files, 2);
+    assert.equal(result.completeRuntimeBytes, 4900);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('counts actual UTF-8 link target bytes without following the target', () => {
+  const { root, dist } = fixture();
+  try {
+    const target = path.join(root, 'external-target-with-a-long-name');
+    mkdirSync(target);
+    writeFileSync(path.join(target, 'not-shipped.txt'), Buffer.alloc(9999));
+    const link = path.join(dist, 'standalone/node_modules/x');
+    symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    const result = report(root, dist);
+    assert.equal(result.symlinks, 1);
+    assert.equal(result.symlinkTargetBytes, Buffer.byteLength(readlinkSync(link)));
+    assert.equal(result.completeRuntimeBytes, 4900);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('uses the same later static/public overrides as the release packer', () => {
+  const { root, dist } = fixture();
+  try {
+    const publicCopy = path.join(dist, 'standalone/apps/web/public/commerce');
+    const staticCopy = path.join(dist, 'standalone/apps/web/.next/static/chunks');
+    mkdirSync(publicCopy, { recursive: true });
+    mkdirSync(staticCopy, { recursive: true });
+    writeFileSync(path.join(publicCopy, 'example.png'), Buffer.alloc(100));
+    writeFileSync(path.join(staticCopy, 'main.js'), Buffer.alloc(10));
+    const assembled = path.join(root, 'assembled');
+    cpSync(path.join(dist, 'standalone'), assembled, { recursive: true, verbatimSymlinks: true });
+    cpSync(path.join(root, 'public'), path.join(assembled, 'apps/web/public'), { recursive: true });
+    cpSync(path.join(dist, 'static'), path.join(assembled, 'apps/web/.next/static'), { recursive: true });
+    const result = report(root, dist);
+    assert.equal(result.categories.publicAssets.bytes, readFileSync(path.join(assembled, 'apps/web/public/commerce/example.png')).length);
+    assert.equal(result.categories.clientStatic.bytes, readFileSync(path.join(assembled, 'apps/web/.next/static/chunks/main.js')).length);
+    assert.equal(result.completeRuntimeBytes, 4900);
+    assert.equal(result.regularFiles, 8);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -359,7 +359,7 @@ describe('workspace presentation components', () => {
     expect(screen.getByText('Google Gemini · gemini-3-pro-image · 3:4 · 2K')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('img', { name: '生成结果 1' }));
     expect(await screen.findByRole('dialog', { name: '生成结果 1' })).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '生成结果 1' })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: '重新生成第 1 张' }));
     fireEvent.click(screen.getByRole('button', { name: '批量下载' }));
@@ -597,7 +597,7 @@ describe('workspace presentation components', () => {
     expect(image).toHaveAttribute('src', 'https://example.com/preview.png');
     fireEvent.click(image);
     expect(await screen.findByRole('dialog', { name: '示例图片' })).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '示例图片' })).not.toBeInTheDocument());
   });
 

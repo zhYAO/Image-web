@@ -82,3 +82,13 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 登录后只读健康检查：在可信机器上将测试账号当前会话的完整 Cookie 放入 `ZIMAGE_AUTH_COOKIE` 环境变量，然后执行 `python3 ops/aliyun/authenticated_health.py`。它检查账号、会话列表和积分接口，不创建任务或消耗图片额度；脚本不会输出 Cookie。会话过期会返回失败，需用测试账号重新登录。不要将 Cookie 写入命令历史、工单或仓库。
 
 证书续期演练：先检查 `/etc/letsencrypt/renewal/www.zimage.store.conf` 的 authenticator；若仍为 manual DNS，不应把 `certbot.timer` 视为自动续期成功。备案和公网 HTTP 验证可用后切换为 webroot，运行 `certbot renew --dry-run`，再核对 Nginx reload hook 和公网证书到期日期。`dry-run` 成功与配置记录应写入项目进度；演练前证书自动续期状态仍为待完成。
+
+## 发布体积统计与资源默认值
+
+完整包 CI 固定留空 `NEXT_PUBLIC_STATIC_ASSET_BASE_URL`，保持 `/commerce/...` 同源资源，不自动读取同名仓库变量。手动资源分层构建仅在精确 manifest SHA 的资源已独立发布、路径/权限/HTTPS/内容匹配经核验后才显式设置该变量，参见 [三层发布说明](THREE-LAYERS.md)。本次不发布资源或改变服务器配置。
+
+测量按 standalone、static、public 的覆盖结果计数；static/public 的目标目录互不重叠，覆盖顺序与 packer 等价。`regularFiles` 为唯一普通输入文件数，包含另列的 maps/NFT 和排除源图；`runtimeRegularFiles` 和 `completeRuntimeBytes` 只计实际运行普通文件。链接不跟随，目标 UTF-8 字节另列。压缩包、目录开销、诊断归档和外置字体须另外报告，不能把应用包数字当完整系统净减。
+
+## 独立服装字体（2026-10-28）
+
+字体不再随源码或应用包发布；开发、测试和生产的准备步骤、成对环境变量、许可和完整资源核算见 [FONTS.md](./FONTS.md)。旧 standalone 含字体时必须重新构建，打包器会明确拒绝。旧四层协议仅保留历史兼容；当前外置字体使用三层资源协议。此改动未发布。全包及三层发布/回滚已共用切换前字体预检，专用非敏感配置与 systemd 模板准备见 FONTS.md；Linux 实际权限和服务验证仍待完成。

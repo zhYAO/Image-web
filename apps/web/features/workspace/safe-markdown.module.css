@@ -1,0 +1,14 @@
+.markdown { min-width: 0; overflow-wrap: anywhere; font-size: 15px; line-height: 1.7; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.markdown th, .markdown td { border: 1px solid var(--border-color, #ddd); padding: 6px 12px; }
+.markdown img { max-width: 100%; }
+.markdown blockquote { margin-left: 0; padding-left: 16px; border-left: 3px solid #8886; }
+.markdown :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: #8882; }
+.codeBlock { margin: 12px 0; overflow: hidden; border: 1px solid #8884; border-radius: 10px; background: #0d1117; color: #e6edf3; }
+.codeToolbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 12px; border-bottom: 1px solid #8884; }
+.codeToolbar button { color: inherit; background: transparent; border: 1px solid #8886; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+.codeToolbar button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.codeBlock pre { margin: 0; padding: 12px; overflow-x: auto; line-height: 1.6; }
+.codeBlock code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; white-space: pre; }

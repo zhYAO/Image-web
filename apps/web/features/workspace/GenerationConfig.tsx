@@ -1,3 +1,4 @@
+import { ActionButton, StatusBadge, TextArea } from '@/features/controls/NativeControls';
 import { GlideSelect } from '@/features/controls/GlideSelect';
 import { ModelCreditPrice } from '@/features/credits/CreditsProvider';
 import {
@@ -8,7 +9,7 @@ import {
   type ProviderHealth,
   type Skill,
 } from '@zimage/domain';
-import { Button, Input, Tag } from 'antd';
+
 import { Check, ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 
@@ -153,7 +154,7 @@ export function GenerationParameterPopover({
       onOpenChange={onOpenChange}
       open={open}
       trigger={(
-        <Button
+        <ActionButton
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label={`生成参数 ${aspectRatio} ${resolution}`}
@@ -162,7 +163,7 @@ export function GenerationParameterPopover({
           onClick={() => onOpenChange(!open)}
         >
           {resolution}<span className={styles.toolbarDivider} />{aspectRatio}
-        </Button>
+        </ActionButton>
       )}
     >
       <div className={styles.popoverSection}>
@@ -274,7 +275,7 @@ export function ImageSettingsPopover({
       onOpenChange={onOpenChange}
       open={open}
       trigger={(
-        <Button
+        <ActionButton
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label={`图片设置 ${selectedProvider ?? ''} ${selectedModel?.label ?? ''} ${aspectRatio} ${resolution} ${count}张`.trim()}
@@ -290,7 +291,7 @@ export function ImageSettingsPopover({
           <span className={styles.toolbarDivider} />
           <span>{count}张</span>
           <ChevronDown size={13} />
-        </Button>
+        </ActionButton>
       )}
     >
       <div className={styles.popoverHeading}>
@@ -298,9 +299,9 @@ export function ImageSettingsPopover({
           <div className={styles.popoverTitle}>图片生成设置</div>
           <div className={styles.popoverHint}>模型与高级参数仅在需要时调整</div>
         </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
+        <StatusBadge tone={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
           {selectedHealth?.status === 'healthy' ? '服务正常' : '服务降级'}
-        </Tag>
+        </StatusBadge>
       </div>
       <div className={styles.imageSettingsLayout}>
         <div className={styles.popoverSection}>
@@ -469,7 +470,7 @@ export function SkillPopover({
       onOpenChange={onOpenChange}
       open={open}
       trigger={(
-        <Button
+        <ActionButton
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label={selectedSkill ? `技能配置 ${selectedSkill.name}` : '选择技能'}
@@ -478,7 +479,7 @@ export function SkillPopover({
           onClick={() => onOpenChange(!open)}
         >
           {selectedSkill?.name ?? '技能'}
-        </Button>
+        </ActionButton>
       )}
     >
       <div className={styles.skillPopoverLayout}>
@@ -497,16 +498,16 @@ export function SkillPopover({
               <div className={styles.popoverTitle}>{selectedSkill?.name ?? '技能配置'}</div>
               <div className={styles.popoverHint}>{selectedSkill?.description ?? '选择左侧技能后配置生成要求'}</div>
             </div>
-            {selectedSkill && <Button aria-label="清除技能" onClick={onClear} size="small" type="text">清除</Button>}
+            {selectedSkill && <ActionButton aria-label="清除技能" onClick={onClear} size="small" variant="text">清除</ActionButton>}
           </div>
           {selectedSkill ? (
             <>
               <div className={styles.promptPreviewBlock}>
                 <span>本次方案（发送前可修改）</span>
                 {editablePrompt ? (
-                  <Input.TextArea
+                  <TextArea
                     aria-label="本次 Skill 方案"
-                    autoSize={{ maxRows: 6, minRows: 3 }}
+                    autoResize={{ maxRows: 6, minRows: 3 }}
                     onChange={(event) => onPromptChange?.(event.target.value)}
                     value={prompt}
                   />

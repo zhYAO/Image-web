@@ -189,7 +189,7 @@
   background: var(--z-panel);
   border-radius: 8px;
 }
-.results :global(.ant-image) {
+.results :global(.zi-control-image) {
   width: 100%;
 }
 .results img {

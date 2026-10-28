@@ -1,5 +1,8 @@
 'use client';
 
+import { ActionButton, ControlCluster, InlineNotice, SideDrawer } from '@/features/controls/NativeControls';
+import { ImageGallery } from '@/features/controls/PreviewImage';
+
 import {
   CHAT_PROVIDER_MODELS,
   COMMERCE_SCENES,
@@ -25,8 +28,8 @@ import {
   type UploadReference,
   type WorkspaceGateway,
 } from '@zimage/domain';
-import { Alert, Button, Drawer, Select, Space } from 'antd';
-import PreviewGroup from 'antd/es/image/PreviewGroup';
+
+
 import { Archive, ArrowDown, Menu } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
@@ -1040,8 +1043,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               value={selectedProvider && selectedModelId ? `${selectedProvider}::${selectedModelId}` : undefined}
             />
           </label>
-          <div><span className={styles.popoverLabel}>比例</span><div className={styles.mobileOptionGrid}>{selectedModel?.aspectRatios.map((ratio) => <Button key={ratio} onClick={() => setAspectRatio(ratio)} type={ratio === aspectRatio ? 'primary' : 'default'}>{ratio}</Button>)}</div></div>
-          <div><span className={styles.popoverLabel}>分辨率</span><div className={styles.mobileOptionGrid}>{selectedModel?.resolutions.map((item) => <Button key={item} onClick={() => setResolution(item)} type={item === resolution ? 'primary' : 'default'}>{item}</Button>)}</div></div>
+          <div><span className={styles.popoverLabel}>比例</span><div className={styles.mobileOptionGrid}>{selectedModel?.aspectRatios.map((ratio) => <ActionButton key={ratio} onClick={() => setAspectRatio(ratio)} variant={ratio === aspectRatio ? 'primary' : 'default'}>{ratio}</ActionButton>)}</div></div>
+          <div><span className={styles.popoverLabel}>分辨率</span><div className={styles.mobileOptionGrid}>{selectedModel?.resolutions.map((item) => <ActionButton key={item} onClick={() => setResolution(item)} variant={item === resolution ? 'primary' : 'default'}>{item}</ActionButton>)}</div></div>
         </>
       )}
     </div>
@@ -1052,22 +1055,22 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     <WorkspaceFrame panelLayout={commerceShell} collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
           <header className={styles.header}>
           <NavGlassFilter />
-          <Space className={styles.headerStart}><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
-          <Space className={styles.headerNav}>
+          <ControlCluster className={styles.headerStart}><ActionButton aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} variant="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></ControlCluster>
+          <ControlCluster className={styles.headerNav}>
             <CreditBalance /><Link className={styles.commerceHeaderLink} href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
-              <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
+              <GlideSelect ariaLabel={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={(value) => changeScenario(value as typeof scenario)} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
-              ]} size="small" value={scenario} />
+              ].map(option => ({ ...option, textValue: option.label }))} value={scenario} />
             )}
             <Link aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} href="/assets"><Archive aria-hidden size={15} /><span>{zhCN.workspace.assetLibrary}</span></Link>
-          </Space>
+          </ControlCluster>
         </header>
       }>
         {catalogueActive && <CommerceCatalogue />}
         {assetsActive && <SessionAssets key={ownerKey} gateway={gateway} sessions={sessions} ownerKey={ownerKey} loading={initializing} error={initializationError} onRetry={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }} />}
         {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
-        {feedback && <div className={styles.statusFeedback}><Alert action={feedback.retrySessionId ? <Button onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</Button> : undefined} closable onClose={() => setFeedback(undefined)} role="alert" showIcon title={feedback.message} type={feedback.error ? 'error' : 'info'} /></div>}
+        {feedback && <div className={styles.statusFeedback}><InlineNotice action={feedback.retrySessionId ? <ActionButton onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</ActionButton> : undefined} dismissible onDismiss={() => setFeedback(undefined)} role="alert"  title={feedback.message} tone={feedback.error ? 'error' : 'info'} /></div>}
         {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">
           {quotaError ? <span>额度暂不可用 <button type="button" onClick={() => setQuotaAttempt(value => value + 1)}>重试额度</button></span> : !quota ? <span>正在加载额度…</span> : null}
           {modelsError ? <span>模型状态暂不可用 <button type="button" onClick={() => { setModelsLoading(true); setModelsAttempt(value => value + 1); }}>重试模型</button></span> : modelsLoading ? <span>正在加载模型配置…</span> : null}
@@ -1075,7 +1078,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         {routeError && <div className={styles.statusFeedback} role="alert">{routeError} <Link href="/create">返回创作目录</Link></div>}
         <div className={styles.workspaceBody} hidden={Boolean(routeError) || catalogueActive || assetsActive}>
         {/* Release the preview overlay even when the CSS transition-end event is lost. */}
-        <PreviewGroup preview={{ motionName: '' }}>
+        <ImageGallery >
           <div aria-label="对话时间线" className={`${styles.timelineScroll} ${commerceActive ? styles.commerceScroll : ""}`} onPointerDown={handleUserScrollIntent} onScroll={handleTimelineScroll} onTouchMove={handleUserScrollIntent} onWheel={handleUserScrollIntent} ref={timelineScrollRef} role="log">
             {legacyCommercePending ? <div className={styles.statusFeedback} role={initializationError ? 'alert' : 'status'}>
               {initializationError ? <><strong>暂时无法打开创作空间</strong><p>{initializationError}</p><button type="button" onClick={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }}>重新打开</button></> : '正在打开电商工作台…'}
@@ -1134,10 +1137,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
             />}
           </div>
           {!legacyCommercePending && !commerceActive && !(commerceLaunch?.sessionId === activeSessionId && commerceMode?.sessionId !== activeSessionId) && <div className={styles.composerDock}>
-            {showScrollToBottom && <Button aria-label="回到底部" className={styles.scrollToBottom} icon={<ArrowDown size={17} />} onClick={() => scrollToBottom('smooth')} shape="circle" />}
+            {showScrollToBottom && <ActionButton aria-label="回到底部" className={styles.scrollToBottom} icon={<ArrowDown size={17} />} onClick={() => scrollToBottom('smooth')} shape="circle" />}
             {imageCreationEnabled && !modelsLoading && capabilities.length > 0 && !selectedModel && <p role="alert">
               当前草稿的图片模型已停止新生成，请主动更新模型后发送。
-              <Button onClick={() => { const current = capabilities[0]; const model = current?.models[0]; if (current && model) selectModel(current.provider, model.id); }}>更新为 Seedream 5.0 Pro</Button>
+              <ActionButton onClick={() => { const current = capabilities[0]; const model = current?.models[0]; if (current && model) selectModel(current.provider, model.id); }}>更新为 Seedream 5.0 Pro</ActionButton>
             </p>}
             <UnifiedComposer
               activePopover={activePopover}
@@ -1168,10 +1171,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               selectedProvider={selectedProvider}
             />
           </div>}
-        </PreviewGroup>
+        </ImageGallery>
         </div>
-      <Drawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" size={320} title={zhCN.workspace.sessions}>{sidebar()}</Drawer>
-      <Drawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" size={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</Drawer>
+      <SideDrawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" width={320} title={zhCN.workspace.sessions}>{sidebar()}</SideDrawer>
+      <SideDrawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" width={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</SideDrawer>
     </WorkspaceFrame>
     </>
   );

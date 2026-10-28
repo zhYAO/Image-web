@@ -117,3 +117,12 @@ test('refuses to overwrite an existing build-trace archive', async t => {
   assert.notEqual(f.run().status, 0);
   assert.equal(await readFile(`${f.destination}.build-traces.tgz`, 'utf8'), 'existing trace archive');
 });
+
+test('rejects stale traced apparel font payloads instead of shipping them in the application', async t => {
+ const f=await fixture(t);
+ await f.put('dist/standalone/apps/web/server/apparel/fonts/NotoSansCJKsc-Regular.otf','stale');
+ const r=f.run();
+ assert.notEqual(r.status,0);
+ assert.match(r.stderr,/external font resources/i);
+ await assert.rejects(access(f.destination+'.tgz'));
+});

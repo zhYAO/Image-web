@@ -1,8 +1,7 @@
 'use client';
 
-import Markdown from '@lobehub/ui/es/Markdown/Markdown';
-import type { MarkdownProps } from '@lobehub/ui/es/Markdown/type';
-import { Image as AntdImage } from 'antd';
+
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { BrainCircuit, CheckCircle2, ChevronDown, Wrench } from 'lucide-react';
 import { useMemo, useState, type ComponentProps } from 'react';
 
@@ -13,6 +12,7 @@ import {
   type AssistantMessageSegment,
   type StructuredSegment,
 } from './assistant-message-segments';
+import { SafeMarkdown } from './SafeMarkdown';
 import styles from './workspace.module.css';
 
 interface AssistantMessageContentProps {
@@ -20,27 +20,17 @@ interface AssistantMessageContentProps {
   streaming?: boolean;
 }
 
-const markdownComponentProps: MarkdownProps['componentProps'] = {
-  a: {
-    rel: 'noopener noreferrer',
-  },
-  highlight: {
-    copyable: true,
-    showLanguage: true,
-  },
-};
-
 function SafeMarkdownImage({ alt, src, title }: ComponentProps<'img'> & { node?: unknown }) {
   if (typeof src !== 'string' || !/^https?:\/\//i.test(src)) {
     return null;
   }
 
   return (
-    <AntdImage
+    <PreviewImage
       alt={alt ?? ''}
       className={styles.markdownImage}
       loading="lazy"
-      preview={{ mask: false }}
+
       src={src}
       style={{ maxHeight: 520, maxWidth: '100%', objectFit: 'contain' }}
       title={title}
@@ -48,54 +38,8 @@ function SafeMarkdownImage({ alt, src, title }: ComponentProps<'img'> & { node?:
   );
 }
 
-const markdownComponents: MarkdownProps['components'] = {
-  img: SafeMarkdownImage,
-};
-
-const markdownParserProps: MarkdownProps['reactMarkdownProps'] = {
-  urlTransform(value, _key, node) {
-    const normalized = value.trim();
-    const compact = normalized.replace(/[\u0000-\u0020\u007f-\u009f]/g, '');
-
-    if (node.tagName === 'img') {
-      return /^https?:\/\//i.test(compact) ? normalized : '';
-    }
-
-    const scheme = /^([a-z][a-z\d+.-]*):/i.exec(compact)?.[1]?.toLowerCase();
-    if (!scheme || scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
-      return normalized;
-    }
-
-    return '';
-  },
-};
-
 function MarkdownContent({ children, streaming }: { children: string; streaming: boolean }) {
-  return (
-    <Markdown
-      allowHtml={false}
-      animated={streaming}
-      borderRadius={10}
-      className={styles.markdown}
-      componentProps={markdownComponentProps}
-      components={markdownComponents}
-      enableGithubAlert={false}
-      enableHtmlPreview={false}
-      enableImageGallery={false}
-      enableLatex={false}
-      enableMermaid={false}
-      enableStream={streaming}
-      fontSize={15}
-      fullFeaturedCodeBlock={false}
-      lineHeight={1.7}
-      reactMarkdownProps={markdownParserProps}
-      streamAnimationGranularity="word"
-      streamSmoothingPreset="realtime"
-      variant="chat"
-    >
-      {children}
-    </Markdown>
-  );
+  return <SafeMarkdown streaming={streaming} className={styles.markdown} imageComponent={SafeMarkdownImage}>{children}</SafeMarkdown>;
 }
 
 function blockLabel(segment: StructuredSegment) {

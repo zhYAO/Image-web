@@ -1,0 +1,109 @@
+/* Canonical product-set preview surface, shared by all image inspections. */
+.zi-control-image-preview-dialog {
+  color: var(--text);
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 22px;
+  width: min(640px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 25px 80px #231b3a25;
+}
+.zi-control-image-preview-dialog::backdrop {
+  background: rgba(35, 27, 48, 0.35);
+  backdrop-filter: blur(6px);
+}
+.zi-control-image-preview-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.zi-control-image-preview-heading h2 {
+  font-size: 16px;
+  font-weight: 550;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.zi-control-image-preview-control {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: var(--soft);
+  color: inherit;
+  cursor: pointer;
+}
+.zi-control-image-preview-control:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.zi-control-image-preview-full {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 200px);
+  width: auto;
+  height: auto;
+  margin: 0 auto 16px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.zi-control-image-preview-navigation {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+.zi-control-image-preview-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 12px;
+}
+.zi-control-image-preview-download {
+  display: inline-flex;
+  padding: 10px 16px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 13px;
+}
+.zi-control-image-preview-only .zi-control-image-preview-heading {
+  justify-content: flex-end;
+}
+@media (max-width: 767px) {
+  .zi-control-image-preview-dialog {
+    padding: 18px;
+  }
+}
+@media (forced-colors: active) {
+  .zi-control-image-preview-control {
+    border: 1px solid ButtonText;
+  }
+}
+
+.zi-control-image-preview-full[hidden] {
+  display: none;
+}
+.zi-control-image-preview-error {
+  display: flex;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.zi-control-image-preview-error p {
+  margin: 0;
+}

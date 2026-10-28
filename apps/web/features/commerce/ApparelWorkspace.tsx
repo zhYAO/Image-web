@@ -1,5 +1,6 @@
 "use client";
 
+import { PreviewImage, ImageGallery } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "@/features/commerce/CommerceSelect";
 
 import { publicAssetUrl } from "@/lib/public-assets";
@@ -13,7 +14,7 @@ import {
   type UploadReference,
 } from "@zimage/domain";
 import { useEffect, useState } from "react";
-import { Image } from "antd";
+
 import { Download, Upload, X } from "lucide-react";
 import { isLocalCommerceDraft } from "@/features/workspace/workspace-route";
 import {
@@ -363,7 +364,7 @@ export function ApparelWorkspace({
       {group(role).map((ref) => (
         <div className={styles.material} key={keyOf(ref)}>
           {ref.previewUrl && (
-            <Image
+            <PreviewImage
               src={ref.previewUrl}
               alt={ref.name}
               width={58}
@@ -601,11 +602,7 @@ export function ApparelWorkspace({
               <Download size={16} />
               下载原始 JPEG ZIP
             </button>
-            <Image.PreviewGroup
-              items={run?.assets
-                .filter((asset) => !asset.expired && asset.url)
-                .map((asset) => asset.url!)}
-            >
+            <ImageGallery sources={run?.assets.filter(asset => !asset.expired && asset.url).map(asset => ({ src: asset.url!, alt: asset.name }))}>
               <div className={styles.results}>
                 {run?.assets.map((asset) => (
                   <figure key={`${ownerKey}:${task.id}:${run.id}:${asset.id}`}>
@@ -628,28 +625,28 @@ export function ApparelWorkspace({
                   </figure>
                 ))}
               </div>
-            </Image.PreviewGroup>
+            </ImageGallery>
           </>
         ) : (
           <section className={styles.examples} aria-label="服装排版效果示例">
             <h3>排版效果示例</h3>
             <p>原创 AI 示例 · 虚构商品，仅展示排版。成分、尺码和文案不作为商品事实，也不会填入你的方案。</p>
             <p>5 张 750 × 1000 主图 + 790px 详情模块 · 点击查看原始 JPEG</p>
-            <Image.PreviewGroup>
+            <ImageGallery>
               <div className={styles.results}>
                 {examplePages.map((example) => (
                   <figure key={example.file}>
-                    <Image
+                    <PreviewImage
                       src={publicAssetUrl(`/commerce/apparel-v2/${example.file}.webp`)}
                       alt={`原创 AI 服装示例 · ${example.title}`}
                       loading="lazy"
-                      preview={{ src: publicAssetUrl(`/commerce/apparel-v2/${example.file}.jpg`) }}
+                      fullSource={publicAssetUrl(`/commerce/apparel-v2/${example.file}.jpg`)}
                     />
                     <figcaption>{example.title}<br />{example.width} × {example.height}</figcaption>
                   </figure>
                 ))}
               </div>
-            </Image.PreviewGroup>
+            </ImageGallery>
             <p>完整成品保存 90 天，修改后整套排版新版本。</p>
           </section>
         )}

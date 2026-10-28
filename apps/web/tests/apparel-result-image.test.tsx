@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Image } from "antd";
+import { ImageGallery } from "@/features/controls/PreviewImage";
 import { ApparelResultImage } from "@/features/commerce/ApparelResultImage";
 
 afterEach(() => {
@@ -38,19 +38,19 @@ describe("private apparel result visibility", () => {
       }),
     );
     render(
-      <Image.PreviewGroup items={["/private/first", "/private/last"]}>
+      <ImageGallery sources={[{ src: "/private/first", alt: "首图" }, { src: "/private/last", alt: "末图" }]}>
         <ApparelResultImage url="/private/first" name="首图" />
         <ApparelResultImage url="/private/last" name="末图" />
-      </Image.PreviewGroup>,
+      </ImageGallery>,
     );
     expect(screen.queryByRole("img")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "加载 首图" }));
     expect(screen.queryByRole("img", { name: "末图" })).toBeNull();
     fireEvent.click(screen.getByRole("img", { name: "首图" }));
     await waitFor(() => expect(screen.getByText("1 / 2")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "right" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一张图片" }));
     await waitFor(() => expect(screen.getByText("2 / 2")).toBeInTheDocument());
-    expect(document.querySelector(".ant-image-preview-img")).toHaveAttribute(
+    expect(document.querySelector(".zi-control-image-preview-full")).toHaveAttribute(
       "src",
       "/private/last",
     );

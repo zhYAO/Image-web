@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const script = fileURLToPath(new URL('./package-static-assets.mjs', import.meta.url));
+const externalFonts = process.env.ZIMAGE_SHARED_FONT_DIR;
+if (!externalFonts) throw new Error('Configure ZIMAGE_SHARED_FONT_DIR before tests');
 const policy = JSON.parse(await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=', 'base64');
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -26,11 +28,11 @@ async function fixture(t) {
   await put('apps/web/public/licenses/NOTICE.txt', 'original public notice');
   for (const file of policy.excludedSourceFiles) await put(`apps/web/public/${file}`, 'original excluded source');
   for (const file of ['NotoSansCJKsc-Regular.otf', 'NotoSansCJKsc-Bold.otf', 'LICENSE.txt', 'README.md'])
-    await put(`apps/web/server/apparel/fonts/${file}`, `original ${file}`);
+    await put(`apps/web/server/apparel/fonts/${file}`, await readFile(path.join(externalFonts, file)));
   const output = path.join(root, 'output');
   const run = (args = [], restrictiveUmask = false) => spawnSync(process.execPath, [
     ...(restrictiveUmask ? ['--input-type=module', '--eval', 'process.umask(0o077); await import(process.argv[1]);'] : []),
-    script, '--project', project, '--output', output, ...args,
+    script, '--project', project, '--output', output, '--font-source', path.join(project, 'apps/web/server/apparel/fonts'), ...args,
   ], { encoding: 'utf8' });
   return { root, project, output, put, run };
 }
@@ -117,7 +119,7 @@ test('refuses existing output directories, including an empty directory and an e
 test('rejects overlap with project in either direction before writing output', async t => {
   const f = await fixture(t);
   for (const output of [path.join(f.project, 'assets'), path.join(f.project, 'apps/web/public/assets'), f.root]) {
-    const result = spawnSync(process.execPath, [script, '--project', f.project, '--output', output], { encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [script, '--project', f.project, '--font-source', path.join(f.project, 'apps/web/server/apparel/fonts'), '--output', output], { encoding: 'utf8' });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /overlap/i);
   }
@@ -131,7 +133,7 @@ test('rejects symlink files, directories, excluded source files and project alia
     if (type === 'project') {
       const alias = path.join(f.root, 'project-link');
       await symlink(f.project, alias);
-      const result = spawnSync(process.execPath, [script, '--project', alias, '--output', f.output], { encoding: 'utf8' });
+      const result = spawnSync(process.execPath, [script, '--project', alias, '--font-source', externalFonts, '--output', f.output], { encoding: 'utf8' });
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /symlink/i);
     } else {
@@ -214,4 +216,35 @@ test('Nginx example limits immutable assets to hash paths, exact origins and pub
   assert.ok(!config.includes('try_files'));
   assert.ok(!config.includes('Access-Control-Allow-Credentials'));
   assert.ok(!/Access-Control-Allow-Origin\s+["']?\*/.test(config));
+});
+
+test('requires an explicit font source instead of silently using repository fonts', async t => {
+  const f = await fixture(t);
+  const result = spawnSync(process.execPath, [script, '--project', f.project, '--output', f.output], {encoding:'utf8'});
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /font-source/);
+  await missing(f.output);
+});
+test('rejects altered original font or license bytes', async t => {
+  for (const name of ['NotoSansCJKsc-Regular.otf', 'LICENSE.txt', 'README.md']) {
+    const f = await fixture(t);
+    await f.put('apps/web/server/apparel/fonts/' + name, 'changed');
+    const result = f.run();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /SHA-256/);
+    await missing(f.output);
+  }
+});
+
+test('prepares fonts-only resources without changing full-resource manifest semantics', async t => {
+  const f = await fixture(t);
+  await rm(path.join(f.project,'apps/web/public'),{recursive:true});
+  const result=f.run(['--fonts-only','true']);
+  assert.equal(result.status,0,result.stderr);
+  const summary=JSON.parse(result.stdout);
+  assert.equal(summary.rawPublicBytes,0);
+  assert.equal(summary.rawFontBytes,33444552);
+  const manifest=JSON.parse(await readFile(path.join(summary.versionDirectory,'asset-manifest.json')));
+  assert.equal(manifest.files.length,4);
+  assert.ok(manifest.files.every(e=>e.path.startsWith('fonts/')));
 });

@@ -4,6 +4,16 @@
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* WorkspaceShell navigation adapted to the real account without mock sessions. */
+.account-sidebar-nav { display:flex; flex-direction:column; gap:8px; }
+.account-sidebar-nav a, .account-home-link { display:flex; align-items:center; gap:10px; min-height:44px; padding:10px 12px; border-radius:13px; color:var(--z-text); text-decoration:none; }
+.account-sidebar-nav a:hover, .account-sidebar-nav a[aria-current="page"] { color:var(--z-primary); background:var(--z-primary-soft); }
+.account-sidebar-nav svg, .account-home-link svg { flex:none; }
+.account-sidebar-help { color:var(--z-muted); font-size:11px; line-height:1.7; padding:12px; }
+.account-home-link { margin-top:auto; font-size:12px; }
+.zi-account { width:min(1120px,calc(100% - 48px)); }
+@media(max-width:767px) { .zi-account { width:calc(100% - 32px); margin:28px auto; } }
 .zi-identity * {
   box-sizing: border-box;
 }

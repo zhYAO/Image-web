@@ -1,6 +1,7 @@
 "use client";
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import { useEffect, useRef, useState } from "react";
-import { Image } from "antd";
+
 import styles from "./apparel.module.css";
 import { isApparelVisibleLoadingEnabled } from "./apparel-display-config";
 
@@ -14,7 +15,7 @@ export function ApparelResultImage({
   return isApparelVisibleLoadingEnabled() ? (
     <VisibleApparelImage key={url} url={url} name={name} />
   ) : (
-    <Image src={url} alt={name} />
+    <PreviewImage src={url} alt={name} />
   );
 }
 
@@ -49,7 +50,7 @@ function VisibleApparelImage({ url, name }: { url: string; name: string }) {
   return (
     <div ref={element} className={styles.resultImage}>
       {visible ? (
-        <Image src={url} alt={name} />
+        <PreviewImage src={url} alt={name} />
       ) : (
         <button
           type="button"

@@ -1,7 +1,8 @@
 "use client";
 
 import { CreditAccount } from "@/features/credits/CreditsProvider";
-import { WebPageShell } from "@/features/shell/WebPageShell";
+import { AccountFrame } from "./AccountFrame";
+import { ActionButton, ContentDialog } from "@/features/controls/NativeControls";
 
 import '@/features/brand/identity.css';
 
@@ -23,6 +24,11 @@ export function AccountPanel({ account }: { account: Account }) {
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
+  const [deleteOwner, setDeleteOwner] = useState<string>();
+  const deletionPassword = useRef<string | undefined>(undefined);
+  useEffect(() => () => {
+    deletionPassword.current = undefined;
+  }, [account.id, ownerId, identityStatus]);
 
   async function redirectIfExpired(response: Response) {
     if (response.status !== 401) return false;
@@ -101,28 +107,33 @@ export function AccountPanel({ account }: { account: Account }) {
 
   function remove(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (
-      pendingRef.current ||
-      !confirm("注销后会立即停止访问，后台将永久删除账号数据。确认继续？")
-    )
-      return;
-    const data = new FormData(event.currentTarget);
+    if (pendingRef.current) return;
+    deletionPassword.current = String(new FormData(event.currentTarget).get("password") ?? "");
+    setDeleteOwner(account.id);
+  }
+
+  function closeDelete() {
+    if (pendingRef.current) return;
+    deletionPassword.current = undefined;
+    setDeleteOwner(undefined);
+  }
+
+  function confirmDelete() {
+    if (pendingRef.current || deletionPassword.current === undefined || deleteOwner !== account.id) return;
+    const password = deletionPassword.current;
     void runAction(async () => {
       const response = await fetch("/api/account", {
-        method: "DELETE",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          password: data.get("password"),
-          confirmation: "DELETE",
-        }),
+        method: "DELETE", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password, confirmation: "DELETE" }),
       });
       if (await redirectIfExpired(response)) return;
       const result = (await response.json()) as { accepted?: boolean };
-      setMessage(
-        response.ok && result.accepted === true
-          ? "注销申请已受理，数据正在清理。"
-          : "密码验证失败，注销未受理。",
-      );
+      setMessage(response.ok && result.accepted === true
+        ? "注销申请已受理，数据正在清理。"
+        : "密码验证失败，注销未受理。");
+    }).finally(() => {
+      deletionPassword.current = undefined;
+      setDeleteOwner(undefined);
     });
   }
 
@@ -137,8 +148,14 @@ export function AccountPanel({ account }: { account: Account }) {
   }
 
   return (
-    <WebPageShell className="account-page">
-      <section aria-busy={pending} className="zi-account">
+    <AccountFrame>
+      <section aria-busy={pending} className="zi-account zi-identity">
+        <ContentDialog open={deleteOwner === account.id} title="确认注销账号" onClose={closeDelete} footer={<>
+          <ActionButton disabled={pending} onClick={closeDelete}>取消</ActionButton>
+          <ActionButton danger busy={pending} onClick={confirmDelete}>确认注销</ActionButton>
+        </>}>
+          <p>注销将立即停止访问，后台将继续删除账号数据。确认后才会提交申请。</p>
+        </ContentDialog>
         <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><a className="zi-button" href="/workspace">返回工作区</a></header>
         <div className="zi-account-grid"><div className="zi-account-main glass-card"><CreditAccount /></div><div className="zi-account-settings glass-form glass-card">
         <p className="glass-muted">邮箱：{account.email}</p>
@@ -153,6 +170,6 @@ export function AccountPanel({ account }: { account: Account }) {
         <form onSubmit={remove}><h2>注销账号</h2><p className="glass-muted">注销受理后，账号会立即停止访问；后台清理完成前状态为“删除中”。</p><label>重新输入密码<input autoComplete="current-password" name="password" required type="password" /></label><button className="glass-danger" disabled={pending} type="submit">永久注销账号</button></form>
         </div></div>
       </section>
-    </WebPageShell>
+    </AccountFrame>
   );
 }

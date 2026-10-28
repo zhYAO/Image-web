@@ -214,25 +214,9 @@ def unpack_outer(archive, destination, sha, manifest_sha, layers):
     return manifest, body
 
 
-NATIVE_PROBE = r"""(async()=>{const sharp=require('sharp'),path=require('node:path');let codecs=0;
-for(const [file,font] of [['NotoSansCJKsc-Regular.otf','Noto Sans CJK SC 24'],['NotoSansCJKsc-Bold.otf','Noto Sans CJK SC Bold 24']]){
-const buffer=await sharp({text:{text:'中文 Aa 123',font,fontfile:path.join(process.env.ZIMAGE_SHARED_FONT_DIR,file),rgba:true,dpi:72}}).png().toBuffer();
-const source=await sharp(buffer).metadata();if(source.format!=='png'||!source.width||!source.height)throw Error('native');
-for(const codec of ['jpeg','webp','avif']){
-const encoded=await sharp(buffer).toFormat(codec).toBuffer();const metadata=await sharp(encoded).metadata();
-if(metadata.width!==source.width||metadata.height!==source.height||metadata.format!==({jpeg:'jpeg',webp:'webp',avif:'heif'})[codec]||(codec==='avif'&&metadata.compression!=='av1'))throw Error('codec');codecs++;}}
-if(codecs!==6)throw Error('codec count');console.log(JSON.stringify({native:true,fonts:2,codecs}));
-})().catch(()=>{console.error('Native/font verification failed');process.exit(1)})"""
-
-
 def native_probe(candidate, environment, runner=subprocess.run):
-    command = ['/usr/sbin/runuser', '--user', 'zimage', '--', '/usr/bin/env', '-i', 'PATH=' + SAFE_PATH, 'NODE_ENV=production']
-    command += [key + '=' + environment[key] for key in ('ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256')]
-    command += [str(NODE), '-e', NATIVE_PROBE]
-    result = runner(command, cwd=candidate / 'apps/web', check=True, capture_output=True, text=True, timeout=90,
-                    env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'})
-    if result.returncode or json.loads(result.stdout) != {'native': True, 'fonts': 2, 'codecs': 6}:
-        raise RuntimeError('Non-root native/font candidate verification failed')
+    # One actual Sharp/hash payload shared with full-package activation.
+    return load_tools()[1].native_probe(candidate, environment, runner=runner)
 
 
 def service_preflight():

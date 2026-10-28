@@ -22,7 +22,7 @@ describe('UnifiedWorkspace', () => {
     const previewDialog = await screen.findByRole('dialog');
     expect(previewDialog).toBeInTheDocument();
     expect(previewDialog.querySelector('img')).toHaveAttribute('src', 'blob:ref.png');
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent(previewDialog, new Event('cancel', { cancelable: true }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '移除 ref.png' }));
@@ -125,7 +125,7 @@ describe('UnifiedWorkspace', () => {
     await waitFor(() => expect(screen.getByRole('textbox', { name: '创作输入' })).toHaveValue(''));
     expect(screen.queryByRole('img', { name: '参考图 queued.png' })).not.toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:queued.png');
-    await waitFor(() => expect(screen.getByRole('button', { name: '发送创作请求' })).not.toHaveClass('ant-btn-loading'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '发送创作请求' })).not.toHaveAttribute('aria-busy', 'true'));
     gateway.releasePostSubmitRefresh();
   });
 

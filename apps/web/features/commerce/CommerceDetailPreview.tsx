@@ -1,5 +1,6 @@
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import type { CommerceTask } from "@zimage/domain";
-import { Image as AntdImage } from "antd";
+
 import styles from "./commerce.module.css";
 
 /** Use the same slot order and current selections as the long-image exporter. */
@@ -45,7 +46,7 @@ export function CommerceDetailPreview({ task }: { task: CommerceTask }) {
                         {index + 1}. {slot.module || slot.role}
                       </span>
                       {image?.url && !image.expired ? (
-                        <AntdImage
+                        <PreviewImage
                           src={image.url}
                           alt={`${slot.module || slot.role}长图预览`}
                           style={{

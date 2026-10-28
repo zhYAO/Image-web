@@ -4,6 +4,10 @@ import { afterEach } from 'vitest';
 
 afterEach(() => cleanup());
 
+// jsdom has no top layer. Production uses the browser's native modal dialog.
+HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
+
 // Real Ant Design + deferred editor chunks can exceed RTL's 1s default under
 // coverage on shared CI runners. This readiness deadline is separate from the
 // load SLA; retain the existing 10s deadline for local tests.

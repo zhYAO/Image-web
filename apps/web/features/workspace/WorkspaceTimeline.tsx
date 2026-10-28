@@ -1,5 +1,7 @@
+import { ActionButton, StatusBadge, BusyIndicator, InlineNotice } from '@/features/controls/NativeControls';
+import { PreviewImage } from '@/features/controls/PreviewImage';
 import type { GenerationBatch, RecreateScope, TimelineItem } from '@zimage/domain';
-import { Alert, Button, Image as AntdImage, Spin, Tag } from 'antd';
+
 import { Bot, Download, ImageOff, RefreshCw, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -106,12 +108,12 @@ export function VisibleAsset({ id, initialUrl, alt, resolveAssetUrl }: {
     setResult(previous => ({ scope, version: previous.scope === scope ? previous.version + 1 : 1,
       url: refresh ? undefined : renderedUrl, request: refresh ? 'refresh' : 'check', replaceInitial: true }));
   };
-  return <div ref={element} className={styles.assetPreview}>{renderedUrl ? <AntdImage alt={alt} className={styles.assetPreview}
-    preview={{ mask: false }} rootClassName={styles.assetPreview} src={renderedUrl}
+  return <div ref={element} className={styles.assetPreview}>{renderedUrl ? <PreviewImage alt={alt} className={styles.assetPreview}
+     rootClassName={styles.assetPreview} src={renderedUrl}
     onError={() => requestPreview(true, true)} onClick={() => requestPreview(false)} /> :
     <div className={styles.assetState} role={current.error ? 'alert' : 'status'}>
       <span>{current.error ? '图片预览暂时不可用。' : '正在加载图片预览…'}</span>
-      {current.error && resolveAssetUrl && <Button size="small" onClick={() => requestPreview(true)}>重试图片预览</Button>}
+      {current.error && resolveAssetUrl && <ActionButton size="small" onClick={() => requestPreview(true)}>重试图片预览</ActionButton>}
     </div>}</div>;
 }
 
@@ -154,9 +156,9 @@ function GenerationCard({
         <span className={styles.generationStatusTitle}>
           {needsReview ? '待核对' : working ? '正在创作' : batch.status === 'failed' ? '生成失败' : '图片结果'}
         </span>
-        <Tag color={needsReview || batch.status === 'partial' ? 'warning' : batch.status === 'failed' ? 'error' : batch.status === 'succeeded' ? 'success' : 'processing'}>
+        <StatusBadge tone={needsReview || batch.status === 'partial' ? 'warning' : batch.status === 'failed' ? 'error' : batch.status === 'succeeded' ? 'success' : 'processing'}>
           {needsReview ? '待核对' : statusLabels[batch.status]}
-        </Tag>
+        </StatusBadge>
       </header>
       <div className={styles.generationMeta}>
         {batch.provider} · {batch.model} · {batch.config.aspectRatio} · {batch.config.resolution}
@@ -176,7 +178,7 @@ function GenerationCard({
             )}
             {asset.error?.code === 'CONFLICT' && asset.status !== 'failed' && <div className={styles.assetState}><ImageOff size={23}/><span>{asset.error.message}</span></div>}
             {asset.status === 'processing' && asset.error?.code !== 'CONFLICT' && (
-              <div className={`${styles.assetState} ${styles.assetSkeleton}`}><Spin size="small" /><span>{zhCN.timeline.state.processing}</span></div>
+              <div className={`${styles.assetState} ${styles.assetSkeleton}`}><BusyIndicator size="small" /><span>{zhCN.timeline.state.processing}</span></div>
             )}
             {asset.status === 'failed' && (
               <div className={styles.assetState}><ImageOff size={23} /><span>{asset.error?.message}</span></div>
@@ -187,7 +189,7 @@ function GenerationCard({
               </div>
             )}
             {!optimistic && asset.error?.code !== 'CONFLICT' && (asset.status === 'succeeded' || asset.status === 'failed') && (
-              <Button
+              <ActionButton
                 aria-label={`重新生成第 ${index + 1} 张`}
                 className={styles.assetRecreate}
                 icon={<RefreshCw size={13} />}
@@ -202,17 +204,17 @@ function GenerationCard({
         <span className={styles.muted}>{batch.source === 'chat_tool' ? zhCN.timeline.sourceChatTool : zhCN.timeline.directSource}</span>
         <div className={styles.actionGroup}>
           {completed.length > 0 && (
-            <Button icon={<Download size={14} />} onClick={() => onDownloadBatch(batch)} size="small">{zhCN.timeline.batchDownload}</Button>
+            <ActionButton icon={<Download size={14} />} onClick={() => onDownloadBatch(batch)} size="small">{zhCN.timeline.batchDownload}</ActionButton>
           )}
-          {working && hourExpired && onRefreshBatch && <Button onClick={() => onRefreshBatch(batch)} size="small">手动刷新进度</Button>}
+          {working && hourExpired && onRefreshBatch && <ActionButton onClick={() => onRefreshBatch(batch)} size="small">手动刷新进度</ActionButton>}
           {optimistic && batch.status === 'failed' && batch.assets.some(asset=>asset.error?.retryable) && onRetryImage && (
-            <Button icon={<RefreshCw size={14} />} onClick={onRetryImage}>重试生成</Button>
+            <ActionButton icon={<RefreshCw size={14} />} onClick={onRetryImage}>重试生成</ActionButton>
           )}
           {!optimistic && failed.length > 0 && (
-            <Button icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'failed')} size="small">{zhCN.timeline.recreateFailed}</Button>
+            <ActionButton icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'failed')} size="small">{zhCN.timeline.recreateFailed}</ActionButton>
           )}
           {batch.assets.some((asset) => asset.expired) && !batch.assets.some(asset=>asset.error?.code==='CONFLICT') && (
-            <Button icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'all')} size="small" type="primary">{zhCN.timeline.recreateAll}</Button>
+            <ActionButton icon={<RefreshCw size={14} />} onClick={() => onRecreate(batch, 'all')} size="small" variant="primary">{zhCN.timeline.recreateAll}</ActionButton>
           )}
         </div>
       </footer>
@@ -294,12 +296,12 @@ export function WorkspaceTimeline({
   if (loadError) {
     return (
       <div className={styles.timelineLoadError}>
-        <Alert
-          action={onRetryLoad ? <Button onClick={onRetryLoad}>重试加载</Button> : undefined}
+        <InlineNotice
+          action={onRetryLoad ? <ActionButton onClick={onRetryLoad}>重试加载</ActionButton> : undefined}
           description={loadError}
-          showIcon
+
           title="会话加载失败"
-          type="error"
+          tone="error"
         />
       </div>
     );
@@ -331,7 +333,7 @@ export function WorkspaceTimeline({
           return <GenerationTurn batch={item.batch} key={item.id} resolveAssetUrl={resolveAssetUrl} onRefreshBatch={onRefreshBatch} onDownloadBatch={onDownloadBatch} onRecreate={onRecreate} />;
         }
         const recovery = chatRecoveryActions[item.id];
-        return <Alert action={recovery && onRecoverChat ? <Button disabled={chatRecoveryDisabled} onClick={() => onRecoverChat(item.id)} size="small">{recovery.label}</Button> : undefined} description={item.error.message} key={item.id} showIcon type="error" />;
+        return <InlineNotice action={recovery && onRecoverChat ? <ActionButton disabled={chatRecoveryDisabled} onClick={() => onRecoverChat(item.id)} size="small">{recovery.label}</ActionButton> : undefined} description={item.error.message} key={item.id}  tone="error" />;
       })}
       {optimisticImages.map((turn) => (
         <GenerationTurn

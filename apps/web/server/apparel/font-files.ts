@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  closeSync, constants, existsSync, fstatSync, openSync, readFileSync,
+  closeSync, constants, fstatSync, openSync, readFileSync,
   realpathSync, statSync, type BigIntStats,
 } from "node:fs";
 import path from "node:path";
@@ -120,9 +120,14 @@ function sharedFont(fontDir: string, sha256: string, name: keyof typeof FONT_SHA
     if (entry.sha256 !== expected) throw new Error(`中文字体 SHA-256 摘要不匹配：${relative}`);
     verified.set(filename, verifyFile(path.join(fonts, filename), `中文字体 ${filename}`, expected, fonts, entry.bytes));
   }
-  const license = files.get("fonts/LICENSE.txt");
-  if (!license) throw new Error("资源清单缺少字体许可 fonts/LICENSE.txt。");
-  verifyFile(path.join(fonts, "LICENSE.txt"), "字体许可 LICENSE.txt", license.sha256, fonts, license.bytes);
+  for (const [filename, expected] of Object.entries({
+    "LICENSE.txt": "88f117575237307bdd86a17ef15e21790fc9a662fe4dfb103ca1ca077f0d9982",
+    "README.md": "f314e6e822b03543d7403eb3f8331208d52356a27fe1391216d23d7599583c58",
+  })) {
+    const entry = files.get(`fonts/${filename}`);
+    if (!entry || entry.sha256 !== expected) throw new Error(`资源清单缺失或更改原始字体许可/来源 ${filename} SHA-256。`);
+    verifyFile(path.join(fonts, filename), `字体许可/来源 ${filename}`, expected, fonts, entry.bytes);
+  }
   return verified.get(name)!;
 }
 
@@ -136,10 +141,5 @@ export function resolveApparelFont(bold: boolean) {
       throw new Error("ZIMAGE_SHARED_FONT_DIR 与 ZIMAGE_STATIC_ASSET_SHA256 必须同时配置。");
     return sharedFont(directory, sha256, name);
   }
-  for (const root of [process.cwd(), path.join(process.cwd(), "apps/web")]) {
-    const fonts = path.join(root, "server/apparel/fonts");
-    const file = path.join(fonts, name);
-    if (existsSync(file)) return verifyFile(file, `中文字体 ${name}`, FONT_SHA256[name], realpathSync(fonts));
-  }
-  throw new Error("缺少随应用打包的中文字体。");
+  throw new Error("服装渲染缺少外部字体资源。请按 ops/aliyun/FONTS.md 准备校验过的资源，成对配置 ZIMAGE_SHARED_FONT_DIR=<manifestSHA>/fonts 与 ZIMAGE_STATIC_ASSET_SHA256；不会下载或替换为系统字体。");
 }

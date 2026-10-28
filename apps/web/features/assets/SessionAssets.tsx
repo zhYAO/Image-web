@@ -1,10 +1,11 @@
 "use client";
 
+import { ImageGallery } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "@/features/commerce/CommerceSelect";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import PreviewGroup from "antd/es/image/PreviewGroup";
+
 import { ArrowUpRight, FolderOpen, Search } from "lucide-react";
 import type { Session, TimelineItem, WorkspaceGateway } from "@zimage/domain";
 import { VisibleAsset } from "@/features/workspace/WorkspaceTimeline";
@@ -155,7 +156,7 @@ export function SessionAssets({
       ) : (
         <>
           <p className={styles.count}>{visible.length} 张作品 · 当前会话</p>
-          <PreviewGroup preview={{ motionName: "" }}>
+          <ImageGallery >
             <div className={styles.grid}>
               {visible.map(({ asset, batch }) => (
                 <article className={styles.card} key={asset.id}>
@@ -181,7 +182,7 @@ export function SessionAssets({
                 </article>
               ))}
             </div>
-          </PreviewGroup>
+          </ImageGallery>
           {!visible.length && (
             <div className={styles.empty}>
               {assets.length

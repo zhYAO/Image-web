@@ -9,6 +9,8 @@ User=zimage
 Group=zimage
 WorkingDirectory=/opt/zimage/current/apps/web
 EnvironmentFile=/etc/zimage/environment
+# Font binding is root-generated after successful native preflight.
+EnvironmentFile=-/opt/zimage/current/.runtime-assets.env
 Environment=NODE_OPTIONS=--max-old-space-size=640
 ExecStart=/opt/zimage/toolchain/node-v24.19.0-linux-x64/bin/node server.js
 MemoryMax=850M

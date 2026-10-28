@@ -92,3 +92,73 @@
 .filterButton { width:42px; height:36px; margin:0 0 26px; }
 
 .filterButton svg { width:17px; height:17px; }
+
+/* Reference 2450e9a GooeyNav category indicator; labels stay stationary. */
+.categories {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: rgba(110, 91, 132, 0.055);
+  border-radius: 11px;
+  white-space: nowrap;
+  transition:
+    opacity 150ms,
+    transform 220ms var(--z-ease);
+}
+.categories button {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--z-muted);
+  border-radius: 8px;
+  padding: 7px 2px;
+  font-size: 11px;
+  line-height: 17px;
+}
+.categories button[aria-pressed='true'] {
+  background: var(--z-primary-soft);
+  color: var(--z-primary);
+  box-shadow: 0 1px 5px #27123809;
+}
+.categoryIndicator {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  background: var(--z-primary-soft);
+  box-shadow:
+    inset 0 1px 0 #ffffff70,
+    0 1px 5px #27123809;
+  transition:
+    transform 200ms var(--z-ease),
+    width 200ms var(--z-ease),
+    height 200ms var(--z-ease);
+}
+.categories[data-indicator-ready='true'] .categoryIndicator {
+  display: block;
+}
+.categories[data-indicator-ready='true'] button[aria-pressed='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .categoryIndicator {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .categories[data-indicator-ready='true'] .categoryIndicator {
+    display: none;
+  }
+  .categories button[aria-pressed='true'] {
+    outline: 1px solid Highlight;
+    color: Highlight;
+  }
+}

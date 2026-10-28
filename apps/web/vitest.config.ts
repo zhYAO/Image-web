@@ -1,11 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vitest/config';
-import { createMarkdownBuildProfile } from './build/markdown-profile.mjs';
-
-const profileAliases = process.env.ZIMAGE_BUILD_SLIM === '1'
-  ? createMarkdownBuildProfile(fileURLToPath(new URL('./', import.meta.url)), false).aliases
-  : {};
 
 export default defineConfig({
   esbuild: {
@@ -14,14 +9,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./', import.meta.url)),
-      ...profileAliases,
     },
   },
   test: {
     environment: 'jsdom',
     include: ['tests/**/*.test.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
-    // The real Ant Design/Markdown integration suites also run on developer laptops.
+    // The native controls/Markdown integration suites also run on developer laptops.
     // Bound concurrent DOM workloads instead of competing for every CPU core.
     maxWorkers: 1,
     testTimeout: 60000,

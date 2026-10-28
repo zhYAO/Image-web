@@ -1,3 +1,4 @@
+import { ImageGallery } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "./CommerceSelect";
 import { ApparelWorkspace } from './ApparelWorkspace';
 import { useApparelTasks } from './use-apparel-tasks';
@@ -26,7 +27,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { Image as AntdImage } from "antd";
+
 import Link from "next/link";
 import { ArrowLeft, Layers3, Plus } from "lucide-react";
 import { TemplatePreview } from "./TemplatePreview";
@@ -589,7 +590,7 @@ export function CommerceWorkspace({
                   <p className={styles.note}>
                     原创构图示例，仅用于展示流程；实际生成使用所选模板和你的商品资料。
                   </p>
-                  {['product-set', 'detail', 'clone', 'product-main'].includes(selectedTask.scene) ? <CommerceExample scene={selectedTask.scene} /> : <AntdImage.PreviewGroup>
+                  {['product-set', 'detail', 'clone', 'product-main'].includes(selectedTask.scene) ? <CommerceExample scene={selectedTask.scene} /> : <ImageGallery>
                     <div className={styles.structureGrid}>
                       {selectedTask.slots.map((slot, index) => (
                         <div className={styles.structureCard} key={slot.id}>
@@ -601,7 +602,7 @@ export function CommerceWorkspace({
                         </div>
                       ))}
                     </div>
-                  </AntdImage.PreviewGroup>}
+                  </ImageGallery>}
                 </>
               )}
             </div>
@@ -616,7 +617,7 @@ export function CommerceWorkspace({
                 }
               >
                 {gateway && (
-                  <AntdImage.PreviewGroup>
+                  <ImageGallery>
                     <CommerceTaskCard
                       task={task}
                       active={hasCommerce && !showDraft && !requestedBatchId && task.sessionId === sessionId && task.id === selectedTask?.id && panel === 'results' && !coordinatedLoading}
@@ -638,7 +639,7 @@ export function CommerceWorkspace({
                       previewReferences={wizardProps.references}
                       originalPreviewUrl={wizardProps.references.find(reference => reference.id === task.brief.productReferenceIds[0])?.previewUrl}
                     />
-                  </AntdImage.PreviewGroup>
+                  </ImageGallery>
                 )}
               </div>
             ))}
@@ -654,7 +655,7 @@ export function CommerceWorkspace({
             draft.sessionId !== sessionId || !showDraft || coordinatedLoading
           }
         >
-          <AntdImage.PreviewGroup>
+          <ImageGallery>
             <Suspense fallback={<p role="status">正在打开商品编辑器…</p>}>
             <CommerceWizard
               {...wizardProps}
@@ -681,7 +682,7 @@ export function CommerceWorkspace({
               }}
             />
             </Suspense>
-          </AntdImage.PreviewGroup>
+          </ImageGallery>
         </div>
       ))}
       {hasCommerce && visible.length > 0 && !coordinatedLoading && (

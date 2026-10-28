@@ -225,7 +225,7 @@ def pack(source, store, project, release_id, expected_sha, sample_label, budget)
             raise ValueError('Required build output is missing: ' + prefix)
     for required in ('apps/web/server.js', FONT_ROOT + 'NotoSansCJKsc-Regular.otf', FONT_ROOT + 'NotoSansCJKsc-Bold.otf'):
         if required not in files:
-            raise ValueError('Required runtime file is missing: ' + required)
+            raise ValueError('Legacy four-layer packaging requires bundled fonts; for external fonts use three-layer-release.py with --assets. Missing: ' + required)
     # Matching marker/version strings establish provenance checks, not a working
     # production application. Every output of this local prototype stays gated.
     manifest = {'schema': 1, 'releaseId': release_id, 'productionReady': False,

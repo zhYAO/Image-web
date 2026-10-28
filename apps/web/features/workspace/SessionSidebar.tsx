@@ -1,5 +1,6 @@
+import { ActionButton, AnchoredPanel, BusyIndicator, TextField, ConfirmAction } from '@/features/controls/NativeControls';
 import type { Session } from "@zimage/domain";
-import { Button, Input, Popconfirm, Popover, Spin } from "antd";
+
 import Link from "next/link";
 import {
   Check,
@@ -16,19 +17,15 @@ import { useState } from "react";
 
 import styles from "./workspace.module.css";
 import filters from "./session-sidebar.module.css";
+import { CategoryFilters, type Category } from "./CategoryFilters";
 
-import { sessionCategory, type SessionCategory } from "./session-category";
+import { sessionCategory } from "./session-category";
 
 const activityLabels = {
   general: "普通创作",
   commerce: "电商生图",
   unknown: "类型待确认",
 } as const;
-const categories = [
-  ["all", "全部"],
-  ["general", "普通创作"],
-  ["commerce", "电商生图"],
-] as const;
 
 interface SessionSidebarProps {
   collapsed?: boolean;
@@ -65,7 +62,7 @@ export function SessionSidebar({
 }: SessionSidebarProps) {
   const [editingId, setEditingId] = useState<string>();
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<"all" | SessionCategory>("all");
+  const [category, setCategory] = useState<Category>("all");
   const typeOf = (session: Session) =>
     sessionCategory(session, commerceDraftIds?.has(session.id));
   const visibleSessions = sessions.filter(
@@ -96,25 +93,25 @@ export function SessionSidebar({
           <SidebarTooltip enabled={collapsed}
             title={collapsed ? "展开侧栏" : "折叠侧栏"}
           >
-            <Button
+            <ActionButton
               aria-label={collapsed ? "展开会话侧栏" : "折叠会话侧栏"}
               icon={<WorkspaceIcon name={collapsed ? "expand" : "collapse"} />}
               onClick={onCollapse}
-              type="text"
+              variant="text"
             />
           </SidebarTooltip>
         )}
       </div>
       <SidebarTooltip enabled={collapsed} title="新对话">
-        <Button
+        <ActionButton
           aria-label="新对话"
           className={styles.newButton}
           icon={<WorkspaceIcon name="create" />}
           onClick={onCreate}
-          type="default"
+          variant="default"
         >
           {!collapsed && "新对话"}
-        </Button>
+        </ActionButton>
       </SidebarTooltip>
       <SidebarTooltip enabled={collapsed} title="电商生图">
         <Link
@@ -132,62 +129,24 @@ export function SessionSidebar({
         </Link>
       </SidebarTooltip>
       {collapsed ? (
-        <SidebarTooltip enabled={collapsed} title="筛选会话"><Popover
-          trigger="click"
+        <SidebarTooltip enabled={collapsed} title="筛选会话"><AnchoredPanel
+
           placement="rightTop"
           content={
-            <div
-              className={filters.categories}
-              role="group"
-              aria-label="会话分类"
-            >
-              {categories.map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={category === value}
-                  className={filters.category}
-                  onClick={() => {
-                    setCategory(value);
-                    setEditingId(undefined);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <CategoryFilters value={category} onChange={(value) => { setCategory(value); setEditingId(undefined); }} />
           }
         >
 
-            <Button
+            <ActionButton
               aria-label="筛选会话"
               className={filters.filterButton}
-              type="text"
+              variant="text"
               icon={<WorkspaceIcon name="filter" />}
             />
-        </Popover></SidebarTooltip>
+        </AnchoredPanel></SidebarTooltip>
       ) : (
         <>
-          <div
-            className={filters.categories}
-            role="group"
-            aria-label="会话分类"
-          >
-            {categories.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={category === value}
-                className={filters.category}
-                onClick={() => {
-                  setCategory(value);
-                  setEditingId(undefined);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <CategoryFilters value={category} onChange={(value) => { setCategory(value); setEditingId(undefined); }} />
           <div className={styles.sectionLabel}>
             最近会话<span>{visibleSessions.length}</span>
           </div>
@@ -201,7 +160,7 @@ export function SessionSidebar({
       >
         {deleting && (
           <div className={styles.sessionDeleting} role="status">
-            <Spin size="small" />
+            <BusyIndicator size="small" />
             <span>正在删除会话…</span>
           </div>
         )}
@@ -248,7 +207,7 @@ export function SessionSidebar({
                       seed={session.id}
                     />
                     {busySessionIds?.has(session.id) && (
-                      <Spin
+                      <BusyIndicator
                         size="small"
                         aria-label={`${session.title} 正在处理`}
                         className={filters.iconBusy}
@@ -256,51 +215,51 @@ export function SessionSidebar({
                     )}
                   </button>
                 </SidebarTooltip>
-                <Popover
-                  trigger="click"
+                <AnchoredPanel
+
                   placement="rightTop"
                   content={
                     <div className={filters.compactActions}>
                       {editingId === session.id ? (
                         <>
-                          <Input
+                          <TextField
                             aria-label="会话名称"
                             value={title}
                             onChange={(event) => setTitle(event.target.value)}
-                            onPressEnter={finishRename}
+                            onEnter={finishRename}
                           />
-                          <Button onClick={finishRename}>保存会话名称</Button>
-                          <Button onClick={() => setEditingId(undefined)}>
+                          <ActionButton onClick={finishRename}>保存会话名称</ActionButton>
+                          <ActionButton onClick={() => setEditingId(undefined)}>
                             取消重命名
-                          </Button>
+                          </ActionButton>
                         </>
                       ) : (
                         <>
-                          <Button
+                          <ActionButton
                             aria-label={`重命名 ${session.title}`}
                             onClick={() => beginRename(session)}
                             icon={<Pencil size={14} />}
                           >
                             重命名
-                          </Button>
-                          <Popconfirm
+                          </ActionButton>
+                          <ConfirmAction
                             title="删除这个会话？"
                             description="会话及其中的创作记录将被删除。"
-                            okText="确认删除"
-                            cancelText="取消"
-                            okButtonProps={{ danger: true }}
+                            confirmLabel="确认删除"
+                            cancelLabel="取消"
+
                             onConfirm={() => onDelete(session.id)}
                             disabled={deleting}
                           >
-                            <Button
+                            <ActionButton
                               disabled={deleting}
                               aria-label={`删除 ${session.title}`}
                               danger
                               icon={<Trash2 size={14} />}
                             >
                               删除
-                            </Button>
-                          </Popconfirm>
+                            </ActionButton>
+                          </ConfirmAction>
                         </>
                       )}
                     </div>
@@ -313,14 +272,14 @@ export function SessionSidebar({
                   >
                     <MoreHorizontal size={14} />
                   </button>
-                </Popover>
+                </AnchoredPanel>
               </>
             ) : editingId === session.id ? (
-              <Input
+              <TextField
                 aria-label="会话名称"
                 autoFocus
                 onChange={(event) => setTitle(event.target.value)}
-                onPressEnter={finishRename}
+                onEnter={finishRename}
                 size="small"
                 value={title}
               />
@@ -356,7 +315,7 @@ export function SessionSidebar({
                     </button>
                   </SidebarTooltip>
                   {busySessionIds?.has(session.id) && (
-                    <Spin
+                    <BusyIndicator
                       aria-label={`${session.title} 正在处理`}
                       className={styles.sessionBusy}
                       size="small"
@@ -375,54 +334,54 @@ export function SessionSidebar({
                 {editingId === session.id ? (
                   <>
                     <SidebarTooltip enabled={collapsed} title="保存">
-                      <Button
+                      <ActionButton
                         aria-label="保存会话名称"
                         icon={<Check size={13} />}
                         onClick={finishRename}
                         size="small"
-                        type="text"
+                        variant="text"
                       />
                     </SidebarTooltip>
                     <SidebarTooltip enabled={collapsed} title="取消">
-                      <Button
+                      <ActionButton
                         aria-label="取消重命名"
                         icon={<X size={13} />}
                         onClick={() => setEditingId(undefined)}
                         size="small"
-                        type="text"
+                        variant="text"
                       />
                     </SidebarTooltip>
                   </>
                 ) : (
                   <>
                     <SidebarTooltip enabled={collapsed} title="重命名">
-                      <Button
+                      <ActionButton
                         disabled={deleting}
                         aria-label={`重命名 ${session.title}`}
                         icon={<Pencil size={13} />}
                         onClick={() => beginRename(session)}
                         size="small"
-                        type="text"
+                        variant="text"
                       />
                     </SidebarTooltip>
-                    <Popconfirm
+                    <ConfirmAction
                       title="删除这个会话？"
                       description="会话及其中的创作记录将被删除。"
-                      okText="确认删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
+                      confirmLabel="确认删除"
+                      cancelLabel="取消"
+
                       onConfirm={() => onDelete(session.id)}
                       disabled={deleting}
                     >
-                      <Button
+                      <ActionButton
                         disabled={deleting}
                         aria-label={`删除 ${session.title}`}
                         danger
                         icon={<Trash2 size={13} />}
                         size="small"
-                        type="text"
+                        variant="text"
                       />
-                    </Popconfirm>
+                    </ConfirmAction>
                   </>
                 )}
               </div>

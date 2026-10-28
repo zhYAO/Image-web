@@ -34,6 +34,19 @@ jobs:
           node-version: 24.19.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Explicit CI provisioning only. Dev/test never downloads fonts implicitly.
+      - name: Prepare verified external test fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/zimage-font-source"
+          mkdir "$source"
+          for weight in Regular Bold; do
+            curl --fail --location --proto '=https' --tlsv1.2 "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-$weight.otf" -o "$source/NotoSansCJKsc-$weight.otf"
+          done
+          cp doc/licenses/apparel-noto/LICENSE.txt doc/licenses/apparel-noto/README.md "$source/"
+          node ops/aliyun/package-static-assets.mjs --font-source "$source" --fonts-only true --output "$RUNNER_TEMP/zimage-test-fonts" > "$RUNNER_TEMP/zimage-test-fonts.json"
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync(process.argv[1])); fs.appendFileSync(process.env.GITHUB_ENV, "ZIMAGE_SHARED_FONT_DIR="+r.versionDirectory+"/fonts\nZIMAGE_STATIC_ASSET_SHA256="+r.manifestSha256+"\n");' "$RUNNER_TEMP/zimage-test-fonts.json"
       - run: pnpm lint
       - run: pnpm typecheck
       # Keep real AntD DOM suites sequential on shared runners. Coverage adds
@@ -42,9 +55,8 @@ jobs:
           pnpm --filter @zimage/domain test:coverage
           pnpm --filter @zimage/web exec vitest run --coverage --maxWorkers=1 --testTimeout=120000
       - run: pnpm --filter @zimage/web test:acceptance-budget
-      # Guards the release-slimming module aliases against dependency drift:
-      # the profile throws if @lobehub/ui / next / shiki versions move.
-      - run: node --test apps/web/scripts/markdown-build-profile.test.mjs
+      # Guard the native UI dependency boundary and release accounting.
+      - run: node --test apps/web/scripts/ui-dependency-boundary.test.mjs apps/web/scripts/measure-dist.test.mjs ops/aliyun/package-static-assets.test.mjs ops/aliyun/package-release.test.mjs ops/aliyun/native-font-probe.test.mjs
       - run: python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
       - run: pnpm exec vitest run supabase/functions/generation-worker supabase/functions/cleanup-worker
       - run: pnpm build
@@ -102,7 +114,9 @@ jobs:
           # Release slimming. Webpack is required: the profile rewrites modules
           # via NormalModuleReplacementPlugin, which Turbopack does not apply.
           ZIMAGE_BUILD_SLIM: '1'
-          NEXT_PUBLIC_STATIC_ASSET_BASE_URL: ${{ vars.NEXT_PUBLIC_STATIC_ASSET_BASE_URL }}
+          # Full-package CI ships local public files. Remote resources require
+          # a separately verified immutable deployment; do not inherit repo vars.
+          NEXT_PUBLIC_STATIC_ASSET_BASE_URL: ''
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}

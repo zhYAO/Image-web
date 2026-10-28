@@ -1330,7 +1330,7 @@
   max-width: min(420px, calc(100% - 24px));
   right: 16px;
 }
-.statusFeedback :global(.ant-alert) {
+.statusFeedback :global(.zi-control-notice) {
   border-radius: 18px;
   border-color: var(--z-border);
   background: var(--z-panel-strong);
@@ -1820,7 +1820,7 @@
     padding: 0 10px;
   }
 
-  .assetLibraryButton > span:not(:global(.ant-btn-icon)) {
+  .assetLibraryButton > span:not(:global(.zi-control-button-icon)) {
     display: none;
   }
 
@@ -2054,7 +2054,7 @@
   .inspirationBubble,
   .popoverSurface,
   .bubble,
-  .statusFeedback :global(.ant-alert) {
+  .statusFeedback :global(.zi-control-notice) {
     background: var(--z-panel);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -2076,7 +2076,7 @@
   .composer,
   .popoverSurface,
   .bubble,
-  .statusFeedback :global(.ant-alert) {
+  .statusFeedback :global(.zi-control-notice) {
     background: var(--z-control-bg);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -2390,12 +2390,12 @@
 .sidebar { position:sticky; top:var(--shell-pad); height:calc(100svh - var(--shell-pad) * 2); border-radius:26px; overflow:hidden; }
 .panelInner { display:flex; flex-direction:column; height:100%; padding:25px 16px 0; overflow:hidden; }
 .brandRow { flex:none; min-height:42px; height:42px; margin:0 0 25px; padding:0; gap:5px; }
-.brandRow :global(.ant-btn) { width:28px; height:32px; padding:0; border-radius:10px; }
+.brandRow :global(.zi-control-button) { width:28px; height:32px; padding:0; border-radius:10px; }
 .sidebarHeading { display:flex; align-items:center; gap:9px; font-size:23px; font-weight:650; letter-spacing:-.8px; text-decoration:none; color:var(--z-text); white-space:nowrap; }
 .sidebarHeading > svg { width:32px; height:32px; flex-shrink:0; color:var(--z-primary); }
 .brandCaption { font-size:9px; letter-spacing:.15px; margin-top:4px; font-weight:400; }
 .newButton { flex:none; height:45px !important; margin:0; padding:0 12px; border-radius:13px !important; font-size:13px; }
-.newButton :global(.ant-btn-icon) { color:var(--z-primary); }
+.newButton :global(.zi-control-button-icon) { color:var(--z-primary); }
 .commerceNav { flex:none; height:45px; padding:0 12px; margin:10px 0 23px; border-radius:13px; border-color:color-mix(in srgb,var(--z-primary) 25%,transparent); font-size:13px; }
 .sectionLabel { flex:none; font-size:11px; font-weight:500; margin:16px 7px 12px; }
 .sessionList { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; overscroll-behavior:contain; padding:3px 0 20px; gap:5px; }
@@ -2405,7 +2405,7 @@
 .sessionTitle { font-size:12px; line-height:20px; }
 .sessionActive { outline-color:var(--z-border); }
 .sessionActions { position:absolute; top:10px; right:3px; border:1px solid var(--z-border); border-radius:8px; background:var(--z-panel); }
-.sessionActions :global(.ant-btn) { width:26px; height:27px; }
+.sessionActions :global(.zi-control-button) { width:26px; height:27px; }
 .main { overflow:visible; min-height:calc(100svh - var(--shell-pad) * 2); }
 .header { height:58px; flex-basis:58px; min-height:58px; border-radius:999px; margin:0; padding:0 22px 0 25px; position:sticky; top:var(--shell-pad); z-index:20; }
 .headerTitle,.header a { font-size:12px; }
@@ -2500,7 +2500,7 @@
 
 /* Keep reference icon bounds inside the 42px collapsed rail controls. */
 .newButton svg, .commerceNav > svg { width:18px; height:18px; flex-shrink:0; }
-.brandRow :global(.ant-btn) svg { width:17px; height:17px; }
+.brandRow :global(.zi-control-button) svg { width:17px; height:17px; }
 
 /* Retire the old wrapping-header rule for the reference's single pill bar. */
 .header { flex-wrap:nowrap; }
@@ -2512,7 +2512,7 @@
  .header { gap:5px; }
  .headerStart { gap:4px; }
  .headerNav { gap:8px; }
- .headerNav > :global(.ant-space-item):has(> .commerceHeaderLink) { display:none; }
+ .headerNav > .commerceHeaderLink { display:none; }
  .headerNav :global(.credit-balance) { min-height:32px; padding:0; gap:4px; border:0; background:transparent; font-size:11px; color:var(--z-muted); }
  .headerNav .assetLibraryButton { width:32px; height:32px; min-height:32px; justify-content:center; padding:7px; }
  .composerActions { display:grid; grid-template-columns:minmax(0,1fr) 35px; align-items:center; row-gap:7px; }

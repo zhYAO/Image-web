@@ -1,5 +1,6 @@
 "use client";
 
+import { ContentDialog } from '@/features/controls/NativeControls';
 import {
   createContext,
   useCallback,
@@ -10,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { Modal } from "antd";
+
 import { Coins } from "lucide-react";
 import {
   formatCredits,
@@ -260,11 +261,11 @@ export function CreditBalance() {
           ? `${formatCredits(state.wallet.availableMinor)} 积分`
           : "积分详情"}
       </button>
-      <Modal
+      <ContentDialog
         open={open}
         title="我的积分与模型价格"
         footer={null}
-        onCancel={() => setOpen(false)}
+        onClose={() => setOpen(false)}
       >
         <p>
           可用 {state.wallet ? formatCredits(state.wallet.availableMinor) : "—"}{" "}
@@ -274,7 +275,7 @@ export function CreditBalance() {
         {state.error && <p role="alert">{state.error}</p>}
         <Prices />
         <Link href="/account">查看积分流水</Link>
-      </Modal>
+      </ContentDialog>
     </>
   );
 }

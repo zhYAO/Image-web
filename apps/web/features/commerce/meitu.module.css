@@ -196,12 +196,6 @@
 .editor select {
   font: inherit;
 }
-.editor :global(.ant-select) {
-  font-size: 13px;
-  min-height: 36px;
-  border-radius: 7px;
-  box-shadow: none;
-}
 .section {
   margin: 0 0 24px;
 }
@@ -1125,10 +1119,6 @@
   padding: 2px 5px;
   border: 0;
 }
-.thumbnails :global(.ant-select) {
-  font-size: 10px;
-  width: 76px;
-}
 .shell [role="note"] {
   margin: 0;
   padding: 4px 12px;
@@ -1191,9 +1181,6 @@
   background: var(--z-glass-control);
 }
 .editor textarea {
-  border-radius: 12px;
-}
-.editor :global(.ant-select) {
   border-radius: 12px;
 }
 .detailEditor .settingGrid {
@@ -1292,7 +1279,7 @@
 }
 
 /* Source React Bits editor surfaces; retain the real form and preview scroll owners. */
-.editor { gap: 22px; padding: 0 4px 16px; background: transparent; grid-template-columns: minmax(290px,360px) minmax(0,1fr); }
+.editor { gap: 18px; padding: 0 4px 16px; background: transparent; grid-template-columns: minmax(300px,365px) minmax(0,1fr); }
 .config { border: 1px solid var(--z-border); border-top-color: var(--rim); border-radius: 23px; box-shadow: var(--z-shadow-soft); overflow: hidden; }
 .configScroll { padding: 22px; }
 .sectionTitle h2 { font-size: 12px; font-weight: 600; }
@@ -1300,5 +1287,6 @@
 .editor textarea,.editor input:not([type="checkbox"]):not([type="file"]):not([type="number"]):not([role="combobox"]) { border-radius: 12px; border-color: var(--z-border); background: var(--z-control-bg); }
 .actionBar { border-top: 1px solid var(--z-border); padding: 18px 22px; }
 .preview { border: 1px solid var(--z-border); border-radius: 23px; overflow: auto; background: var(--z-panel); }
-@media(max-width:1100px) and (min-width:768px) { .editor { grid-template-columns: minmax(260px,320px) minmax(0,1fr); gap: 16px; } .configScroll { padding: 16px; } }
-@media(max-width:767px) { .editor,.detailEditor { display: flex; flex-direction: column; height: auto; gap: 18px; padding: 0 0 20px; } .config { overflow: visible; } .configScroll { overflow: visible; padding: 18px; } .actionBar { border-radius: 0 0 23px 23px; } .preview { min-height: 360px; } }
+@media(min-width:1600px) { .editor,.detailEditor { grid-template-columns: minmax(340px,400px) minmax(0,1fr); gap: 24px; } }
+@media(max-width:1100px) and (min-width:768px) { .editor,.detailEditor { grid-template-columns: minmax(270px,320px) minmax(0,1fr); gap: 12px; } .configScroll { padding: 16px; } }
+@media(max-width:767px) { .editor,.detailEditor { display: grid; grid-template-columns: 1fr; grid-template-rows: minmax(0,1.35fr) minmax(0,1fr); height: 100%; min-height: 0; gap: 12px; padding: 0 0 12px; } .config { overflow: hidden; } .configScroll { overflow: auto; padding: 18px; } .actionBar { border-radius: 0 0 23px 23px; } .preview { min-height: 0; overflow: auto; } }

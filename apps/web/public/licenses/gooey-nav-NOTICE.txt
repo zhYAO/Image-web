@@ -1,0 +1,6 @@
+React Bits GooeyNav selected geometry adaptation
+Copyright (c) 2026 David Haz. MIT + Commons Clause.
+Source: https://github.com/DavidHDev/react-bits/blob/c2a1408d9219a5bd7a2d9c93c9c499042f5fa34a/src/ts-default/Components/GooeyNav/GooeyNav.tsx
+Only relative selected-item bounds tracking is adapted for the ZImage sidebar category buttons.
+No upstream particles, WebGL, gooey morphing or label animation is included.
+License: gooey-nav-LICENSE.md

@@ -12,7 +12,8 @@ import sharp from "sharp";
 import { resolveApparelFont } from "@/server/apparel/font-files";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sourceFonts = path.join(appRoot, "server/apparel/fonts");
+const sourceFonts = path.dirname(resolveApparelFont(false));
+resolveApparelFont(true);
 const filenames = ["NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf", "LICENSE.txt", "README.md"];
 const temporary: string[] = [];
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -61,18 +62,19 @@ afterEach(() => {
 });
 
 describe("apparel local font files", () => {
-  it("keeps both existing cwd lookup locations when shared assets are not configured", () => {
+  it("does not force repository font files into the application tracing graph", () => {
+    const config = readFileSync(path.join(appRoot, "next.config.ts"), "utf8");
+    expect(config).not.toMatch(/server\/apparel\/fonts/);
+  });
+  it("requires explicit external configuration even when cwd contains bundled fonts", () => {
     noSharedFonts();
-    const cwd = vi.spyOn(process, "cwd").mockReturnValue(appRoot);
-    expect(resolveApparelFont(false)).toBe(path.join(sourceFonts, filenames[0]!));
-    expect(resolveApparelFont(true)).toBe(path.join(sourceFonts, filenames[1]!));
-    cwd.mockReturnValue(path.resolve(appRoot, "../.."));
-    expect(resolveApparelFont(false)).toBe(path.join(sourceFonts, filenames[0]!));
+    vi.spyOn(process, "cwd").mockReturnValue(appRoot);
+    expect(() => resolveApparelFont(false)).toThrow(/ZIMAGE_SHARED_FONT_DIR/);
   });
 
   it.each([false, true])("renders identical real Sharp Chinese pixels with the shared font (bold=%s)", async (bold) => {
     noSharedFonts();
-    const local = resolveApparelFont(bold);
+    const local = path.join(sourceFonts, bold ? filenames[1]! : filenames[0]!);
     const f = fixture();
     configure(f);
     const shared = resolveApparelFont(bold);
@@ -161,6 +163,20 @@ describe("apparel local font files", () => {
     expect(() => resolveApparelFont(false)).toThrow(/LICENSE|许可/);
   });
 
+  it.each(["LICENSE.txt", "README.md"])("rejects a manifest that approves changed original %s", (name) => {
+    const f = fixture((m) => { m.files.find((e) => e.path === `fonts/${name}`)!.sha256 = "a".repeat(64); });
+    configure(f);
+    expect(() => resolveApparelFont(false)).toThrow(/SHA-256/);
+  });
+
+  it.each(["entry", "file", "bytes"])("requires retained font provenance %s", (problem) => {
+    const f = fixture(problem === "entry" ? (m) => { m.files = m.files.filter((e) => e.path !== "fonts/README.md"); } : undefined);
+    if (problem === "file") unlinkSync(path.join(f.fontDir, "README.md"));
+    if (problem === "bytes") corruptFirstByte(path.join(f.fontDir, "README.md"));
+    configure(f);
+    expect(() => resolveApparelFont(false)).toThrow(/README/);
+  });
+
   it.each(["font", "directory", "manifest"])("rejects a %s symlink escaping the version directory", (target) => {
     const f = fixture();
     const origin = target === "font" ? path.join(f.fontDir, filenames[0]!) : target === "directory" ? f.fontDir : f.manifestFile;
@@ -205,7 +221,7 @@ describe("apparel local font files", () => {
     expect(() => resolveApparelFont(false)).toThrow(/manifest.*(?:SHA|摘要)|清单.*(?:SHA|摘要)/i);
   });
 
-  it("also rejects modified default local fonts instead of selecting a system font", () => {
+  it("never uses cwd font files without explicit external configuration", () => {
     noSharedFonts();
     const root = mkdtempSync(path.join(tmpdir(), "zimage-local-font-test-"));
     temporary.push(root);

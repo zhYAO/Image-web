@@ -80,10 +80,27 @@ describe('account feedback', () => {
     expect(await screen.findByText('密码更新失败。')).toBeInTheDocument();
   });
   it('does not report deletion as accepted after password rejection', async () => {
-    vi.stubGlobal('confirm', () => true);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ accepted: false })));
     render(<AccountPanel account={account} />);
     fireEvent.submit(screen.getByLabelText('重新输入密码').closest('form')!);
+    fireEvent.click(await screen.findByRole('button', { name: '确认注销' }));
     expect(await screen.findByText('密码验证失败，注销未受理。')).toBeInTheDocument();
   });
+  it('only sends account deletion after explicit dialog confirmation and lets cancellation retry', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ accepted: true }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<AccountPanel account={account} />);
+    fireEvent.change(screen.getByLabelText('重新输入密码'), { target: { value: 'test-password' } });
+    fireEvent.submit(screen.getByLabelText('重新输入密码').closest('form')!);
+    expect(await screen.findByRole('dialog', { name: '确认注销账号' })).toBeInTheDocument();
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.submit(screen.getByLabelText('重新输入密码').closest('form')!);
+    fireEvent.click(await screen.findByRole('button', { name: '确认注销' }));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/account', expect.objectContaining({
+      method: 'DELETE', body: JSON.stringify({ password: 'test-password', confirmation: 'DELETE' }),
+    })));
+  });
+
 });

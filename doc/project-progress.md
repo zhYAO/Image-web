@@ -1,5 +1,24 @@
 # ZImage 项目进度
 
+## 2026-10-28 阶段3表现层迁移（代码整合完成，浏览器及真实环境待验收）
+
+- 本地参考 ZIP 大小/SHA256 与全部197个清单文件通过校验，来源 `2450e9a`；保留参考许可。未采用参考模拟 Provider、会话/模型数据或法务草稿。
+- 全部功能视图已替换为原生控件与统一站内弹层/图片预览，移除 LobeHub UI、Ant Design、Emotion 主题注册及旧 Markdown 构建别名。依赖图1179→891个包记录，离线 frozen install及供应链校验通过；旧包解析/产品导入/构建边界2项测试通过。
+- 独立 SafeMarkdown 专项58项通过并审查通过；原生控件修正后专项46项通过并审查通过；账号/主题22项通过。最终 lint/typecheck与预算5项通过，整合代码审查通过。全量单元测试首次被执行环境断连中断，已确认无残留测试进程后补跑，完整结果待登记；保留原有Windows字体symlink EPERM安全测试。
+- 最终无密钥/禁止外网的Mock隔离Webpack构建通过（71.797秒）；运行时代码/配置/锁与快照一致，144份NFT中旧UI与仓库字体追踪均为0，产物字体文件0。该目录通过junction复用依赖，是本机QA编译证据，不作为Linux可部署发布包体积。
+- 对照工作区与阶段2隔离副本确认两者均残留字体tracing glob；本轮已在真实配置删除并补断言。字体解析器、外部原件及原生安全校验边界未变。
+- 未启动7788或其他服务，未做浏览器操作，未提交/推送/发布；原76项暂存补丁SHA256仍为3725d3c87bd0eacf9eca27a874276ded1621cf9d158b74eb4e67614a365d7188。临时7791 QA启动脚本已准备但未执行，后续由Terra验收并关闭。
+- 浏览器布局/键盘/首滚动效、真实Supabase/SSE/provider/私有Storage/队列及真实扣费仍待对应环境验收；Mock与本地fixture通过不能证明生产就绪。最终产物占比由后续同口径发布包复核。
+
+
+## 2026-10-28 阶段1前置统计与引用修复（本地定向验证通过）
+
+- 保留用户确认的 ae8c332 及76项既有暂存变化，未重新暂存/提交；修复仅留工作区。
+- 发布统计按最终覆盖结果计数，普通输入文件数不重复加诊断文件，链接目标按真实 UTF-8 字节另列；先复现3项失败，再通过8项统计及3项Markdown profile测试（含8种SSR对照）。
+- 19处被删历史证据链接改指真实 ae8c332 Git对象，逐项校验存在；历史文档删除保持。完整包CI固定同源资源，测量测试并入原Node步骤，无新增job或资源发布。
+- 本轮 Node24.19.0：定向lint、无输出typecheck、预算5/5、YAML/同源配置校验通过；lint保留既有Pages目录提示。未重跑业务全量、构建、浏览器或真实服务验收，不将先前Windows打包限制记为通过。
+- 尚未开始字体外置或Lobe/AntD迁移；未启动7788、连接生产、付费调用、推送或部署。详细补丁与红/绿日志留仓库外本机任务目录，由父会话继续串行交接。
+
 ## 2026-10-28 首页与工作区功能分支交接
 
 - 用户授权将已验收改动提交并推送到 `origin/codex/home-chat-react-bits-20261027`，供D1M自行拉取本地运行；不合并main、不创建PR、不部署、不操作D1M。
@@ -11,13 +30,13 @@
 - 原始Mac仓库在最新origin/main `9c5c3ea95e0c66193b23a2db50643530aa7d095a` 新建 `codex/home-chat-react-bits-20261027`；只做本地开发，未push/PR/部署/生产操作或付费模型调用。`/` 与 `/home` 共用首页，唯一工作区 `/workspace`，登录回跳和旧深链同步。模型保持豆包、MiniMax聊天与Seedream生图，真实选择进入既有请求。
 - 用户实测反馈的动画失效与折叠错乱已定位并修复：Reveal子控制器先于父ref运行；tooltip包装破坏直接子节点CSS。均先失败再通过回归。修复后的实际Edge有淡入中间帧、76px图标居中侧栏、展开无气泡；另修手机旧换行覆盖。底部CTA在opacity0.376678、translateY17.453px动画中首次点击进入登录；访客全部CTA与顶部登录、已登录响应隐藏登录、模型键盘/焦点/外部关闭及390px布局已实际核对。
 - 最新产品代码独立QA构建49/49、typecheck、lint、预算5/5通过；字体canonical路径27/27，保留像素/安全断言。Node25实验storage使用官方关闭开关，让jsdom正常接管。独立审查滚动重置问题已回归修复，Reveal/tooltip复审无新实质问题。最终全量退出0：Web **911/911（124文件，495.66s）**、Domain **106/106（12文件）**，见 `/tmp/zimage-final-full-tests.log`；旧默认回跳预期迁移后安全断言保留，最终窄范围复审无新实质问题。
-- 当前用户预览 `http://127.0.0.1:3100/`、`/workspace` 是当前未提交分支Mock，已恢复可用；认证UI专用3101/3102夹具验收后停止，已清理无打开文件的隔离QA输出，未使用真实账号。实际参考Site已读取截图，但所交接源码commit与Site v18未证明逐字一致，不宣称像素完全一致。真实Supabase、验证码、计费及模型就绪仍沿用既有边界。详见[本地QA记录](qa/2026-10-27-home-chat-local.md)。
+- 当前用户预览 `http://127.0.0.1:3100/`、`/workspace` 是当前未提交分支Mock，已恢复可用；认证UI专用3101/3102夹具验收后停止，已清理无打开文件的隔离QA输出，未使用真实账号。实际参考Site已读取截图，但所交接源码commit与Site v18未证明逐字一致，不宣称像素完全一致。真实Supabase、验证码、计费及模型就绪仍沿用既有边界。详见[本地QA记录（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-27-home-chat-local.md)。
 
 ## 2026-10-27 三层管理员适配与生产平台匹配（本地完成，已收生产公开配置，待最终构建）
 
 - 用户要求的实际管理员适配器已实现：独立bundle、固定路径root deploy/rollback及systemd-template，旧完整包helper未修改。沿用同一部署锁、严格本机HTTP/TLS健康检查和精确原版本回退；root导入闭包/安全Node路径、有界7成员传输、真实生产SHA/.next/www资源门禁、逐release字体环境、nonroot字体/native与sameSHA完整重验均有回归。未安装到ECS或修改sudoers/Nginx/服务。
 - 最终完整运维Python套件**114/114**、13.325s通过；Python3.10语法检查和缺新API摘要回归通过，未声称真实Python3.10运行。应用源码/锁文件与已验证第二QA一致，不重复887项应用回归或占位构建。独立审查无Critical/Important；额外验证7项用例、4类七成员恶意包及异UID拒绝。运维边界：helper任何非零都须核查current并按捕获oldSHA回退；新95资源HTTPS是外部硬门，失败必须精确恢复。
-- 父会话CloudAssistant `t-sh0719pffua0buo`退出0：ECS Linux5.15 x64、Node24.19.0/ABI137/Node-API10、glibc2.35。官方固定摘要Ubuntu22.04容器已实际拉取/启动，真实Node元组与ECS一致；严格指纹未放宽。只读/非root/无网络/不privileged环境中现有pnpm、SWC、Sharp、两字体和JPEG/WebP/AVIF通过。复用预装Python隔离运行，49项分层测试6.754s通过，adapter原生JS实际返回fonts2/codecs6；未挂载主机凭据或敏感系统目录。详见[平台方案及证据](qa/2026-10-27-production-platform-plan.md)。
+- 父会话CloudAssistant `t-sh0719pffua0buo`退出0：ECS Linux5.15 x64、Node24.19.0/ABI137/Node-API10、glibc2.35。官方固定摘要Ubuntu22.04容器已实际拉取/启动，真实Node元组与ECS一致；严格指纹未放宽。只读/非root/无网络/不privileged环境中现有pnpm、SWC、Sharp、两字体和JPEG/WebP/AVIF通过。复用预装Python隔离运行，49项分层测试6.754s通过，adapter原生JS实际返回fonts2/codecs6；未挂载主机凭据或敏感系统目录。详见[平台方案及证据（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-27-production-platform-plan.md)。
 - 官方Python apt安装仅尝试一次，因容器DNS无法解析Ubuntu源失败，无包安装；已停止，不改DNS/代理/host网络/安全配置。随后使用现成可信Python并屏蔽site-packages，无需继续下载。基础镜像78,093,105字节；原有QA/正式产物保留。
 - **公开配置已受控收到并验真**：Library物化download failed后没有重试，父会话另交付原始字节，387bytes及可信SHA完全匹配、仅5个公开键，文件0600置仓库外且未输出值。下一步锁定含新适配器的最终commit，做一次规范.next/glibc2.35正式候选构建。配置中的Turnstile key已确认是Cloudflare官方always-pass测试key；保留现存值/校验而不静默替换，后端secret/真实验证码未读未测，不能据候选构建宣称防机器人通过。详情见平台报告。Library报告保存network故障保留，不编造身份或链接；旧QA包绝不上传冒充生产。
 - 用户已批准的生产安装/临时OSS表单中转、Windows严格验收和一次自动回退仍由主会话协调。当前没有可用的OSS API签名请求，不假定浏览器表单等同PUT URL、不创建凭据。Windows公网ConnectionReset仍未通过，所有生产安装/验收/切换待完成；没有把本地READY称为发布成功。
@@ -28,54 +47,54 @@
 - 第二轮QA构建98.556秒成功；普通运行文件101,403,266字节，比基准155,934,878少54,531,612（34.97%）。业务24,811,988、runtime32,873,294、字体/public43,717,984；图像/字体原字节、许可、完整语法语言与安全能力保留。
 - 真实三层冷/暖/回退目录已装配。含metadata未压缩业务24,955,607＋共享runtime33,180,123＋资源43,753,251＝101,888,981字节；gzip仅传输55,838,637。暖装配与可信同一QA清单重新装配均复用两层，987文件hardlink、无拷贝；不同代码回退由fixture覆盖，未恢复线上旧版。业务未移进runtime凑数。
 - 最终Web887/887（119文件），Domain106/106（未改源码），原分层28/28＋三层20/20，真实额度保护5/5，lint/typecheck通过；原型独立审核无当前范围Critical/Important。冷与回退实际Next/HTTPS/static/Sharp/CJK各132项通过；CA/hostname/privateDNS拒绝保持。
-- **仍in_progress的发布边界**：所有现有包为QA假Supabase＋test HTTPS域，productionReady:false，不能发布。两个认证API占位503未算真实401。等待5项公开生产变量、ECS共享cache路径和Node/ABI/glibc/libstdc++确认，才作规范.next的最终生产构建并输出新hash。真实公网/Nginx、服务UID、认证/业务、回退安全由正式发布验收；未用fixture替代。详见[最终验证报告](qa/2026-10-27-three-layer-validation.md)和[手动交接](../ops/aliyun/MANUAL-THREE-LAYER-RELEASE.md)。
+- **仍in_progress的发布边界**：所有现有包为QA假Supabase＋test HTTPS域，productionReady:false，不能发布。两个认证API占位503未算真实401。等待5项公开生产变量、ECS共享cache路径和Node/ABI/glibc/libstdc++确认，才作规范.next的最终生产构建并输出新hash。真实公网/Nginx、服务UID、认证/业务、回退安全由正式发布验收；未用fixture替代。详见[最终验证报告（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-27-three-layer-validation.md)和[手动交接](../ops/aliyun/MANUAL-THREE-LAYER-RELEASE.md)。
 
 ## 2026-10-27 未压缩10MB继续瘦身（一次QA净减，整体未达标）
 
 - 沿用隔离分支，完整分类/top20生成文件及模块、官方资料与引入链已记录。用户目标为10,000,000未压缩字节，保留所有功能/语言字体/画质/安全。显式默认关闭的`ZIMAGE_BUILD_SLIM=1` webpack候选清理原本禁用Markdown分支、SSR未执行Shiki实现及Next两个仅dev入口追踪，不做压缩/移层假达标。
 - 唯一完整QA构建102.279秒成功、锁文件未变。业务42,545,964→**24,783,748字节**（-41.75%），全运行155,934,878→**101,375,026字节**（-34.99%）。服务端24,300,973→**9,971,306**，前端18,109,982→14,676,931，运行依赖69,670,930→32,873,294；字体/public原字节全部保留。整体仍超10MB，不宣称完成。
 - 全套Web840/840、Domain106/106；末次测试补充后Markdown实际Python着色/复制3/3，SSR8样例字节相同，Node打包/预算/profile13/13、最新profile3/3、Python运维77/77，lint/typecheck通过。真实Next/static/Sharp/CJK33项通过；客户端260grammar/65theme/WASM内容与加载入口全留。认证两项503仍未验证，未付费生成、上传、CI或改生产；独立审查无当前版本P0/P1。
-- 现有构建分层代码24,783,748+共享运行32,873,294+资源43,717,984=101,375,026，资源外置不改变总量。用户新增HTTPS版本化公共资源/共享本地字体原型继续在本分支推进；其配置需另作构建/真实域名验证，不能把本次QA冒充资源迁移验收。详见[完整报告](qa/2026-10-27-dist-10mb-audit.md)和[测量JSON](qa/2026-10-27-dist-10mb-analysis.json)。
+- 现有构建分层代码24,783,748+共享运行32,873,294+资源43,717,984=101,375,026，资源外置不改变总量。用户新增HTTPS版本化公共资源/共享本地字体原型继续在本分支推进；其配置需另作构建/真实域名验证，不能把本次QA冒充资源迁移验收。详见[完整报告（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-27-dist-10mb-audit.md)和[测量JSON（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-27-dist-10mb-analysis.json)。
 
 ## 2026-10-26 未压缩5MB约束（未达标，最小无损优化本地验证）
 
 - 用户澄清约束的是未压缩完整业务产物，必须保留原始页面、生图/导出、语言字体、画质与安全。此前4MB是压缩传输，56MiB是解码峰值内存，均不能算dist达标；暂停编码探索，不通过迁移/拆层隐去依赖资源。
 - 复用既有Next16.4.1/Sharp0.35.5匹配QA，未安装或重建。互斥原始文件业务45,297,593字节、全运行158,686,507字节。新增仅分离70份构建追踪清单2,751,629字节，原件/独立trace归档保留；业务降至**42,545,964字节（40.574993MiB）**，全运行**155,934,878字节（148.711088MiB）**。JS/CSS本身41,813,337字节；5,000,000字节目标尚未完成，不能靠打包参数保证。
 - 新回归失败先行后通过，Node打包6/6、完整Python运维77/77通过；独立临时副本真实Next/静态/Sharp/中文字体33项通过，4287保留文件SHA与原索引一致。真实认证/付费生图仍未验证，两个认证接口占位RPC仍503，不放宽门禁，不宣称全功能验收完成。
-- 原始源码/素材、旧10MB交付版及原产物保留。未push/Actions/上传/改生产/付费。现阶段可证预算业务50–60MB、全运行180–200MB；若坚持未压缩5MB，需要另定模块图/架构优化范围及验收，不擅自大重写。详见[未压缩测量与追踪清单优化](qa/2026-10-26-release-uncompressed-budget.md)。
+- 原始源码/素材、旧10MB交付版及原产物保留。未push/Actions/上传/改生产/付费。现阶段可证预算业务50–60MB、全运行180–200MB；若坚持未压缩5MB，需要另定模块图/架构优化范围及验收，不擅自大重写。详见[未压缩测量与追踪清单优化（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-release-uncompressed-budget.md)。
 
 ## 2026-10-26 日常代码5MB可行性（本地编码原型，未启用部署）
 
 - 基线`18ffbd3e`和既有当前版本QA构建保留，未重建/安装/裁剪语言或功能、未进一步拆出客户端JS/CSS。同一46,172,160字节代码tar经5种编码解码后SHA全部一致；XZ9归档3,799,552字节，含新索引/清单的本地格式候选**4,000,339字节（3.815021MiB）**。
 - XZ9本机编码14.428秒、峰值521.71MiB，流式解码0.194秒、56.18MiB；64MiB字典，32MiB解码限额拒绝、96MiB通过。首次全部运行层仍64,084,474字节，独立debug另11,232,847字节。当前组装器主动拒绝候选schema2，生产helper仍仅gzip，未改默认10MB路径或发布协议。
-- 931份JS静态分析识别语言/主题数据跨server/client重复，未以删除它们凑数。下一步最小边界是可选XZ编解码、目标能力/内存上限与组装回归；本轮只完成有数字和逐字节校验的可行性研究，原生产/CI均未触碰。详见[5MB研究](qa/2026-10-26-release-code-5mb-study.md)。
+- 931份JS静态分析识别语言/主题数据跨server/client重复，未以删除它们凑数。下一步最小边界是可选XZ编解码、目标能力/内存上限与组装回归；本轮只完成有数字和逐字节校验的可行性研究，原生产/CI均未触碰。详见[5MB研究（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-release-code-5mb-study.md)。
 
 ## 2026-10-26 当前版本瘦身QA（本地预算通过，未发布）
 
 - 用户另行批准隔离环境按现有锁文件安装依赖；官方npm源frozen安装、生命周期脚本禁用，锁文件SHA保持`62b7a0a523438da5fad23d1a5be2926021ad566f6bde24d35ec2b1f425955d0c`。Next16.4.1/Sharp0.35.5单次webpack占位HTTP QA构建131.953秒通过，未读取生产密钥，buildId明确qa前缀。
 - 当前webpack423个生成map共53,471,956原始字节，导致初次代码21,250,446字节超预算；map原件保留并独立调试归档，完整JS/CSS保留，代码gzip9后日常交付**9,977,498字节（9.515284MiB）**，含代码索引/release清单，余量22,502字节。首次全运行层70,061,633字节，独立debug归档11,232,847字节；完整运行tgz69,143,502字节，不混称10MB完整包。
 - 本地组装与真实Next/静态/Sharp/中文字体33项通过，渲染器8/8、Node打包4/4、运维76/76通过；独立审查map目录边界已失败回归复现并修复。两项受保护API因占位RPC为503，保留为QA限制，不放宽生产401门禁；Sentry资料独立保留，未上传或声称在线符号化通过。
-- 此为当前版本QA结果，不是原artifact或生产发布证明；未push/Actions/上传/迁移/Nginx/生产重启/发布，原工作区保持不变。目标主机兼容、真实构建配置、认证后台、调试归档私有留存/传输及发布仍待授权验证。详见[当前QA证据](qa/2026-10-26-release-slim-current-qa.md)。
+- 此为当前版本QA结果，不是原artifact或生产发布证明；未push/Actions/上传/迁移/Nginx/生产重启/发布，原工作区保持不变。目标主机兼容、真实构建配置、认证后台、调试归档私有留存/传输及发布仍待授权验证。详见[当前QA证据（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-release-slim-current-qa.md)。
 
 ## 2026-10-26 发布包瘦身（独立本地原型，正式体积待核验）
 
 - 独立分支 `codex/release-slim-51cc0a9`，基线精确为 `51cc0a953c7582fe19663d8afc497cca9e8cfbf5`。仅从打包清单排除已核验的5张来源PNG，仓库原件、两份manifest及两版44张JPEG/WebP成品保留；精确清单与拒绝覆盖的Node回归3/3通过。
 - 增加独立本地代码/依赖/静态/字体分层原型，日常代码预算包含服务端、`.next/static`、代码索引及release清单；未接入现有CI或生产部署。已有Next16.3/Sharp0.35.3/development旧样本日常8,822,577字节（8.413865MiB），首次全层60,616,131字节（57.808047MiB）；**不是当前16.4.1正式包达标证明**。正式artifact未取得且未重试被拒读取，内层tgz摘要未知。
 - 本地运维75/75（含分层26项）、Node打包3/3通过。独立审查两项重要问题均以失败回归复现后修复：原型始终非生产且缺构建输出阻断；输入/输出重叠和存储子目录符号链接拒绝写入。非glibc指纹细分为后续边界，未宣称支持。
-- 本轮未构建、安装、push/PR/Actions、上传、改Nginx、重启、发布或删除现有产物；匹配当前锁定依赖的正式测量、目标运行环境兼容及发布集成仍待验证。详见[瘦身原型证据](qa/2026-10-26-release-slim-prototype.md)和[本地使用边界](../ops/aliyun/LAYERS.md)。
+- 本轮未构建、安装、push/PR/Actions、上传、改Nginx、重启、发布或删除现有产物；匹配当前锁定依赖的正式测量、目标运行环境兼容及发布集成仍待验证。详见[瘦身原型证据（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-release-slim-prototype.md)和[本地使用边界](../ops/aliyun/LAYERS.md)。
 
 ## 2026-10-26 退役入口真实404与发布前HTTP回归（本地验证中）
 
 - main `9993d2d` 的正常发布因 `/create/batch` 实际200、门禁预期404而失败回退，非本轮Actions额度错误；父Edge已确认原版8cbb708公网首页、ready和已有会话恢复。服务代理保留，root helper源码未改。
 - 真实Next16.4.1 HTTP正式模式占位配置构建复现异步notFound流式软404：5种退役请求全200且GET有noindex。静态Route Handler明确404后5项全404，首页及有效场景仍200；新增实际standalone HTTP回归，打包前执行，不放宽404门禁。
 - 公网验证增加安全底层错误分类和切换前原版公网预检，旧runner URLError内部原因仍未取得，不宣称已修复。正式HTTP占位配置及mock两次构建退出0、各HTTP7/7，运维49/49、lint/typecheck、预算5/5、独立复审通过；本轮全量本地测试Domain106/106、Web838/838（406.62秒）通过。
-- 遵照节省额度要求，没有新push/CI/部署；占位QA构建不可发布。准备云开发环境构建、已授权控制台文件传输、原helper手动激活与严格检查/回退的方案，现有上传权限与临时OSS暂存同意待确认。不在2GB生产机全量构建，不新增网络/安全/凭据权限。详细证据见[HTTP复核](qa/2026-10-26-retired-route-http.md)。
+- 遵照节省额度要求，没有新push/CI/部署；占位QA构建不可发布。准备云开发环境构建、已授权控制台文件传输、原helper手动激活与严格检查/回退的方案，现有上传权限与临时OSS暂存同意待确认。不在2GB生产机全量构建，不新增网络/安全/凭据权限。详细证据见[HTTP复核（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-retired-route-http.md)。
 
 ## 2026-10-26 服务出口恢复与发布验证分离（代码待审安装/发布）
 
 - 父Edge确认8cbb708的服务级代理修复08:49:33 UTC保留，首页、ready及已有登录工作台恢复；未改全机DNS/路由/Mihomo。服务器默认公网检查08:57仍6008ms超时、无HTTP响应，与应用/外部浏览器必须区分。
 - 本地发布脚本改为服务器应用/严格TLS本机Nginx40项 + GitHub runner独立公网20路由和最多3项静态资源，任一失败仍回退精确原SHA；401需unauthorized JSON，真实依赖503不放宽。手动/失败恢复均补外部稳定接口及静态资源验证。独立审查发现的“恢复失败又选回被拒版本”已用真实symlink回归修复。
-- 最终运维45/45（4.287s）、bash语法、diff检查通过，独立复审无新增问题；不重复未变化的Web全量，不把既有Web838 CI冒称新ops提交已远端验证。细节见[验证说明](qa/2026-10-26-release-validation-sources.md)。
+- 最终运维45/45（4.287s）、bash语法、diff检查通过，独立复审无新增问题；不重复未变化的Web全量，不把既有Web838 CI冒称新ops提交已远端验证。细节见[验证说明（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-release-validation-sources.md)。
 - 生产保持8cbb708；本轮准备按正常草稿PR/CI交付，安装及部署未执行，远端门禁以最终PR SHA为准。安装新版root helper需管理员明确批准，固定SHA256 `28e4dad990be11ebcd3acc8d413b383a3c0f96ec0e20d9e91edf28d441a58d82`，仅替换 `/usr/local/sbin/zimage-release`、保留root:root0755和原备份；不重启Web、不读私密环境、不改sudoers/SSH/网络。激活前哈希预检不匹配即停止。新ops代码须正常PR/CI及新SHA产物，不能改标签复用旧包。
 
 ## 2026-10-26 访问诊断、公开首页导航与性能（本地完成，已获正常发布授权）
@@ -86,13 +105,13 @@
 - 最新用户要求已实现：明确guest回真实公开 `/home`，主动登录仍可进入/login/auth；错误/15秒超时不等同guest，不清有效Cookie。含糊账户401另查身份；身份RPC与账户资料服务的网络/未知错误保持503并拒绝访问；成功退出要求signedOut:true。公开首页首访不挂载身份provider，正式模式精确/home GET/HEAD服务端也不读认证配置、不刷新Cookie，其余路由/API/POST/旧匿名模式保留验证。
 - 账户缓存展示风险已补守卫：guest/checking/error不显示旧账户字段/操作；guest回首页，authorized owner不匹配刷新SSR资料，不清新合法会话。独立审查三项风险（动作401、资料401、旧owner展示）均以失败先行回归修复。
 - 性能：保留应用provider树跨首页状态；导航意图预取，助手富文本按需，认证未确认不预取编辑器。移动390px主列宽0的独立空白问题补flex:1，390/767/768/1024px与草稿/导航回归通过。设计、图片、动效、邮箱、短信禁用、计费/生成均保留。
-- 最近性能快照（03:18构建、03:21采样；每档每路由3次；Chromium151，冷浏览器缓存；移动390×844/150ms RTT/1.6Mbps/4×CPU）：品牌桌面JS500816→224812bytes、FCP404→392ms、LCP752→532ms；移动JS488444→224812、FCP724→712、LCP776→768。空白工作区桌面JS1742393→633815，输入就绪1643→1741ms，LCP1264→1512；移动从空白恢复，输入就绪6551ms，LCP7088。完整计入link预加载，公开小幅时间波动与桌面取舍，不保证生产0.8秒。最后账户展示守卫随后追加并另测/构建，未冒称重新跑过全部性能；完整表/上下文见[报告](qa/2026-10-26-access-home-performance.md)。
+- 最近性能快照（03:18构建、03:21采样；每档每路由3次；Chromium151，冷浏览器缓存；移动390×844/150ms RTT/1.6Mbps/4×CPU）：品牌桌面JS500816→224812bytes、FCP404→392ms、LCP752→532ms；移动JS488444→224812、FCP724→712、LCP776→768。空白工作区桌面JS1742393→633815，输入就绪1643→1741ms，LCP1264→1512；移动从空白恢复，输入就绪6551ms，LCP7088。完整计入link预加载，公开小幅时间波动与桌面取舍，不保证生产0.8秒。最后账户展示守卫随后追加并另测/构建，未冒称重新跑过全部性能；完整表/上下文见[报告（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-26-access-home-performance.md)。
 - 完整导航/身份/公开代理版本：Domain12文件106项、Web115文件834项全过，Web429.31s/exit0。末次账户展示守卫后相关8文件51项（含新增4项）通过，按要求不重复无关全量，明确不将834冒称补丁后重跑。最终lint/typecheck/预算5项及两编译器构建通过；Webpack24.5s、Turbopack4.2s、48/48静态页（编译时间受缓存影响），既有ESLint Pages/Sentry建议未压制。
 - 原始失败、日志、JSON、截图与临时脚本在 `/workspace/scratch/zimage-diagnostic/evidence/`，不入git；源码/测试/脱敏文档共34文件。基线next-env恢复，本次.next-build-qa清理，原.next保留。没有自动扩展生产修复；已授权正常发布，最终SHA、CI、部署、实际回退点与生产验证以远端终态为准。Actions存储90%警告期间不新增产物上传、不删除既有产物或改付费设置，若CI阻塞则报告。
 
 ## 2026-10-23 React Bits 整合（本地实现、自动化与桌面复核完成；数据库/真实环境待验）
 
-- 本地分支 `codex/zimage-react-bits-integration-20261022`，基线 `a9a88959d8d9778dc7288a47fb2933a3162e39b7`；按已核验源 `4516d423803ab2923083610d75f2326c033984fe` 完成首页 `/home`、唯一工作区 `/`、五场景目录/表单/详情、会话资产 `/assets`、账户和邮箱认证界面整合；`/workspace` 重定向。真实网关、API、认证、权限、计费与生成保持，手机仅禁用占位。用户现已授权提交、推送该独立分支，并在发布门槛满足后按正常 PR 流程合并发布；本节本地证据保留，远端 CI 与生产结果将在取得后追加。映射和来源见[整合说明](plans/2026-10-22-react-bits-integration.md)。
+- 本地分支 `codex/zimage-react-bits-integration-20261022`，基线 `a9a88959d8d9778dc7288a47fb2933a3162e39b7`；按已核验源 `4516d423803ab2923083610d75f2326c033984fe` 完成首页 `/home`、唯一工作区 `/`、五场景目录/表单/详情、会话资产 `/assets`、账户和邮箱认证界面整合；`/workspace` 重定向。真实网关、API、认证、权限、计费与生成保持，手机仅禁用占位。用户现已授权提交、推送该独立分支，并在发布门槛满足后按正常 PR 流程合并发布；本节本地证据保留，远端 CI 与生产结果将在取得后追加。映射和来源见[整合说明（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/plans/2026-10-22-react-bits-integration.md)。
 - 最终依赖为 Next / eslint-config-next **16.4.1**、Sentry **10.75.2**、sharp **0.35.5**，React 19.2.7 保持。官方发布记录和 registry peers 确认兼容；不启用 Cache Components 或改业务架构。仅针对 fast-uri 3.1.6 → 3.1.8、brace-expansion 5.0.9 → 5.0.12 设置临时精确 overrides，lock 与实际依赖均核实；上游不再选择旧版本时移除 pin 并重审计。普通递归更新曾 exit 0 但未改变解析结果，原日志保留。安装默认目录 EROFS 后仅改用命令级可写 XDG 数据目录和项目 store，无全局配置或权限扩大。
 - **完整自动化**：升级前、最终安全版本分别执行 `DEBUG_PRINT_LIMIT=100000 pnpm test:run --coverage`，均 exit 0；两轮各为 Domain **12 文件 / 106 测试**、Web **110 文件 / 796 测试**全过，Web 分别耗时 1760.72s / 1980.73s。最终 Web lines/statements **89.05%**、functions **71.61%**、branches **85.31%**；Domain **96.56% / 75% / 87.77%**，原覆盖率阈值全过且没有放宽等待条件。最终 lint / typecheck exit 0，预算 **5/5** / exit 0。主线程此前独立 Worker **80/80**、运维辅助 **20/20**、启动器 **3/3**，无后端变更。
 - **历史失败保留**：源到位前首次标准全量 Web 787/788 / exit 1；电商入口重试未在原 10 秒窗口找到向导。原文件和基线定向复验均 4/4；本日两轮完整覆盖率也未复现，但根因仍未证实，不称已经定位修复。首轮日志、截断 DOM 限制和初始化/懒加载时序假设均保留于下方历史节。
@@ -118,7 +137,7 @@
 ### 源交付前的阶段记录（传输阻塞已解决，首轮失败证据保留）
 
 - 基线：已获取最新 `origin/main`，SHA `a9a88959d8d9778dc7288a47fb2933a3162e39b7`；工作区起始干净，在 `/workspace/Image-web` 创建本地独立分支 `codex/zimage-react-bits-integration-20261022`。未修改 `clone-web`，未推送、合并或部署。
-- 目标仓库审查与[页面/契约映射](plans/2026-10-22-react-bits-integration.md)已建立。保留现有 Next.js、唯一工作区、HTTP/Mock 网关、真实认证、会话、生图、私有资产及计费；不复制源部署身份或模拟后端。
+- 目标仓库审查与[页面/契约映射（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/plans/2026-10-22-react-bits-integration.md)已建立。保留现有 Next.js、唯一工作区、HTTP/Mock 网关、真实认证、会话、生图、私有资产及计费；不复制源部署身份或模拟后端。
 - 源目标 SHA 为 `4516d423803ab2923083610d75f2326c033984fe`。普通 Git 读取因缺少认证失败，预览普通 HTTP 返回 403；后续正式 Library ZIP 的 `prepare_materialize` 返回授权 URL 但 `workspace_path=null`，消费端普通 GET 再次返回 HTTP 403 / curl exit 22，未取得 ZIP 字节。当时停止失败路线等待正式交付；文件摘要仅为预期值，尚未核验或移植。后续输入恢复与实施结果见上文。
 - 用户已在本任务重新上传同名 ZIP（`file_00000000ed9482309263f5c4fc0b72c1`）；对新附件的一次受支持读取确认大小 2,725,000 bytes，但仍无本地路径，新 URL 普通 GET 同样 HTTP 403 / exit 22，未取得字节。当时无需用户再次上传，原路线停止等待；后续已通过授权 GitHub 输入分支解决，未重试旧票据或扩大权限。
 - 已完成不依赖源视觉的手机号入口边界：邮箱登录/注册/找回/验证码继续原服务；手机号区域明确标注短信未接入，全部输入及按钮禁用，没有短信请求、演示认证或假会话，邮箱草稿在切换时保留。
@@ -174,7 +193,7 @@
 - 按用户要求用成年东亚模特、米白衬衫、垂感宽腿裤、小金耳饰、自然窗光和柔光影棚改善穿搭审美；分别生成四张 1024×1536 单图，主图等比缩小、面料近景 829×845 裁切到 790×741，不用拼图低像素放大。水印缩成 `ORIGINAL AI · 原创示例`。首图和坐姿初稿各少一颗门襟纽扣，经正式 image_gen 最小修正后均可见 7+2 纽扣；仍有细微衣袋轮廓/织纹变化，不声称真实商品保真。
 - 新资源 `/commerce/apparel-v2/`：4 张原始 PNG、11 张 JPEG、11 张 WebP、联系表和完整来源/提示词/摘要。逐张像素检查及独立代码/资源审查通过；桌面浅深主题、1440×900/600、720×900 的 11 图、末图滚动、原图 750×1000 预览和空表单通过。lint、构建、预算 5/5 通过，首轮 typecheck 读到 Next 生成文件临时语法错误，顺序复验通过；本轮全量 Domain 10 文件 / 76 测试、Web 94 文件 / 643 测试单次通过，0 失败，Web 耗时 936.04 秒。初轮日志与最终复验均保留，自有预览服务已停止。
 - Library 单文件联系表正式保存成功：`libfile_d19dd5ee6bc48191a4d2c80de3da88c5`，`/lookbook-contact-sheet.webp`。主会话需通过 Library 在自己的环境下载并实际查看像素，不能使用本容器路径代替传输。
-- 用户确认 Supabase 配置已添加；只读复核 image-web / `klmiycyesxnpinxpeqep` 正常，线上 Worker 现在 v18，五份源码与初检 v16 完全相同，仍不读取新 Plan Key/模型。当前工具无 Secret 名称清单能力，变量存在性仅按用户确认记录，未读取/回显/复制/移动密钥值。添加配置不等于四张调用批准；真实电商/聊天仍未测。最小不影响生产的完整实测需另行批准四张已有套餐额度，以及兼容该分支的隔离测试环境；没有部署授权，不能擅自准备远程 Worker/迁移。见 [v2 样图及交接报告](qa/2026-10-12-apparel-lookbook-v2.md)。
+- 用户确认 Supabase 配置已添加；只读复核 image-web / `klmiycyesxnpinxpeqep` 正常，线上 Worker 现在 v18，五份源码与初检 v16 完全相同，仍不读取新 Plan Key/模型。当前工具无 Secret 名称清单能力，变量存在性仅按用户确认记录，未读取/回显/复制/移动密钥值。添加配置不等于四张调用批准；真实电商/聊天仍未测。最小不影响生产的完整实测需另行批准四张已有套餐额度，以及兼容该分支的隔离测试环境；没有部署授权，不能擅自准备远程 Worker/迁移。见 [v2 样图及交接报告（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-12-apparel-lookbook-v2.md)。
 
 ## 2026-10-12 服装示例补齐与质量测试准备（本地验收完成，真实 Plan 未测）
 
@@ -183,7 +202,7 @@
 - 本轮 lint、typecheck、标准 Mock 构建及 git diff 检查通过；预算保护 5/5，全量 Domain 76/76、Web 643/643 单次通过。新增表单不采用示例资料的回归先红后绿，服装工作区 6/6。Desktop Chromium 151 实际检查 1440×900/600、720×900 和深色桌面：11 图全部加载、末图可达、无横向溢出，保持既有宽屏双栏/窄窗口单区滚动；原图预览 750×1000，表单为空。浏览器仅有既有 favicon 404，lint 有既有 pages 检测提示。
 - 排版示例展示合格；面料放大存在源分辨率柔化，AI 照片间衣袋/纽扣细节不能用于真实商品保真。其他 image_gen 工具和 Mock 输出不计入项目 Seedream 验收。电商和聊天两条 Plan 真实路径均未测，不能判定合格。
 - 本地无 Plan/Supabase/账号安全配置。只读已连接项目 `klmiycyesxnpinxpeqep`：线上 generation-worker v16 不含新 Plan Key/模型分支，生产未应用 `20261012024930` 准入迁移；未读取 Secret 值。用户选在 Supabase 私有变量安全填写，但单设 Secret 不更新代码、数据库或本地 Next.js，当前禁止部署条件下仍无可执行的该分支端到端路径。
-- 四张实测方案为电商白底/模特/中文细节各一张、普通聊天一张，指定 Plan Pro 和完整 Plan URL。项目静态报价 120 minor / 1.20 积分，供应商现有 Plan 实际额度未知；主会话确认卡尚待批准，限制仅现有套餐额度、不充值/额外按量/自动重试。安全交接与逐张示例结论见 [质量报告](qa/2026-10-12-apparel-examples-quality.md)、[安全配置交接](qa/2026-10-12-plan-safe-test-handoff.md)。
+- 四张实测方案为电商白底/模特/中文细节各一张、普通聊天一张，指定 Plan Pro 和完整 Plan URL。项目静态报价 120 minor / 1.20 积分，供应商现有 Plan 实际额度未知；主会话确认卡尚待批准，限制仅现有套餐额度、不充值/额外按量/自动重试。安全交接与逐张示例结论见 [质量报告（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-12-apparel-examples-quality.md)、[安全配置交接（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-12-plan-safe-test-handoff.md)。
 - Library 样图传输受环境连接阻碍，三项均 `transfer_failed`，无 finalize 或 Library ID，不宣称保存成功，不规避代理/网络策略。原图与资源来源摘要已保留；全部排版 JPEG 在该开发分支的 `apps/web/public/commerce/apparel-v1/`，报告与证据包可供继续安全交付。
 
 ## 2026-10-12 分层玻璃、浅深主题与首页轮播（本地验收完成，仅开发分支交付）
@@ -197,7 +216,7 @@
 - 实际 Chromium 151 Desktop Mock：浅深首页、720px 单卡、减少动态/透明度与强制颜色、模型弹层、共享目录五入口及场景导航通过；下一张轨道 -292px、上一张回 0、拖动 140px 时轨道跟随 -140px 后吸附 -292px，卡片无整组淡出或卸载，播放末端停止。服装页 1440×900/720/600 左右独立滚动，1100×900、720×900、600×720 单区滚动；末尾输入/30 张合成预览可达，操作条不移位、外层不滚动且无横向溢出。没有提交真实生成，合成夹具不改变积分。
 - 独立只读复审最终 **Critical 0 / Important 0 / Minor 0**；浅深组件派生值、SSR、原生按钮、数量字段、焦点/指针与高对比降级均完成复验。只覆盖本地 Mock/桌面窗口模拟，未覆盖生产 Auth/Storage、Safari/Firefox、真实触摸/触控板、原生 200% 缩放或 GPU 性能。
 - 浅深首页最终截图保留在 `/workspace/scratch/ZImage-liquid-glass-implementation-20261012/`。Library 官方上传助手在 `tools/list` 阶段两次报 `network`，未进入创建；按用户补充指令改用运行时直接暴露的单文件保存动作，两张均返回 succeeded 并完成本地版本元数据写回。浅色 **`libfile_5c5f919f59b881919e73151c2488e12c`**，深色 **`libfile_a82b646499308191907da7c5a6f2c602`**；未改认证/网络配置或换用外部服务，原失败日志保留。
-- 推送前读取远程分支仍为原基线，现有唯一 CI 的 push 仅匹配 `setup2`/`main`，生产构建限定 main 且非 PR；无活动 Git hook。验收记录见 [本轮 QA](qa/2026-10-12-liquid-glass.md)。临时 Next/CDP 已停止，日志和失败记录保留；原工作树、历史真实验收证据及 clone-web 未修改。
+- 推送前读取远程分支仍为原基线，现有唯一 CI 的 push 仅匹配 `setup2`/`main`，生产构建限定 main 且非 PR；无活动 Git hook。验收记录见 [本轮 QA（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/doc/qa/2026-10-12-liquid-glass.md)。临时 Next/CDP 已停止，日志和失败记录保留；原工作树、历史真实验收证据及 clone-web 未修改。
 
 ## 2026-10-12 服装滚动与 Seedream Plan（本地验收完成，仅开发分支提交）
 
@@ -306,7 +325,7 @@
 - 内置 imagegen 生成 18 张原创图片，版本化 WebP 合计约 1.6 MB。暖橙耳机、冷蓝耳机、杯子复刻对照和浅色香水摄影以真实布局组合，示例不自动加入请求。来源与提示词见 [素材清单](assets/meitu-commerce-v1.md)。
 - 自动化：lint、typecheck、预算保护 5/5、最终隔离生产构建通过（42 页面）。完整单测首轮 Domain 61/61、Web 483/487；4 项旧 UI 断言经修正与定向复验全部通过。最终 Domain 62/62，语言及新流程专项 15/15，相关流程 26/26；最后素材归属修复后新增流程 8/8、原一键流程 7/7。中间新增回归曾因测试使用非 UUID 素材编号失败，修正测试数据后 8/8 通过。没有宣称最终代码单次全量全绿。
 - 浏览器：本机 Mock 生产构建，CUA 走查 1280×650、1440×900、1920×1080，五流程配置及 AI 上传后状态；无横向页面溢出。已走通套图、复刻、详情、AI 商品图、批量的模拟提交，详情文案／排序／步骤刷新恢复，批量附件／参数恢复、逐项进度和历史抽屉。单张编辑、历史版本、长图预览及导出反馈已核对。Mock 导出沿用逐图模拟下载，不能据此宣称真实 ZIP／长图文件端到端验收完成；真实导出契约由现有专项单测覆盖。
-- 验收证据：[设计 QA](../design-qa.md)，截图与原始自动化日志在 `.design-qa/2026-09-26-meitu-commerce/`。旧真实验收目录保持不动。未恢复 Playwright/E2E 工程。最终隔离构建目录已清理，next-env.d.ts 已还原，本轮临时服务已停止。
+- 验收证据：[设计 QA（历史提交）](https://github.com/zhYAO/Image-web/blob/ae8c332ec6aa55a80b21a752d152275e58ed797e/design-qa.md)，截图与原始自动化日志在 `.design-qa/2026-09-26-meitu-commerce/`。旧真实验收目录保持不动。未恢复 Playwright/E2E 工程。最终隔离构建目录已清理，next-env.d.ts 已还原，本轮临时服务已停止。
 - 边界：未发布生产、未执行数据库迁移或 Worker 部署、未调用本项目供应商付费效果验收。浏览器结果是本地 Mock；真实图片质量、真实账号积分与真实存储导出仍需另行授权验收。
 
 ## 2026-09-22 首页、输入框与侧栏改造
@@ -742,3 +761,19 @@
 - 自动化：Domain 61/61、Web 完整复跑 480/480、Worker 27/27、预算保护 5/5，Lint、Typecheck 和本地 Webpack 生产构建通过。PR #2 的 CI 质量与数据库检查全绿；主分支 [发布流水线 #29](https://github.com/zhYAO/Image-web/actions/runs/35952647357) 的质量、数据库、生产构建及部署四个作业全部通过。
 - 发布：生产 Supabase 应用了 `20260923154547_ecommerce_workflows` 迁移；`creative_batches` 表已存在且启用 RLS，认证用户可读自身记录、不可直接插入，服务角色可写。`generation-worker` 更新至 v13 并保持原入口鉴权。主分支合并提交 `ae52814` 经阿里云不可变发布流程部署成功。Edge 桌面实测生产站点五个入口均可打开，商品套图可上传项目公开示例图，显示 7 张／2.10 积分报价，平台、地区、语言和四类数量设置可展开；未按下付费生成。
 - 验收边界：本机无 Docker／Podman、PostgreSQL 或 Deno 运行时；隔离数据库检查由 CI 完成，生产 RLS 已核对。未执行本项目真实付费模型输出、失败退款、批量下载及长图像素检查；这些仍需按实际消费和结果分别验收。浏览器仅用 Edge 桌面端，未恢复已移除的浏览器 E2E 工程。
+
+
+## 2026-10-28 字体外置阶段（本地实现，未发布）
+
+- 网页保持系统字体；服装 Sharp 保留原 Noto Regular/Bold 字节、字体族、字重和布局。OTF 已从工作区移除，原许可/来源移至 doc/licenses/apparel-noto/；既有暂存改动保持不变，未提交。
+- 运行时仅接受成对 ZIMAGE_SHARED_FONT_DIR / ZIMAGE_STATIC_ASSET_SHA256，校验版本目录、实际清单、两字体和原许可/来源；缺失时给出 ops/aliyun/FONTS.md 指引，不自动下载或回退。
+- 独立资源打包需显式 --font-source，支持本地 fonts-only 清单；完整清单继续带全部 public 与字体。Next 字体 tracing 已移除，普通应用打包拒绝旧字体残留。三层 adapter 原生探针增加原资源 SHA 校验，旧四层协议明确提示使用三层。
+- 本地验证：类型检查和 lint 无代码错误；验收预算 5/5；真实原生探针 4/4（字体和六项编解码、篡改失败）；Windows 可执行资源打包用例 11/11、应用包保护用例 4/4。完整业务测试与隔离构建结果见本轮仓库外交接记录，尚不能据此宣称 Linux 发布就绪。
+- 完整独立资源：71 文件、62 图片，public 8,089,791 B + 字体 33,444,552 B + 清单 25,460 B = 41,559,803 B。字体只是退出应用载荷，首次完整部署仍需这些字节；不能把转移量当作总量消失。
+- 待验证/交接：Windows 文件 symlink 权限、POSIX 模式、GNU tar 和 Linux fcntl/runuser/systemd 阻碍对应正式验证。旧全包自动部署尚无等价外部字体预检，发布前须接通已支持版本绑定资源的三层 adapter 或补齐预检并验证。此阶段未启动 7788、未做 UI 迁移、未触及生产或凭据。
+
+- 最终本地结果：Domain 106/106；Web 全量 908/911，3 项字体越界 symlink 夹具因 Windows EPERM 失败（不标为全绿）；最终字体定向回归 29 通过、3 项 symlink 待 Linux。隔离无凭据/禁网络 Webpack slim 构建退出 0，171.893 秒；QA standalone 中 Noto 文件及 tracing 条目均为 0。QA 使用审计依赖绝对 junction，不是可部署 Linux 包，未据其总量/压缩量作发布减重结论。
+
+- 字体外置补充闭环（2026-10-28）：全包及三层 deploy/rollback 统一在 release.py.activate() 切换前执行外部字体预检，自动恢复前也检查目标旧版。全包读取专用 /etc/zimage/font-assets.env，验证成功后才固定到每版 .runtime-assets.env；已有绑定不回退全局配置。检查服务 User/Group 及最后 EnvironmentFile，复用原生 Sharp/清单/固定 SHA payload。缺失或错误在 current/previous/restart 前失败。基础 service 模板已补绑定，未安装到服务器；上述旧全包预检代码缺口已在本地补齐，Linux 实际验证仍未完成。
+
+- 预检补充验证：离线 Python 门禁 8/8、真实 Sharp 原生 payload 10/10、既有归档/标识安全定向 2/2、新脚本 lint/Python AST/diff 检查通过；仅定向验证，无真实服务调用。Windows 空 fcntl 导入占位不模拟锁，Linux flock/UID/systemd 集成继续未验证。
