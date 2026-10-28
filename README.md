@@ -23,7 +23,7 @@ pnpm dev
 
 `pnpm run dev` 从项目内统一启动器运行已安装的 Next.js，按 `.node-version` 检查 Node 最低版本。当前 Node 过旧时，会检查 PATH 与 Homebrew 已安装的兼容版本；也可用 `ZIMAGE_NODE_BIN=/绝对路径/node pnpm run dev` 明确指定。启动器不下载软件、不修改全局 PATH，也不再嵌套调用全局 pnpm。依赖安装仍应使用项目声明的 pnpm 11.19。
 
-开发服务默认使用 3000 端口（可用 `PORT=3100 pnpm run dev` 更改）；端口被占用时明确失败，不会悄悄切到另一个端口。此命令是前台服务，需保持终端运行；停止命令或关闭终端后，本地页面会不可用。启动日志会打印实际 Node 路径。Next 16.3 的开发磁盘缓存恢复曾触发 TaskGuard panic，因此开发缓存暂时关闭；首次页面编译会比热更新慢。
+开发服务默认使用 7788 端口（可用 `PORT=3100 pnpm run dev` 更改）；端口被占用时明确失败，不会悄悄切到另一个端口。此命令是前台服务，需保持终端运行；停止命令或关闭终端后，本地页面会不可用。启动日志会打印实际 Node 路径。Next 16.3 的开发磁盘缓存恢复曾触发 TaskGuard panic，因此开发缓存暂时关闭；首次页面编译会比热更新慢。
 
 默认仍使用版本化 localStorage mock（`zimage:mock:v1`），便于无密钥开发。将 `NEXT_PUBLIC_DATA_MODE` 设置为 `http` 后，Web 会切换到 Supabase 匿名身份、真实 SSE、持久队列和 private Storage；所需变量见 `apps/web/.env.example`，本地统一写入 `apps/web/.env.local`，不再维护 `.env`。生产服务端凭据独立保存在服务器环境文件；构建与发布不复制本地环境文件。
 

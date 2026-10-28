@@ -41,7 +41,7 @@ function main() {
   console.log(`[ZImage dev] Node ${node.version} · ${node.path}`);
   // Resolve the installed Next CLI directly: a globally installed pnpm 9 must
   // not take over a nested pnpm command in this pnpm 11 workspace.
-  const child = spawn(node.path, [next, 'dev', '--port', process.env.PORT || '3000', ...process.argv.slice(2)], {
+  const child = spawn(node.path, [next, 'dev', '--hostname', '127.0.0.1', '--port', process.env.PORT || '7788', ...process.argv.slice(2)], {
     cwd: web,
     env: { ...process.env, PATH: `${dirname(node.path)}${delimiter}${process.env.PATH ?? ''}` },
     stdio: 'inherit',
