@@ -27,7 +27,7 @@ import {
 } from '@zimage/domain';
 import { Alert, Button, Drawer, Select, Space } from 'antd';
 import PreviewGroup from 'antd/es/image/PreviewGroup';
-import { ArrowDown, Menu } from 'lucide-react';
+import { Archive, ArrowDown, Menu } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { CommerceWorkspace, type CommerceWorkspaceHandle, type CommerceLaunch } from '@/features/commerce/CommerceWorkspace';
@@ -45,6 +45,7 @@ import { mergeSessionActivity } from './session-category';
 import { lastComposerSession } from '@/store/composer-storage';
 
 import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
+import { GlideSelect } from '@/features/controls/GlideSelect';
 import { SessionSidebar } from './SessionSidebar';
 import { downloadImages } from './download-images';
 import { chatRecoveryActions, reconcileChatTimeline, type FailedChatAttempt } from './chat-recovery';
@@ -520,7 +521,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     requestFollow,
     scrollToBottom,
     showScrollToBottom,
-  } = useSmartAutoScroll({ contentVersion: timelineContentVersion, sessionId: activeSessionId, enabled: !commerceActive });
+  } = useSmartAutoScroll({ contentVersion: timelineContentVersion, sessionId: activeSessionId, enabled: !commerceActive && !catalogueActive && !assetsActive && route?.kind !== 'outside' && Boolean(activeSessionId), documentScroll: !commerceShell, resetOnEmpty: !activeSessionId && !commerceShell && !catalogueActive && !assetsActive && route?.kind !== 'outside' });
 
   const changeScenario = (value: typeof scenario) => {
     setScenario(value);
@@ -529,7 +530,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   const createSession = async () => {
     if (onNavigate) {
-      setActiveSessionId(undefined); setDraft(''); setReferences([]); onNavigate('/'); return;
+      setActiveSessionId(undefined); setDraft(''); setReferences([]); onNavigate('/workspace'); return;
     }
     try {
       const session = await gateway.createSession();
@@ -858,7 +859,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       if (wasActive) {
         const nextId = next[0]?.id;
         setActiveSessionId(nextId);
-        onNavigate?.(nextId ? sessionHref(nextId) : "/", true);
+        onNavigate?.(nextId ? sessionHref(nextId) : "/workspace", true);
         if (nextId) await refreshTimeline(nextId, true);
       }
     } catch (error: unknown) {
@@ -1027,15 +1028,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const activeSession = sessions.find((session) => session.id === activeSessionId);
   const mobileConfig = (
     <div className={styles.mobileConfig}>
-      {!imageCreationEnabled && <label><span className={styles.popoverLabel}>聊天模型</span><Select aria-label="移动端聊天模型" value={selectedChatModel} onChange={setSelectedChatModel} options={CHAT_PROVIDER_MODELS.map((model) => ({ label: model.label, value: model.id }))} /></label>}
+      {!imageCreationEnabled && <label><span className={styles.popoverLabel}>聊天模型</span><GlideSelect ariaLabel="移动端聊天模型" value={selectedChatModel} onChange={setSelectedChatModel} options={CHAT_PROVIDER_MODELS.map((model) => ({ label: model.label, textValue:model.label, value: model.id }))} /></label>}
       {imageCreationEnabled && (
         <>
           <label>
             <span className={styles.popoverLabel}>生成模型</span>
-            <Select
-              aria-label="移动端生成模型"
+            <GlideSelect
+              ariaLabel="移动端生成模型"
               onChange={(value) => { const [provider = '', model = ''] = value.split('::'); selectModel(provider, model); }}
-              options={capabilities.flatMap((capability) => capability.models.map((model) => ({ label: `${capability.provider} · ${model.label}`, value: `${capability.provider}::${model.id}` })))}
+              options={capabilities.flatMap((capability) => capability.models.map((model) => ({ label: model.label, textValue: model.label, value: `${capability.provider}::${model.id}` })))}
               value={selectedProvider && selectedModelId ? `${selectedProvider}::${selectedModelId}` : undefined}
             />
           </label>
@@ -1048,18 +1049,18 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   return (
     <>
-    <WorkspaceFrame collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
+    <WorkspaceFrame panelLayout={commerceShell} collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
           <header className={styles.header}>
           <NavGlassFilter />
-          <Space><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
-          <Space>
-            <CreditBalance /><Link href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
+          <Space className={styles.headerStart}><Button aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} type="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></Space>
+          <Space className={styles.headerNav}>
+            <CreditBalance /><Link className={styles.commerceHeaderLink} href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
             {gateway instanceof MockWorkspaceGateway && (
               <Select aria-label={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={changeScenario} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
               ]} size="small" value={scenario} />
             )}
-            <Link aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} href="/assets">{zhCN.workspace.assetLibrary}</Link>
+            <Link aria-label={zhCN.workspace.assetLibrary} className={styles.assetLibraryButton} href="/assets"><Archive aria-hidden size={15} /><span>{zhCN.workspace.assetLibrary}</span></Link>
           </Space>
         </header>
       }>

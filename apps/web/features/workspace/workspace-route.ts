@@ -14,10 +14,10 @@ export function workspaceRoute(pathname: string, search = ''): WorkspaceRoute {
   const query = new URLSearchParams(search);
   if (pathname === '/assets' || pathname === '/assets/') return { kind: 'assets' };
   if (pathname === '/create' || pathname === '/create/') return { kind: 'catalogue' };
-  if (pathname === '/' && !query.has('scene')) return { kind: 'home' };
-  if (pathname === '/' || pathname.startsWith('/create/')) {
-    if (pathname !== '/' && !/^\/create\/[^/]+\/?$/.test(pathname)) return { kind: 'invalid' };
-    const scene = commerceSceneSchema.safeParse(pathname === '/' ? query.get('scene') : pathname.split('/')[2]);
+  if (pathname === '/workspace' && !query.has('scene')) return { kind: 'home' };
+  if ((pathname === '/' && query.has('scene')) || pathname === '/workspace' || pathname.startsWith('/create/')) {
+    if (pathname !== '/' && pathname !== '/workspace' && !/^\/create\/[^/]+\/?$/.test(pathname)) return { kind: 'invalid' };
+    const scene = commerceSceneSchema.safeParse((pathname === '/' || pathname === '/workspace') ? query.get('scene') : pathname.split('/')[2]);
     if (!scene.success) return { kind: 'invalid' };
     const platform = query.get('platform');
     return { kind: 'commerce', scene: scene.data,

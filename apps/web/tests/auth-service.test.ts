@@ -5,7 +5,7 @@ import { AuthService } from '../server/auth/auth-service';
 
 describe('normalizeReturnTo', () => {
   it.each(['https://evil.example/x', '//evil.example/x', '/api/account', '/auth/confirm'])('rejects unsafe target %s', (target) => {
-    expect(normalizeReturnTo(target)).toBe('/');
+    expect(normalizeReturnTo(target)).toBe('/workspace');
   });
 
   it('preserves an internal skill intent', () => {

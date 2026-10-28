@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { commerceHref, workspaceRoute } from '@/features/workspace/workspace-route';
 import type { Database } from './database.generated';
 import { readSupabasePublicEnv, type DataMode } from './env';
 
@@ -25,11 +26,18 @@ function hasAuthCookie(request: NextRequest) {
 }
 
 export async function updateSupabaseSession(request: NextRequest) {
+  // Old bookmarks encode commerce intent on the former workspace root.
+  if (request.nextUrl.pathname === '/' && request.nextUrl.searchParams.has('scene')
+    && (request.method === 'GET' || request.method === 'HEAD')) {
+    const route = workspaceRoute('/', request.nextUrl.search);
+    if (route.kind !== 'commerce') return new NextResponse(null, { status: 404 });
+    return NextResponse.redirect(new URL(commerceHref(route.scene, route.platform, route.template), request.url));
+  }
   // The public brand document has no private data or anonymous bootstrap.
   // Keep it available when identity refresh/configuration is unavailable;
   // every application route and protected API keeps the normal auth path.
   if (process.env.NEXT_PUBLIC_PHASE2_AUTH === 'true'
-    && request.nextUrl.pathname === '/home'
+    && (request.nextUrl.pathname === '/' || request.nextUrl.pathname === '/home')
     && (request.method === 'GET' || request.method === 'HEAD')) {
     return NextResponse.next({ request });
   }

@@ -15,7 +15,7 @@ export function WebPageShell({
   return (
     <main className={`glass-page ${className}`}>
       <nav className="glass-site-nav" aria-label="网站导航">
-        <Link className="glass-brand" href="/home">
+        <Link className="glass-brand" href="/">
           <BrandMark />
           ZImage<span>创作空间</span>
         </Link>

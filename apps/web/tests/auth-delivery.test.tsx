@@ -70,7 +70,7 @@ describe('verification navigation and resend', () => {
     fireEvent.change(screen.getByLabelText('邮箱'), { target: { value: 'audit@example.com' } });
     fireEvent.click(screen.getByRole('checkbox'));
     submitForm();
-    expect(await screen.findByRole('link', { name: '输入邮箱验证码' })).toHaveAttribute('href', '/auth/verify?email=audit%40example.com&returnTo=%2F');
+    expect(await screen.findByRole('link', { name: '输入邮箱验证码' })).toHaveAttribute('href', '/auth/verify?email=audit%40example.com&returnTo=%2Fworkspace');
   });
   it('shows resend failure and never claims delivery', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ message: '邮件暂时无法发送' }, { status: 503 })));

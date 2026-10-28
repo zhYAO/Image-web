@@ -139,7 +139,7 @@ export function AccountPanel({ account }: { account: Account }) {
   return (
     <WebPageShell className="account-page">
       <section aria-busy={pending} className="zi-account">
-        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><a className="zi-button" href="/">返回工作区</a></header>
+        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><a className="zi-button" href="/workspace">返回工作区</a></header>
         <div className="zi-account-grid"><div className="zi-account-main glass-card"><CreditAccount /></div><div className="zi-account-settings glass-form glass-card">
         <p className="glass-muted">邮箱：{account.email}</p>
         <form onSubmit={patch}><label>显示名称<input defaultValue={account.displayName ?? ''} name="displayName" /></label><button disabled={pending} type="submit">保存资料</button></form>

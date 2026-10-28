@@ -1,5 +1,7 @@
 "use client";
 
+import { CommerceSelect } from "@/features/commerce/CommerceSelect";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PreviewGroup from "antd/es/image/PreviewGroup";
@@ -93,9 +95,9 @@ export function SessionAssets({
       <div className={styles.toolbar}>
         <label>
           选择会话
-          <select
+          <CommerceSelect aria-label="选择会话"
             value={sessionId ?? ""}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(value) => setSelected(value)}
             disabled={!sessionId}
           >
             <option value="" disabled>
@@ -108,7 +110,7 @@ export function SessionAssets({
                   {item.title}
                 </option>
               ))}
-          </select>
+          </CommerceSelect>
         </label>
         <label className={styles.search}>
           <Search size={17} />
@@ -139,7 +141,7 @@ export function SessionAssets({
           <FolderOpen size={32} />
           <h2>作品从一次创作开始</h2>
           <p>生成的图片会随会话出现在这里。</p>
-          <Link href="/">开始创作</Link>
+          <Link href="/workspace">开始创作</Link>
         </div>
       ) : current?.failed ? (
         <div className={styles.empty} role="alert">

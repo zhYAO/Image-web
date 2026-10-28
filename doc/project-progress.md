@@ -1,5 +1,18 @@
 # ZImage 项目进度
 
+## 2026-10-28 首页与工作区功能分支交接
+
+- 用户授权将已验收改动提交并推送到 `origin/codex/home-chat-react-bits-20261027`，供D1M自行拉取本地运行；不合并main、不创建PR、不部署、不操作D1M。
+- 交接前核对71个既有改动文件，业务代码/测试自最终验收后未变；沿用Web911/911、Domain106/106、lint/typecheck、构建49/49及预算5/5。新增改动仅为README路由说明与交接文档，无需重复应用测试。
+- 仓库唯一workflow的push分支为main/setup2，功能分支不匹配；提交附带 `[skip ci]`，不修改workflow、不手动触发CI。运行要求Node>=24.19.0、pnpm11.19.0；`pnpm install --frozen-lockfile` 后 `pnpm dev`，默认Mock、默认端口3000。提交与远程SHA以Git记录及本次推送核对结果为准。
+
+## 2026-10-27 首页默认路由与聊天界面对齐（本地验收完成，未发布）
+
+- 原始Mac仓库在最新origin/main `9c5c3ea95e0c66193b23a2db50643530aa7d095a` 新建 `codex/home-chat-react-bits-20261027`；只做本地开发，未push/PR/部署/生产操作或付费模型调用。`/` 与 `/home` 共用首页，唯一工作区 `/workspace`，登录回跳和旧深链同步。模型保持豆包、MiniMax聊天与Seedream生图，真实选择进入既有请求。
+- 用户实测反馈的动画失效与折叠错乱已定位并修复：Reveal子控制器先于父ref运行；tooltip包装破坏直接子节点CSS。均先失败再通过回归。修复后的实际Edge有淡入中间帧、76px图标居中侧栏、展开无气泡；另修手机旧换行覆盖。底部CTA在opacity0.376678、translateY17.453px动画中首次点击进入登录；访客全部CTA与顶部登录、已登录响应隐藏登录、模型键盘/焦点/外部关闭及390px布局已实际核对。
+- 最新产品代码独立QA构建49/49、typecheck、lint、预算5/5通过；字体canonical路径27/27，保留像素/安全断言。Node25实验storage使用官方关闭开关，让jsdom正常接管。独立审查滚动重置问题已回归修复，Reveal/tooltip复审无新实质问题。最终全量退出0：Web **911/911（124文件，495.66s）**、Domain **106/106（12文件）**，见 `/tmp/zimage-final-full-tests.log`；旧默认回跳预期迁移后安全断言保留，最终窄范围复审无新实质问题。
+- 当前用户预览 `http://127.0.0.1:3100/`、`/workspace` 是当前未提交分支Mock，已恢复可用；认证UI专用3101/3102夹具验收后停止，已清理无打开文件的隔离QA输出，未使用真实账号。实际参考Site已读取截图，但所交接源码commit与Site v18未证明逐字一致，不宣称像素完全一致。真实Supabase、验证码、计费及模型就绪仍沿用既有边界。详见[本地QA记录](qa/2026-10-27-home-chat-local.md)。
+
 ## 2026-10-27 三层管理员适配与生产平台匹配（本地完成，已收生产公开配置，待最终构建）
 
 - 用户要求的实际管理员适配器已实现：独立bundle、固定路径root deploy/rollback及systemd-template，旧完整包helper未修改。沿用同一部署锁、严格本机HTTP/TLS健康检查和精确原版本回退；root导入闭包/安全Node路径、有界7成员传输、真实生产SHA/.next/www资源门禁、逐release字体环境、nonroot字体/native与sameSHA完整重验均有回归。未安装到ECS或修改sudoers/Nginx/服务。

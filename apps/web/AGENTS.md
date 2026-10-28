@@ -19,7 +19,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Workspace invariants
 
-- `/` is the only workspace. `/chat` and `/image` remain redirects; do not introduce a second chat/image session store, timeline, or route implementation.
+- `/workspace` is the only workspace; `/` and `/home` render the public brand homepage. `/chat` and `/image` remain redirects to `/workspace`; do not introduce a second chat/image session store, timeline, or route implementation.
 - Chat and image drafts stay independent. Server sessions and timeline items come from the gateway; Zustand holds only UI and request-transient state.
 - In image mode, the image-tool switch is not rendered. Image mode still derives image capability internally without mutating the user's explicit chat-tool preference; returning to chat restores that preference, while a selected skill may force-enable it.
 - Toolbar and mobile-drawer skill selection preserve the current mode; only the empty-state quick skill cards explicitly enter image mode. Desktop and mobile configuration must share `selectedSkillId` and `skillValues` rather than creating a second skill state.

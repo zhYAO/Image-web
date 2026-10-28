@@ -15,7 +15,7 @@ class TestResizeObserver {
   unobserve() {}
 }
 
-function Harness({ contentVersion = 0, sessionId = 'session-1', enabled = true }: { contentVersion?: number; sessionId?: string; enabled?: boolean }) {
+function Harness({ contentVersion = 0, sessionId = 'session-1', enabled = true, documentScroll = false, resetOnEmpty = false }: { contentVersion?: number; sessionId?: string; enabled?: boolean; documentScroll?: boolean; resetOnEmpty?: boolean }) {
   const [sent, setSent] = useState(false);
   const {
     containerRef,
@@ -24,7 +24,7 @@ function Harness({ contentVersion = 0, sessionId = 'session-1', enabled = true }
     requestFollow,
     scrollToBottom,
     showScrollToBottom,
-  } = useSmartAutoScroll({ contentVersion: `${contentVersion}-${sent}`, sessionId, enabled });
+  } = useSmartAutoScroll({ contentVersion: `${contentVersion}-${sent}`, sessionId, enabled, documentScroll, resetOnEmpty });
 
   return (
     <>
@@ -54,6 +54,31 @@ function setScrollMetrics(element: HTMLElement, values: { clientHeight: number; 
 }
 
 describe('useSmartAutoScroll', () => {
+  it('returns a visible new conversation to the document top without moving retained outside pages', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(2000);
+    const view = render(<Harness documentScroll />);
+    scrollTo.mockClear();
+    view.rerender(<Harness documentScroll enabled={false} resetOnEmpty sessionId="new" />);
+    expect(scrollTo).toHaveBeenCalledWith({ behavior:'auto', top:0 });
+    scrollTo.mockClear();
+    view.rerender(<Harness documentScroll enabled={false} sessionId="outside" />);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+  it('follows the document without pulling a reader who scrolled up back down', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(200);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
+    const view = render(<Harness documentScroll />);
+    expect(scrollTo).toHaveBeenCalledWith({ behavior:'auto', top:1000 });
+    scrollTo.mockClear();
+    fireEvent.scroll(window);
+    view.rerender(<Harness documentScroll contentVersion={1} />);
+    expect(scrollTo).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name:'回到底部' }));
+    expect(scrollTo).toHaveBeenCalledWith({ behavior:'smooth', top:1000 });
+  });
   beforeEach(() => {
     resizeCallback = undefined;
     globalThis.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver;

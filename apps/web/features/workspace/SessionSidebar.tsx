@@ -1,5 +1,5 @@
 import type { Session } from "@zimage/domain";
-import { Button, Input, Popconfirm, Popover, Spin, Tooltip } from "antd";
+import { Button, Input, Popconfirm, Popover, Spin } from "antd";
 import Link from "next/link";
 import {
   Check,
@@ -9,6 +9,7 @@ import {
   X,
   MoreHorizontal,
 } from "lucide-react";
+import { SidebarTooltip } from "./SidebarTooltip";
 import { BrandMark } from "@/features/brand/BrandMark";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import { useState } from "react";
@@ -92,9 +93,8 @@ export function SessionSidebar({
           </Link>
         )}
         {onCollapse && (
-          <Tooltip
+          <SidebarTooltip enabled={collapsed}
             title={collapsed ? "展开侧栏" : "折叠侧栏"}
-            trigger={["hover", "focus"]}
           >
             <Button
               aria-label={collapsed ? "展开会话侧栏" : "折叠会话侧栏"}
@@ -102,10 +102,10 @@ export function SessionSidebar({
               onClick={onCollapse}
               type="text"
             />
-          </Tooltip>
+          </SidebarTooltip>
         )}
       </div>
-      <Tooltip title="新对话" placement="right" trigger={["hover", "focus"]}>
+      <SidebarTooltip enabled={collapsed} title="新对话">
         <Button
           aria-label="新对话"
           className={styles.newButton}
@@ -115,8 +115,8 @@ export function SessionSidebar({
         >
           {!collapsed && "新对话"}
         </Button>
-      </Tooltip>
-      <Tooltip title="电商生图" placement="right" trigger={["hover", "focus"]}>
+      </SidebarTooltip>
+      <SidebarTooltip enabled={collapsed} title="电商生图">
         <Link
           aria-label="电商生图"
           className={styles.commerceNav}
@@ -130,9 +130,9 @@ export function SessionSidebar({
             </>
           )}
         </Link>
-      </Tooltip>
+      </SidebarTooltip>
       {collapsed ? (
-        <Popover
+        <SidebarTooltip enabled={collapsed} title="筛选会话"><Popover
           trigger="click"
           placement="rightTop"
           content={
@@ -158,19 +158,14 @@ export function SessionSidebar({
             </div>
           }
         >
-          <Tooltip
-            title="筛选会话"
-            placement="right"
-            trigger={["hover", "focus"]}
-          >
+
             <Button
               aria-label="筛选会话"
               className={filters.filterButton}
               type="text"
               icon={<WorkspaceIcon name="filter" />}
             />
-          </Tooltip>
-        </Popover>
+        </Popover></SidebarTooltip>
       ) : (
         <>
           <div
@@ -231,11 +226,9 @@ export function SessionSidebar({
           >
             {collapsed ? (
               <>
-                <Tooltip
+                <SidebarTooltip enabled={collapsed}
                   title={session.title}
-                  placement="right"
-                  trigger={["hover", "focus"]}
-                >
+                      >
                   <button
                     type="button"
                     className={filters.iconSession}
@@ -262,7 +255,7 @@ export function SessionSidebar({
                       />
                     )}
                   </button>
-                </Tooltip>
+                </SidebarTooltip>
                 <Popover
                   trigger="click"
                   placement="rightTop"
@@ -343,11 +336,9 @@ export function SessionSidebar({
                     seed={session.id}
                     size={22}
                   />
-                  <Tooltip
+                  <SidebarTooltip enabled={collapsed}
                     title={session.title}
-                    placement="right"
-                    trigger={["hover", "focus"]}
-                  >
+                          >
                     <button
                       className={styles.sessionTitle}
                       disabled={deleting}
@@ -363,7 +354,7 @@ export function SessionSidebar({
                     >
                       {session.title}
                     </button>
-                  </Tooltip>
+                  </SidebarTooltip>
                   {busySessionIds?.has(session.id) && (
                     <Spin
                       aria-label={`${session.title} 正在处理`}
@@ -383,7 +374,7 @@ export function SessionSidebar({
               <div className={styles.sessionActions}>
                 {editingId === session.id ? (
                   <>
-                    <Tooltip title="保存">
+                    <SidebarTooltip enabled={collapsed} title="保存">
                       <Button
                         aria-label="保存会话名称"
                         icon={<Check size={13} />}
@@ -391,8 +382,8 @@ export function SessionSidebar({
                         size="small"
                         type="text"
                       />
-                    </Tooltip>
-                    <Tooltip title="取消">
+                    </SidebarTooltip>
+                    <SidebarTooltip enabled={collapsed} title="取消">
                       <Button
                         aria-label="取消重命名"
                         icon={<X size={13} />}
@@ -400,11 +391,11 @@ export function SessionSidebar({
                         size="small"
                         type="text"
                       />
-                    </Tooltip>
+                    </SidebarTooltip>
                   </>
                 ) : (
                   <>
-                    <Tooltip title="重命名">
+                    <SidebarTooltip enabled={collapsed} title="重命名">
                       <Button
                         disabled={deleting}
                         aria-label={`重命名 ${session.title}`}
@@ -413,7 +404,7 @@ export function SessionSidebar({
                         size="small"
                         type="text"
                       />
-                    </Tooltip>
+                    </SidebarTooltip>
                     <Popconfirm
                       title="删除这个会话？"
                       description="会话及其中的创作记录将被删除。"

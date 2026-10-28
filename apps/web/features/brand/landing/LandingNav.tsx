@@ -6,10 +6,12 @@ import { IntentLink } from "@/features/brand/IntentLink";
 import { PillNavCTA } from "./PillNavCTA";
 import { Glass } from "@/features/brand/Glass";
 import { BrandMark } from "./BrandMark";
+import { useLandingAuthorized, WORKSPACE_LOGIN_HREF } from "./LandingAuth";
 import { nextCondensed } from "./motion";
 import { scrollToSection } from "./SectionJump";
 
 export function LandingNav() {
+  const authorized = useLandingAuthorized();
   const [condensed, setCondensed] = useState(false);
   const [open, setOpen] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -68,7 +70,7 @@ export function LandingNav() {
         className={`zl-nav${open ? " is-open" : ""}`}
         aria-label="网站导航"
       >
-        <Link href="/home" className="zl-brand" onClick={() => setOpen(false)}>
+        <Link href="/" className="zl-brand" onClick={() => setOpen(false)}>
           <span className="zl-brand-icon">
             <BrandMark />
           </span>
@@ -91,22 +93,22 @@ export function LandingNav() {
           <button type="button" onClick={() => jump("landing-faq")}>
             常见问题
           </button>
-          <IntentLink
-            href="/login"
+          {!authorized && <IntentLink
+            href={WORKSPACE_LOGIN_HREF}
             className="zl-mobile-login"
             onClick={() => setOpen(false)}
           >
             登录
-          </IntentLink>
+          </IntentLink>}
         </nav>
         <div className="zl-nav-actions">
-          <IntentLink
-            href="/login"
+          {!authorized && <IntentLink
+            href={WORKSPACE_LOGIN_HREF}
             className="zl-login"
             onClick={() => setOpen(false)}
           >
             登录
-          </IntentLink>
+          </IntentLink>}
           <PillNavCTA variant="nav" onClick={() => setOpen(false)} />
           <button
             ref={menuRef}

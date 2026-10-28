@@ -18,7 +18,8 @@ vi.mock('@/app/client-workspace', () => ({ ClientWorkspace: () => <p>editor</p> 
 
 describe('public landing runtime boundary', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); route.pathname = '/home'; });
-  it('renders the public homepage without starting private identity checks', async () => {
+  it.each(['/', '/home'])('renders the public homepage at %s without starting private identity checks', async (pathname) => {
+    route.pathname = pathname;
     vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
     const fetcher = vi.fn().mockResolvedValue(new Response('{}', { status: 503 }));
     vi.stubGlobal('fetch', fetcher);
@@ -29,13 +30,13 @@ describe('public landing runtime boundary', () => {
   });
   it('retains the application provider tree after visiting the homepage', async () => {
     vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'false');
-    route.pathname = '/';
+    route.pathname = '/workspace';
     const view = render(<ApplicationShell><h1>outlet</h1></ApplicationShell>);
     fireEvent.click(await screen.findByRole('button', { name: 'runtime 0' }));
     route.pathname = '/home';
     view.rerender(<ApplicationShell><h1>public homepage</h1></ApplicationShell>);
     expect(screen.getByRole('button', { name: 'runtime 1' })).toBeVisible();
-    route.pathname = '/';
+    route.pathname = '/workspace';
     view.rerender(<ApplicationShell><h1>outlet</h1></ApplicationShell>);
     expect(screen.getByRole('button', { name: 'runtime 1' })).toBeVisible();
   });

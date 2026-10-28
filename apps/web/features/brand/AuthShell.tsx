@@ -76,7 +76,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
                 tabIndex={0}
                 aria-label="登录与账号操作"
               >
-                <Link href="/home" className="zi-brand">
+                <Link href="/" className="zi-brand">
                   <BrandMark />
                   <span>ZImage</span>
                 </Link>
@@ -86,7 +86,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
                   <ArrowRight />
                 </p>
                 <footer className="zi-footer">
-                  <Link href="/" className="zi-back">
+                  <Link href="/workspace" className="zi-back">
                     进入工作区
                     <ArrowRight />
                   </Link>

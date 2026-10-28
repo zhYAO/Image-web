@@ -14,8 +14,8 @@ async function wizard(initialTemplateId?: string, seedPlan?: CommercePlan) {
   return { create };
 }
 async function choose(label: string, option: string) {
-  fireEvent.mouseDown(screen.getByLabelText(label));
-  fireEvent.click(await screen.findByText(option, { selector: '.ant-select-item-option-content' }));
+  fireEvent.click(screen.getByLabelText(label));
+  fireEvent.click(await screen.findByRole('option', { name:option }));
 }
 function fill() {
   fireEvent.change(screen.getByLabelText('海报标题'), { target: { value: '周末生活提案' } });
@@ -36,7 +36,7 @@ describe('小红书海报字段方案', () => {
   });
   it('ignores an initial template from another scene and retains product image validation', async () => {
     await wizard('soft-studio');
-    expect(screen.getByLabelText('风格模板').closest('.ant-select')).toHaveTextContent('清新种草');
+    expect(screen.getByLabelText('风格模板').closest('.glide-select')).toHaveTextContent('清新种草');
     await choose('海报内容类型', '商品种草');
     fireEvent.change(screen.getByLabelText('商品名称'), { target: { value: '陶瓷杯' } });
     fireEvent.click(screen.getByRole('button', { name: '调整分图方案' }));
@@ -51,7 +51,7 @@ describe('小红书海报字段方案', () => {
     };
     const { create } = await wizard('xhs-retro', seedPlan);
     const historical = COMMERCE_TEMPLATES.find(template => template.id === 'soft-studio')!;
-    expect(screen.getByLabelText('风格模板').closest('.ant-select')).toHaveTextContent(`历史模板 · ${historical.name}`);
+    expect(screen.getByLabelText('风格模板').closest('.glide-select')).toHaveTextContent(`历史模板 · ${historical.name}`);
     for (const guidance of screen.getAllByText(historical.guidance)) expect(guidance).toBeVisible();
     expect(seedPlan.slots[0]!.model).toBe('gemini-3-pro-image');
     fireEvent.click(screen.getByRole('button', { name: '使用当前默认参数创建新版本' }));

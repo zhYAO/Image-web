@@ -18,7 +18,7 @@ export function PublicCommerceCatalogue() {
   const { sidebarCollapsed, setSidebarCollapsed, sessionDrawerOpen, setSessionDrawerOpen } = useWorkspaceStore();
   if (catalogueRuntimeAllowed(status)) return null;
   const sidebar = (collapsed = false) => <SessionSidebar sessions={[]} collapsed={collapsed}
-    onCollapse={() => setSidebarCollapsed(!collapsed)} onCreate={() => router.push('/')}
+    onCollapse={() => setSidebarCollapsed(!collapsed)} onCreate={() => router.push('/workspace')}
     onDelete={() => {}} onRename={() => {}} onSelect={() => {}} />;
   return <WorkspaceFrame collapsed={sidebarCollapsed} sidebar={sidebar(sidebarCollapsed)} header={
     <header className={styles.header}>

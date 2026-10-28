@@ -42,10 +42,10 @@ describe('UnifiedWorkspace', () => {
     render(<UnifiedWorkspace gateway={createTestGateway()} />);
     await screen.findByText('你好，想创作什么？');
     fireEvent.click(screen.getByRole('button', { name: '创建图片' }));
-    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
-    expect(screen.getByRole('dialog', { name: '选择生成模型' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('combobox', { name: /^生成模型/ }));
+    expect(screen.getByRole('listbox', { name: '生成模型' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^生成参数/ }));
-    expect(screen.queryByRole('dialog', { name: '选择生成模型' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox', { name: '生成模型' })).not.toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: '生成参数' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /生成数量/ })).not.toBeInTheDocument();
   });
@@ -145,27 +145,20 @@ describe('UnifiedWorkspace', () => {
   });
 
   it('shows a bottom affordance after manual upward scrolling and resumes follow when the user submits', async () => {
-    render(<UnifiedWorkspace gateway={createTestGateway(CapturingGateway)} />);
+    const gateway = createTestGateway(CapturingGateway);
+    const session = await gateway.createSession('阅读构图建议');
+    render(<UnifiedWorkspace gateway={gateway} route={{ kind:'session', sessionId:session.id }} />);
     await screen.findByText('你好，想创作什么？');
-
-    const timeline = screen.getByRole('log', { name: '对话时间线' });
-    const scrollTo = vi.fn();
-    Object.defineProperties(timeline, {
-      clientHeight: { configurable: true, value: 300 },
-      scrollHeight: { configurable: true, value: 1_000 },
-      scrollTo: { configurable: true, value: scrollTo },
-      scrollTop: { configurable: true, value: 400, writable: true },
-    });
-    fireEvent.scroll(timeline);
-    expect(screen.getByRole('button', { name: '回到底部' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), {
-      target: { value: '继续最新对话' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '发送创作请求' }));
-
-    expect(screen.queryByRole('button', { name: '回到底部' })).not.toBeInTheDocument();
-    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', top: 1_000 });
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(1000);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(400);
+    fireEvent.scroll(window);
+    expect(screen.getByRole('button', { name:'回到底部' })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name:'创作输入' }), { target:{ value:'继续最新对话' } });
+    fireEvent.click(screen.getByRole('button', { name:'发送创作请求' }));
+    expect(screen.queryByRole('button', { name:'回到底部' })).not.toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith({ behavior:'smooth', top:1000 });
   });
 
 

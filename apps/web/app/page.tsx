@@ -1,7 +1,5 @@
-import { connection } from 'next/server';
+import { LandingPage } from "@/features/brand/landing/LandingPage";
 
-
-export default async function HomePage() {
-  await connection();
-  return null;
+export default function HomePage() {
+  return <LandingPage />;
 }

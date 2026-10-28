@@ -10,11 +10,11 @@ vi.mock('@supabase/ssr', () => ({ createServerClient: mocks.client }));
 beforeEach(() => vi.stubGlobal('Headers', new NextRequest('https://fixture.test').headers.constructor));
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.resetAllMocks(); });
 describe('public landing proxy isolation', () => {
-  it.each(['GET', 'HEAD'])('serves public /home %s without auth configuration, refresh, cookie changes or blocking', async (method) => {
+  it.each([['/', 'GET'], ['/', 'HEAD'], ['/home', 'GET'], ['/home', 'HEAD']])('serves public %s %s without auth configuration, refresh, cookie changes or blocking', async (pathname, method) => {
     vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
     vi.stubEnv('NEXT_PUBLIC_DATA_MODE', 'http');
     mocks.environment.mockImplementation(() => { throw Error('auth service unavailable'); });
-    const request = new NextRequest('https://www.zimage.store/home', { method, headers: { cookie: 'sb-test-auth-token=retained' } });
+    const request = new NextRequest(`https://www.zimage.store${pathname}`, { method, headers: { cookie: 'sb-test-auth-token=retained' } });
     const response = await updateSupabaseSession(request);
     expect(response.headers.get('x-middleware-next')).toBe('1');
     expect(response.headers.get('set-cookie')).toBeNull();
@@ -22,7 +22,7 @@ describe('public landing proxy isolation', () => {
     expect(mocks.environment).not.toHaveBeenCalled();
     expect(mocks.client).not.toHaveBeenCalled();
   });
-  it.each(['/', '/api/auth/session', '/api/account', '/sessions/private', '/create/product-set', '/home/private'])('retains identity refresh for %s', async (pathname) => {
+  it.each(['/workspace', '/api/auth/session', '/api/account', '/sessions/private', '/create/product-set', '/home/private'])('retains identity refresh for %s', async (pathname) => {
     vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
     mocks.environment.mockReturnValue({ url: 'https://fixture.supabase.co', publishableKey: 'fixture' });
     mocks.claims.mockResolvedValue({ data: null });

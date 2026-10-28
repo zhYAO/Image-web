@@ -17,6 +17,22 @@ const callbacks = () => ({
   onSelect: vi.fn(),
 });
 describe("compact session sidebar", () => {
+  it("keeps collapsed rail navigation in its direct layout scope", () => {
+    const view = render(<SessionSidebar {...callbacks()} collapsed sessions={[session]}/>);
+    const rail = view.container.firstElementChild;
+    expect(screen.getByRole('button', { name:'新对话' }).parentElement).toBe(rail);
+    expect(screen.getByRole('link', { name:'电商生图' }).parentElement).toBe(rail);
+  });
+  it("suppresses hover and focus bubbles while expanded", async () => {
+    render(<SessionSidebar {...callbacks()} sessions={[session]} />);
+    for (const name of ["新对话", "折叠会话侧栏", session.title]) {
+      const target = screen.getByRole('button', { name });
+      fireEvent.mouseEnter(target);
+      fireEvent.focus(target);
+    }
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(screen.queryAllByRole('tooltip')).toHaveLength(0);
+  });
   it("retains icon navigation, active session, busy status and keyboard tooltips", async () => {
     const props = callbacks();
     const { rerender } = render(

@@ -135,7 +135,7 @@ function FormalAuthGate({ children }: { children: ReactNode }) {
   const redirectingRef = useRef(false);
   const redirectToHome = useCallback(() => {
     const pathname = window.location.pathname;
-    if (pathname === '/home' || pathname === '/login' || pathname.startsWith('/auth')) return;
+    if (pathname === '/' || pathname === '/home' || pathname === '/login' || pathname.startsWith('/auth')) return;
     if (redirectingRef.current) return;
     redirectingRef.current = true;
     setRedirecting(true);

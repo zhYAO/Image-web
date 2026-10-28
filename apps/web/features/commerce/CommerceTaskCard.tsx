@@ -1,3 +1,4 @@
+import { CommerceSelect } from "./CommerceSelect";
 import { readPending, persistPending, type PendingSubmission } from "./commerce-submission";
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
@@ -670,18 +671,18 @@ export function CommerceTaskCard({
               {candidates.length > 0 && (
                 <label>
                   当前选图
-                  <select
+                  <CommerceSelect
                     aria-label={`第 ${index + 1} 张历史版本`}
                     value={selection?.generationId ?? ""}
                     disabled={busy || unknown}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       void perform(async () => {
                         onTask(
                           await gateway.select(task.id, {
                             requestId: crypto.randomUUID(),
                             revision: task.revision,
                             slotId: slot.id,
-                            generationId: event.target.value,
+                            generationId: value,
                             expectedSelectionVersion: selection?.version ?? 0,
                           }),
                         );
@@ -701,7 +702,7 @@ export function CommerceTaskCard({
                         {item.expired ? "（已到期）" : ""}
                       </option>
                     ))}
-                  </select>
+                  </CommerceSelect>
                 </label>
               )}
               <div className={styles.actions}>
@@ -764,7 +765,7 @@ export function CommerceTaskCard({
         )}
       {message && <p role="status">{message}</p>}
       <div className={styles.actions}>
-        <label>导出格式<select aria-label="导出格式" value={exportFormat} onChange={event => setExportFormat(event.target.value as 'jpg' | 'png')}><option value="jpg">JPG</option><option value="png">PNG</option></select></label>
+        <label>导出格式<CommerceSelect aria-label="导出格式" value={exportFormat} onChange={value => setExportFormat(value as 'jpg' | 'png')}><option value="jpg">JPG</option><option value="png">PNG</option></CommerceSelect></label>
         {task.scene === 'detail' && <label>横向裁切位置<input aria-label="横向裁切位置" type="range" min="0" max="100" value={exportFocus.x * 100} onChange={event => setExportFocus(current => ({ ...current, x: Number(event.target.value) / 100 }))} /></label>}
         {task.runs
           .filter((run) => run.items.some((item) => item.status === "pending"))

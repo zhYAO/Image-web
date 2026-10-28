@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+import { connection } from 'next/server';
 
-/** Source-preview links resolve to the existing single workspace. */
-export default function WorkspaceAlias() {
-  redirect("/");
+/** The shared WorkspaceHost owns the sole editor runtime. */
+export default async function WorkspacePage() {
+  await connection();
+  return null;
 }

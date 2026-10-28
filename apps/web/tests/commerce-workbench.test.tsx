@@ -3,7 +3,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import {
   buildCommerceSlots,
@@ -88,14 +87,14 @@ describe("persistent commerce workbench", () => {
     expect(screen.getByRole("alert", { name: "" })).toHaveTextContent(
       "历史加载失败，请重试",
     );
-    const options = within(history).getAllByRole("option");
+    fireEvent.click(history);
+    const options = screen.getAllByRole("option");
     expect(options).toHaveLength(2);
     const white = options.find((option) =>
       option.textContent?.includes("白杯"),
     )!;
-    fireEvent.change(history, {
-      target: { value: (white as HTMLOptionElement).value },
-    });
+    const whiteId = white.getAttribute('data-value')!;
+    fireEvent.click(white);
     expect(
       screen.getByRole("complementary", { name: "已保存商品资料" }),
     ).toHaveTextContent("白杯");
@@ -117,10 +116,10 @@ describe("persistent commerce workbench", () => {
         (task) => task.runs.length === 0,
       ),
     ).toBe(true);
-    view.rerender(cloneElement(workbench, { routeDriven: true, requestedTaskId: (white as HTMLOptionElement).value, requestedView: 'examples' }));
+    view.rerender(cloneElement(workbench, { routeDriven: true, requestedTaskId: whiteId, requestedView: 'examples' }));
     expect(screen.getByRole('button', { name: '示例' })).toHaveAttribute('aria-pressed', 'true');
     view.rerender(cloneElement(workbench, { routeDriven: true }));
     expect(screen.getByRole('button', { name: '方案' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('combobox', { name: '当前会话任务' })).toHaveValue((await gateway.commerce.list(session.id)).at(-1)!.id);
+    expect(screen.getByRole('combobox', { name: '当前会话任务' })).toHaveTextContent((await gateway.commerce.list(session.id)).at(-1)!.brief.name);
   });
 });

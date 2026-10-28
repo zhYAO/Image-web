@@ -1,5 +1,7 @@
 "use client";
 
+import { CommerceSelect } from "@/features/commerce/CommerceSelect";
+
 import { publicAssetUrl } from "@/lib/public-assets";
 import {
   APPAREL_LAYOUT_VERSION,
@@ -566,10 +568,10 @@ export function ApparelWorkspace({
           <>
             <label>
               历史整套版本
-              <select
+              <CommerceSelect
                 aria-label="历史整套版本"
                 value={run?.id ?? ""}
-                onChange={(event) => setPreviewRun(event.target.value)}
+                onChange={(value) => setPreviewRun(value)}
               >
                 {[...task.runs].reverse().map((item) => (
                   <option key={item.id} value={item.id}>
@@ -581,7 +583,7 @@ export function ApparelWorkspace({
                         : "执行中"}
                   </option>
                 ))}
-              </select>
+              </CommerceSelect>
             </label>
             {run?.error && <p role="alert">{run.error}</p>}
             {run?.status === "processing" && (

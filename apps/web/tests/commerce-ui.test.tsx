@@ -33,16 +33,16 @@ import {
 } from "./workspace-test-fixtures";
 
 async function chooseCommerceOption(control: HTMLElement, label: string) {
-  fireEvent.mouseDown(control);
+  fireEvent.click(control);
+  fireEvent.click(await screen.findByRole('option', { name:label }));
+}
+
+async function chooseCommerceValue(control: HTMLElement, value: string) {
+  fireEvent.click(control);
   const option = await waitFor(() => {
-    const visible = screen.getAllByText(label, {
-      selector: ".ant-select-item-option-content",
-    }).filter((element) => {
-      const popup = element.closest(".ant-select-dropdown");
-      return popup && !popup.classList.contains("ant-select-dropdown-hidden");
-    });
-    expect(visible).toHaveLength(1);
-    return visible[0]!;
+    const match = screen.getAllByRole('option').find(item => item.getAttribute('data-value') === value);
+    expect(match).toBeDefined();
+    return match!;
   });
   fireEvent.click(option);
 }
@@ -340,11 +340,9 @@ describe("commerce UI", () => {
     );
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
     expect(submit.mock.calls[0]?.[1].slotIds).toEqual([plan.slots[2]!.id]);
-    await waitFor(() =>
-      expect(
-        screen.getByLabelText("第 3 张历史版本").querySelectorAll("option"),
-      ).toHaveLength(3),
-    );
+    fireEvent.click(screen.getByRole("combobox", { name:"第 3 张历史版本" }));
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    fireEvent.click(screen.getByRole("combobox", { name:"第 3 张历史版本" }));
     const updated = await gateway.commerce.get(plan.id);
     expect(
       updated.selections.find((item) => item.slotId === plan.slots[0]!.id)
@@ -356,13 +354,9 @@ describe("commerce UI", () => {
     const oldId = ready.selections.find(
       (item) => item.slotId === plan.slots[2]!.id,
     )!.generationId;
-    expect(screen.getByLabelText("第 3 张历史版本")).not.toHaveValue(oldId);
-    fireEvent.change(screen.getByLabelText("第 3 张历史版本"), {
-      target: { value: oldId },
-    });
-    await waitFor(() =>
-      expect(screen.getByLabelText("第 3 张历史版本")).toHaveValue(oldId),
-    );
+    expect(updated.selections.find(item => item.slotId === plan.slots[2]!.id)?.generationId).not.toBe(oldId);
+    await chooseCommerceValue(screen.getByRole("combobox", { name:"第 3 张历史版本" }), oldId);
+    await waitFor(async () => expect((await gateway.commerce.get(plan.id)).selections.find(item => item.slotId === plan.slots[2]!.id)?.generationId).toBe(oldId));
     expect(
       screen.getByRole("button", { name: "ZIP 下载当前选图（3 张）" }),
     ).toBeEnabled();
@@ -521,7 +515,7 @@ describe("commerce UI", () => {
     const wizard = await screen.findByRole("region", { name: "商品套图向导" });
     expect(within(wizard).getByLabelText("商品描述")).toHaveValue("陶瓷杯\n白色陶瓷");
     expect(
-      within(wizard).getByLabelText("参考图 2 用途").closest(".ant-select"),
+      within(wizard).getByLabelText("参考图 2 用途").closest(".glide-select"),
     ).toHaveTextContent("风格参考图");
     expect(within(wizard).getByLabelText("参考图 2 用途")).toBeDisabled();
     expect(promote.mock.calls[0]?.[1].generationId).toBe(
@@ -585,20 +579,18 @@ describe("commerce UI", () => {
     );
     await screen.findByText(/请先明确移除一张/);
     expect(promote).not.toHaveBeenCalled();
-    const wizard = screen.getByRole("region", { name: "商品套图向导" });
+    const wizard = await screen.findByRole("region", { name: "商品套图向导" });
     fireEvent.click(
       within(wizard).getByRole("button", { name: "移除参考图 4" }),
     );
-    fireEvent.change(screen.getByRole("combobox", { name: "当前会话任务" }), {
-      target: { value: full.id },
-    });
+    await chooseCommerceValue(screen.getByRole("combobox", { name:"当前会话任务" }), full.id);
     fireEvent.click(
       screen.getByRole("button", { name: "采用第 1 张为风格参考" }),
     );
     await waitFor(() => expect(promote).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
-        within(wizard).getByLabelText("参考图 4 用途").closest(".ant-select"),
+        within(wizard).getByLabelText("参考图 4 用途").closest(".glide-select"),
       ).toHaveTextContent("风格参考图"),
     );
     expect(useWorkspaceStore.getState().references).toHaveLength(4);

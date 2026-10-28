@@ -1,4 +1,4 @@
-export function safeReturnTo(value: string | null | undefined, fallback = '/') {
+export function safeReturnTo(value: string | null | undefined, fallback = '/workspace') {
   if (!value?.startsWith('/') || value.startsWith('//')) return fallback;
   try {
     const url = new URL(value, 'https://local.invalid');

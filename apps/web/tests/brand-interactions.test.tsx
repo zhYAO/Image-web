@@ -37,7 +37,7 @@ describe("integrated brand interactions", () => {
     render(<LandingPage />);
     const starts = screen.getAllByRole("link", { name: /开始创作/ });
     expect(starts.length).toBeGreaterThan(0);
-    for (const link of starts) expect(link).toHaveAttribute("href", "/");
+    for (const link of starts) expect(link).toHaveAttribute("href", "/workspace");
     expect(screen.getAllByRole("link", { name: /资产库/ })[0]).toHaveAttribute(
       "href",
       "/assets",

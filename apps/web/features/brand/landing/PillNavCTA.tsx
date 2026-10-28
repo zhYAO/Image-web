@@ -1,3 +1,6 @@
+"use client";
+
+import { useLandingAuthorized, WORKSPACE_LOGIN_HREF } from "./LandingAuth";
 import { IntentLink } from "@/features/brand/IntentLink";
 import type { MouseEventHandler } from "react";
 import { ArrowUpRight } from "lucide-react";
@@ -15,9 +18,10 @@ export function PillNavCTA({
   variant?: "button" | "nav";
   onClick?: MouseEventHandler<HTMLAnchorElement>;
 }) {
+  const authorized = useLandingAuthorized();
   return (
     <IntentLink
-      href="/"
+      href={authorized ? "/workspace" : WORKSPACE_LOGIN_HREF}
       className={`${variant === "nav" ? "zl-nav-cta" : "zl-button zl-button-primary"} zl-pill-cta`}
       onClick={onClick}
     >

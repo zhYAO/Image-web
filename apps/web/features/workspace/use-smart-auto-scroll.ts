@@ -7,6 +7,8 @@ type RequestedScrollBehavior = 'auto' | 'smooth';
 interface SmartAutoScrollOptions {
   contentVersion: string;
   enabled?: boolean;
+  documentScroll?: boolean;
+  resetOnEmpty?: boolean;
   sessionId?: string;
 }
 
@@ -22,6 +24,8 @@ interface SmartAutoScrollController {
 export function useSmartAutoScroll({
   contentVersion,
   enabled = true,
+  documentScroll = false,
+  resetOnEmpty = false,
   sessionId,
 }: SmartAutoScrollOptions): SmartAutoScrollController {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,15 +35,14 @@ export function useSmartAutoScroll({
 
   const scrollElementToBottom = useCallback((behavior: RequestedScrollBehavior) => {
     const container = containerRef.current;
-    if (!enabled || !container || typeof container.scrollTo !== 'function') return;
+    if (!enabled || !container || container.closest('[hidden]')) return;
+    if (!documentScroll && typeof container.scrollTo !== 'function') return;
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const resolvedBehavior = behavior === 'smooth' && !reduceMotion ? 'smooth' : 'auto';
     if (resolvedBehavior === 'smooth') ignoreScrollEventsUntilRef.current = performance.now() + 750;
-    container.scrollTo({
-      behavior: resolvedBehavior,
-      top: container.scrollHeight,
-    });
-  }, [enabled]);
+    const target = documentScroll ? window : container;
+    target.scrollTo({ behavior: resolvedBehavior, top: documentScroll ? document.documentElement.scrollHeight : container.scrollHeight });
+  }, [enabled, documentScroll]);
 
   const scrollToBottom = useCallback((behavior: RequestedScrollBehavior = 'auto') => {
     followingRef.current = true;
@@ -51,11 +54,23 @@ export function useSmartAutoScroll({
     if (!enabled) return;
     if (performance.now() < ignoreScrollEventsUntilRef.current) return;
     const container = event.currentTarget;
-    const distanceFromBottom = container.scrollHeight - container.clientHeight - container.scrollTop;
+    const distanceFromBottom = documentScroll
+      ? document.documentElement.scrollHeight - window.innerHeight - window.scrollY
+      : container.scrollHeight - container.clientHeight - container.scrollTop;
     const isFollowing = distanceFromBottom <= BOTTOM_THRESHOLD_PX;
     followingRef.current = isFollowing;
     setShowScrollToBottom(!isFollowing);
-  }, [enabled]);
+  }, [enabled, documentScroll]);
+
+  useEffect(() => {
+    if (!documentScroll || !enabled) return;
+    const scroll = () => {
+      const container = containerRef.current;
+      if (container && !container.closest('[hidden]')) handleScroll({ currentTarget: container } as React.UIEvent<HTMLDivElement>);
+    };
+    window.addEventListener('scroll', scroll, { passive: true });
+    return () => window.removeEventListener('scroll', scroll);
+  }, [documentScroll, enabled, handleScroll]);
 
   const handleUserScrollIntent = useCallback(() => {
     ignoreScrollEventsUntilRef.current = 0;
@@ -69,10 +84,14 @@ export function useSmartAutoScroll({
     followingRef.current = enabled;
     ignoreScrollEventsUntilRef.current = 0;
     if (enabled) scrollElementToBottom('auto');
-    else containerRef.current?.scrollTo?.({ behavior: 'auto', top: 0 });
+    else {
+      const container = containerRef.current;
+      if (documentScroll && resetOnEmpty && container && !container.closest('[hidden]')) window.scrollTo({ behavior:'auto', top:0 });
+      else container?.scrollTo?.({ behavior: 'auto', top: 0 });
+    }
     const frame = window.requestAnimationFrame(() => setShowScrollToBottom(false));
     return () => window.cancelAnimationFrame(frame);
-  }, [enabled, scrollElementToBottom, sessionId]);
+  }, [enabled, scrollElementToBottom, sessionId, documentScroll, resetOnEmpty]);
 
   useEffect(() => {
     if (followingRef.current) scrollElementToBottom('auto');

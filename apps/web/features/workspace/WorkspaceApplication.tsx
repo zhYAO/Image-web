@@ -17,7 +17,7 @@ export function WorkspaceApplication() {
     else router.push(url, { scroll: false });
   }, [router]);
   useEffect(() => {
-    if (pathname === '/' && route.kind === 'commerce') navigate(commerceHref(route.scene, route.platform, route.template), true);
+    if ((pathname === '/' || pathname === '/workspace') && route.kind === 'commerce') navigate(commerceHref(route.scene, route.platform, route.template), true);
   }, [pathname, route, navigate]);
   return <UnifiedWorkspace route={route} onNavigate={navigate} ownerKey={ownerId ?? 'local'} />;
 }

@@ -12,7 +12,7 @@ const WorkspaceProviders = dynamic(() => import('./workspace-providers').then(mo
 /** First-time brand visitors need no editor runtime or private service requests. */
 export function ApplicationShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const needsRuntime = pathname !== '/home';
+  const needsRuntime = pathname !== '/' && pathname !== '/home';
   const [entered, setEntered] = useState(needsRuntime);
   if (needsRuntime && !entered) setEntered(true);
   // Once entered, keep the existing provider and workspace tree mounted even on

@@ -112,7 +112,7 @@ describe('workspace presentation components', () => {
     rerender(<UnifiedComposer {...sharedProps} imageCreationEnabled />);
     expect(screen.getByRole('button', { name: '创建图片' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('参考图')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /聊天模型/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /聊天模型/ })).not.toBeInTheDocument();
   });
 
   it('lets image-mode users edit the resolved skill prompt before submission', () => {
@@ -177,8 +177,8 @@ describe('workspace presentation components', () => {
         selectedModel="doubao"
       />,
     );
-    expect(screen.getByRole('dialog', { name: '聊天模型' })).toHaveTextContent('服务正常');
-    fireEvent.click(screen.getByRole('button', { name: 'minimax · MiniMax' }));
+    expect(screen.getByRole('listbox', { name: '聊天模型' })).toHaveTextContent('服务正常');
+    fireEvent.click(screen.getByRole('option', { name: /MiniMax/ }));
     expect(onSelect).toHaveBeenCalledWith('minimax');
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

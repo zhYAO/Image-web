@@ -25,6 +25,7 @@ describe("shared authentication presentation", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     replace.mockReset();
+    window.history.replaceState({}, "", "/");
   });
   it("shares one verified request across catalogue and workspace, including StrictMode", async () => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");
@@ -118,7 +119,7 @@ describe("shared authentication presentation", () => {
     expect(catalogueRuntimeAllowed('authorized')).toBe(true);
     expect(catalogueRuntimeAllowed('guest')).toBe(false);
   });
-  it.each(['/?scene=product-set', '/create/product-set?platform=taobao', '/sessions/abc?task=xyz&view=results'])("returns an unauthenticated visitor from %s to the public homepage", async (path) => {
+  it.each(['/workspace', '/create/product-set?platform=taobao', '/sessions/abc?task=xyz&view=results'])("returns an unauthenticated visitor from %s to the public homepage", async (path) => {
     vi.stubEnv("NEXT_PUBLIC_PHASE2_AUTH", "true");
     vi.stubGlobal(
       "fetch",
@@ -173,6 +174,7 @@ describe("shared authentication presentation", () => {
     expect(replace).not.toHaveBeenCalled();
   });
   it('returns to the homepage after a confirmed logout without reviving a late identity', async () => {
+    window.history.replaceState({}, "", "/workspace");
     vi.stubEnv('NEXT_PUBLIC_PHASE2_AUTH', 'true');
     const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ id: '10000000-0000-4000-8000-000000000001' })));
     vi.stubGlobal('fetch', fetcher);

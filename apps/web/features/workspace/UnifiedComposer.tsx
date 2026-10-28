@@ -16,7 +16,8 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { Glass } from "@/features/brand/Glass";
 import { ComposerOrbs } from "./ComposerOrbs";
 
 import { zhCN } from "@/i18n";
@@ -106,8 +107,19 @@ export function UnifiedComposer({
   };
 
   const [focused, setFocused] = useState(false);
+  const composer = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const dock = composer.current?.parentElement;
+    const shell = dock?.closest<HTMLElement>('[data-workspace-shell]');
+    if (!dock || !shell) return;
+    const measure = () => shell.style.setProperty('--composer-obstruction', `${dock.offsetHeight + 80}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    measure();
+    return () => { observer.disconnect(); shell.style.removeProperty('--composer-obstruction'); };
+  }, []);
   return (
-    <div className={styles.composer}>
+    <Glass ref={composer} className={styles.composer}>
       <ComposerOrbs focused={focused} />
       <div className={styles.composerBody}>
         {imageCreationEnabled && (
@@ -174,7 +186,7 @@ export function UnifiedComposer({
           aria-describedby="composer-help"
           aria-label="创作输入"
           id="creation-prompt"
-          autoSize={{ maxRows: 5, minRows: 2 }}
+          autoSize={{ maxRows: 5, minRows: 3 }}
           className={styles.composerInput}
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
@@ -192,18 +204,6 @@ export function UnifiedComposer({
       </div>
       <div className={styles.composerActions}>
         <div className={styles.composerTools}>
-          <Tooltip title="开启后，描述你想生成的图片">
-            <Button
-              aria-label="创建图片"
-              aria-pressed={imageCreationEnabled}
-              className={`${styles.toolbarButton} ${imageCreationEnabled ? styles.toolbarButtonActive : ""}`}
-              disabled={disabled}
-              icon={<ImageIcon size={15} />}
-              onClick={() => onImageCreationChange(!imageCreationEnabled)}
-            >
-              创建图片
-            </Button>
-          </Tooltip>
           {imageCreationEnabled && (
             <>
               <ModelPopover
@@ -241,6 +241,18 @@ export function UnifiedComposer({
               selectedModel={selectedChatModel}
             />
           )}
+          <Tooltip title="开启后，描述你想生成的图片">
+            <Button
+              aria-label="创建图片"
+              aria-pressed={imageCreationEnabled}
+              className={`${styles.toolbarButton} ${imageCreationEnabled ? styles.toolbarButtonActive : ""}`}
+              disabled={disabled}
+              icon={<ImageIcon size={15} />}
+              onClick={() => onImageCreationChange(!imageCreationEnabled)}
+            >
+              创建图片
+            </Button>
+          </Tooltip>
           <Button
             aria-label={zhCN.composer.openMobileConfig}
             className={styles.mobileConfigButton}
@@ -293,6 +305,6 @@ export function UnifiedComposer({
         Enter 发送，Shift + Enter 换行。
         {imageCreationEnabled && "最多上传 4 张参考图，每次生成 1 张图片。"}
       </span>
-    </div>
+    </Glass>
   );
 }

@@ -20,3 +20,8 @@ TypeScript optional-entry handling. No React Bits Pro content is used.
 
 These components are included as part of this application only. They are not
 offered as a standalone component library or component pack.
+
+GlideSelect visual source revision: 43591e8b3fa327d45633b4e8239ff6742ef706ef.
+Adapted from user-provided ZImage reference checkout 2450e9a5a95639a0f465534c920e27dc6027abd1,
+with application-owned real model values, optional controlled opening and disabled options.
+The reference checkout is not verified identical to deployed Site version 18.

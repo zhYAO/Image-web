@@ -67,3 +67,6 @@ Object.defineProperty(window, 'matchMedia', {
   }),
   writable: true,
 });
+
+// jsdom has no layout viewport; exercise document-follow decisions with a controllable scroll method.
+Object.defineProperty(window, "scrollTo", { configurable:true, writable:true, value:() => undefined });

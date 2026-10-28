@@ -1,3 +1,4 @@
+import { GlideSelect } from '@/features/controls/GlideSelect';
 import { ModelCreditPrice } from '@/features/credits/CreditsProvider';
 import {
   CHAT_PROVIDER_MODELS,
@@ -8,7 +9,7 @@ import {
   type Skill,
 } from '@zimage/domain';
 import { Button, Input, Tag } from 'antd';
-import { Box, Check, ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { Check, ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import { zhCN } from '@/i18n';
@@ -217,67 +218,20 @@ interface ModelPopoverProps {
   selectedProvider?: string;
 }
 
-export function ModelPopover({
-  capabilities,
-  health,
-  onOpenChange,
-  onSelect,
-  open,
-  selectedModel,
-  selectedProvider,
-}: ModelPopoverProps) {
-  const selectedHealth = health.find((item) => item.provider === selectedProvider);
-  return (
-    <PopoverShell
-      ariaLabel="选择生成模型"
-      className={styles.modelPopover}
-      onOpenChange={onOpenChange}
-      open={open}
-      trigger={(
-        <Button
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          aria-label={`生成模型 ${selectedProvider ?? ''} ${selectedModel?.label ?? ''}`.trim()}
-          className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
-          icon={<Box size={15} />}
-          onClick={() => onOpenChange(!open)}
-        >
-          {selectedModel?.label ?? '选择模型'} <ChevronDown size={13} />
-        </Button>
-      )}
-    >
-      <div className={styles.popoverHeading}>
-        <div>
-          <div className={styles.popoverTitle}>图片模型</div>
-          <div className={styles.popoverHint}>选择用于本次创作的服务与模型</div>
-        </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
-          {selectedHealth?.status === 'healthy' ? '服务正常' : '服务降级'}
-        </Tag>
-      </div>
-      <div className={styles.modelList}>
-        {capabilities.flatMap((capability) => capability.models.map((model) => {
-          const selected = capability.provider === selectedProvider && model.id === selectedModel?.id;
-          return (
-            <button
-              aria-label={`${capability.provider} · ${model.label}`}
-              className={`${styles.modelOption} ${selected ? styles.optionActive : ''}`}
-              key={`${capability.provider}-${model.id}`}
-              onClick={() => {
-                onSelect(capability.provider, model.id);
-                onOpenChange(false);
-              }}
-              type="button"
-            >
-              <span className={styles.modelIcon}><Sparkles size={16} /></span>
-              <span><strong>{model.label}</strong><small>{capability.provider}</small><ModelCreditPrice operation="image" provider={capability.provider} model={model.id}/></span>
-              {selected && <Check size={16} />}
-            </button>
-          );
-        }))}
-      </div>
-    </PopoverShell>
-  );
+export function ModelPopover({ capabilities, health, onOpenChange, onSelect, open, selectedModel, selectedProvider }: ModelPopoverProps) {
+  return <GlideSelect ariaLabel="生成模型" includeValueInLabel placement="top"
+    className={styles.modelSelector} open={open} onOpenChange={onOpenChange}
+    value={selectedProvider && selectedModel ? `${selectedProvider}::${selectedModel.id}` : undefined}
+    options={capabilities.flatMap(capability => capability.models.map(model => {
+      const status = health.find(item => item.provider === capability.provider)?.status;
+      return { value: `${capability.provider}::${model.id}`, textValue: model.label, label: model.label,
+        detail: <>{status === 'healthy' ? '服务正常' : status === 'unavailable' ? '服务不可用' : '服务降级'}<ModelCreditPrice operation="image" provider={capability.provider} model={model.id}/></> };
+    }))}
+    onChange={next => {
+      const match = capabilities.flatMap(capability => capability.models.map(model => ({ provider:capability.provider, model:model.id })))
+        .find(item => `${item.provider}::${item.model}` === next);
+      if (match) onSelect(match.provider, match.model);
+    }}/>;
 }
 
 interface ImageSettingsPopoverProps {
@@ -437,60 +391,15 @@ interface ChatModelPopoverProps {
   selectedModel: string;
 }
 
-export function ChatModelPopover({
-  health, onOpenChange, onSelect, open, selectedModel,
-}: ChatModelPopoverProps) {
-  const selected = CHAT_PROVIDER_MODELS.find((model) => model.id === selectedModel)
-    ?? CHAT_PROVIDER_MODELS[0];
-  const selectedHealth = health.find((item) => item.provider === selected.provider);
-  return (
-    <PopoverShell
-      ariaLabel={zhCN.composer.chatModel}
-      className={styles.modelPopover}
-      onOpenChange={onOpenChange}
-      open={open}
-      trigger={(
-        <Button
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          aria-label={`${zhCN.composer.chatModel} ${selected.label}`}
-          className={`${styles.toolbarButton} ${open ? styles.toolbarButtonActive : ''}`}
-          icon={<Box size={15} />}
-          onClick={() => onOpenChange(!open)}
-        >
-          {selected.label} <ChevronDown size={13} />
-        </Button>
-      )}
-    >
-      <div className={styles.popoverHeading}>
-        <div>
-          <div className={styles.popoverTitle}>{zhCN.composer.chatModel}</div>
-          <div className={styles.popoverHint}>{zhCN.composer.chatModelHint}</div>
-        </div>
-        <Tag color={selectedHealth?.status === 'healthy' ? 'success' : 'warning'}>
-          {selectedHealth?.status === 'healthy' ? zhCN.composer.serviceHealthy : zhCN.composer.serviceDegraded}
-        </Tag>
-      </div>
-      <div className={styles.modelList}>
-        {CHAT_PROVIDER_MODELS.map((model) => (
-          <button
-            aria-label={`${model.provider} · ${model.label}`}
-            className={`${styles.modelOption} ${model.id === selected.id ? styles.optionActive : ''}`}
-            key={model.id}
-            onClick={() => {
-              onSelect(model.id);
-              onOpenChange(false);
-            }}
-            type="button"
-          >
-            <span className={styles.modelIcon}><Sparkles size={16} /></span>
-            <span><strong>{model.label}</strong><small>{model.provider}</small><ModelCreditPrice operation="chat" provider={model.id} model={model.id}/></span>
-            {model.id === selected.id && <Check size={16} />}
-          </button>
-        ))}
-      </div>
-    </PopoverShell>
-  );
+export function ChatModelPopover({ health, onOpenChange, onSelect, open, selectedModel }: ChatModelPopoverProps) {
+  return <GlideSelect ariaLabel={zhCN.composer.chatModel} includeValueInLabel placement="top"
+    className={styles.modelSelector} open={open} onOpenChange={onOpenChange} value={selectedModel}
+    options={CHAT_PROVIDER_MODELS.map(model => {
+      const status = health.find(item => item.provider === model.provider)?.status;
+      return { value:model.id, label:model.label, textValue:model.label,
+        detail:<>{status === 'healthy' ? '服务正常' : status === 'unavailable' ? '服务不可用' : '服务降级'}<ModelCreditPrice operation="chat" provider={model.id} model={model.id}/></> };
+    })}
+    onChange={next => { if (CHAT_PROVIDER_MODELS.some(model => model.id === next)) onSelect(next); }}/>;
 }
 
 export function buildSkillPromptPreview(skill: Skill | undefined, values: Record<string, string>, prompt: string) {

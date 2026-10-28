@@ -229,8 +229,8 @@ describe('UnifiedWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '生成参数 1:1 2K' }));
     fireEvent.click(screen.getByRole('button', { name: '比例 16:9' }));
-    fireEvent.click(screen.getByRole('button', { name: /^生成模型/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'seedream · Seedream 5.0 Pro' }));
+    fireEvent.click(screen.getByRole('combobox', { name: /^生成模型/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Seedream 5.0 Pro/ }));
     expect(screen.getByRole('button', { name: '生成参数 16:9 2K' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '生成参数 16:9 2K' }));

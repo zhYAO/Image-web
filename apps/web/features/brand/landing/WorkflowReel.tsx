@@ -171,7 +171,7 @@ export function WorkflowReel() {
               </button>
             ))}
           </div>
-          <Link href="/" className="zl-text-link">
+          <Link href="/workspace" className="zl-text-link">
             进入创作工作台 <ArrowRight aria-hidden="true" />
           </Link>
         </div>

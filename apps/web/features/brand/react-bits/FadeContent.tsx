@@ -10,6 +10,7 @@
  */
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   type HTMLAttributes,
   type ReactNode,
@@ -60,7 +61,7 @@ function useFadeContentAnimation(
     callback.current = onComplete;
   }, [onComplete]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
     const preference = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -69,6 +70,13 @@ function useFadeContentAnimation(
     let revealed = false;
     let alive = true;
     let completed = false;
+    const original = { opacity: element.style.opacity, transform: element.style.transform, filter: element.style.filter };
+    let prepared = false;
+    const restore = () => {
+      if (!prepared) return;
+      Object.assign(element.style, original);
+      prepared = false;
+    };
 
     const complete = () => {
       if (!alive || completed) return;
@@ -79,6 +87,7 @@ function useFadeContentAnimation(
       if (revealed || !alive) return;
       revealed = true;
       observer?.disconnect();
+      restore();
       if (preference?.matches || !element.animate || duration <= 0) {
         complete();
         return;
@@ -106,6 +115,7 @@ function useFadeContentAnimation(
       revealed = true;
       observer?.disconnect();
       animation?.cancel();
+      restore();
       complete();
     };
     const onPreference = (event: MediaQueryListEvent) => {
@@ -117,9 +127,16 @@ function useFadeContentAnimation(
       else animation.play();
     };
 
-    if (preference?.matches || typeof IntersectionObserver === "undefined")
-      show();
-    else {
+    // Only elements below the viewport can be prepared. Visible/previously seen
+    // content stays readable even when hydration arrives after the first scroll.
+    if (preference?.matches || typeof IntersectionObserver === "undefined"
+      || !element.animate || duration <= 0 || element.getBoundingClientRect().top < window.innerHeight) {
+      showWithoutMotion();
+    } else {
+      prepared = true;
+      element.style.opacity = String(Math.min(1, Math.max(0, initialOpacity)));
+      element.style.transform = `translateY(${distance}px)`;
+      if (blur) element.style.filter = "blur(6px)";
       observer = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) show();
@@ -128,8 +145,12 @@ function useFadeContentAnimation(
       );
       observer.observe(element);
     }
-    // Keyboard navigation must never land on temporarily transparent content.
-    element.addEventListener("focusin", showWithoutMotion);
+    // Keyboard focus must be readable immediately. Pointer focus during a running
+    // reveal must not move the clicked link between pointerdown and pointerup.
+    const onFocus = (event: FocusEvent) => {
+      if (!revealed || (event.target instanceof HTMLElement && event.target.matches(":focus-visible"))) showWithoutMotion();
+    };
+    element.addEventListener("focusin", onFocus);
     preference?.addEventListener("change", onPreference);
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -137,7 +158,8 @@ function useFadeContentAnimation(
       alive = false;
       observer?.disconnect();
       animation?.cancel();
-      element.removeEventListener("focusin", showWithoutMotion);
+      restore();
+      element.removeEventListener("focusin", onFocus);
       preference?.removeEventListener("change", onPreference);
       document.removeEventListener("visibilitychange", onVisibility);
     };

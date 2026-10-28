@@ -29,7 +29,7 @@ describe('explicit EC03 safe PNG action', () => {
     // A later failed candidate must not replace the current successful selection.
     task.runs[0]!.items.push({ ...task.runs[0]!.items[0]!, generationId: ids.request, status: 'failed' });
     card(task);
-    expect(screen.getByRole('combobox', { name: '导出格式' })).toHaveValue('jpg');
+    expect(screen.getByRole('combobox', { name: '导出格式' })).toHaveTextContent('JPG');
     expect(screen.getByText(/整图（含文字）.*缩小.*不能补回缺失内容/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '安全导出第 1 张 PNG' }));
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
@@ -37,7 +37,7 @@ describe('explicit EC03 safe PNG action', () => {
     expect(url).toBe(`/api/creative-tasks/${ids.task}/download`);
     expect(JSON.parse(init.body)).toMatchObject({ mode: 'single', format: 'png', safeExport: 'ec03-white-8', selections: [{ slotId: ids.slot, generationId: ids.generation }] });
     await waitFor(() => expect(screen.getByText('已下载 commerce-safe-image.png。')).toHaveAttribute('role', 'status'));
-    expect(screen.getByRole('combobox', { name: '导出格式' })).toHaveValue('jpg');
+    expect(screen.getByRole('combobox', { name: '导出格式' })).toHaveTextContent('JPG');
   });
 
   it.each(['soft-studio', 'detail-hero'])('does not offer safe export for %s', templateId => {

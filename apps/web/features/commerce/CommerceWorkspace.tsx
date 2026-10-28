@@ -1,3 +1,4 @@
+import { CommerceSelect } from "./CommerceSelect";
 import { ApparelWorkspace } from './ApparelWorkspace';
 import { useApparelTasks } from './use-apparel-tasks';
 import { hasApparelDraft } from './apparel-draft-storage';
@@ -449,7 +450,7 @@ export function CommerceWorkspace({
   };
   if (activeScene === 'apparel-catalog' && sessionId) return <section className={styles.commerceRoot}>
     <header className={styles.workbenchHeader}><Link href="/create"><ArrowLeft size={15}/>创作方式</Link><span>服装商品图片</span><button className={styles.refreshTask} type="button" onClick={() => void apparel.refresh()}>手动刷新任务</button>
-      {apparel.tasks.length > 0 && <label className={styles.taskHistory}>当前会话<select aria-label="当前会话任务" value={showDraft?'draft':selectedApparel?.id??''} onChange={event=>chooseTask(event.target.value)}>{currentDraft&&<option value="draft">新方案 · 尚未保存</option>}{[...apparel.tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}{[...tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.brief.name} · v{task.revision}</option>)}</select></label>}
+      {apparel.tasks.length > 0 && <label className={styles.taskHistory}>当前会话<CommerceSelect aria-label="当前会话任务" value={showDraft?'draft':selectedApparel?.id??''} onChange={value=>chooseTask(value)}>{currentDraft&&<option value="draft">新方案 · 尚未保存</option>}{[...apparel.tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}{[...tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.brief.name} · v{task.revision}</option>)}</CommerceSelect></label>}
     </header>
     {apparel.error&&<p role="alert">{apparel.error}<button onClick={()=>void apparel.refresh()}>重试任务载入</button></p>}
     {apparel.loading ? <p role="status">正在载入服装任务…</p> : <ApparelWorkspace key={`${ownerKey}:${sessionId}:${showDraft?'new':selectedApparel?.id??'new'}`} ownerKey={ownerKey} sessionId={sessionId} task={showDraft?undefined:selectedApparel} gateway={gateway?.apparel} references={wizardProps.references} ensureSession={ensureSession} onReferenceAdd={wizardProps.onReferenceAdd} onReferenceRemove={wizardProps.onReferenceRemove} onReferenceUploaded={wizardProps.onReferenceUploaded} onTask={apparelSaved}/>}
@@ -484,10 +485,10 @@ export function CommerceWorkspace({
           {(tasks.length > 0 || currentDraft) && (
             <label className={styles.taskHistory}>
               当前会话
-              <select
+              <CommerceSelect
                 aria-label="当前会话任务"
                 value={showDraft ? "draft" : (selectedTask?.id ?? "")}
-                onChange={(event) => chooseTask(event.target.value)}
+                onChange={(value) => chooseTask(value)}
               >
                 {currentDraft && (
                   <option value="draft">新方案 · 尚未保存</option>
@@ -499,7 +500,7 @@ export function CommerceWorkspace({
                     {task.archived ? " · 已归档" : ""}
                   </option>
                 ))}
-              </select>
+              </CommerceSelect>
             </label>
           )}
           {selectedTask && !showDraft && <button className={styles.refreshTask} type="button" onClick={() => void refresh().catch(() => undefined)}>

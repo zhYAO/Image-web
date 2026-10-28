@@ -1,0 +1,28 @@
+/* React Bits GlideSelect / David Haz (2026), MIT + Commons Clause.
+   Pinned visual source and license attribution are in GlideSelect.tsx. */
+.glide-select { position:relative; display:inline-block; min-width:0; max-width:100%; --gs-ease:cubic-bezier(.23,1,.32,1); }
+.glide-select__trigger { display:inline-flex; align-items:center; gap:8px; width:100%; min-width:0; height:36px; padding:0 10px; border:1px solid #e3e0e9; border-radius:10px; background:#fff; color:#292633; font:inherit; font-size:12px; line-height:1; text-align:left; cursor:pointer; touch-action:manipulation; transition:background-color 100ms,transform 160ms var(--gs-ease); }
+.glide-select__trigger:not(:disabled):hover,.glide-select__trigger[aria-expanded='true'] { background:#f5f2f9; }
+.glide-select__trigger:not(:disabled):active { transform:scale(.97); }
+.glide-select__trigger:focus-visible { outline:2px solid #78659e; outline-offset:3px; }
+.glide-select__trigger:disabled { opacity:.5; cursor:default; }
+.glide-select__label { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; min-width:0; }
+.glide-select__chevron { color:#8a8394; flex:none; transition:transform 200ms var(--gs-ease); }
+.glide-select__trigger[aria-expanded='true'] .glide-select__chevron { transform:rotate(180deg); }
+.glide-select__menu { position:fixed; z-index:1200; box-sizing:border-box; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; padding:4px; border:1px solid #e3e0e9; border-radius:10px; background:#fff; color:#292633; box-shadow:0 4px 16px #00000024; animation:glide-select-pop 180ms var(--gs-ease) both; }
+.glide-select__list { position:relative; display:grid; grid-template-columns:minmax(0,1fr); gap:1px; outline:none; touch-action:pan-y; }
+.glide-select__pill { position:absolute; inset:0 0 auto; height:40px; border-radius:6px; pointer-events:none; background:#eeeaf7; transition:transform 220ms var(--gs-ease),height 220ms var(--gs-ease),opacity 150ms; }
+.glide-select__option { position:relative; z-index:1; display:flex; align-items:center; gap:8px; min-height:40px; padding:7px 10px; border-radius:6px; font-size:12px; cursor:pointer; user-select:none; }
+.glide-select__option[aria-selected='true'] { color:#6243a3; }
+.glide-select__option[aria-disabled='true'] { opacity:.45; cursor:default; }
+.glide-select__name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.glide-select__name small { display:block; color:#736d7d; font-size:10px; line-height:1.5; margin-top:3px; }
+.glide-select__check { flex:none; visibility:hidden; }
+.glide-select__check[data-on='true'] { visibility:visible; }
+.glide-select__name small .credit-model-price { display:inline; margin-left:8px; }
+.commerce-select,.commerce-select .glide-select__trigger { width:100%; }
+.commerce-select .glide-select__trigger { min-height:40px; padding-inline:12px; }
+@keyframes glide-select-pop { from {opacity:0;transform:scale(.95);} to {opacity:1;transform:none;} }
+@media(max-width:767px) { .glide-select__trigger { min-height:40px; } }
+@media(prefers-reduced-motion:reduce) { .glide-select__menu { animation:none; } .glide-select__trigger,.glide-select__pill,.glide-select__chevron { transition:none; } .glide-select__trigger:not(:disabled):active { transform:none; } }
+@media(forced-colors:active) { .glide-select__trigger,.glide-select__menu { color:ButtonText;background:Canvas;border:1px solid ButtonText; } .glide-select__trigger:focus-visible { outline:2px solid Highlight; } .glide-select__pill { background:Highlight; } .glide-select__option[aria-selected='true'] { outline:1px solid Highlight; } }

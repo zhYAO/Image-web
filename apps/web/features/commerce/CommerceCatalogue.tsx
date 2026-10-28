@@ -15,7 +15,7 @@ export function CommerceCatalogue() {
   return (
     <section className={styles.catalogue} aria-label="电商工具目录">
       <div className={styles.content}>
-        <Link className={styles.back} href="/">
+        <Link className={styles.back} href="/workspace">
           <ArrowLeft size={13} />
           返回工作区
         </Link>

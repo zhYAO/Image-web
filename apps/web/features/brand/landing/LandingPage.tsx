@@ -13,11 +13,12 @@ import { Reveal } from "./Reveal";
 import { SectionJump } from "./SectionJump";
 import { PillNavCTA } from "./PillNavCTA";
 import "./landing.css";
+import { LandingAuthProvider } from "./LandingAuth";
 
 /** Original ZImage brand layout, rendered as semantic React rather than a DOM shell. */
 export function LandingPage() {
   return (
-    <div className="zl-root" data-glass-theme="light">
+    <LandingAuthProvider><div className="zl-root" data-glass-theme="light">
       <a href="#landing-main" className="skip-link">
         跳至主要内容
       </a>
@@ -175,7 +176,7 @@ export function LandingPage() {
       </main>
       <footer className="zl-footer zl-container">
         <div>
-          <Link href="/home" className="zl-brand">
+          <Link href="/" className="zl-brand">
             <span className="zl-brand-icon">
               <BrandMark />
             </span>
@@ -184,7 +185,7 @@ export function LandingPage() {
           <span>让灵感成为画面。</span>
         </div>
         <nav aria-label="页脚导航">
-          <Link href="/">创作工作台</Link>
+          <Link href="/workspace">创作工作台</Link>
           <Link href="/create">电商生图</Link>
           <Link href="/assets">资产库</Link>
           <Link href="/account">账号</Link>
@@ -194,6 +195,6 @@ export function LandingPage() {
           <span>IMAGINE. CREATE. REFINE.</span>
         </p>
       </footer>
-    </div>
+    </div></LandingAuthProvider>
   );
 }

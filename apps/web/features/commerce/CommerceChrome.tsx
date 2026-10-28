@@ -40,7 +40,7 @@ export function CommerceHeader({ onHistory }: { onHistory?: () => void }) {
         </button>
       ) : (
         <Link
-          href="/"
+          href="/workspace"
           onClick={() =>
             useWorkspaceStore.getState().setSessionDrawerOpen(true)
           }
@@ -89,7 +89,7 @@ export function CommerceNav({ scene }: { scene?: CommerceScene }) {
           <span>{title}</span>
         </Link>
       ))}
-      <Link className={styles.navFooter} href="/">
+      <Link className={styles.navFooter} href="/workspace">
         <Sparkles />
         <span>普通创作</span>
       </Link>
