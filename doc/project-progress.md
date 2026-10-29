@@ -1,5 +1,14 @@
 # ZImage 项目进度
 
+## 2026-10-29 已批准的独立可信 Node（安装/兼容验证完成，未激活新应用）
+
+- 用户明确批准新增部署专用root Node、固定helper路径及ExecStart-only drop-in，不修改旧www安装、不新增账号/密钥或扩大SSH/sudo。官方HTTPS固定版本归档31,633,904字节，SHA256 `14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647`；仅提取node成员并核验SHA256 `bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12`。
+- `/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node`及新增祖先均root:root0755；实测Node24.19.0/ABI137/API10/linux/x64/glibc2.35。旧路径字节/SHA和www所有权保持，源码两helper的固定NODE及服务模板同步新路径，root祖先/非符号链接/不可组写门禁未放松。
+- 配置备份为 `/var/backups/zimage-trusted-node-20261029`（root0700）；新增 `/etc/systemd/system/zimage.service.d/10-trusted-node.conf`（root0644），只重置ExecStart到新Node，原子发布并仅daemon-reload。User/Group、EnvironmentFiles及其顺序、隔离/出口相关属性、资源限制均逐项保持；线上PID399199及启动时间未变。新Node将用于下次服务启动，本轮没有restart或改current/previous。
+- 以新Node在两个串行、只读、仅localhost、无生产秘密的限额临时单元启动保留应用，`9c5c3ea95e0c66193b23a2db50643530aa7d095a`和`8cbb708645e93d3d71d17641b860cc60301fa005`的真实ready均200且版本准确；192MiB/64MiB swap/40%CPU/75秒硬上限，单元已停止。该结果是旧应用启动兼容性预检，不是线上回滚；生产current/previous仍为这两个精确SHA。
+- 两项固定路径回归先失败后通过，Mac定向10/10；新可信Node下实际Linux完整运维 **203/203**、66.524秒、exit0，独立复核无当前Critical/Important。临时管理脚本的部分写入和启动超时清理问题在执行前修复并经故障注入复核。证据在 `.design-qa/2026-10-29-trusted-node/` 及服务器临时目录；应用/依赖未改，不重复业务构建。
+- 服务器现有root发布helper保留，未提前安装新版六文件闭包、启用三层target或激活新应用；正式发布前须按本轮新冻结SHA核验/安装整套helper与资源绑定，保留当前回滚能力。云构建必须fetch新提交并以其真实SHA重新构建，禁止给0f7adff3产物改标签。生产包仍未上传，Library消费失败由父会话按支持流程处理。
+
 ## 2026-10-29 正式构建前提与已保存云环境核对（文档补齐，通道待验真）
 
 - 详细边界见 [生产构建输入与既有云通道判定](../ops/aliyun/BUILD-PREREQUISITES.md)：实测目标Node24.19.0/ABI137/linux/x64/glibc2.35，历史Node-API10须重新读取；pnpm11.19.0、Python3.10兼容工具、GNU tar及真实POSIX/native/字体门禁不变。固定HTTP/slim/Webpack/规范.next/同源资源，精确commit与构建标记一致。

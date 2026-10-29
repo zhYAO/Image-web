@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 ROOT = Path('/opt/zimage')
-NODE = ROOT / 'toolchain/node-v24.19.0-linux-x64/bin/node'
+NODE = ROOT / 'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
 DROPIN = Path('/etc/systemd/system/zimage.service.d/three-layer-assets.conf')
 SYSTEMD_TEMPLATE = '[Service]\nEnvironmentFile=-/opt/zimage/current/.runtime-assets.env\n'
 SAFE_PATH = str(NODE.parent) + ':/usr/sbin:/usr/bin:/sbin:/bin'

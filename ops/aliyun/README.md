@@ -4,7 +4,7 @@
 
 ## 路径
 
-- `/opt/zimage/toolchain/node-v24.19.0-linux-x64`：独立 Node 24.19.0，不替换服务器原 Node。
+- `/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node`：部署专用、官方校验的 Node 24.19.0，root:root 0755；保留旧 `/opt/zimage/toolchain/` 安装。
 - `/opt/zimage/toolchain/pnpm`：pnpm 11.19.0。
 - `/opt/zimage/build/<release>`：构建源码和依赖。
 - `/opt/zimage/releases/<release>`：standalone 发布产物。

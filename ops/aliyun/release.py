@@ -27,7 +27,7 @@ RELEASES = ROOT / 'releases'
 CURRENT = ROOT / 'current'
 PREVIOUS = ROOT / 'previous'
 FONT_ENV = Path('/etc/zimage/font-assets.env')
-NODE = ROOT / 'toolchain/node-v24.19.0-linux-x64/bin/node'
+NODE = ROOT / 'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
 SAFE_PATH = str(NODE.parent) + ':/usr/sbin:/usr/bin:/sbin:/bin'
 
 

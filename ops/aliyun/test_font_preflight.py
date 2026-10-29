@@ -88,6 +88,25 @@ class FontPreflight(unittest.TestCase):
         self.assertEqual(command[-1], release.NATIVE_PROBE)
         self.assertEqual(runner.call_args.kwargs['env'], {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'})
 
+    def test_full_and_layered_probes_execute_only_the_fixed_trusted_node(self):
+        spec = importlib.util.spec_from_file_location('trusted_node_adapter', Path(__file__).with_name('release-three-layer.py'))
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        expected = Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node')
+        for module in (release, adapter):
+            with self.subTest(module=module.__name__):
+                self.assertEqual(module.NODE, expected)
+                runner = Mock(return_value=types.SimpleNamespace(returncode=0, stdout='{"native":true,"fonts":2,"codecs":6}'))
+                module.native_probe(self.target, self.env, runner=runner)
+                command = runner.call_args.args[0]
+                self.assertEqual(command[-3:], [str(expected), '-e', release.NATIVE_PROBE])
+                self.assertIn('PATH=' + str(expected.parent) + ':/usr/sbin:/usr/bin:/sbin:/bin', command)
+
+    def test_service_template_matches_the_fixed_trusted_probe_node(self):
+        source = Path(__file__).with_name('zimage.service').read_text()
+        self.assertIn('ExecStart=/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node server.js\n', source)
+        self.assertNotIn('ExecStart=/opt/zimage/toolchain/', source)
+
     def test_success_pins_pair_only_after_checks_and_rechecks_retained_pair(self):
         self.put()
         events = []
