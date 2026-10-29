@@ -52,6 +52,16 @@ class Transport(_fixture.PortableFixture):
         self.assertEqual(len(provided), 7)
         self.assertEqual(bundled['bytes'], (self.root / 'bundle.tgz').stat().st_size)
 
+    def test_roundtrip_without_python311_hashlib_file_digest(self):
+        bundled = self.bundle()
+        with patch.dict(vars(self.transport.hashlib)):
+            vars(self.transport.hashlib).pop('file_digest', None)
+            restored, body, provided = self.transport.unpack_bundle(
+                Path(bundled['bundle']), self.root / 'python310-incoming', '1' * 40, self.sha)
+        self.assertEqual(restored, self.manifest)
+        self.assertEqual(body, self.manifest_path.read_bytes())
+        self.assertEqual(len(provided), 7)
+
     def test_old_schema1_all_seven_archive_remains_consumable(self):
         with patch.object(self.m, 'runtime_identity', return_value=self.runtime):
             packed = self.m.pack(self.source, self.store, self.project, self.assets, '2' * 40,

@@ -1,5 +1,14 @@
 # ZImage 项目进度
 
+## 2026-10-29 Mac 手动发布续接（Linux 运维验证通过，正式构建仍阻塞）
+
+- Mac 当前分支 `codex/home-chat-react-bits-20261027` 从干净工作区安全快进至远端 `4e639c38dc11efe26ba0460d08b7b7ef753dae5d`，未合并 main、未触发 Actions、未 reset/stash/force push。本机配置为 `gpt-6.1-sol`、`service_tier=priority`。
+- 复用现有 SSH 身份及已保存主机指纹恢复生产只读连接；实测 Ubuntu/Linux x64、Node24.19.0/ABI137/glibc2.35、Python3.10.12。服务 active，current 为 `9c5c3ea95e0c66193b23a2db50643530aa7d095a`，previous 为 `8cbb708645e93d3d71d17641b860cc60301fa005`。三层目标配置、store/cache 与安装闭包仍缺失；没有安装或启用它们。
+- 实际 Linux 首轮200项发现27个错误，其中18项由新 transport 直接使用 Python3.11 的 `hashlib.file_digest` 引起，9项由测试夹具使用 Python3.11 的 `TestCase.enterContext` 引起。新增无该哈希API的真实归档回归先在服务器3.10失败，随后使用1MiB分块SHA-256，保留大小/哈希/路径/落盘/原子发布门禁；夹具改为等价 `ExitStack` 加 `addCleanup`，全部原断言保留。第二轮201项剩9个夹具错误，最终完整 **201/201**、75.394秒、exit0；独立代码审查通过。
+- Linux 测试只上传870400字节运维源码归档及3个后续补丁至 `/tmp/zimage-4e639c38-preflight-20261029`，校验归档SHA256，使用现有zimage用户、断网、256MiB内存/128MiB swap/40%单CPU配额的临时systemd单元；未安装root helper或改线上服务。测试包含临时夹具和模拟服务调用，不能替代真实部署、字体/native、systemd激活与回滚验收。日志在 Mac `.design-qa/2026-10-29-mac-production/`，服务器原始日志保留。
+- **发布仍 in_progress**：Mac 没有可运行的Docker/其他已发现Linux构建环境，现有Docker命令是指向已不存在应用的悬空链接；未安装新运行环境。生产机总内存1608MiB、可用约317–327MiB、swap1024MiB且swappiness0、磁盘可用13GiB，不足以据现有证据安全放行完整Next生产构建；历史构建已有约2GiB V8堆不足记录，不能将swap或cgroup上限当作资源保证。须提供资源充足且已授权的匹配Linux构建环境，再做精确新commit的正式HTTP/slim/same-origin构建与三层/native/字体验收后激活；没有使用Mac/Windows产物，没有上传生产包，生产包上传量0字节。
+- Terra 经现有Edge会话访问公网HTTPS：首页、登录入口与ready正常，ready精确返回current SHA；未提交登录或付费请求。Mac独立curl随后以LibreSSL `SSL_ERROR_SYSCALL` 失败，未绕过TLS，不能宣称命令行公网门禁通过。旧版未切换，尚未执行新版本激活或实际回滚；回滚指针仍为上述精确previous SHA。
+
 ## 2026-10-28 阶段3表现层迁移（代码整合完成，浏览器及真实环境待验收）
 
 - 本地参考 ZIP 大小/SHA256 与全部197个清单文件通过校验，来源 `2450e9a`；保留参考许可。未采用参考模拟 Provider、会话/模型数据或法务草稿。

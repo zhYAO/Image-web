@@ -257,7 +257,8 @@ class LegacyFullFormat(unittest.TestCase):
             member.size = len(body)
             stream.addfile(member, io.BytesIO(body))
         self.digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-        self.stack = self.enterContext(ExitStack())
+        self.stack = ExitStack()
+        self.addCleanup(self.stack.close)
         for name, value in {'ROOT': self.root, 'RELEASES': self.releases, 'INCOMING': self.incoming,
                             'CURRENT': self.root / 'current', 'PREVIOUS': self.root / 'previous'}.items():
             self.stack.enter_context(patch.object(self.legacy, name, value))

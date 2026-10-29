@@ -269,7 +269,10 @@ def unpack_bundle(archive, destination, release_sha, manifest_sha):
                 if item.size != size:
                     raise ValueError('Outer member size mismatch')
                 with tar.extractfile(item) as stream:
-                    actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+                    digest = hashlib.sha256()
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+                    actual = digest.hexdigest()
                 if actual != checksum:
                     raise ValueError('Outer member checksum mismatch')
             staging = _pending(destination.parent, '.unpack-')
