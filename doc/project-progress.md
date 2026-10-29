@@ -1,5 +1,12 @@
 # ZImage 项目进度
 
+## 2026-10-29 正式构建前提与已保存云环境核对（文档补齐，通道待验真）
+
+- 详细边界见 [生产构建输入与既有云通道判定](../ops/aliyun/BUILD-PREREQUISITES.md)：实测目标Node24.19.0/ABI137/linux/x64/glibc2.35，历史Node-API10须重新读取；pnpm11.19.0、Python3.10兼容工具、GNU tar及真实POSIX/native/字体门禁不变。固定HTTP/slim/Webpack/规范.next/同源资源，精确commit与构建标记一致。
+- 纯云构建只需要源码、原始公开字体/许可、实际目标JSON、固定构建开关和五项真实公开配置；生产数据库/模型/认证/部署秘密及目标运行开关留在原存储和目标机。历史五键文件的验真不证明当前云环境仍持有；测试Turnstile sitekey风险仍需在激活前处置。
+- 已保存Image-web Codex云环境仅由父会话报告可见，本Mac工具只列出本地项目，无法核实其OS/资源/工具/配置/费用。项目文档记录历史匹配容器与GitHub Actions，不足以证明现在存在无需新安装/额外付费的可用通道。建议由有访问能力的操作者先在该已保存环境只读核对；不创建新环境、不安装、不传秘密、不启动构建或发布。
+- 若既有云环境不能满足严格条件且无已保留的匹配执行方式，停止依赖步骤，最小决策为指定已授权匹配Linux构建机，或另行批准具体临时资源/安装及费用上限。生产机约327MiB余量不用于全量构建，GitHub Actions仍不启动。本轮只补文档，未改应用或运维代码、未访问或修改生产。
+
 ## 2026-10-29 Mac 手动发布续接（Linux 运维验证通过，正式构建仍阻塞）
 
 - Mac 当前分支 `codex/home-chat-react-bits-20261027` 从干净工作区安全快进至远端 `4e639c38dc11efe26ba0460d08b7b7ef753dae5d`，未合并 main、未触发 Actions、未 reset/stash/force push。本机配置为 `gpt-6.1-sol`、`service_tier=priority`。
