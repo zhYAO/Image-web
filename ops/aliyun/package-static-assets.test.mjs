@@ -31,7 +31,7 @@ async function fixture(t) {
     await put(`apps/web/server/apparel/fonts/${file}`, await readFile(path.join(externalFonts, file)));
   const output = path.join(root, 'output');
   const run = (args = [], restrictiveUmask = false) => spawnSync(process.execPath, [
-    ...(restrictiveUmask ? ['--input-type=module', '--eval', 'process.umask(0o077); await import(process.argv[1]);'] : []),
+    ...(restrictiveUmask ? ['--input-type=module', '--eval', 'import { pathToFileURL } from "node:url"; process.umask(0o077); await import(pathToFileURL(process.argv[1]).href);'] : []),
     script, '--project', project, '--output', output, '--font-source', path.join(project, 'apps/web/server/apparel/fonts'), ...args,
   ], { encoding: 'utf8' });
   return { root, project, output, put, run };
@@ -87,6 +87,13 @@ test('packages original bytes under the actual manifest SHA and records image, f
     assert.equal(await readFile(path.join(f.project, 'apps/web/public', file), 'utf8'), 'original excluded source');
   }
   assert.deepEqual(await readdir(f.output), [summary.manifestSha256]);
+});
+
+test('publishes POSIX file and directory modes despite a restrictive umask', {
+  skip: process.platform === 'win32' ? 'Pending actual POSIX host: Windows cannot prove POSIX permission modes or umask behavior' : false,
+}, async t => {
+  const f = await fixture(t), result = f.run([], true);
+  assert.equal(result.status, 0, result.stderr);
   await assertPublishedModes(f.output);
 });
 
@@ -128,19 +135,28 @@ test('rejects overlap with project in either direction before writing output', a
 });
 
 test('rejects symlink files, directories, excluded source files and project aliases', async t => {
+  const cases = [];
   for (const type of ['file', 'directory', 'excluded', 'project']) {
     const f = await fixture(t);
+    const source = type === 'project' ? f.project : path.join(f.project, `apps/web/public/commerce${type === 'directory' ? '' : '/example.png'}`);
+    const target = type === 'excluded' ? `apps/web/public/${policy.excludedSourceFiles[0]}` : `apps/web/public/${type === 'file' ? 'commerce/link.png' : 'linked'}`;
+    const link = type === 'project' ? path.join(f.root, 'project-link') : path.join(f.project, target);
+    if (type === 'excluded') await rm(link);
+    try {
+      await symlink(source, link);
+    } catch (error) {
+      if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code) || error.syscall !== 'symlink') throw error;
+      t.skip(`Windows symlink fixture creation failed with ${error.code}: this account lacks symlink permission; product validation pending`);
+      return;
+    }
+    cases.push({ f, type, link });
+  }
+  for (const { f, type, link } of cases) {
     if (type === 'project') {
-      const alias = path.join(f.root, 'project-link');
-      await symlink(f.project, alias);
-      const result = spawnSync(process.execPath, [script, '--project', alias, '--font-source', externalFonts, '--output', f.output], { encoding: 'utf8' });
+      const result = spawnSync(process.execPath, [script, '--project', link, '--font-source', externalFonts, '--output', f.output], { encoding: 'utf8' });
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /symlink/i);
     } else {
-      const target = type === 'excluded' ? `apps/web/public/${policy.excludedSourceFiles[0]}` : `apps/web/public/${type === 'file' ? 'commerce/link.png' : 'linked'}`;
-      const full = path.join(f.project, target);
-      if (type === 'excluded') await rm(full);
-      await symlink(type === 'directory' ? path.join(f.project, 'apps/web/public/commerce') : path.join(f.project, 'apps/web/public/commerce/example.png'), full);
       const result = f.run();
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /symlink/i);

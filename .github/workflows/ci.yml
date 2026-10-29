@@ -12,6 +12,11 @@ on:
         type: choice
         options: [deploy, rollback]
         default: deploy
+      format:
+        description: 'Release transport (full is explicit fallback)'
+        type: choice
+        options: [layers, full]
+        default: layers
       release:
         description: '回滚版本目录名；默认 previous'
         default: previous
@@ -49,7 +54,7 @@ jobs:
           node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync(process.argv[1])); fs.appendFileSync(process.env.GITHUB_ENV, "ZIMAGE_SHARED_FONT_DIR="+r.versionDirectory+"/fonts\nZIMAGE_STATIC_ASSET_SHA256="+r.manifestSha256+"\n");' "$RUNNER_TEMP/zimage-test-fonts.json"
       - run: pnpm lint
       - run: pnpm typecheck
-      # Keep real AntD DOM suites sequential on shared runners. Coverage adds
+      # Keep DOM suites sequential on shared runners. Coverage adds
       # substantial overhead; performance SLAs are checked by the budget suite.
       - run: |
           pnpm --filter @zimage/domain test:coverage
@@ -92,7 +97,8 @@ jobs:
     environment: production
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event.inputs.action != 'rollback'
     needs: [quality, database]
-    runs-on: ubuntu-24.04
+    # Runner label is not compatibility evidence; the exact target gate must pass.
+    runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -102,7 +108,23 @@ jobs:
         with:
           node-version: 24.19.0
           cache: pnpm
+      - name: Require supplied exact target before install, build or SSH
+        env:
+          TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGET_JSON" || { echo 'Administrator must supply ZIMAGE_RELEASE_TARGET_JSON and a compatible trusted runner.' >&2; exit 1; }
+          printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
+          node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
       - run: pnpm install --frozen-lockfile
+      - name: Prepare complete resources from provisioned verified original fonts
+        env:
+          FONT_SOURCE: ${{ vars.ZIMAGE_RELEASE_FONT_SOURCE }}
+        run: |
+          set -euo pipefail
+          test -n "$FONT_SOURCE" || { echo 'Administrator must provision the verified original fonts and license directory.' >&2; exit 1; }
+          node ops/aliyun/package-static-assets.mjs --font-source "$FONT_SOURCE" --output "$RUNNER_TEMP/zimage-production-resources" > "$RUNNER_TEMP/zimage-resources.json"
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync(process.argv[1])); fs.appendFileSync(process.env.GITHUB_ENV,"ZIMAGE_RESOURCE_DIRECTORY="+r.versionDirectory+"\nZIMAGE_SHARED_FONT_DIR="+r.versionDirectory+"/fonts\nZIMAGE_STATIC_ASSET_SHA256="+r.manifestSha256+"\n");' "$RUNNER_TEMP/zimage-resources.json"
       - name: Build production HTTP application
         run: pnpm --filter @zimage/web exec next build --webpack
         env:
@@ -111,11 +133,7 @@ jobs:
           NEXT_PUBLIC_PHASE2_AUTH: 'true'
           ZIMAGE_DEPLOYMENT_ENV: production
           ZIMAGE_BUILD_SHA: ${{ github.sha }}
-          # Release slimming. Webpack is required: the profile rewrites modules
-          # via NormalModuleReplacementPlugin, which Turbopack does not apply.
           ZIMAGE_BUILD_SLIM: '1'
-          # Full-package CI ships local public files. Remote resources require
-          # a separately verified immutable deployment; do not inherit repo vars.
           NEXT_PUBLIC_STATIC_ASSET_BASE_URL: ''
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
@@ -126,7 +144,52 @@ jobs:
         run: node apps/web/scripts/verify-built-retired-route.mjs
       - name: Assert release slimming took effect
         run: node apps/web/scripts/measure-dist.mjs --assert-slim --json /tmp/zimage-dist-report.json
-      - run: node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-release
+      - name: Prepare default layers or explicit full fallback
+        env:
+          RELEASE_FORMAT: ${{ github.event_name == 'workflow_dispatch' && inputs.format || 'layers' }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir /tmp/zimage-delivery
+          if [[ "$RELEASE_FORMAT" == layers ]]; then
+            node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-release --assets "$ZIMAGE_RESOURCE_DIRECTORY" --release-id "$RELEASE_SHA" --target "$RUNNER_TEMP/zimage-target.json" --prepare-only
+          elif [[ "$RELEASE_FORMAT" == full ]]; then
+            node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-full --format full
+            cp /tmp/zimage-full.tgz /tmp/zimage-delivery/transport.tgz
+            node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync("/tmp/zimage-delivery/release-result.json",JSON.stringify({schema:1,format:"full",releaseSha:process.env.RELEASE_SHA,productionReady:false}));'
+          else
+            exit 1
+          fi
+      - name: Configure existing restricted inventory connection
+        if: github.event.inputs.format != 'full'
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Verify installed closure and enabled target before bounded inventory
+        if: github.event.inputs.format != 'full'
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          bash ops/aliyun/deployment-health.sh check-install
+          ssh -T -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" 'sudo /usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py inventory' < /tmp/zimage-release/inventory-request.json > /tmp/zimage-inventory.json
+      - name: Build exactly one missing-only production transport
+        if: github.event.inputs.format != 'full'
+        run: |
+          set -euo pipefail
+          manifest=$(node -p 'JSON.parse(require("fs").readFileSync("/tmp/zimage-release/release-result.json")).artifacts.manifest')
+          digest=$(node -p 'JSON.parse(require("fs").readFileSync("/tmp/zimage-release/release-result.json")).pack.manifestSha256')
+          python3 -I -B ops/aliyun/release-transport.py bundle /tmp/zimage-release/store "$manifest" /tmp/zimage-delivery/transport.tgz --manifest-sha256 "$digest" --inventory /tmp/zimage-inventory.json > /tmp/zimage-transport.json
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("/tmp/zimage-release/release-result.json")); r.prepareOnly=false; r.transport=JSON.parse(fs.readFileSync("/tmp/zimage-transport.json")); r.artifacts.transport="/tmp/zimage-delivery/transport.tgz"; fs.writeFileSync("/tmp/zimage-delivery/release-result.json",JSON.stringify(r,null,2));'
+      - name: Remove inventory runner key
+        if: always()
+        run: rm -f ~/.ssh/zimage
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -136,29 +199,35 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: production-${{ github.sha }}
-          path: /tmp/zimage-release.tgz
+          path: |
+            /tmp/zimage-delivery/transport.tgz
+            /tmp/zimage-delivery/release-result.json
+          if-no-files-found: error
           retention-days: 7
-      # Debug-only sidecars. They never reach the server, but losing them means
-      # no source maps for a bad production release.
+      # Private diagnostic sidecars never enter the server upload.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: production-debug-maps-${{ github.sha }}
-          path: /tmp/zimage-release.debug-maps.tgz
+          path: |
+            /tmp/zimage-release/debug-maps.tgz
+            /tmp/zimage-full.debug-maps.tgz
           retention-days: 7
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: production-build-traces-${{ github.sha }}
-          path: /tmp/zimage-release.build-traces.tgz
+          path: |
+            /tmp/zimage-release/build-traces.tgz
+            /tmp/zimage-full.build-traces.tgz
           retention-days: 7
           if-no-files-found: ignore
 
   deploy:
     environment: production
     needs: [production-build]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
     concurrency:
       group: zimage-production-release
       cancel-in-progress: false
@@ -168,6 +237,20 @@ jobs:
           name: production-${{ github.sha }}
           path: /tmp/production
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - name: Validate supplied exact target and delivery report before SSH
+        env:
+          TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
+          RELEASE_SHA: ${{ github.sha }}
+          EXPECTED_RELEASE_FORMAT: ${{ github.event_name == 'workflow_dispatch' && inputs.format || 'layers' }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGET_JSON"
+          printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
+          node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("/tmp/production/release-result.json")); if(r.schema!==1||r.releaseSha!==process.env.RELEASE_SHA||r.format!==process.env.EXPECTED_RELEASE_FORMAT||!["layers","full"].includes(r.format)||r.productionReady!==false)throw Error("Invalid delivery report"); const m=r.format==="layers"?r.pack.manifestSha256:""; if(r.format==="layers"&&(typeof m!=="string"||m.length!==64||!/^[a-f0-9]{64}$/.test(m)))throw Error("Invalid manifest SHA"); fs.appendFileSync(process.env.GITHUB_ENV,"RELEASE_FORMAT="+r.format+"\nMANIFEST_SHA="+m+"\n");'
       - name: Verify this is still main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -201,9 +284,18 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
-          digest=$(sha256sum /tmp/production/zimage-release.tgz | cut -d ' ' -f1)
-          scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/zimage-release.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.tgz"
-          ssh -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo /usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
+          digest=$(sha256sum /tmp/production/transport.tgz | cut -d ' ' -f1)
+          if [[ "$RELEASE_FORMAT" == layers ]]; then
+            suffix=layers.tgz
+            command="/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py deploy $RELEASE_SHA $digest $MANIFEST_SHA $RUN_NUMBER"
+          elif [[ "$RELEASE_FORMAT" == full ]]; then
+            suffix=tgz
+            command="/usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
+          else
+            exit 1
+          fi
+          scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/transport.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.$suffix"
+          ssh -T -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo $command"
       - name: Verify published version and retired batch endpoints
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -220,12 +312,23 @@ jobs:
   rollback:
     environment: production
     if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
     concurrency:
       group: zimage-production-release
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - name: Require supplied exact target before SSH
+        env:
+          TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$TARGET_JSON"
+          printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
+          node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
       - name: Configure restricted SSH connection
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

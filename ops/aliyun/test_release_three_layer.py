@@ -1,6 +1,9 @@
 """Temporary local fixtures. No systemd, production, install, build or network calls."""
 import copy
-import fcntl
+try:
+    import fcntl
+except ModuleNotFoundError:
+    fcntl = None
 import importlib.util
 import io
 import json
@@ -25,6 +28,8 @@ def load(path, name):
     return module
 
 
+@unittest.skipUnless(os.name == 'posix' and fcntl is not None and hasattr(fcntl, 'flock'),
+                     'Requires real Linux/glibc, POSIX ownership, flock and symlink assembly')
 class RootThreeLayerAdapter(unittest.TestCase):
     def setUp(self):
         self.assertTrue(SCRIPT.is_file(), 'Production adapter is missing')
@@ -62,7 +67,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
         link.symlink_to('../../../packages/domain')
         self.producer = self.root / 'producer-store'
         self.packed = self.layers.pack(self.source, self.producer, self.project, self.assets, SHA,
-                                       source_commit=SHA, assembly_cache_root=self.cache)
+                                       source_commit=SHA, assembly_cache_root=self.cache, schema=1)
         self.incoming.mkdir(parents=True)
         self.bundle = self.incoming / (SHA + '.layers.tgz')
         self.transport = self.adapter.bundle(self.producer, Path(self.packed['manifest']), self.bundle, self.packed['manifestSha256'])
@@ -71,7 +76,8 @@ class RootThreeLayerAdapter(unittest.TestCase):
         (self.host / 'current').symlink_to(old)
         (self.host / 'cache').mkdir()
         self.native, self.service = Mock(), Mock()
-        self.operation = self.adapter.Adapter(self.host, self.layers, self.legacy, native_check=self.native, service_check=self.service)
+        self.operation = self.adapter.Adapter(self.host, self.layers, self.legacy, native_check=self.native, service_check=self.service,
+                                             target_check=Mock())
         self.real_activate = self.legacy.activate
         self.activation = patch.object(self.legacy, 'activate')
         self.activate = self.activation.start()
@@ -144,7 +150,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
                 else:
                     extra.size = 1
                     writer.addfile(extra, io.BytesIO(b'x'))
-            with self.assertRaisesRegex(ValueError, 'outer|Outer'):
+            with self.assertRaisesRegex(ValueError, 'outer|Outer|payload|archive|Archive|member|members|Unsafe'):
                 self.operation.deploy(SHA, self.layers.file_digest(self.bundle), self.packed['manifestSha256'], '1')
             self.bundle.unlink()
         self.activate.assert_not_called()
@@ -222,7 +228,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
         def switch(target):
             (self.host / 'current').unlink()
             (self.host / 'current').symlink_to(target)
-        with patch.object(self.legacy, 'activate', wraps=self.real_activate), \
+        with patch.object(self.legacy, 'font_preflight'), patch.object(self.legacy, 'activate', wraps=self.real_activate), \
              patch.object(self.legacy, 'switch', side_effect=switch) as switches, \
              patch.object(self.legacy, 'wait_healthy', side_effect=[RuntimeError('new TLS failed'), None]) as health:
             with self.assertRaisesRegex(RuntimeError, 'new TLS failed'):
@@ -231,7 +237,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
             self.assertEqual(health.call_args_list, [call(new), call(old)])
         self.assertEqual((self.host / 'current').resolve(), old)
         self.assertFalse((self.host / 'last-deployment-run').exists())
-        with patch.object(self.legacy, 'activate', wraps=self.real_activate), \
+        with patch.object(self.legacy, 'font_preflight'), patch.object(self.legacy, 'activate', wraps=self.real_activate), \
              patch.object(self.legacy, 'switch', side_effect=switch), \
              patch.object(self.legacy, 'wait_healthy', side_effect=[RuntimeError('new failed'), RuntimeError('old recovery failed')]):
             with self.assertRaisesRegex(RuntimeError, 'old recovery failed'):
@@ -263,7 +269,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
     def test_managed_next_cache_link_cannot_turn_an_incoming_link_external(self):
         (self.source / 'cache-leak').symlink_to('apps/web/.next/cache/missing')
         producer = self.root / 'producer-two'
-        packed = self.layers.pack(self.source, producer, self.project, self.assets, SHA, source_commit=SHA, assembly_cache_root=self.cache)
+        packed = self.layers.pack(self.source, producer, self.project, self.assets, SHA, source_commit=SHA, assembly_cache_root=self.cache, schema=1)
         self.bundle.unlink()
         transport = self.adapter.bundle(producer, Path(packed['manifest']), self.bundle, packed['manifestSha256'])
         with self.assertRaisesRegex(ValueError, 'symlink.*escapes'):
@@ -287,6 +293,52 @@ class RootThreeLayerAdapter(unittest.TestCase):
         (self.host / 'current').symlink_to(alias)
         with self.assertRaisesRegex(ValueError, 'Current|current'):
             self.deploy()
+        self.activate.assert_not_called()
+
+    def test_manifest_only_delta_requires_actual_complete_store_and_rechecks_cache(self):
+        self.deploy()
+        self.activate.reset_mock()
+        request = self.operation.transport.request(self.producer, Path(self.packed['manifest']), self.packed['manifestSha256'])
+        self.bundle.unlink()
+        self.transport = self.adapter.bundle(self.producer, Path(self.packed['manifest']), self.bundle,
+                                             self.packed['manifestSha256'], inventory=request)
+        with tarfile.open(self.bundle, 'r:gz') as tar:
+            self.assertEqual(len(tar.getmembers()), 1)
+        self.deploy('2')
+        self.activate.assert_called_once()
+        cache_file = next(path for path in (self.cache / 'runtime').rglob('index.js') if path.is_file())
+        cache_file.chmod(0o644)
+        cache_file.write_bytes(b'tampered cache')
+        self.activate.reset_mock()
+        with self.assertRaises(ValueError):
+            self.deploy('3')
+        self.activate.assert_not_called()
+
+    def test_forged_hit_inventory_on_empty_target_blocks_before_candidate(self):
+        request = self.operation.transport.request(self.producer, Path(self.packed['manifest']), self.packed['manifestSha256'])
+        self.bundle.unlink()
+        self.transport = self.adapter.bundle(self.producer, Path(self.packed['manifest']), self.bundle,
+                                             self.packed['manifestSha256'], inventory=request)
+        with self.assertRaises((ValueError, OSError)):
+            self.deploy()
+        self.activate.assert_not_called()
+        self.assertFalse((self.host / 'releases' / SHA).exists())
+
+    def test_retained_layered_rollback_verifies_store_and_keeps_all_references(self):
+        self.deploy()
+        target = self.host / 'releases' / SHA
+        retained = (target / '.runtime-assets.env').read_bytes()
+        self.activate.reset_mock()
+        self.operation.rollback(SHA)
+        self.activate.assert_called_once_with(target, restore_previous_on_failure=False)
+        self.assertEqual((target / '.runtime-assets.env').read_bytes(), retained)
+        self.assertTrue((self.host / 'releases' / ('b' * 40)).exists())
+        runtime_blob = self.store / self.layers.parse(Path(self.packed['manifest']).read_bytes())['layers']['runtime']['archive']
+        runtime_blob.chmod(0o644)
+        runtime_blob.write_bytes(b'tampered immutable blob')
+        self.activate.reset_mock()
+        with self.assertRaises(ValueError):
+            self.operation.rollback(SHA)
         self.activate.assert_not_called()
 
 

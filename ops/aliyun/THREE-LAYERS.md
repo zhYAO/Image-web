@@ -1,80 +1,58 @@
-# Local three-layer release prototype
+# Default three-layer release contract
 
-This opt-in tool does not install, upload, activate, deploy, run CI, or garbage-collect anything. Every manifest and result remains `productionReady:false`; assembly requires `--allow-sample`. The current QA build uses a test HTTPS asset domain and QA build marker and is not a production artifact.
+The default package is code + immutable versioned runtime + independent original resources. `package-release.mjs` stages and checks the application once, then uses schema 2 of `three-layer-release.py` and `release-transport.py`. All reports retain `productionReady:false`: local validation does not establish Linux deployment or external acceptance. No garbage collection exists; retain releases, store objects and caches referenced by current, previous or any retained release.
 
-It imports the existing `release-layers.py` canonical serialization, SHA, runtime fingerprint, deterministic archive, exclusive file publication and Linux `renameat2(RENAME_NOREPLACE)` tools without changing that script.
+## Exact target and resources
 
-## Pack an existing staged release
+Supply an administrator measured target JSON with exactly `schema`, `runtime`, `toolchain` and `assemblyCacheRoot`. This is a shape example, **not a measured production target**:
+
+```json
+{"schema":1,"runtime":{"node":"24.19.0","abi":"137","platform":"linux","arch":"x64","libc":"glibc-REPLACE_WITH_ACTUAL"},"toolchain":{"packageManager":"pnpm@11.19.0"},"assemblyCacheRoot":"/opt/zimage/layer-cache"}
+```
+
+Record the actual exact glibc value and verify it on the build host and server. Node/ABI/platform/architecture/libc must all match. A runner label such as ubuntu-24.04 does not prove compatibility with another Ubuntu/glibc release. `node ops/aliyun/package-release.mjs --check-target --target /safe/target.json` checks the actual host and package manager before any staging or archive output. Windows cannot package for Linux through an override.
+
+Create the **complete** original resource manifest with `package-static-assets.mjs --font-source ORIGINAL_VERIFIED_DIRECTORY --output NEW_OUTPUT`. Omit `--fonts-only` for releases. The source must contain both original Noto OTFs, their original license and provenance; see [FONTS.md](FONTS.md). Original `asset-manifest.json` bytes and their SHA are the resource identity. Same-origin delivery keeps `NEXT_PUBLIC_STATIC_ASSET_BASE_URL` empty; schema 2 explicitly binds `same-origin-public`, a null compiled remote base and the sole generated public link to `/opt/zimage/layer-cache/assets/<manifestSHA>`. Actual compiled configuration is rechecked. Schema 1 retains its original absolute production URL requirements in the privileged adapter; it cannot borrow the new same-origin declaration.
+
+Static JS/CSS, server code and workspace code remain in code. Only exact `node_modules` path components enter runtime. Runtime identity binds actual indexed contents, paths, modes and link targets, lock SHA, exact runtime, pinned package manager, original config source hashes and the stable compiled dependency resolution subset. Same lock with changed traced files, native aliases, config or toolchain produces another runtime identity. Old weak cache identities never satisfy schema 2. `.node`, `.so` and numbered `.so` require matching Linux ELF headers; `.dll`/`.dylib` are rejected. Headers do not replace the original Sharp/native/font loading probe.
+
+## Cold pack and incremental transport
+
+Use full lowercase SHA40 values and new output directories outside the project; their parent must exist. Build an HTTP/slim Webpack standalone on the exact compatible host first, with source SHA, BUILD_ID and compiled build marker equal. This document does not run that build.
 
 ```sh
-python ops/aliyun/three-layer-release.py pack /tmp/staged-runtime /tmp/three-layer/store \
-  --project /workspace/Image-web-slim-51cc0a9 \
-  --assets /tmp/resource-output/ACTUAL_ASSET_MANIFEST_SHA256 \
-  --assembly-cache-root /tmp/three-layer/cache \
-  --release-id qa-three-layer \
-  --sample-label 'QA sample; not production'
+node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-cold \
+  --assets /safe/resources/RESOURCE_SHA64 --release-id RELEASE_SHA40 \
+  --target /safe/target.json
 ```
 
-`--source-commit FULL_COMMIT_SHA` is optional provenance metadata. The actual `config.env.ZIMAGE_BUILD_SHA` and `BUILD_ID` are retained separately and never rewritten. Equality of marker/commit strings is not proof of a clean or reproducible build. Omit an unestablished source commit instead of inventing one.
+Cold output includes `staging/`, `store/`, `inventory-request.json`, `release-result.json` and one `transport.tgz` containing all seven immutable closure objects. Optional `debug-maps.tgz` and `build-traces.tgz` are separate private diagnostic artifacts and must never be uploaded to the server. `release:pack` selects layers. Explicit fallback is `node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-full --format full` (or `release:pack:full`); it produces `/tmp/zimage-full.tgz`, preserving original full-package preflight.
 
-The business raw budget is **unconfigured by default**. Reports then contain `budgetBytes:null` and `budgetPassed:null`: this means no cap was configured, not that a hidden size gate passed. To enforce an optional positive cap, add for example `--code-raw-budget 10000000`; a configured cap is checked against complete code raw bytes including indexes, the full release manifest and symlink targets. Successful capped reports contain `budgetPassed:true`. No sample label is required for any budget value. Exceeding an explicit cap exits nonzero without publishing a release manifest; validated immutable layer blobs may remain for reuse. Gzip sizes are independent transfer fields and never satisfy a raw cap. New manifests contain no 10 MB goal gate; historical goal fields are informational only.
-
-The tool detects exactly one `apps/web/.next/required-server-files.json` or `apps/web/.next-build-qa/required-server-files.json` and requires `config.distDir` to agree. Both server and client chunks, workspace packages, and other business files remain code. Only paths with an exact `node_modules` component enter runtime. Generated server/static `.map` and server `.js.nft.json` files stay unchanged in the staged input as existing debug evidence, outside runtime delivery; omitted counts/bytes are recorded. Other `.map` files and `.map`-suffixed route directories remain intact.
-
-Compiled image `remotePatterns` under `/static-assets/` must use HTTPS, an exact hostname/port, empty query, and exactly `/static-assets/ASSET_MANIFEST_SHA256/commerce/**`. Pack records the single `compiledAssetBaseUrl`, and assemble revalidates the actual extracted config. Identical resource payload with different manifest metadata is a different version and cannot be bound to stale compiled URLs. Builds without these patterns retain legacy local URL support.
-
-All staged public/font files must match the independent asset manifest before being excluded. Missing public/font directories in standalone output are supported; the independent asset package must still be complete. The four original source PNG exclusions were already applied by resource/staging packaging; an unexpected staged source PNG is rejected, not silently discarded.
-
-`assets` uses the original `asset-manifest.json` bytes as its file index and SHA identity. Its archive contains the 95 resource files, with the original manifest stored alongside the extracted cache for verification/font consumers. Fonts, licenses and provenance are public by explicit choice; private Storage content is excluded.
-
-`runtime` identity binds lock SHA, full Node version, ABI, OS, architecture, exact glibc version, and every indexed file/link. Non-Linux or non-glibc samples are rejected. No global mutable dependency directory or package installation is used.
-
-All source, project, asset-version, store and bound cache roots must be disjoint in both directions. Symlink input roots/output ancestors, environment files, path escapes and external archive links are rejected. Internal pnpm/workspace symlinks retain their original paths and targets.
-
-## Assemble with a trusted manifest SHA
+For incremental delivery, prepare without producing a cold outer archive:
 
 ```sh
-python ops/aliyun/three-layer-release.py assemble \
-  /tmp/three-layer/store/releases/qa-three-layer.json \
-  /tmp/three-layer/store /tmp/app-release-qa \
-  --cache /tmp/three-layer/cache \
-  --manifest-sha256 TRUSTED_RELEASE_MANIFEST_SHA256 \
-  --allow-sample
+node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-prepared \
+  --assets /safe/resources/RESOURCE_SHA64 --release-id RELEASE_SHA40 \
+  --target /safe/target.json --prepare-only
+# After verifying installed helper hashes and enabled exact target (manual runbook):
+ssh EXISTING_RESTRICTED_IDENTITY 'sudo /usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py inventory' \
+  < /tmp/zimage-prepared/inventory-request.json > /tmp/zimage-inventory.json
+python3 -I -B ops/aliyun/release-transport.py bundle \
+  /tmp/zimage-prepared/store /tmp/zimage-prepared/store/releases/RELEASE_SHA40.json \
+  /tmp/zimage-delta.tgz --manifest-sha256 TRUSTED_MANIFEST_SHA64 \
+  --inventory /tmp/zimage-inventory.json
 ```
 
-Obtain the trusted release-manifest SHA from the pack result through a trusted channel. The cache root must equal the pack-time binding, so the generated public-link target and its raw byte count are exact. A production layout requires its approved ECS cache root and a new pack with the correct production build/config; the QA package cannot be promoted by rewriting markers.
+Read the trusted manifest SHA from `release-result.json` at `pack.manifestSha256`; obtain the measured outer SHA from the bundle result, independently checking the final file. The inventory operation accepts at most seven precise descriptors through at most 16 KiB stdin, uses only the fixed root-owned store, hashes requested files and returns verified hashes/sizes. Missing files are absent. A corrupt or unsafe existing privileged store object is an error, never permission to overwrite it. Pure local advisory inventory deliberately treats corrupt/unsafe objects as misses. Inventory always remains a hint: forged or stale hits cannot authorize activation. The adapter validates every omitted object and every existing immutable file before publishing, then the entire seven-object closure, schema/index bindings, accounting and actual runtime/assets caches again before activation. It never fetches, silently falls back or rewrites manifest bytes.
 
-Before assembly, every index/archive file is verified against its trusted SHA and byte count. Code archive members are semantically validated on every extraction. On runtime/assets cache misses, extraction also checks archive paths, duplicate/extra/missing members, types, sizes, permissions, link targets and file contents before atomic no-replace cache publication. On cache hits, runtime/assets archives receive checksum/size verification but are not decoded again for header/member semantics; instead the existing cache tree is checked file-by-file, including contents, links, modes and extra directories. No cache marker is trusted as proof. Incoming external/hard links and escaping paths remain forbidden.
+`release-transport.py request|inventory|plan|bundle|unpack` are offline operations; `unpack` accepts a validated subset with the mandatory trusted manifest as well as historical seven-object bundles. Code-only transport may reuse all runtime/assets objects; all-hit transport still contains the release manifest. A fresh release always has its exact manifest identity.
 
-Cache regular files are 0444 or executable 0555; directories are 0555. Runtime regular files are hardlinked into each application release at their original paths, and each release recreates the original symlink tree. `node_modules` is never replaced by a single symlink, so workspace aliases can resolve to business packages. Cross-filesystem `EXDEV` uses a verified private copy and reports copied file/byte counts instead of claiming hardlink savings. An owner/root can deliberately chmod and corrupt shared inodes; normal service writes are prevented, and cache verification catches tampering on reuse. The cache parent and application parent must have suitable traversal permissions for the service UID.
+## Accounting and activation
 
-Every newly created cache/intermediate directory is explicitly chmod 0755 before immutable object directories become 0555, even under umask 0077. Existing ancestor permissions and the process umask remain unchanged. Deployers must check the actual application/Nginx UID and all existing ancestor traversal permissions. Serve only `CACHE/assets` over HTTP; never expose `CACHE/runtime`, the store, private Storage, or arbitrary application files. This prototype does not claim Nginx or production acceptance.
+`pack.raw` describes complete indexed raw payload and metadata; `transport.rawTransferBytes` / `compressedTransferBytes` describe selected inner objects, while `transport.bytes` measures actual outer compressed bytes. These fields have different boundaries. Staging size is not network transfer. No 10 MB cap is implied; an explicit configured raw budget is enforced separately.
 
-After code/runtime verification, the assembler creates exactly one controlled external link:
+The privileged adapter has fixed production paths, no arbitrary input/store/cache CLI paths, the original non-root native/font probe, root-owned immutable stores/caches and the shared legacy `deploy.lock`. Normal deploy requires a valid exact current release and preserves original local HTTP/TLS failure recovery. Explicit `--initial-deploy` is manual only, requires no current/previous/dangling/temporary links, deployment sequence or retained release, and validates closure first. On attempted initial activation failure it stops zimage and removes only its own current link, without inventing an old release. Validated retained files/caches remain for administrator inspection; the helper does not delete them to make a retry look empty.
 
-```text
-APP/apps/web/public -> CACHE/assets/ASSET_MANIFEST_SHA256
-```
+Rollback takes an exact retained SHA. Layered targets are reconstructed from the trusted retained manifest and store, with exact runtime/cache/config/resource bindings and all retained file/link/env bytes checked before the native/font probe and selection. Full retained targets follow original full gates. Health recovery chooses the target's retained format, not the failed deployment's format, and restores only the original recorded SHA when current still names the failed SHA. Same-SHA normal retries accept byte-identical release content even if the new outer transport differs; the first outer hash remains as audit metadata. Same-SHA health failure never rolls back an older previous version. The exact manifest/environment/cache bindings cannot change.
 
-Only the assembler can create this link, to the fully verified asset cache root bound by the trusted release manifest. Archive-supplied external links remain forbidden. This preserves old `/commerce/...` URLs and Next's internal image optimizer while new UI requests can use versioned HTTPS `/static-assets/SHA/...` URLs. No public resources are copied into each code release. Every exposed file is a selected public resource/font/license/manifest; no private directory is linked.
-
-After generating `public`, every original archive symlink is resolved again against the final application graph, including cache-reuse assemblies. None may escape through `public` or any other path; only the assembler-generated `public` link itself is exempt.
-
-The assemble result supplies local font environment values:
-
-```text
-ZIMAGE_SHARED_FONT_DIR=CACHE/assets/ASSET_MANIFEST_SHA256/fonts
-ZIMAGE_STATIC_ASSET_SHA256=ASSET_MANIFEST_SHA256
-```
-
-Raw accounting separates regular file payload, original symlink target text, the generated public-link target text, code/runtime indexes, original asset manifest, and the complete release manifest. Full deployment raw includes runtime and all assets once; it is not hidden by layer reuse. `filesystemAccounting` separately reports logical regular bytes and unique-inode regular bytes across this release and its two cache objects; it excludes store archives/indexes and other releases and does not estimate filesystem blocks.
-
-Application destination and release ID never overwrite existing paths. Concurrent cooperating publications use exclusive file linking and `RENAME_NOREPLACE`; only each invocation's unpublished staging is cleaned. Rollback means selecting a trusted old manifest and verified cache for a new destination; activation and GC are deliberately external.
-
-## Offline tests
-
-```sh
-python -m unittest discover -s ops/aliyun -p test_three_layer_release.py
-```
-
-Temporary fixtures cover raw/metadata accounting, explicit-cap rejection of highly compressible large code, uncapped default reporting, actual QA markers, code changes reusing runtime/assets, lock/Node/ABI/content identity changes, native compatibility, resource mismatch/missing/corruption, trusted manifest/sample gates, original workspace links, exact cache checks/tampering, archive escape/duplicate/extra/external-link/missing members, concurrent publication, EXDEV copy reporting, bound cache roots, changing input size during inventory, stale archive size rejection, and source/old-release retention. Inventory uses stable file-descriptor reads and checks inode/device, size, timestamps and mode before/after hashing. Files changing during these checks, or whose archived bytes/size differ from the index, are rejected without a release manifest. No full application build or network is involved.
+See [MANUAL-THREE-LAYER-RELEASE.md](MANUAL-THREE-LAYER-RELEASE.md) for future administrator installation, initial/incremental/rollback commands and unexecuted acceptance gates. No installation, service operation, server connection, CI run, native Linux acceptance or release garbage collection was performed. A retired shell-fixture PATH error caused one failed reserved-host SSH/DNS attempt; its exact evidence and replacement mock protections are recorded in the Task 3 handoff report.

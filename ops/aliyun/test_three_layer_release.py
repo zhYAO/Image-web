@@ -13,11 +13,13 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name('three-layer-release.py')
 
 
+@unittest.skipUnless(os.name == 'posix', 'Requires real Linux/glibc, POSIX modes and symlink assembly; Windows is not acceptance evidence')
 class ThreeLayers(unittest.TestCase):
     def setUp(self):
         self.assertTrue(SCRIPT.is_file(), 'three-layer implementation is missing')
@@ -65,7 +67,7 @@ class ThreeLayers(unittest.TestCase):
         path.symlink_to(target)
 
     def pack(self, release='one', **kwargs):
-        return self.m.pack(self.source, self.store, self.project, self.assets, release, assembly_cache_root=self.cache, **kwargs)
+        return self.m.pack(self.source, self.store, self.project, self.assets, release, assembly_cache_root=self.cache, schema=1, **kwargs)
 
     def assemble(self, packed, name='app', **kwargs):
         return self.m.assemble(Path(packed['manifest']), self.store, self.root / name, self.cache, packed['manifestSha256'], True, **kwargs)
@@ -177,7 +179,7 @@ class ThreeLayers(unittest.TestCase):
         wrong = self.assets.with_name('0' * 64)
         shutil.copytree(self.assets, wrong)
         with self.assertRaisesRegex(ValueError, 'asset'):
-            self.m.pack(self.source, self.store, self.project, wrong, 'wrong-version', assembly_cache_root=self.cache)
+            self.m.pack(self.source, self.store, self.project, wrong, 'wrong-version', assembly_cache_root=self.cache, schema=1)
         self.assertFalse((self.store / 'releases').exists())
 
     def test_trust_gate_missing_layers_and_cache_tamper_block_app(self):
@@ -212,7 +214,7 @@ class ThreeLayers(unittest.TestCase):
 
     def test_disjoint_symlink_outputs_and_external_links_are_rejected(self):
         with self.assertRaisesRegex(ValueError, 'overlap'):
-            self.m.pack(self.source, self.source / 'store', self.project, self.assets, 'overlap', assembly_cache_root=self.cache)
+            self.m.pack(self.source, self.source / 'store', self.project, self.assets, 'overlap', assembly_cache_root=self.cache, schema=1)
         self.store.mkdir()
         external = self.root / 'external'
         external.mkdir()
@@ -325,7 +327,7 @@ class ThreeLayers(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(result.stdout)
         packed = command('pack', self.source, self.store, '--project', self.project, '--assets', self.assets,
-                         '--assembly-cache-root', self.cache, '--release-id', 'umask-fixture')
+                         '--assembly-cache-root', self.cache, '--release-id', 'umask-fixture', '--schema', '1')
         command('assemble', packed['manifest'], self.store, self.root / 'readable-app', '--cache', self.cache,
                 '--manifest-sha256', packed['manifestSha256'], '--allow-sample')
         for directory, _, _ in os.walk(self.cache, followlinks=False):
@@ -354,7 +356,7 @@ class ThreeLayers(unittest.TestCase):
         shutil.copytree(self.assets, changed)
         self.put(changed / 'asset-manifest.json', body)
         with self.assertRaisesRegex(ValueError, 'compiled asset'):
-            self.m.pack(self.source, self.store, self.project, changed, 'stale-compiled', assembly_cache_root=self.cache)
+            self.m.pack(self.source, self.store, self.project, changed, 'stale-compiled', assembly_cache_root=self.cache, schema=1)
         self.assertFalse((self.store / 'releases/stale-compiled.json').exists())
 
     def test_compiled_resource_patterns_require_exact_https_version_and_query_restriction(self):
@@ -434,6 +436,277 @@ class ThreeLayers(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '[Ss]ize'):
             self.m.make_archive(self.source, self.root / 'must-not-publish.tgz', [entry])
         self.assertFalse((self.root / 'must-not-publish.tgz').exists())
+
+
+class PortableFixture(unittest.TestCase):
+    """Synthetic Linux metadata only; does not assert native Linux compatibility."""
+    runtime = {'node': '24.19.0', 'abi': '137', 'platform': 'linux', 'arch': 'x64', 'libc': 'glibc-2.36'}
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('portable_layers', SCRIPT)
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        # mkdir(0755) avoids Python 3.14's Windows private-directory ACL behavior.
+        self.root = Path(tempfile.gettempdir()) / ('zimage-contract-' + uuid.uuid4().hex)
+        self.root.mkdir(mode=0o755)
+        self.addCleanup(shutil.rmtree, self.root)
+        self.source, self.store, self.project = [self.root / p for p in ('source', 'store', 'project')]
+        self.put(self.project / 'pnpm-lock.yaml', 'lock-v1')
+        self.put(self.project / 'package.json', json.dumps({'packageManager': 'pnpm@11.19.0'}))
+        self.put(self.project / 'apps/web/next.config.ts', 'export default {output: "standalone"}')
+        self.put(self.project / 'apps/web/build/static-assets-config.mjs', 'export const assets = true;')
+        self.dist = 'apps/web/.next-build-qa/'
+        self.config = {'distDir': '.next-build-qa', 'env': {'ZIMAGE_BUILD_SHA': 'one'},
+                       'outputFileTracingRoot': str(self.project), 'output': 'standalone',
+                       'transpilePackages': ['@zimage/domain'], 'experimental': {'cpus': 1}}
+        self.set_config()
+        for name, body in {'BUILD_ID': 'build-one', 'server/chunks/main.js': 'server', 'static/chunks/client.js': 'client'}.items():
+            self.put(self.source / (self.dist + name), body)
+        self.put(self.source / 'apps/web/server.js', 'server entry')
+        self.put(self.source / 'node_modules/pkg/index.js', 'runtime library')
+        self.put(self.source / 'node_modules/pkg/alias.js', 'another alias target')
+        files = []
+        values = {'commerce/example.jpg': b'pixels', **{'fonts/' + name: name.encode() for name in
+                  ('NotoSansCJKsc-Regular.otf', 'NotoSansCJKsc-Bold.otf', 'LICENSE.txt', 'README.md')}}
+        for name, body in sorted(values.items()):
+            files.append({'path': name, 'kind': 'font' if name.startswith('fonts/') else 'public',
+                          'bytes': len(body), 'sha256': self.m.digest(body), 'mime': 'text/plain'})
+        body = self.m.canonical({'schema': 1, 'productionReady': False, 'files': files})
+        self.assets = self.root / 'resources' / self.m.digest(body)
+        for name, value in values.items():
+            self.put(self.assets / name, value)
+        self.put(self.assets / 'asset-manifest.json', body)
+        self.target = {'schema': 1, 'runtime': dict(self.runtime), 'toolchain': {'packageManager': 'pnpm@11.19.0'},
+                       'assemblyCacheRoot': '/opt/zimage/layer-cache'}
+
+    def put(self, path, body):
+        path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        path.write_bytes(body.encode() if isinstance(body, str) else body)
+
+    def set_config(self):
+        self.put(self.source / (self.dist + 'required-server-files.json'), json.dumps({'config': self.config}))
+
+    def pack(self, release='1' * 40, **kwargs):
+        with patch.object(self.m, 'runtime_identity', return_value=dict(self.runtime)):
+            return self.m.pack(self.source, self.store, self.project, self.assets, release, target=self.target, **kwargs)
+
+
+class LayerContract(PortableFixture):
+    @staticmethod
+    def elf_header(machine=62, elf_class=2, byte_order=1):
+        body = bytearray(64)
+        body[:6] = b'\x7fELF' + bytes((elf_class, byte_order))
+        body[18:20] = machine.to_bytes(2, 'little' if byte_order == 1 else 'big')
+        return bytes(body)
+
+    def test_foreign_shared_library_extensions_reject_before_outputs(self):
+        # A valid Linux addon does not excuse an unused foreign library.
+        self.put(self.source / 'node_modules/pkg/native.node', self.elf_header())
+        for index, suffix in enumerate(('.dll', '.DLL', '.DlL', '.dylib', '.DYLIB', '.DyLiB')):
+            with self.subTest(suffix=suffix):
+                path = self.source / ('node_modules/pkg/unused' + suffix)
+                self.put(path, b'MZ' + b'\0' * 62)
+                try:
+                    with self.assertRaisesRegex(ValueError, 'foreign|native|Linux'):
+                        self.pack('foreign-library-' + str(index))
+                    self.assertFalse(self.store.exists())
+                finally:
+                    path.unlink()
+
+    def test_shared_library_elf_headers_must_match_target(self):
+        headers = (b'MZ' + b'\0' * 62, self.elf_header(machine=183),
+                   self.elf_header(elf_class=1), self.elf_header(byte_order=2), b'\x7fELF')
+        for name in ('libvips.so', 'libvips.so.42', 'libvips.so.42.3.1', 'libVips.SO.2'):
+            for body in headers:
+                with self.subTest(name=name, header=body[:20]):
+                    path = self.source / ('node_modules/pkg/' + name)
+                    self.put(path, body)
+                    try:
+                        with self.assertRaisesRegex(ValueError, 'native|ELF|architecture'):
+                            self.m.validate_native_files(self.source, [{'path': path.relative_to(self.source).as_posix(), 'type': 'file'}], self.runtime)
+                    finally:
+                        path.unlink()
+
+    def test_valid_linux_shared_library_names_are_accepted(self):
+        for name in ('libvips.so', 'libvips.so.42', 'libvips.so.42.3.1', 'libVips.SO.2', 'addon.NODE'):
+            self.put(self.source / ('node_modules/pkg/' + name), self.elf_header())
+        self.pack()  # Synthetic matching ELF headers only; no native loading.
+
+    def test_shared_library_metadata_and_backups_are_not_classified_as_natives(self):
+        for name in ('libvips.so.map', 'libvips.so.1.debug', 'libvips.so.backup', 'library.dll.txt', 'lib.dylib.LICENSE'):
+            self.put(self.source / ('node_modules/pkg/' + name), 'non-native metadata')
+        self.pack()
+
+    def test_windows_native_payload_is_rejected_even_with_linux_metadata(self):
+        self.put(self.source / 'node_modules/pkg/native.node', b'MZ' + b'\0' * 62)
+        with self.assertRaisesRegex(ValueError, 'native|ELF'):
+            self.pack()
+        self.assertFalse(self.store.exists())
+
+    def test_synthetic_elf_header_must_match_target_architecture(self):
+        body = bytearray(64)
+        body[:6] = b'\x7fELF\x02\x01'
+        body[18:20] = (183).to_bytes(2, 'little')
+        self.put(self.source / 'node_modules/pkg/native.node', bytes(body))
+        with self.assertRaisesRegex(ValueError, 'native|architecture'):
+            self.pack()
+        self.assertFalse(self.store.exists())
+        body[18:20] = (62).to_bytes(2, 'little')
+        self.put(self.source / 'node_modules/pkg/native.node', bytes(body))
+        self.pack()  # Header validation only, not native execution acceptance.
+
+    def test_project_toolchain_drift_is_rejected_before_outputs(self):
+        self.put(self.project / 'package.json', json.dumps({'packageManager': 'pnpm@11.18.0'}))
+        with self.assertRaisesRegex(ValueError, 'packageManager'):
+            self.pack()
+        self.assertFalse(self.store.exists())
+
+    def test_matching_changed_runtime_target_changes_runtime_identity(self):
+        first = self.pack()['layers']['runtime']['identity']
+        for index, (field, value) in enumerate((('node', '24.20.0'), ('abi', '138'), ('libc', 'glibc-2.37'), ('arch', 'arm64'))):
+            runtime = {**self.runtime, field: value}
+            target = {**self.target, 'runtime': runtime}
+            with patch.object(self.m, 'runtime_identity', return_value=runtime):
+                packed = self.m.pack(self.source, self.store, self.project, self.assets, str(index + 2) * 40, target=target)
+            self.assertNotEqual(first, packed['layers']['runtime']['identity'])
+
+    def test_symbolic_trace_inventory_target_changes_runtime_identity(self):
+        original = self.m.inspect_source
+        def inventory(target):
+            entries, omitted = original(self.source, '.next-build-qa')
+            return sorted(entries + [{'path': 'node_modules/pkg/link', 'type': 'symlink', 'mode': 0o777, 'target': target}], key=lambda entry: entry['path']), omitted
+        # Synthetic trace inventory tests wire identity without claiming Windows
+        # can create/resolve the Linux symlinks required by real assembly.
+        with patch.object(self.m, 'inspect_source', return_value=inventory('index.js')):
+            first = self.pack()['layers']['runtime']['identity']
+        with patch.object(self.m, 'inspect_source', return_value=inventory('alias.js')):
+            second = self.pack('2' * 40)['layers']['runtime']['identity']
+        self.assertNotEqual(first, second)
+
+    def test_resource_version_and_config_key_order_do_not_change_runtime_identity(self):
+        first = self.pack()['layers']['runtime']['identity']
+        value = self.m.parse((self.assets / 'asset-manifest.json').read_bytes())
+        value['provenanceRevision'] = 'new metadata, same payload'
+        body = self.m.canonical(value)
+        changed = self.assets.with_name(self.m.digest(body))
+        shutil.copytree(self.assets, changed)
+        self.put(changed / 'asset-manifest.json', body)
+        self.assets = changed
+        self.config = dict(reversed(list(self.config.items())))
+        self.set_config()
+        self.assertEqual(first, self.pack('2' * 40)['layers']['runtime']['identity'])
+
+    def test_explicit_legacy_pack_still_works(self):
+        with patch.object(self.m, 'runtime_identity', return_value=self.runtime):
+            packed = self.m.pack(self.source, self.store, self.project, self.assets, '1' * 40,
+                                 schema=1, assembly_cache_root=self.root / 'legacy-cache')
+        manifest = self.m.parse(Path(packed['manifest']).read_bytes())
+        self.assertEqual(manifest['schema'], 1)
+        self.assertNotIn('runtimeBinding', manifest)
+        self.assertEqual(self.m.parse((self.store / manifest['layers']['runtime']['index']).read_bytes())['schema'], 1)
+
+    def test_immutable_layers_and_release_id_survive_concurrent_publication(self):
+        def publish(_):
+            try:
+                return self.m.pack(self.source, self.store, self.project, self.assets, '1' * 40, target=self.target)
+            except ValueError:
+                return None
+        with patch.object(self.m, 'runtime_identity', return_value=self.runtime):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(executor.map(publish, range(2)))
+        self.assertEqual(sum(result is not None for result in results), 1)
+        packed = next(result for result in results if result is not None)
+        originals = {path: path.read_bytes() for path in (self.store / 'layers').iterdir()}
+        self.pack('2' * 40)
+        self.assertEqual({path: path.read_bytes() for path in originals}, originals)
+        self.assertEqual(self.m.file_digest(Path(packed['manifest'])), packed['manifestSha256'])
+
+    def test_new_default_requires_target_before_output(self):
+        with self.assertRaisesRegex(ValueError, 'target'):
+            self.m.pack(self.source, self.store, self.project, self.assets, 'missing')
+        self.assertFalse(self.store.exists())
+
+    def test_exact_target_platform_cache_and_toolchain_fail_before_output(self):
+        for field, value in (('platform', 'win32'), ('arch', 'arm64'), ('abi', 'other'), ('node', '24.18.0'), ('libc', 'glibc-2.35')):
+            target = {**self.target, 'runtime': {**self.runtime, field: value}}
+            with patch.object(self.m, 'runtime_identity', return_value=self.runtime):
+                with self.assertRaises(ValueError):
+                    self.m.pack(self.source, self.store, self.project, self.assets, 'bad', target=target)
+            self.assertFalse(self.store.exists())
+        for target in ({**self.target, 'assemblyCacheRoot': '/tmp/cache'},
+                       {**self.target, 'toolchain': {'packageManager': 'pnpm@10.0.0'}}):
+            with patch.object(self.m, 'runtime_identity', return_value=self.runtime), self.assertRaises(ValueError):
+                self.m.pack(self.source, self.store, self.project, self.assets, 'bad', target=target)
+            self.assertFalse(self.store.exists())
+
+    def test_windows_build_host_cannot_claim_linux_target(self):
+        windows = {**self.runtime, 'platform': 'win32', 'libc': 'non-glibc'}
+        with patch.object(self.m, 'runtime_identity', return_value=windows), self.assertRaisesRegex(ValueError, 'Build host Runtime'):
+            self.m.pack(self.source, self.store, self.project, self.assets, 'bad', target=self.target)
+        self.assertFalse(self.store.exists())
+
+    def test_schema2_same_origin_preserves_asset_bytes_and_binds_index(self):
+        original = (self.assets / 'asset-manifest.json').read_bytes()
+        packed = self.pack()
+        manifest = self.m.parse(Path(packed['manifest']).read_bytes())
+        self.assertEqual(manifest['schema'], 2)
+        self.assertEqual(manifest['target'], self.target)
+        self.assertEqual(manifest['assetDeliveryMode'], 'same-origin-public')
+        self.assertIsNone(manifest.get('compiledAssetBaseUrl'))
+        self.assertEqual(manifest['generatedPublicLink']['target'], '/opt/zimage/layer-cache/assets/' + self.assets.name)
+        self.assertEqual((self.assets / 'asset-manifest.json').read_bytes(), original)
+        runtime = self.m.parse((self.store / packed['layers']['runtime']['index']).read_bytes())
+        self.assertEqual(runtime['schema'], 2)
+        self.assertEqual(runtime['binding']['schema'], 2)
+        legacy = {'schema': 1, 'kind': 'runtime', 'binding': {'lockSha256': manifest['lockSha256'], 'runtime': self.runtime}, 'entries': runtime['entries']}
+        self.assertNotEqual(packed['layers']['runtime']['identity'], self.m.digest(self.m.canonical(legacy)))
+
+    def test_runtime_reuse_excludes_commit_build_id_env_and_input_roots(self):
+        first = self.pack()
+        self.put(self.source / (self.dist + 'BUILD_ID'), 'build-two')
+        self.config['env']['ZIMAGE_BUILD_SHA'] = 'two'
+        self.config['outputFileTracingRoot'] = '/a/different/input/root'
+        self.set_config()
+        second = self.pack('2' * 40, source_commit='a' * 40)
+        self.assertEqual(first['layers']['runtime']['identity'], second['layers']['runtime']['identity'])
+        self.assertEqual(first['layers']['assets'], second['layers']['assets'])
+        self.assertNotEqual(first['layers']['code']['identity'], second['layers']['code']['identity'])
+
+    def test_same_lock_trace_content_config_and_resolution_changes_change_runtime(self):
+        first = self.pack()['layers']['runtime']['identity']
+        self.put(self.source / 'node_modules/pkg/extra.js', 'new trace')
+        self.assertNotEqual(first, self.pack('2' * 40)['layers']['runtime']['identity'])
+        (self.source / 'node_modules/pkg/extra.js').unlink()
+        self.put(self.source / 'node_modules/pkg/index.js', 'changed')
+        self.assertNotEqual(first, self.pack('3' * 40)['layers']['runtime']['identity'])
+        self.put(self.source / 'node_modules/pkg/index.js', 'runtime library')
+        self.put(self.project / 'apps/web/next.config.ts', 'changed build source')
+        changed = self.pack('4' * 40)['layers']['runtime']['identity']
+        self.assertNotEqual(first, changed)
+        self.config['transpilePackages'].append('another-package')
+        self.set_config()
+        self.assertNotEqual(changed, self.pack('5' * 40)['layers']['runtime']['identity'])
+
+    def test_same_origin_rejects_compiled_remote_and_explicit_remote_is_exact(self):
+        self.config['images'] = {'remotePatterns': [{'protocol': 'https', 'hostname': 'assets.example.com', 'port': '',
+            'pathname': '/static-assets/' + self.assets.name + '/commerce/**', 'search': ''}]}
+        self.set_config()
+        with self.assertRaisesRegex(ValueError, 'same-origin'):
+            self.pack()
+        self.assertFalse(self.store.exists())
+        packed = self.pack(asset_delivery_mode='remote')
+        self.assertEqual(self.m.parse(Path(packed['manifest']).read_bytes())['compiledAssetBaseUrl'], 'https://assets.example.com/static-assets/' + self.assets.name)
+        self.config['images']['remotePatterns'][0]['pathname'] = '/static-assets/' + '0' * 64 + '/commerce/**'
+        self.set_config()
+        with self.assertRaisesRegex(ValueError, 'compiled asset'):
+            self.pack('2' * 40, asset_delivery_mode='remote')
+
+    def test_cli_missing_target_fails_before_outputs(self):
+        result = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), 'pack', str(self.source), str(self.store),
+            '--project', str(self.project), '--assets', str(self.assets), '--release-id', '1' * 40], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('target', result.stderr)
+        self.assertFalse(self.store.exists())
 
 
 if __name__ == '__main__':

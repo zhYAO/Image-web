@@ -1,3 +1,91 @@
+# Current default layer administrator runbook (2026-10-29)
+
+This section supersedes the historical manual prototype notes below. Everything here is a **future administrator operation**, not an operation performed in this implementation. The local Windows evidence is not Linux acceptance. Read [THREE-LAYERS.md](THREE-LAYERS.md) and preserve the original UID/font/license/systemd/ingress trust policies. Do not enable CI until the installed closure, actual platform and independent Linux/external checks have passed.
+
+## Installation and enablement prerequisites
+
+1. Independently review and SHA256-check **six** files from this exact frozen revision: `release-three-layer.py`, `release.py`, `release-layers.py`, `three-layer-release.py`, `release-transport.py`, `release-public-policy.json`. Install all together in `/usr/local/libexec/zimage-three-layer/`, with root-owned non-writable ancestors, directory 0755 and regular source/policy files 0644. No writable import or bytecode directory is permitted. Keep the separately restricted `/usr/local/sbin/zimage-release` byte-identical to reviewed `release.py` for historical full rollback/fallback. Do not permit deployment-user source updates or a generic root Python/shell sudo command.
+2. Verify fixed Node `/opt/zimage/toolchain/node-v24.19.0-linux-x64/bin/node` and its ancestors are root-owned and not group/world writable. Measure actual Node version/ABI/platform/arch/glibc with that binary on the target; use exactly the same values on the trusted build host. Verify pinned pnpm 11.19.0 and original project/config sources. Set nonsecret `ZIMAGE_RELEASE_TARGET_JSON` to the exact target shape in THREE-LAYERS.md and select an actually compatible trusted `ZIMAGE_RELEASE_RUNNER` if the default differs. Never substitute a guessed Ubuntu/glibc value or mask a Windows target error.
+3. Provision fixed root-owned `/opt/zimage`, `/opt/zimage/releases`, `/opt/zimage/layer-store` and `/opt/zimage/layer-cache`; immutable stores/caches remain root-controlled and traversable/readable by the existing zimage service where required. `incoming` retains the existing deployment-user upload policy. `/opt/zimage/cache` retains the existing managed mutable Next cache policy. Keep releases/caches on a filesystem supporting the reviewed hardlink/atomic publication behavior. Do not recursively chown existing trees or remove retained data.
+4. Generate the exact drop-in body with `python3 -I release-three-layer.py systemd-template`; the administrator reviews/installs `/etc/systemd/system/zimage.service.d/three-layer-assets.conf` root:root 0644. Keep original User/Group=zimage, ExecStart, credential EnvironmentFiles and isolation. The per-release `EnvironmentFile=-/opt/zimage/current/.runtime-assets.env` must be LAST in effective EnvironmentFiles order. Only the administrator may reload systemd. Before enablement, collect reviewed `systemctl show` evidence for User, Group, EnvironmentFiles, ExecStart and the existing isolation policy without logging credential values.
+5. Install `/etc/zimage/three-layer-target.json` as root-owned regular JSON with non-writable ancestors and size at most 16 KiB, initially `{"enabled":false,"target":ACTUAL_TARGET_OBJECT}`. After Linux/POSIX/native/full closure and health acceptance is independently established, an administrator may explicitly set enabled to true. This task did not write that file or enable it. `check-target` refuses absent/disabled config, actual runtime mismatch, or a schema-2 manifest target different from the enabled target.
+6. Extend the existing restricted sudo policy only for the fixed interpreter **and fixed reviewed script path**, with exact zero-argument `check-target` and `inventory`, exact `rollback SHA40`, and `deploy SHA40 OUTER_SHA64 MANIFEST_SHA64 RUN_NUMBER` where all values follow the helper's strict lowercase/digit rules. Use administrator-reviewed exact argument matching (supported sudo argument regex or a fixed root-owned validating wrapper after checking the installed sudo version); no arbitrary paths, extra flags, wildcard Python execution or automatic `--initial-deploy` authorization. The current CI command shape is `/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py ...`; any wrapper must preserve those restrictions and the CI command must be reviewed accordingly. Initial deploy remains a separate manual administrator invocation. No sudo policy was changed here.
+7. Provision both original Noto OTFs plus original LICENSE.txt/README.md in a safe external runner directory, verifying the original fingerprints described in FONTS.md. Set nonsecret `ZIMAGE_RELEASE_FONT_SOURCE` to it. The production helper creates a complete resource manifest from project public resources and those bytes; it must not use `--fonts-only`. Keep public build configuration reviewed, HTTP/slim Webpack mode and `NEXT_PUBLIC_STATIC_ASSET_BASE_URL=''`. No new credentials, network policy, permissions bypass or paid provider action is required by this change.
+
+For future CI, `deployment-health.sh check-install` checks the six installed SHA256 values before invoking the root `check-target` gate. Every inventory/activation operation rechecks its own trust and runtime gates as well. Use the existing restricted SSH key, pinned known_hosts and account; no root login or alternate transport is implied. Missing tools/config are an administrator stop, never a reason to silently use full packaging.
+
+## Exact future command sequence
+
+The uppercase names below are placeholders for independently measured full lowercase hashes/paths, not executable defaults. Use SHA40 for a release/source/build ID and SHA64 for content digests. Read `pack.manifestSha256` from the package report and `outerSha256` from the final transport result. All packaging output paths must be NEW and outside the project. Keep originals and diagnostics private and retained.
+
+```sh
+# On the exact compatible trusted build host, before building:
+node ops/aliyun/package-release.mjs --check-target --target /safe/target.json
+node ops/aliyun/package-static-assets.mjs --font-source /safe/original-fonts \
+  --output /tmp/zimage-resources
+# Build separately using the reviewed HTTP/slim Webpack flow and the resource
+# report's ZIMAGE_SHARED_FONT_DIR + ZIMAGE_STATIC_ASSET_SHA256 pair.
+
+# First cold artifact (seven immutable objects; no old cache assumed):
+node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-cold \
+  --assets /tmp/zimage-resources/RESOURCE_SHA64 --release-id RELEASE_SHA40 \
+  --target /safe/target.json
+# Existing restricted transfer, after installed hashes/target verification:
+scp EXISTING_RESTRICTED_OPTIONS /tmp/zimage-cold/transport.tgz \
+  zimage-deploy@TARGET:/opt/zimage/incoming/RELEASE_SHA40.layers.tgz
+# Administrator only, on a verified EMPTY managed installation:
+/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py \
+  deploy RELEASE_SHA40 OUTER_SHA64 MANIFEST_SHA64 RUN_NUMBER --initial-deploy
+```
+
+Empty means no current, previous, dangling or temporary pointer, deployment sequence or retained release. The helper preflights all objects/caches/native/fonts before switching. If initial activation/restart/local health fails, it stops the attempted app and removes only its own current link. No old release is invented; validated store/cache/release data remains. An initial failure therefore requires administrator inspection and an explicit reviewed recovery decision; neither CI nor this helper deletes retained data to reopen the empty-install gate. After successful local initial activation, independently verify public HTTPS, version, original resources/fonts and anonymous denial before enabling future normal CI. Initial deployment is never inferred from a broken current link.
+
+```sh
+# Normal incremental preparation: no cold outer artifact is generated.
+node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-prepared \
+  --assets /tmp/zimage-resources/RESOURCE_SHA64 --release-id RELEASE_SHA40 \
+  --target /safe/target.json --prepare-only
+# Existing restricted SSH, installed complete closure/target checked first:
+bash ops/aliyun/deployment-health.sh check-install
+ssh EXISTING_RESTRICTED_OPTIONS zimage-deploy@TARGET \
+  'sudo /usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py inventory' \
+  < /tmp/zimage-prepared/inventory-request.json > /tmp/zimage-inventory.json
+python3 -I -B ops/aliyun/release-transport.py bundle /tmp/zimage-prepared/store \
+  /tmp/zimage-prepared/store/releases/RELEASE_SHA40.json /tmp/zimage-delta.tgz \
+  --manifest-sha256 MANIFEST_SHA64 --inventory /tmp/zimage-inventory.json
+# Record original exact current and verify it externally, before upload/activation:
+original=$(bash ops/aliyun/deployment-health.sh record)
+scp EXISTING_RESTRICTED_OPTIONS /tmp/zimage-delta.tgz \
+  zimage-deploy@TARGET:/opt/zimage/incoming/RELEASE_SHA40.layers.tgz
+ssh EXISTING_RESTRICTED_OPTIONS zimage-deploy@TARGET \
+  'sudo /usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py deploy RELEASE_SHA40 OUTER_SHA64 MANIFEST_SHA64 RUN_NUMBER'
+bash ops/aliyun/deployment-health.sh verify RELEASE_SHA40 "$original"
+
+# Explicit full fallback, selected by an operator (never automatic):
+node ops/aliyun/package-release.mjs apps/web/.next /tmp/zimage-full --format full
+# Upload ONLY /tmp/zimage-full.tgz to incoming/RELEASE_SHA40.tgz and use the
+# existing restricted zimage-release deploy SHA OUTER_SHA RUN_NUMBER command.
+# Set RELEASE_FORMAT=full for health record; health rollback auto-detects the
+# exact original retained format. Keep original font/native/service gates.
+
+# Exact retained rollback; helper validates original target format and bindings:
+bash ops/aliyun/deployment-health.sh rollback RETAINED_SHA40
+# 'previous' is resolved to one exact retained SHA before selecting a helper.
+# Direct administrator layered rollback, when applicable:
+/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py \
+  rollback RETAINED_SHA40
+```
+
+Normal deploy always requires a valid existing current. It captures that original under deploy.lock and retains original local failure recovery. Newer run numbers cannot be displaced by stale runs. Same-SHA normal retry is allowed only with identical manifest, files, link targets, resources and environment bindings; a different cold/delta outer digest does not rewrite the first retained transport hash. Health failure on a same-SHA retry never rolls back an older previous release. For another SHA, external recovery requires current still to be the failed SHA and restores exactly the recorded original, using the original retained format. A layered rollback reconstructs and compares the retained target against its trusted manifest, actual store and actual cache, then verifies native/fonts before selection. No reference or cache is removed.
+
+## Local evidence and outstanding acceptance
+
+Task 3 tests use temporary controlled files and injected/mock runners. Windows pure logic tests import through a temporary fcntl placeholder solely to test logic; they do not test flock. Real POSIX symlink/ownership/archive/assembly/concurrent lock, runuser/systemd/SSH/GitHub Actions and ingress/public checks are separately unexecuted. Existing Git Bash at AppData/Local/Programs/Git/bin/bash.exe passed syntax checks for the health helper and all 38 workflow run blocks. Controlled shell-flow fixtures use readonly same-shell SSH/python3 functions bound to absolute local fixture paths, with a fail-closed unknown-command proof before each run; real Linux SSH/service behavior remains untested. YAML was parsed with the existing js-yaml package and structurally checked locally. Existing Task 1/2 evidence and Windows resource-suite failures remain in their reports. Source/report freeze and independent review are required before administrator enablement. No service, installation, server connection, browser, build, GC or Git submission was performed. While correcting the retired PATH-only shell-test harness, one real SSH invocation attempted a read-only helper hash against reserved deploy.invalid and failed hostname resolution before connecting. Exact captured stderr and test exit evidence are retained in task-3-health-path-incident.log beside the handoff report. The replacement harness cannot fall back to real SSH.
+
+---
+
+## Historical prototype notes (superseded operational instructions)
+
 # 手动三层发布交接（未激活，禁止使用现有QA包）
 
 生产目标为阿里云 `https://www.zimage.store`。用户已取消10MB硬门槛，允许完成检查后手动发布，禁止触发GitHub CI。临时OSS中转、Windows固定HTTP验收及一次性自动回退已批准；实际外部操作由主会话/服务器管理员协调。本文不执行上传、改Nginx、改凭据、切换或重启。

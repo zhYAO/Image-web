@@ -6,6 +6,12 @@ set -euo pipefail
 : "${DEPLOY_PORT:?DEPLOY_PORT is required}"
 ssh_args=(-T -i "$HOME/.ssh/zimage" -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST")
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+layer_helper='/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py'
+release_format=${RELEASE_FORMAT:-layers}
+if [[ "$release_format" != layers && "$release_format" != full ]]; then
+  echo 'RELEASE_FORMAT must be layers or explicit full.' >&2
+  exit 1
+fi
 
 current_release() {
   local current
@@ -35,9 +41,71 @@ verify_installed_helper() {
   fi
 }
 
+verify_layer_helper() {
+  local name expected actual
+  for name in release-three-layer.py release.py release-layers.py three-layer-release.py release-transport.py release-public-policy.json; do
+    expected=$(sha256sum "$script_dir/$name")
+    expected=${expected%% *}
+    actual=$(ssh "${ssh_args[@]}" "sha256sum /usr/local/libexec/zimage-three-layer/$name") || {
+      echo 'Missing reviewed layer helper closure; administrator installation is required.' >&2
+      return 1
+    }
+    actual=${actual%% *}
+    if [[ ! "$actual" =~ ^[a-f0-9]{64}$ || "$actual" != "$expected" ]]; then
+      echo 'Installed layer helper closure differs; administrator installation is required.' >&2
+      return 1
+    fi
+  done
+  ssh "${ssh_args[@]}" "sudo $layer_helper check-target" >&2 || {
+    echo 'Administrator must install and enable the exact verified target configuration.' >&2
+    return 1
+  }
+}
+
+retained_format() {
+  local target=$1 format
+  format=$(ssh "${ssh_args[@]}" "if test -e /opt/zimage/releases/$target/.three-layer-release.json || test -L /opt/zimage/releases/$target/.three-layer-release.json; then printf layers; elif test -e /opt/zimage/releases/$target/.manifest-sha256 || test -L /opt/zimage/releases/$target/.manifest-sha256; then printf invalid; else printf full; fi") || return 1
+  if [[ "$format" != layers && "$format" != full ]]; then
+    echo 'Retained release format is damaged or unknown; refusing recovery.' >&2
+    return 1
+  fi
+  printf '%s\n' "$format"
+}
+
+verify_format_helper() {
+  if [[ "$1" == layers ]]; then
+    verify_layer_helper
+  elif [[ "$1" == full ]]; then
+    verify_installed_helper
+  else
+    echo 'Unknown release format; refusing activation or recovery.' >&2
+    return 1
+  fi
+}
+
+rollback_exact() {
+  local target=$1 format
+  format=$(retained_format "$target") || return 1
+  verify_format_helper "$format" || return 1
+  if [[ "$format" == layers ]]; then
+    ssh "${ssh_args[@]}" "sudo $layer_helper rollback $target"
+  else
+    ssh "${ssh_args[@]}" "sudo /usr/local/sbin/zimage-release rollback $target"
+  fi
+}
+
+if [[ "${1:-}" == check-install && $# == 1 ]]; then
+  verify_format_helper "$release_format"
+  exit 0
+fi
+
 if [[ "${1:-}" == record && $# == 1 ]]; then
-  verify_installed_helper
+  verify_format_helper "$release_format"
   original=$(current_release)
+  original_format=$(retained_format "$original")
+  if [[ "$original_format" != "$release_format" ]]; then
+    verify_format_helper "$original_format"
+  fi
   if ! python3 "$script_dir/verify-release.py" "$original" --public-recovery >&2; then
     echo 'Current public release is not verified; stopping before activation.' >&2
     exit 1
@@ -46,7 +114,6 @@ if [[ "${1:-}" == record && $# == 1 ]]; then
   exit 0
 fi
 if [[ "${1:-}" == rollback && $# == 2 ]]; then
-  verify_installed_helper
   target=$2
   if [[ "$target" == previous ]]; then
     target=$(ssh "${ssh_args[@]}" 'readlink -f /opt/zimage/previous')
@@ -60,7 +127,7 @@ if [[ "${1:-}" == rollback && $# == 2 ]]; then
     echo 'Rollback target must be an exact retained SHA or versioned previous.' >&2
     exit 1
   fi
-  ssh "${ssh_args[@]}" "sudo /usr/local/sbin/zimage-release rollback $target"
+  rollback_exact "$target"
   restored=$(current_release)
   if [[ "$restored" != "$target" ]]; then
     echo 'Rollback selected an unexpected release; external verification refused.' >&2
@@ -70,7 +137,7 @@ if [[ "${1:-}" == rollback && $# == 2 ]]; then
   exit 0
 fi
 if [[ "${1:-}" != verify || $# != 3 || ! "$2" =~ ^[a-f0-9]{40}$ || ! "$3" =~ ^[a-f0-9]{40}$ ]]; then
-  echo 'Usage: deployment-health.sh record | verify EXPECTED_SHA ORIGINAL_SHA | rollback SHA_OR_previous' >&2
+  echo 'Usage: deployment-health.sh check-install | record | verify EXPECTED_SHA ORIGINAL_SHA | rollback SHA_OR_previous' >&2
   exit 1
 fi
 expected=$2
@@ -92,7 +159,7 @@ if [[ "$original" == "$expected" ]]; then
 fi
 # The installed helper verifies the restored version, login, static assets and
 # anonymous account denial. New-page checks must not be applied to an old release.
-if ! ssh "${ssh_args[@]}" "sudo /usr/local/sbin/zimage-release rollback $original"; then
+if ! rollback_exact "$original"; then
   echo 'Rollback failed; the original verification failure remains unresolved.' >&2
   exit 1
 fi

@@ -61,6 +61,13 @@ def release_name(value):
     return value
 
 
+def require_full_release(target):
+    # Presence, including orphan/dangling markers, binds this SHA to the
+    # layered protocol. Only its adapter may validate that retained closure.
+    if any(os.path.lexists(target / name) for name in ('.three-layer-release.json', '.manifest-sha256')):
+        raise ValueError('Immutable release format conflict: layered metadata requires the three-layer helper; use a new SHA for full deployment')
+
+
 def extract_release(archive, destination):
     destination.mkdir(parents=True, exist_ok=False)
     with tarfile.open(archive, 'r:gz') as tar:
@@ -73,7 +80,7 @@ def extract_release(archive, destination):
             path = PurePosixPath(member.name)
             if path.is_absolute() or '..' in path.parts or any(p.startswith('.env') for p in path.parts):
                 raise ValueError('Unsafe archive path')
-            if str(path) in {'.release-sha', '.archive-sha256', '.runtime-assets.env'}:
+            if str(path) in {'.release-sha', '.archive-sha256', '.runtime-assets.env', '.three-layer-release.json', '.manifest-sha256'}:
                 raise ValueError('Reserved release metadata')
             if str(path) in names:
                 raise ValueError('Duplicate archive member')
@@ -295,6 +302,26 @@ def activate(target, restore_previous_on_failure=True):
     print('Activated and locally verified; external verification still required:', target.name, flush=True)
 
 
+def activate_initial(target, runner=subprocess.run):
+    """Only the explicit layered empty-install path calls this; no old target exists."""
+    if os.path.lexists(CURRENT) or os.path.lexists(PREVIOUS):
+        raise ValueError('Initial activation requires absent current and previous')
+    font_preflight(target)
+    try:
+        switch(target)
+        wait_healthy(target)
+    except Exception:
+        try:
+            runner(['/usr/bin/systemctl', 'stop', 'zimage'], check=True)
+        finally:
+            # A failed restart may have installed current already. Never delete
+            # a concurrent/replaced pointer, and never invent a rollback point.
+            if CURRENT.is_symlink() and CURRENT.resolve(strict=False) == target:
+                CURRENT.unlink()
+        raise
+    print('Initial release locally verified; external verification still required:', target.name, flush=True)
+
+
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('Use the restricted sudo release command')
@@ -306,6 +333,7 @@ def main():
             target = PREVIOUS.resolve(strict=True) if name == 'previous' else RELEASES / release_name(name)
             if target.parent != RELEASES or not target.is_dir() or target.is_symlink():
                 raise ValueError('Rollback target is not a retained release')
+            require_full_release(target)
             # A failed recovery must not reactivate the release just rejected
             # by the external gate. Leave the exact requested original selected
             # and report its failed verification for administrator follow-up.
@@ -320,6 +348,7 @@ def main():
         if sequence.exists() and int(run) < int(sequence.read_text()):
             raise ValueError('Refusing an older workflow run')
         target = RELEASES / sha
+        require_full_release(target)
         # Copy into a root-owned directory before verification to avoid staging-file races.
         with tempfile.TemporaryDirectory(prefix='release-', dir=ROOT) as temp:
             archive = Path(temp) / 'release.tgz'
@@ -337,6 +366,7 @@ def main():
             if not target.exists():
                 unpacked = Path(temp) / 'unpacked'
                 extract_release(archive, unpacked)
+                require_full_release(unpacked)
                 server = unpacked / 'apps/web/server.js'
                 if not server.is_file() or server.is_symlink():
                     raise ValueError('Missing standalone server')

@@ -1,6 +1,6 @@
 'use client';
 
-import { ActionButton, ControlCluster, InlineNotice, SideDrawer } from '@/features/controls/NativeControls';
+import { ActionButton, ContentDialog, ControlCluster, InlineNotice, SideDrawer } from '@/features/controls/NativeControls';
 import { ImageGallery } from '@/features/controls/PreviewImage';
 
 import {
@@ -9,6 +9,7 @@ import {
   imageCreditItem,
   formatCredits,
   type CreditConfirmation,
+  creditConfirmationSchema,
   templatesForScene,
   hasTextOnlyImageIntent,
   MAX_UPLOAD_BYTES,
@@ -162,6 +163,11 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const deletionLock = useRef(false);
   const firstSubmissionLock = useRef(false);
   const selectionVersion = useRef(0);
+  type RecreateAction = { batch: GenerationBatch; scope: RecreateScope; generationId?: string; quantity: number; billing?: CreditConfirmation; version: number; pending: boolean };
+  const recreateActionRef = useRef<RecreateAction | undefined>(undefined);
+  const [recreateAction, setRecreateAction] = useState<RecreateAction>();
+  const clearRecreate = () => { recreateActionRef.current = undefined; setRecreateAction(undefined); };
+
   useLayoutEffect(() => { selectionVersion.current++; }, [ownerKey]);
   const [referencePreparation, setReferencePreparation] = useState<{
     version: number; scope: ReferencePreparationScope; count: number;
@@ -169,6 +175,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [pendingFirstMessage, setPendingFirstMessage] = useState<MessageTimelineItem>();
   const sessionsRef = useRef<Session[]>([]);
   const [activeSessionId, setActiveSessionState] = useState<string>();
+  useLayoutEffect(() => {
+    if (recreateActionRef.current && recreateActionRef.current.version !== selectionVersion.current) clearRecreate();
+  });
   const referenceScope = useMemo(() => ({ ownerKey, source: activeSessionId, route }), [ownerKey, activeSessionId, route]);
   const preparingReferences = referencePreparation?.scope === referenceScope ? referencePreparation.count : 0;
   const composerDefaults = useRef<Partial<ComposerState>>({});
@@ -892,12 +901,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     setSessionDrawerOpen(false);
   };
 
-  const recreate = async (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => {
+  const admitRecreate = async (action: RecreateAction) => {
+    if (recreateActionRef.current !== action || action.pending || action.version !== selectionVersion.current) return;
+    action.pending = true;
+    setRecreateAction({ ...action });
+    const current = () => recreateActionRef.current === action && action.version === selectionVersion.current;
     try {
-      const quantity = scope === 'single' ? 1 : batch.assets.filter(asset => scope === 'all' || (asset.status === 'failed' && asset.error?.code !== 'CONFLICT')).length;
-      const billing = credits.confirm([imageCreditItem({provider:batch.provider,model:batch.model,resolution:batch.config.resolution,count:quantity})]);
-      if (billing && !window.confirm(`重做 ${quantity} 张图片，本次 ${formatCredits(billing.totalMinor)} 积分。确认生成？`)) return;
-      const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope, requestId:crypto.randomUUID(), billing });
+      const { batch, scope, generationId, billing } = action;
+      const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope, requestId: crypto.randomUUID(), billing });
+      if (!current()) return;
       updateRuntime(batch.sessionId, (runtime) => ({
         ...runtime,
         timeline: [...runtime.timeline, {
@@ -910,12 +922,53 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         }],
       }));
       void refreshQuota().catch(() => {
-        setFeedback({ message: '图片任务已提交，额度暂未刷新；请稍后查看。' });
+        if (action.version === selectionVersion.current) setFeedback({ message: '图片任务已提交，额度暂未刷新；请稍后查看。' });
       });
     } catch (error: unknown) {
+      if (!current()) return;
       const safe = sanitizeError(error);
-      if (safe.code === 'UNAUTHORIZED') return;
-      setFeedback({ error: safe, message: safe.message });
+      if (safe.code !== 'UNAUTHORIZED') setFeedback({ error: safe, message: safe.message });
+    } finally {
+      if (current()) clearRecreate();
+    }
+  };
+
+  const recreate = (batch: GenerationBatch, scope: RecreateScope, generationId?: string) => {
+    if (recreateActionRef.current) return;
+    try {
+      const quantity = scope === 'single' ? 1 : batch.assets.filter(asset => scope === 'all' || (asset.status === 'failed' && asset.error?.code !== 'CONFLICT')).length;
+      const billing = credits.confirm([imageCreditItem({ provider: batch.provider, model: batch.model, resolution: batch.config.resolution, count: quantity })]);
+      if (billing && !creditConfirmationSchema.safeParse(billing).success) {
+        setFeedback({ message: '积分报价暂不可用，请稍后重试。' });
+        return;
+      }
+      const action: RecreateAction = { batch, scope, generationId, quantity, billing: billing && { ...billing }, version: selectionVersion.current, pending: false };
+      recreateActionRef.current = action;
+      if (billing) setRecreateAction({ ...action });
+      else void admitRecreate(action);
+    } catch (error: unknown) {
+      const safe = sanitizeError(error);
+      if (safe.code !== 'UNAUTHORIZED') setFeedback({ message: '积分报价暂不可用，请稍后重试。' });
+    }
+  };
+
+  const confirmRecreate = () => {
+    const action = recreateActionRef.current;
+    if (!action || action.pending) return;
+    if (action.version !== selectionVersion.current) { clearRecreate(); return; }
+    try {
+      const { batch, quantity } = action;
+      const latest = credits.confirm([imageCreditItem({ provider: batch.provider, model: batch.model, resolution: batch.config.resolution, count: quantity })]);
+      if (!latest || !creditConfirmationSchema.safeParse(latest).success || latest.version !== action.billing?.version || latest.totalMinor !== action.billing?.totalMinor) {
+        clearRecreate();
+        setFeedback({ message: '积分报价已变更，请重新确认。' });
+        return;
+      }
+      void admitRecreate(action);
+    } catch (error: unknown) {
+      clearRecreate();
+      const safe = sanitizeError(error);
+      if (safe.code !== 'UNAUTHORIZED') setFeedback({ message: '积分报价暂不可用，请稍后重试。' });
     }
   };
 
@@ -1173,6 +1226,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           </div>}
         </ImageGallery>
         </div>
+      <ContentDialog open={Boolean(recreateAction?.billing)} title="重新生成图片"
+        onClose={() => { if (!recreateActionRef.current?.pending) clearRecreate(); }}
+        footer={<>
+          <ActionButton disabled={recreateAction?.pending} onClick={clearRecreate}>取消</ActionButton>
+          <ActionButton variant="primary" disabled={recreateAction?.pending} onClick={confirmRecreate}>确认生成</ActionButton>
+        </>}>
+        <p>重建 {recreateAction?.quantity} 张图片，消耗 {formatCredits(recreateAction?.billing?.totalMinor ?? 0)} 积分。确认生成？</p>
+        {recreateAction?.pending && <p role="status">正在提交生成请求…</p>}
+      </ContentDialog>
       <SideDrawer className="workspaceDrawer" onClose={() => setSessionDrawerOpen(false)} open={sessionDrawerOpen} placement="left" width={320} title={zhCN.workspace.sessions}>{sidebar()}</SideDrawer>
       <SideDrawer className="workspaceDrawer" onClose={() => setConfigDrawerOpen(false)} open={configDrawerOpen} placement="right" width={420} title={zhCN.workspace.generationConfig}>{mobileConfig}</SideDrawer>
     </WorkspaceFrame>

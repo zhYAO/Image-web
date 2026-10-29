@@ -1,4 +1,4 @@
-"""Opt-in offline three-layer prototype. Never activates or marks a release production-ready."""
+"""Offline, versioned three-layer packaging. Never activates a release."""
 import argparse
 import errno
 import importlib.util
@@ -25,6 +25,9 @@ KINDS = ('code', 'runtime', 'assets')
 PUBLIC, FONTS = 'apps/web/public/', 'apps/web/server/apparel/fonts/'
 FONT_FILES = {'fonts/' + n for n in ('NotoSansCJKsc-Regular.otf', 'NotoSansCJKsc-Bold.otf', 'LICENSE.txt', 'README.md')}
 SHA = re.compile(r'[a-f0-9]{64}')
+CACHE_ROOT = '/opt/zimage/layer-cache'
+PACKAGE_MANAGER = 'pnpm@11.19.0'
+CONFIG_SOURCES = ('apps/web/next.config.ts', 'apps/web/build/static-assets-config.mjs')
 
 
 def absolute(value):
@@ -77,10 +80,16 @@ def stat_identity(info):
 
 def read_regular(path):
     ancestors_safe(path)
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    original = path.lstat()
+    if not stat.S_ISREG(original.st_mode):
+        raise ValueError('Expected regular input file: ' + str(path))
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
     with os.fdopen(descriptor, 'rb') as stream:
         before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode):
+        # Windows path stat and descriptor stat expose different ctime semantics.
+        # Compare object identity here; compare complete descriptor snapshots below.
+        object_fields = ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_mode')
+        if not stat.S_ISREG(before.st_mode) or any(getattr(original, key) != getattr(before, key) for key in object_fields):
             raise ValueError('Expected regular input file: ' + str(path))
         body = stream.read()
         after = os.fstat(stream.fileno())
@@ -249,6 +258,113 @@ def valid_runtime(value):
         raise ValueError('Incomplete Runtime fingerprint')
 
 
+def validate_native_files(root, entries, runtime):
+    """Check .node/.so[.numeric...] and forbid .dll/.dylib, case-insensitively.
+
+    Metadata/backup suffixes are not shared-library names. Actual loading remains
+    candidate preflight; this guard only checks declared native files' headers.
+    """
+    architectures = {'x64': (2, 1, 62), 'arm64': (2, 1, 183), 'arm': (1, 1, 40),
+                     'ia32': (1, 1, 3), 'riscv64': (2, 1, 243), 'ppc64': (2, 1, 21), 's390x': (2, 2, 22)}
+    for entry in entries:
+        name = PurePosixPath(entry['path']).name.lower()
+        if name.endswith(('.dll', '.dylib')):
+            raise ValueError('Foreign native library is forbidden for Linux: ' + entry['path'])
+        if not (name.endswith('.node') or re.search(r'\.so(?:\.[0-9]+)*\Z', name)):
+            continue
+        path = root / entry['path']
+        if entry['type'] == 'symlink':
+            path = path.resolve(strict=True)
+            if not path.is_relative_to(root):
+                raise ValueError('Native symlink escapes input')
+        body = read_regular(path)
+        expected = architectures.get(runtime['arch'])
+        if len(body) < 52 or body[:4] != b'\x7fELF' or body[5] not in (1, 2):
+            raise ValueError('Linux native payload requires an ELF header: ' + entry['path'])
+        machine = int.from_bytes(body[18:20], 'little' if body[5] == 1 else 'big')
+        if expected != (body[4], body[5], machine):
+            raise ValueError('Linux native architecture differs from target: ' + entry['path'])
+
+
+def validate_target_shape(target):
+    if (not isinstance(target, dict) or set(target) != {'schema', 'runtime', 'toolchain', 'assemblyCacheRoot'} or
+            type(target['schema']) is not int or target['schema'] != 1 or
+            not isinstance(target['runtime'], dict) or set(target['runtime']) != {'node', 'abi', 'platform', 'arch', 'libc'} or
+            target['toolchain'] != {'packageManager': PACKAGE_MANAGER} or target['assemblyCacheRoot'] != CACHE_ROOT):
+        raise ValueError('Invalid target schema, toolchain or assembly cache root')
+    valid_runtime(target['runtime'])
+
+
+def dependency_resolution(config, roots=()):
+    """Stable compiled resolution choices, without env/build IDs or input roots."""
+    keys = ('output', 'serverExternalPackages', 'transpilePackages', 'outputFileTracingIncludes',
+            'outputFileTracingExcludes', 'bundlePagesRouterDependencies')
+    experimental = ('esmExternals', 'serverComponentsExternalPackages', 'externalDir', 'extensionAlias',
+                    'optimizePackageImports', 'bundlePagesExternals')
+    value = {key: config[key] for key in keys if key in config}
+    value['experimental'] = {key: config.get('experimental', {})[key] for key in experimental if key in config.get('experimental', {})}
+    value['turbopack'] = {key: config.get('turbopack', {})[key] for key in ('resolveAlias', 'resolveExtensions', 'rules') if key in config.get('turbopack', {})}
+    def stable(item):
+        if isinstance(item, str):
+            for root in sorted({str(r) for r in roots}, key=len, reverse=True):
+                if item == root or item.startswith(root + '/') or item.startswith(root + os.sep):
+                    return '<input>' + item[len(root):].replace('\\', '/')
+            return item
+        if isinstance(item, dict):
+            return {key: stable(member) for key, member in item.items()}
+        if isinstance(item, list):
+            return [stable(member) for member in item]
+        return item
+    return stable(value)
+
+
+def layer_binding(manifest, kind):
+    if kind == 'runtime':
+        return (manifest['runtimeBinding'] if manifest['schema'] == 2 else
+                {'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime']})
+    binding = {'distDir': manifest['distDir'], 'assetsVersion': manifest['assetsVersion']}
+    if manifest['schema'] == 2:
+        binding.update(schema=2, assetDeliveryMode=manifest['assetDeliveryMode'], compiledAssetBaseUrl=manifest.get('compiledAssetBaseUrl'))
+    return binding
+
+
+def validate_manifest(manifest):
+    """Validate versioned metadata without checking local native runtime or files."""
+    if (type(manifest.get('schema')) is not int or manifest['schema'] not in (1, 2) or
+            set(manifest.get('layers', {})) != set(KINDS) or manifest.get('productionReady') is not False or
+            not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,100}', manifest.get('releaseId', '')) or
+            not SHA.fullmatch(manifest.get('lockSha256', '')) or not SHA.fullmatch(manifest.get('assetsVersion', ''))):
+        raise ValueError('Unsupported non-production release manifest')
+    valid_runtime(manifest['runtime'])
+    if manifest['distDir'] not in ('.next', '.next-build-qa'):
+        raise ValueError('Unsupported build directory')
+    if manifest['schema'] == 2:
+        validate_target_shape(manifest['target'])
+        fingerprint = manifest['configFingerprint']
+        binding = {'schema': 2, 'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime'],
+                   'toolchain': manifest['target']['toolchain'], 'configSha256': digest(canonical(fingerprint))}
+        if (manifest['runtime'] != manifest['target']['runtime'] or manifest['assemblyCacheRoot'] != CACHE_ROOT or
+                manifest['runtimeBinding'] != binding or set(fingerprint.get('sources', {})) != set(CONFIG_SOURCES) or
+                any(not isinstance(sha, str) or not SHA.fullmatch(sha) for sha in fingerprint['sources'].values())):
+            raise ValueError('Runtime/config/toolchain binding mismatch')
+        mode, base = manifest.get('assetDeliveryMode'), manifest.get('compiledAssetBaseUrl')
+        if mode not in ('same-origin-public', 'remote') or (mode == 'same-origin-public' and base is not None) or (mode == 'remote' and not isinstance(base, str)):
+            raise ValueError('Invalid asset delivery mode/base binding')
+        public_target = CACHE_ROOT + '/assets/' + manifest['assetsVersion']
+        if manifest['generatedPublicLink'] != {'path': 'apps/web/public', 'target': public_target, 'bytes': len(public_target.encode())}:
+            raise ValueError('Controlled public symlink binding mismatch')
+
+
+def asset_delivery(config, asset_sha, mode, schema):
+    base = validate_compiled_assets(config, asset_sha)
+    if schema == 2:
+        if mode == 'same-origin-public' and base is not None:
+            raise ValueError('same-origin-public requires absent compiled remote asset URL')
+        if mode not in ('same-origin-public', 'remote') or (mode == 'remote' and base is None):
+            raise ValueError('Explicit remote mode requires an exact compiled asset URL')
+    return base
+
+
 def validate_compiled_assets(config, asset_sha):
     """Bind compiled remote image paths to the exact resource manifest bytes."""
     images = config.get('images', {})
@@ -298,13 +414,36 @@ def finish_manifest(manifest):
     raise ValueError('Manifest raw accounting did not stabilize')
 
 
-def pack(source, store, project, assets, release_id, budget=None, sample_label=None, source_commit=None, assembly_cache_root=None):
+def pack(source, store, project, assets, release_id, budget=None, sample_label=None, source_commit=None, assembly_cache_root=None, *, target=None, schema=2, asset_delivery_mode='same-origin-public'):
     source, project, assets = map(root_path, (source, project, assets))
     store = ancestors_safe(store)
-    if assembly_cache_root is None:
-        raise ValueError('--assembly-cache-root is required for exact generated-link raw accounting')
-    assembly_cache_root = ancestors_safe(assembly_cache_root)
-    disjoint(source, store, project, assets, assembly_cache_root)
+    if type(schema) is not int or schema not in (1, 2):
+        raise ValueError('Unsupported release schema')
+    if schema == 2:
+        if target is None:
+            raise ValueError('Explicit --target JSON is required for schema 2')
+        validate_target_shape(target)
+        runtime = runtime_identity()
+        if runtime != target['runtime']:
+            raise ValueError('Build host Runtime fingerprint differs from target')
+        package_manager = parse(read_regular(project / 'package.json')).get('packageManager')
+        if package_manager != target['toolchain']['packageManager']:
+            raise ValueError('Project packageManager differs from target toolchain')
+        if assembly_cache_root is not None and str(assembly_cache_root) != target['assemblyCacheRoot']:
+            raise ValueError('Assembly cache root differs from target')
+        assembly_cache_root = target['assemblyCacheRoot']
+        disjoint(source, store, project, assets)
+        if os.name == 'posix':
+            disjoint(source, store, project, assets, ancestors_safe(assembly_cache_root))
+    else:
+        if target is not None:
+            raise ValueError('Legacy schema 1 does not accept a schema 2 target')
+        if assembly_cache_root is None:
+            raise ValueError('--assembly-cache-root is required for exact generated-link raw accounting')
+        assembly_cache_root = ancestors_safe(assembly_cache_root)
+        disjoint(source, store, project, assets, assembly_cache_root)
+        runtime = runtime_identity()
+    valid_runtime(runtime)
     for child in ('layers', 'releases'):
         ancestors_safe(store / child)
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,100}', release_id):
@@ -316,8 +455,6 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
         raise ValueError('Invalid code raw budget')
     if source_commit is not None and not re.fullmatch(r'[a-f0-9]{40}', source_commit):
         raise ValueError('Invalid source commit SHA')
-    runtime = runtime_identity()
-    valid_runtime(runtime)
     lock_sha = digest(read_regular(project / 'pnpm-lock.yaml'))
     candidates = [(dist, source / f'apps/web/{dist}/required-server-files.json') for dist in ('.next', '.next-build-qa')]
     candidates = [(dist, name) for dist, name in candidates if name.exists() or name.is_symlink()]
@@ -331,11 +468,13 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
     asset_sha = digest(asset_body)
     if assets.name != asset_sha:
         raise ValueError('Wrong asset version directory')
-    compiled_asset_base = validate_compiled_assets(config, asset_sha)
+    compiled_asset_base = asset_delivery(config, asset_sha, asset_delivery_mode, schema)
     asset_entries, asset_manifest = resource_entries(asset_body)
     manifest_entry = {'path': 'asset-manifest.json', 'type': 'file', 'mode': 0o644, 'bytes': len(asset_body), 'sha256': asset_sha}
     verify_tree(assets, asset_entries + [manifest_entry], label='asset input')
     entries, omitted = inspect_source(source, dist)
+    if schema == 2:
+        validate_native_files(source, entries, runtime)
     indexed_assets = {e['path']: e for e in asset_entries}
     grouped = {'code': [], 'runtime': []}
     for entry in entries:
@@ -357,8 +496,8 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
     if not grouped['runtime']:
         raise ValueError('Runtime layer is empty')
     marker = config.get('env', {}).get('ZIMAGE_BUILD_SHA')
-    public_target = str(assembly_cache_root / 'assets' / asset_sha)
-    manifest = {'schema': 1, 'releaseId': release_id, 'productionReady': False,
+    public_target = (assembly_cache_root + '/assets/' + asset_sha if schema == 2 else str(assembly_cache_root / 'assets' / asset_sha))
+    manifest = {'schema': schema, 'releaseId': release_id, 'productionReady': False,
                 'sampleLabel': sample_label or 'Local unactivated prototype', 'distDir': dist,
                 'budgetBytes': budget, 'budgetPassed': None,
                 'runtime': runtime, 'lockSha256': lock_sha, 'assetsVersion': asset_sha,
@@ -369,11 +508,17 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
                           'sourceCommit': source_commit, 'markerMatchesSourceCommit': bool(source_commit and marker == source_commit)},
                 'inputRoots': {'source': str(source), 'project': str(project), 'assets': str(assets)},
                 'retainedBuildMetadata': {'files': len(omitted), 'rawBytes': sum(e['bytes'] for e in omitted), 'location': 'Original staged input, unchanged; excluded from runtime delivery'}, 'layers': {}}
+    if schema == 2:
+        fingerprint = {'sources': {name: digest(read_regular(project / name)) for name in CONFIG_SOURCES},
+                       'dependencyResolution': dependency_resolution(config, (project, source))}
+        manifest.update(target=target, assetDeliveryMode=asset_delivery_mode, configFingerprint=fingerprint)
+        manifest['runtimeBinding'] = {'schema': 2, 'lockSha256': lock_sha, 'runtime': runtime,
+                                     'toolchain': {'packageManager': package_manager}, 'configSha256': digest(canonical(fingerprint))}
     directory(store / 'layers')
     for kind in KINDS:
         members = asset_entries if kind == 'assets' else grouped[kind]
-        binding = {'lockSha256': lock_sha, 'runtime': runtime} if kind == 'runtime' else {'distDir': dist, 'assetsVersion': asset_sha}
-        index_body = asset_body if kind == 'assets' else canonical({'schema': 1, 'kind': kind, 'binding': binding, 'entries': members})
+        binding = layer_binding(manifest, kind)
+        index_body = asset_body if kind == 'assets' else canonical({'schema': schema, 'kind': kind, 'binding': binding, 'entries': members})
         identity = digest(index_body)
         base = f'layers/{kind}-{identity}'
         archive_name, index_name = base + '.tgz', base + '.json'
@@ -516,8 +661,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
     if digest(body) != expected_digest:
         raise ValueError('Release manifest checksum mismatch')
     manifest = parse(body)
-    if manifest['schema'] != 1 or set(manifest['layers']) != set(KINDS) or manifest.get('productionReady') is not False:
-        raise ValueError('Unsupported non-production release manifest')
+    validate_manifest(manifest)
     if not allow_sample:
         raise ValueError('Local assembly requires --allow-sample')
     if str(cache) != manifest['assemblyCacheRoot']:
@@ -557,8 +701,8 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
             raw_assets = index_body
         else:
             index = parse(index_body)
-            binding = {'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime']} if kind == 'runtime' else {'distDir': manifest['distDir'], 'assetsVersion': manifest['assetsVersion']}
-            if index['schema'] != 1 or index['kind'] != kind or index['binding'] != binding:
+            binding = layer_binding(manifest, kind)
+            if index['schema'] != manifest['schema'] or index['kind'] != kind or index['binding'] != binding:
                 raise ValueError('Layer binding mismatch')
             entries = index['entries']
             validate_entries(entries)
@@ -609,17 +753,21 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
                 reused['copiedFiles'] += 1
         create_links(staging, links)
         verify_tree(staging, combined, label='assembled app')
+        if manifest['schema'] == 2:
+            validate_native_files(staging, combined, manifest['runtime'])
         for name in ('apps/web/server.js', f'apps/web/{manifest["distDir"]}/BUILD_ID', f'apps/web/{manifest["distDir"]}/required-server-files.json'):
             if not (staging / name).is_file() or (staging / name).is_symlink():
                 raise ValueError('Missing assembled required business file')
         restored_config = parse(read_regular(staging / f'apps/web/{manifest["distDir"]}/required-server-files.json'))['config']
         if restored_config.get('distDir', '').removeprefix('./') != manifest['distDir']:
             raise ValueError('Assembled config.distDir mismatch')
-        compiled_base = validate_compiled_assets(restored_config, manifest['assetsVersion'])
+        compiled_base = asset_delivery(restored_config, manifest['assetsVersion'], manifest.get('assetDeliveryMode'), manifest['schema'])
         # Older local manifests lack this metadata field; actual config is still
         # checked independently. New manifests must also agree with their record.
         if 'compiledAssetBaseUrl' in manifest and manifest['compiledAssetBaseUrl'] != compiled_base:
             raise ValueError('Assembled compiled asset base metadata mismatch')
+        if manifest['schema'] == 2 and dependency_resolution(restored_config, manifest['inputRoots'].values()) != manifest['configFingerprint']['dependencyResolution']:
+            raise ValueError('Assembled compiled dependency resolution mismatch')
         # This one external link is generated solely from the trusted, fully
         # verified asset cache binding. No archive may supply an external link.
         public = staging / public_entry['path']
@@ -656,7 +804,10 @@ def main():
     build.add_argument('--code-raw-budget', type=int, default=None)
     build.add_argument('--sample-label')
     build.add_argument('--source-commit')
-    build.add_argument('--assembly-cache-root', required=True, type=Path)
+    build.add_argument('--assembly-cache-root')
+    build.add_argument('--target', type=Path, help='Explicit JSON target runtime/toolchain/cache contract (required for schema 2)')
+    build.add_argument('--schema', type=int, choices=(1, 2), default=2, help='Schema 1 is an explicit legacy compatibility mode')
+    build.add_argument('--asset-delivery-mode', choices=('same-origin-public', 'remote'), default='same-origin-public')
     restore = commands.add_parser('assemble')
     restore.add_argument('manifest', type=Path)
     restore.add_argument('store', type=Path)
@@ -666,7 +817,9 @@ def main():
     restore.add_argument('--allow-sample', action='store_true')
     args = parser.parse_args()
     if args.command == 'pack':
-        result = pack(args.source, args.store, args.project, args.assets, args.release_id, args.code_raw_budget, args.sample_label, args.source_commit, args.assembly_cache_root)
+        target = parse(read_regular(args.target)) if args.target else None
+        result = pack(args.source, args.store, args.project, args.assets, args.release_id, args.code_raw_budget, args.sample_label, args.source_commit, args.assembly_cache_root,
+                      target=target, schema=args.schema, asset_delivery_mode=args.asset_delivery_mode)
     else:
         result = assemble(args.manifest, args.store, args.destination, args.cache, args.manifest_sha256, args.allow_sample)
     print(json.dumps(result, sort_keys=True))

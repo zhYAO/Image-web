@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "pnpm --filter @zimage/web build",
+    "release:pack": "node ops/aliyun/package-release.mjs",
+    "release:pack:full": "node ops/aliyun/package-release.mjs --format full",
     "lint": "eslint apps/web packages/domain --max-warnings=0",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",

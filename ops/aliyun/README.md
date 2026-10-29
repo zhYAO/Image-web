@@ -16,9 +16,9 @@
 
 使用锁定版本执行 `pnpm install --frozen-lockfile` 和 `pnpm build`。构建环境必须设置 `NEXT_PUBLIC_DATA_MODE=http`、`ZIMAGE_DEPLOYMENT_ENV=production`；所有 `NEXT_PUBLIC_*` 必须在构建前确定。小内存实例使用 `ZIMAGE_BUILD_CPUS=1 pnpm --filter @zimage/web exec next build --webpack`，并通过 systemd 构建单元限制内存、CPU 和交换空间，避免同时进行其他构建。V8 的堆上限不能限制 Turbopack 的全部原生内存。
 
-发布构建必须同时设置 `ZIMAGE_BUILD_SLIM=1`，并且只能用 `next build --webpack`：该开关通过 `NormalModuleReplacementPlugin` 和 `outputFileTracingExcludes` 生效，Turbopack 不会应用。它去掉 Next 静态追踪进来的开发入口（esbuild、`next-dev-server`、`setup-dev-bundler`、babel bundle 等约 37 MB），以及 SSR 从不执行的 Markdown 分支（Shiki、ELK、KaTeX、Octicons 等）。别名由 `apps/web/build/markdown-profile.mjs` 生成，该文件对 `@lobehub/ui` / `next` / `shiki` 有版本断言，升级依赖必须先更新 profile，否则构建直接失败。构建完成后执行 `node apps/web/scripts/measure-dist.mjs --assert-slim`，它会按 `package-release.mjs` 的同一输入集统计字节，并在发现开发入口残留时以退出码 1 阻断打包。
+Production uses `ZIMAGE_BUILD_SLIM=1` with `next build --webpack` and the reviewed Next tracing exclusions. The retired Lobe/Markdown profile is no longer the active release path. Run `node apps/web/scripts/measure-dist.mjs --assert-slim` after the build; its measured inclusion policy remains the packaging policy.
 
-将 `apps/web/.next/standalone/` 的内容复制到独立 release 目录，再将 `apps/web/public/` 和 `apps/web/.next/static/` 分别复制到 release 中的 `apps/web/public/` 和 `apps/web/.next/static/`。发布目录由 zimage 用户运行；不要复制构建时的 `.env.production`。检查产物不含服务端凭据后，再切换 current 并启动 `zimage.service`。
+Default packaging is the three-layer entry described below; use its shared staging and native/link preflight. Do not hand-copy or change ownership of a release to bypass these gates. Never include `.env*` or service credentials.
 
 `zimage.service` 和 `nginx.conf` 是部署模板；HTTPS 模板须在真实证书签发后才能启用。应用仅监听回环地址，Nginx 覆写可信代理头，关闭响应缓冲以支持流式聊天。
 
@@ -92,3 +92,15 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 ## 独立服装字体（2026-10-28）
 
 字体不再随源码或应用包发布；开发、测试和生产的准备步骤、成对环境变量、许可和完整资源核算见 [FONTS.md](./FONTS.md)。旧 standalone 含字体时必须重新构建，打包器会明确拒绝。旧四层协议仅保留历史兼容；当前外置字体使用三层资源协议。此改动未发布。全包及三层发布/回滚已共用切换前字体预检，专用非敏感配置与 systemd 模板准备见 FONTS.md；Linux 实际权限和服务验证仍待完成。
+
+The application packer validates every candidate symlink before creating any archive: links must be relative, resolve successfully, and remain inside the candidate even through link chains. It then loads Sharp from the candidate's apps/web in a clean child process with external CommonJS dependency resolution blocked, and verifies JPEG, WebP, and AVIF encode/decode round trips for the packaging host. Missing native packages or package aliases fail with a rebuild diagnostic; the packer does not copy native dependencies from another platform. Package on the deployment platform (CI uses Linux); this host check does not replace the server's native font and platform activation guards.
+
+## 2026-10-29 default layers and explicit fallback
+
+The current release contract is [THREE-LAYERS.md](THREE-LAYERS.md); the administrator runbook is [MANUAL-THREE-LAYER-RELEASE.md](MANUAL-THREE-LAYER-RELEASE.md). These replace earlier full-only/absolute-resource/prototype instructions on this page. Original operational and historical evidence above remains historical, including past native-copy workarounds; current packaging never repairs candidates with foreign native dependencies.
+
+`release:pack` now requires a measured exact Linux target, complete original resource directory and full release SHA. `release:pack:full` is the explicit legacy fallback. Default CI uses prepare-only, fixed-root bounded inventory and one missing-only production transport; maps/NFT diagnostics stay in separate private artifacts. CI requires `vars.ZIMAGE_RELEASE_TARGET_JSON`, compatible `vars.ZIMAGE_RELEASE_RUNNER` when needed, and externally provisioned `vars.ZIMAGE_RELEASE_FONT_SOURCE`. Default resources are same-origin; leave `NEXT_PUBLIC_STATIC_ASSET_BASE_URL` empty. The retired AntD/Lobe/Markdown build profile is not an active dependency.
+
+Full deployment and the legacy rollback CLI reject any layered manifest/digest marker on the selected retained SHA, including damaged or dangling metadata. Use the layered helper to validate and activate that retained release, or a new SHA for a full-format deployment; retained data is never overwritten. Shared packaging rejects generated `.map` symlinks before publishing archives; regular maps and NFT traces remain separate diagnostics, and `.map` route directories remain application code.
+
+Before future SSH inventory or activation, the workflow checks all six installed reviewed helper files and the explicitly enabled root target configuration. Missing/old helpers or a disabled/incompatible target stop with administrator instructions. No automatic full fallback or first installation occurs. Record the exact original current SHA before normal activation; health recovery selects the original retained format. No release/layer/cache GC is implemented. Linux/POSIX assembly, flock, runuser, systemd, ingress and external health checks remain unexecuted on this Windows implementation host.
