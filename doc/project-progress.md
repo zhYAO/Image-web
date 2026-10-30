@@ -1,5 +1,13 @@
 # ZImage 项目进度
 
+## 2026-10-30 本地构建上传与纯观察工具（本地复核通过，前端候选已上传，未发布，UTC）
+
+- 用户明确改用本地构建后上传阿里云。精确975应用源已在Mac以Node24.19/pnpm11.19完成Next生产编译（119.838秒exit0），BUILD_ID/业务标记/822源码哈希一致；标准75NFT的23881引用闭合，另minimal根缺项保留。Darwin Sharp原生探针通过仅属Mac证据。详见[本地交付与边界](./separation/local-build-upload-20261030.md)。
+- 新业务export/verify工具不改原Linux packager，不发Darwin node_modules，不重标旧runtime。最终b候选667文件/20,629,485原始字节，18单测及独立8项攻击样例通过；构建输出指纹和严格原始tar闭包已绑定。Linux安装/assembler/平台与真实组合验收仍待完成，不能把Mac业务候选称Linux可运行包。
+- Mac前端候选9,959,007字节已一次上传到47.100.222.24全新`/tmp/zimage-local-candidates-975-20261030-a`，远端338成员/逐文件hash与CRC通过，原current/previous/PID399199前后同。没有解压、正式pack、安装或启用。旧runtime的lock/config与975不同，现有Node目录未过root路径信任检查，未运行该版本探针或改权限，不能宣称Linuxruntime已匹配。
+- 纯observe/cancel/status工具已独立实现并关闭五项实证P1；本地工具59/backend144、独立安全59、原handoff23/ingress9/split9通过。工具只诊断与恢复同一旧准入，无stop/start/reload/DB/网络、无completion；异常需显式cancel，BUSY及300秒不保证故障恢复。应用仍绑定975，运维工具以本次提交和两源码rawhash单独标识，不重标应用。
+- 用户解锁后Terra正常inventory已恢复，但原生选图仍`noWindowsAvailable`、reference0，真正focus/引用连续性未验证；新夹具HTTP96通过不能替代UI。自有PID57462已正常退出并核端口关闭，旧B0保留。云CONNECT403出口未重试；无DB迁移、删除、收费调用、生产门禁安装/reload/封口/stop或切换。
+
 ## 2026-10-30 静态资源构建/封包契约修复（完整本地回归通过，正式新源待Linux重建，未发布，UTC）
 
 - 云端真实0b35 F1/B1构建成功；F1 subject-only发现17处七种原始commerce图片常量，运行时helper加前缀而build检查特许根路径，正式pack拒绝。已在四个受审模块的browser/SSR源码预转换中将allowlisted完整常量生成namespace URL，并收紧build检查；没有改dist或放松正式资源闭包。见[资源契约验证](./separation/asset-pack-validation-20261030.md)。
