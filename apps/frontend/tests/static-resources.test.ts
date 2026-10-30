@@ -30,6 +30,13 @@ describe('static payload resource closure', () => {
     const root = await fixture(); await writeFile(join(root, 'index.html'), '<script src="/frontend-assets/other/assets/main.js"></script>');
     await expect(checkStaticResources({ dist: root, namespace: 'test' })).rejects.toThrow('Unexpected frontend namespace');
   });
+  it('rejects an unversioned catalogue constant even when the image exists', async () => {
+    const root = await fixture();
+    await mkdir(join(root, 'commerce'));
+    await writeFile(join(root, 'commerce/example.webp'), 'image');
+    await writeFile(join(root, 'assets/lazy.js'), 'export const image = publicAssetUrl("/commerce/example.webp");');
+    await expect(checkStaticResources({ dist: root, namespace: 'test' })).rejects.toThrow('Unversioned static resource URL');
+  });
   it.each(['font.otf', 'chunk.js.map', 'server.node', '.env'])('rejects forbidden payload %s', async file => {
     const root = await fixture(); await writeFile(join(root, file), 'secret');
     await expect(checkStaticResources({ dist: root, namespace: 'test' })).rejects.toThrow();

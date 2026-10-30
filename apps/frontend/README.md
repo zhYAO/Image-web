@@ -52,8 +52,15 @@ node scripts/check-dist.mjs
 ```
 
 The coordinator's package build script includes all five steps.
-Browser/SSR full builds have not been run by this implementation task. No `.env`
-values are exposed. Optional public telemetry inputs are `ZIMAGE_SENTRY_DSN` and
+Public catalogue constants in the four reviewed landing/editor/example modules
+are resolved to `/frontend-assets/<namespace>/...` by the shared browser/SSR
+source transform. Only complete literals in the public asset allowlist are
+rewritten. The runtime URL helper remains for dynamic inputs and is idempotent;
+calling it around an unversioned constant alone does not satisfy artifact
+closure. Both build checking and formal packaging reject raw root resource URLs.
+Build/subject outcomes and remaining acceptance gates are recorded in
+`../../doc/project-progress.md`; build success does not establish production readiness.
+No `.env` values are exposed. Optional public telemetry inputs are `ZIMAGE_SENTRY_DSN` and
 `ZIMAGE_SENTRY_TRACES_SAMPLE_RATE` (default 0); absent DSN means no telemetry init.
 Sourcemaps remain disabled; public payload cannot contain private sourcemaps.
 

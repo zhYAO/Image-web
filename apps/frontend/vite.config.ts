@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import { frontendAliases } from './build/aliases';
 import { assertClientSource, isAllowedClientModule } from './build/client-boundary';
 import { adaptLegacyClientSource } from './build/adapt-legacy-client';
+import { namespacePublicAssetSource } from './build/public-asset-source';
 import { validateCandidateDescriptor, validateCandidateMetadata } from './scripts/candidate-metadata.mjs';
 import { readBuildSource, assertBuildSourceUnchanged, readSourceSnapshot } from './scripts/build-source-identity.mjs';
 
@@ -49,7 +50,7 @@ export default defineConfig(({ command, isSsrBuild }) => {
       transform(code, id) {
         // react-dom/server is build-only and Vite normally externalizes it.
         if (isSsrBuild && /[\\/]react-dom[\\/](?:server|cjs[\\/]react-dom-server)/.test(id)) return;
-        const adapted = adaptLegacyClientSource(code, id);
+        const adapted = namespacePublicAssetSource(adaptLegacyClientSource(code, id), id, namespace);
         assertClientSource(adapted, id);
         return adapted;
       },

@@ -1,5 +1,12 @@
 # ZImage 项目进度
 
+## 2026-10-30 静态资源构建/封包契约修复（完整本地回归通过，正式新源待Linux重建，未发布，UTC）
+
+- 云端真实0b35 F1/B1构建成功；F1 subject-only发现17处七种原始commerce图片常量，运行时helper加前缀而build检查特许根路径，正式pack拒绝。已在四个受审模块的browser/SSR源码预转换中将allowlisted完整常量生成namespace URL，并收紧build检查；没有改dist或放松正式资源闭包。见[资源契约验证](./separation/asset-pack-validation-20261030.md)。
+- 真构建还发现Emacs Lisp两个完整函数词项被sk-启发式误报；SECRETS原正则不变，仅两个严格完整标识符的窄例外，其他key/未知前后缀/同文件混入key和原始资源继续拒绝。语言字节与旧版本全同，无功能删减。新代码回归先red后绿，frontend176/domain195、Python前端工具52、预算5通过；typecheck/lint exit0（保留既有Next pages提示）。
+- 新完整五步build→真实subject-only exit0，raw commerce常量0；QA338文件含candidate/337payload，dirty:true且formalAuth=false，仅acceptanceRequired，不是正式verified组合。Web首轮字体配对/loopback失败、取消轮和后续两项Mac临时路径别名失败均保留；使用原字体/manifest、正常测试权限及canonical TMPDIR后，单轮144文件/1189全通过，连同frontend176/domain195同一workspace完整命令exit0。新SHA、clean提交后构建与清单由外部receipt绑定，0b35云包不重标。
+- B0真实只读快照已将问题缩到当前危险责任：text/apparel/upload pending和preview全状态均0；历史unknown3与needs_review2共60 minor保留。16选定函数13 exact+3仅CRLF、10表全权限可见已核。不再笼统索取每条历史GET/health/ZIP；当前仍缺封口时潜在mutation/pre-admission/断连链的可信边界，现有v1 gate未改、未签completion、未维护/stop/切生产。测试Turnstile为既有风险，未换键或制造安全配置。
+
 ## 2026-10-30 明确授权后恢复（候选语法通过，正式Linux待验，未发布，UTC）
 
 - 用户明确批准当前私有迁移分支提交/push，以及47.100.222.24 `/tmp`候选上传仅nginx-t；此前拒绝由新授权允许正常流程重试。临时删除旧数据的提议已撤回，原数据/草稿兼容/排空/回滚全部保留，无删除。详见[恢复检查点](./separation/approval-resume-20261030.md)。

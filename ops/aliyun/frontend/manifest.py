@@ -36,6 +36,26 @@ RESOURCE = re.compile(r'\.(?:js|mjs|css|webp|png|jpe?g|gif|svg|ico|woff2?|otf|tt
 SECRETS = re.compile(r'SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY|DATABASE_URL|AUTH_RATE_LIMIT_PEPPER|SENTRY_AUTH_TOKEN|(?:OPENAI|ANTHROPIC|GEMINI|DEEPSEEK|PROVIDER)_API_KEY|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|sb_secret_[A-Za-z0-9_-]{16,}|sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}|postgres(?:ql)?://[^\s"\x27]+|sourceMappingURL\s*=|__NEXT_DATA__|next/dist|require\(["\x27]sharp["\x27]\)')
 
 
+def forbidden_browser_marker(text):
+    # The bundled Emacs Lisp grammar contains this real function name. Exempt
+    # only its complete identifier, never a language/chunk or other key match.
+    symbols = ('ask-user-about-supersession-threat', 'userlock--ask-user-about-supersession-threat')
+    for match in SECRETS.finditer(text):
+        if match.group() == 'sk-user-about-supersession-threat':
+            end = match.end()
+            for symbol in symbols:
+                start = end - len(symbol)
+                if (start >= 0 and text[start:end] == symbol
+                        and (start == 0 or not re.fullmatch(r'[A-Za-z0-9_-]', text[start - 1]))
+                        and (end == len(text) or not re.fullmatch(r'[A-Za-z0-9_-]', text[end]))):
+                    break
+            else:
+                return True
+            continue
+        return True
+    return False
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -299,7 +319,7 @@ def closure(files, namespace, scan=None):
         if len(body) > MAX_TEXT: raise ValueError('Text payload exceeds scan budget')
         try: text = body.decode('utf-8')
         except UnicodeError as exc: raise ValueError('Invalid UTF-8 browser payload') from exc
-        if SECRETS.search(text): raise ValueError('Forbidden browser secret/server marker')
+        if forbidden_browser_marker(text): raise ValueError('Forbidden browser secret/server marker')
         references = []
         if suffix in {'.html', '.svg'}:
             parser = References()

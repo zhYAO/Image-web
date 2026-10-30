@@ -292,7 +292,7 @@ class ReleaseTests(unittest.TestCase):
         for name, data in [('config.env', 'x'), ('assets/a.js', 'SUPABASE_SERVICE_ROLE_KEY=x'),
                            ('assets/b.json', '{"DATABASE_URL":"postgres://x"}'), ('a.map', '{}'),
                            ('a.node', 'x'), ('fonts/a.otf', 'x'), ('server.js', 'x'),
-                           ('assets/c.js', 'const t="sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"')]:
+                           ('assets/c.js', 'const t="sb_secret_' + 'x' * 32 + '"')]:
             with self.subTest(name=name):
                 path = self.dist('secret-' + str(len(list(self.root.glob('input-*')))))
                 target = path / name
@@ -300,6 +300,45 @@ class ReleaseTests(unittest.TestCase):
                 target.write_text(data)
                 with self.assertRaises(ValueError):
                     self.m.pack(path, self.root / 'bad.tgz', self.options, self.public)
+
+    def test_subject_accepts_the_emacs_lisp_symbol_without_treating_its_suffix_as_a_key(self):
+        for symbol in ['ask-user-about-supersession-threat', 'userlock--ask-user-about-supersession-threat']:
+            with self.subTest(symbol=symbol):
+                dist = self.dist('symbol-' + str(len(list(self.root.glob('input-*')))), script='export const symbol=' + json.dumps(symbol) + ';')
+                try:
+                    files, _, subject = self.m.candidate_files(dist, self.public)
+                except ValueError as error:
+                    self.fail('Benign language identifier was rejected as a credential: ' + str(error))
+                self.assertIn('assets/main.js', files)
+                self.assertEqual(subject['schemaVersion'], 1)
+
+    def test_subject_does_not_exempt_unknown_prefixes_or_suffixes_of_language_identifiers(self):
+        for symbol in ['prefix-ask-user-about-supersession-threat', 'prefix-userlock--ask-user-about-supersession-threat', 'ask-user-about-supersession-threat-extra']:
+            with self.subTest(symbol=symbol):
+                dist = self.dist('unknown-symbol-' + str(len(list(self.root.glob('input-*')))), script='export const value=' + json.dumps(symbol) + ';')
+                with self.assertRaisesRegex(ValueError, 'secret/server'):
+                    self.m.candidate_files(dist, self.public)
+
+    def test_subject_still_rejects_api_key_tokens_at_value_boundaries(self):
+        for prefix in ['sk-', 'sk-proj-', 'sk-svcacct-']:
+            for context in ['{}', 'Bearer {}', 'token={}', 'key:{}', '({})', 'https://example.test/?token={}', 'a{}', 'prefix_{}', '9{}']:
+                with self.subTest(prefix=prefix, context=context):
+                    value = context.format(prefix + 'x' * 32)
+                    dist = self.dist('key-' + str(len(list(self.root.glob('input-*')))), script='export const value=' + json.dumps(value) + ';')
+                    with self.assertRaisesRegex(ValueError, 'secret/server'):
+                        self.m.candidate_files(dist, self.public)
+
+    def test_language_symbol_does_not_exempt_another_key_in_the_same_payload(self):
+        dist = self.dist(script='export const symbol="ask-user-about-supersession-threat";export const key="sk-proj-' + 'x' * 32 + '";')
+        with self.assertRaisesRegex(ValueError, 'secret/server'):
+            self.m.candidate_files(dist, self.public)
+
+    def test_language_symbol_does_not_exempt_an_unversioned_catalogue_resource(self):
+        dist = self.dist(script='export const symbol="ask-user-about-supersession-threat";export const image="/commerce/example.webp";')
+        (dist / 'commerce').mkdir()
+        (dist / 'commerce/example.webp').write_bytes(b'image')
+        with self.assertRaisesRegex(ValueError, 'Unversioned or foreign namespace'):
+            self.m.candidate_files(dist, self.public)
 
     def test_pack_rejects_links_case_collisions_and_hidden_files(self):
         for kind in ['symlink', 'hardlink', 'case', 'hidden']:

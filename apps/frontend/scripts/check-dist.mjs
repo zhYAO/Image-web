@@ -20,8 +20,7 @@ function resourcePath(value, owner, namespace) {
     if (!path.startsWith(prefix)) throw new Error('Unexpected frontend namespace');
     path = path.slice(prefix.length);
   } else if (path.startsWith('/')) {
-    if (!path.startsWith('/commerce/')) throw new Error('Unversioned static resource URL');
-    path = path.slice(1);
+    throw new Error('Unversioned static resource URL');
   } else if (path.startsWith('assets/')) {
     // Vite's preload table paths are relative to the output root.
   } else path = posix.join(posix.dirname(owner), path);
