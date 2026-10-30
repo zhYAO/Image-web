@@ -122,20 +122,31 @@ export const readCredits = async (c: CreditRpc, u: string) =>
   creditWalletSchema.parse(await creditCall(c, u, "wallet"));
 export const readLedger = async (c: CreditRpc, u: string, cursor?: string) =>
   creditLedgerSchema.parse(await creditCall(c, u, "ledger", { cursor }));
-export const readPrices = async (c: CreditRpc, u: string) => {
-  const { data, error } = await c.rpc("credit_dispatch", {
-    p_user_id: u,
-    p_action: "catalog",
-    p_input: {},
-  });
-  if (error || data === null) {
-    // Compatibility deployment may precede the additive wallet migration.
-    if (!creditsEnabled() && ["PGRST202", "42883"].includes(error?.code ?? ""))
-      return { ...TRIAL_CREDIT_CATALOG, enabled: false };
-    throw creditFailure(error);
+export const readPrices = async (
+  c: CreditRpc,
+  u: string,
+  { allowUnavailableFallback = true }: { allowUnavailableFallback?: boolean } = {},
+) => {
+  try {
+    const { data, error } = await c.rpc("credit_dispatch", {
+      p_user_id: u,
+      p_action: "catalog",
+      p_input: {},
+    });
+    if (error || data === null) {
+      // Compatibility deployment may precede the additive wallet migration.
+      if (allowUnavailableFallback && !creditsEnabled() && ["PGRST202", "42883"].includes(error?.code ?? ""))
+        return { ...TRIAL_CREDIT_CATALOG, enabled: false };
+      throw creditFailure(error);
+    }
+    const catalog = creditCatalogSchema.parse(data);
+    return { ...catalog, enabled: catalog.enabled && creditsEnabled() };
+  } catch (error) {
+    // A readiness probe requires an actual, valid RPC catalog, including when
+    // transport or schema failures prevent normal catalog validation.
+    if (!allowUnavailableFallback) throw creditFailure(null);
+    throw error;
   }
-  const catalog = creditCatalogSchema.parse(data);
-  return { ...catalog, enabled: catalog.enabled && creditsEnabled() };
 };
 export const readQuote = async (
   c: CreditRpc,

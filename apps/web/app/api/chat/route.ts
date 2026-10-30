@@ -1,3 +1,4 @@
+import { trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import { creditsEnabled } from "@/server/credits/credit-service";
 import { billedChat } from "@/server/credits/billed-text";
 import {
@@ -160,7 +161,7 @@ export async function POST(request: Request) {
           });
         }
 
-        void executeChatGraph(
+        void trackFinalizer(() => executeChatGraph(
           {
             ...input,
             correlationId,
@@ -180,7 +181,7 @@ export async function POST(request: Request) {
                 type: event.type,
               });
           },
-        )
+        ))
           .catch((error: unknown) => {
             // Keep the phase/correlation visible without logging user content,
             // provider responses, credentials or arbitrary exception messages.

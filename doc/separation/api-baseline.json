@@ -1,0 +1,820 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "48e35686e0e4d6b302a1940cb12f5ea1be84860e",
+  "evidence": "static-source-only-not-runtime-acceptance",
+  "counts": {
+    "routeFiles": 49,
+    "explicitMethods": 58
+  },
+  "scopeNotes": [
+    "Includes retired and local-mock-only routes; not all production operations.",
+    "Implicit Next HEAD/OPTIONS and proxy behavior require separate HTTP verification.",
+    "Schema identifiers and delegates are route-file evidence; transitive behavior needs contract review."
+  ],
+  "routes": [
+    {
+      "path": "/api/account",
+      "methods": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "source": "apps/web/app/api/account/route.ts",
+      "sourceSha256": "c00b78f20cfafaf4078272c5dea7e7dd87c4725bc4a68828ae0d0fb69728522f",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "PATCH": "verified-user-and-route-specific-ownership",
+        "DELETE": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "accountPatchSchema",
+        "credentialsSchema"
+      ],
+      "delegates": [
+        "authPost",
+        "readAccount",
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/login/route.ts",
+      "sourceSha256": "6d550a36f4cb6deb70709f9b7a1491c3469049d1179cba043e4e54b72ddb9c5a",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "credentialsSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/logout",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/logout/route.ts",
+      "sourceSha256": "37658aca842988432b7ee71b6e626feb17ad7ca98b03e5be2e8460f801a88562",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/password",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/password/route.ts",
+      "sourceSha256": "4349869af3e3d619ed649dc57d13cddfb21ea2506c063887369dca9125858034",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "authPost",
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/auth/recovery",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/recovery/route.ts",
+      "sourceSha256": "f0b4c456ad9f39ab2ce245537b3999e57309bf93c8522114a22b742c98e49e88",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "emailAuthSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/recovery/verify",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/recovery/verify/route.ts",
+      "sourceSha256": "4ffb646001cc0f1916902b0987ac2fb2db91f1b0eefc11da2682f4356fc16695",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "otpSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/register",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/register/route.ts",
+      "sourceSha256": "2c89adccee3cb07b0f3731a0b312053c1119d0e1bb910128e604570e17171bfb",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "registrationSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/resend",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/resend/route.ts",
+      "sourceSha256": "11c4fdf9cde3ef0fe1ac57ea9ed1ac5159639e0e8644e6586e6882368861351a",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "emailAuthSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/auth/session",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/auth/session/route.ts",
+      "sourceSha256": "bc421f02db8db422ea1bdee8d356e33a0dd257cdcc5daab6da92e68a81debc70",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/auth/verify",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/auth/verify/route.ts",
+      "sourceSha256": "73fc8a8da1df5e96263fc94e1e2c42f5a286889cfada82cf6bf52ae4a6281c89",
+      "policyByMethod": {
+        "POST": "auth-flow-specific-checks"
+      },
+      "routeFileSchemaIdentifiers": [
+        "otpSchema"
+      ],
+      "delegates": [
+        "authPost"
+      ]
+    },
+    {
+      "path": "/api/chat",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/chat/route.ts",
+      "sourceSha256": "25d68df36cce9849a4189d803b23391609747f1b9083d04365f95d5020ee3dcb",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "chatEventSchema",
+        "chatRequestSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/commerce/import-url",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/commerce/import-url/route.ts",
+      "sourceSha256": "62151088c961bc2026d1216d161b555dccf70674a4efa9d270d6decb228aed89",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-batches/[id]/download",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-batches/[id]/download/route.ts",
+      "sourceSha256": "06ac26905c34f9b1b58564144249e660450d947150132762df7f80455e05f60f",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-batches/[id]/progress",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/creative-batches/[id]/progress/route.ts",
+      "sourceSha256": "2576e98b31728ef4be21add086b45c84aea14e6fe9a29b2baca48fcaa1743d97",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-batches/[id]",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-batches/[id]/route.ts",
+      "sourceSha256": "539a2bb9e4d5aed7d794f5587fcfea1c6773503afc12845bb520631886659b54",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "POST": "retired-410"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-batches",
+      "methods": [
+        "POST",
+        "GET"
+      ],
+      "source": "apps/web/app/api/creative-batches/route.ts",
+      "sourceSha256": "76ae1ff239406e03cf5e572a9ea505cd70aa5e40d1df831989e19c5aa46196f8",
+      "policyByMethod": {
+        "POST": "retired-410",
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/archive",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/archive/route.ts",
+      "sourceSha256": "4c7d8aaa03aa6e88f85039b5556ebe55616bbbc08d8c963e8830ba1e8c4ab6bd",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/assets/[assetId]",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/assets/[assetId]/route.ts",
+      "sourceSha256": "83e45f4cd098e723589e38e8955243e2b3b310b33f4ddd1e041f3dc433416095",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/cancel",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/cancel/route.ts",
+      "sourceSha256": "a7bc84e37a91b1cbf8a750fd8baf824ff42eba34f07f6f703a4b872b0a30ce9d",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/download",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/download/route.ts",
+      "sourceSha256": "015025ea26a281a72bee3bdb8331e8b4e79eeafded9392e0b637beca06b7df82",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "apparelExportResultSchema",
+        "apparelExportSchema",
+        "commerceExportSchema",
+        "requestSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/export",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/export/route.ts",
+      "sourceSha256": "1dbc14d81e36ef4b0d9b4d7ab3a7b4e9296937b843e0ddbc7d049107c215a121",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/promote",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/promote/route.ts",
+      "sourceSha256": "c7ec21e6301873b83d34f3b38f369bf813d6734dab51ad165589b2371cb32119",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "commercePromoteResultSchema",
+        "commercePromoteSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/route.ts",
+      "sourceSha256": "51ae4c7f9cfcd67807765fc7318909fd9b568fa7d2fda25b944ae0403a61c6aa",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "PATCH": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/select",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/select/route.ts",
+      "sourceSha256": "a313cc62270605951cb35fe38d2faa9ffb8b3932f944a3422a87b47e5c01ae55",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/[id]/submit",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/[id]/submit/route.ts",
+      "sourceSha256": "189ee38feca5bd5dfcbcb95f4f718b008942314d1c61fcf458faa9b6455f33b5",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/mock-apparel-render/download",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/mock-apparel-render/download/route.ts",
+      "sourceSha256": "2f4ca139e41ce86007a97b01c5551cbc265e7175de4c962cf3df8674c1c9c085",
+      "policyByMethod": {
+        "POST": "local-mock-only"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "assertLocalApparelMock"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks/mock-apparel-render",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/mock-apparel-render/route.ts",
+      "sourceSha256": "8d0da8fc9ac7135a2e9cfe5aa8c46f52beafd434bc5f7467886391f081060cf9",
+      "policyByMethod": {
+        "POST": "local-mock-only"
+      },
+      "routeFileSchemaIdentifiers": [
+        "apparelPlanSchema"
+      ],
+      "delegates": [
+        "assertLocalApparelMock"
+      ]
+    },
+    {
+      "path": "/api/creative-tasks",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-tasks/route.ts",
+      "sourceSha256": "bf924d153182693e11075a3a389abb2d5a2af03b15952553fde16498863d20a9",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "commerceRoute"
+      ]
+    },
+    {
+      "path": "/api/creative-templates",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/creative-templates/route.ts",
+      "sourceSha256": "b39bcc0c9ef7b66298f2b6c82acce94542a88d650e2ad2842d61f23b682cf6ee",
+      "policyByMethod": {
+        "GET": "route-level-public-dto"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": []
+    },
+    {
+      "path": "/api/creative-text/optimize",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/creative-text/optimize/route.ts",
+      "sourceSha256": "d980214308fa1b2418062f3c3cb603427f2a6ecaed1ed03c9870a40c6f2ea4ec",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "creativeTextOptimizeRequestSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/credits/ledger",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/credits/ledger/route.ts",
+      "sourceSha256": "7c1aacede9b49b8b9406f2892f3d41efb7d2d23b41c7bc7a3592d4f9bc60b5c8",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "creditRoute"
+      ]
+    },
+    {
+      "path": "/api/credits/pricing",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/credits/pricing/route.ts",
+      "sourceSha256": "2661b232012bade541ea05820b8e6694fea21e196424a05696c6871adc092178",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "creditRoute"
+      ]
+    },
+    {
+      "path": "/api/credits/quote",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/credits/quote/route.ts",
+      "sourceSha256": "7faf390f4788c157464d5d254bb161f6b35db3698271f46d90dc07f1513d8bfa",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "creditRoute"
+      ]
+    },
+    {
+      "path": "/api/credits",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/credits/route.ts",
+      "sourceSha256": "59fa2460d083aed13d223f97270b8e789d16c90974e295c806fc5013db9c8f1a",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "creditRoute"
+      ]
+    },
+    {
+      "path": "/api/generations/[id]/asset-url",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/generations/[id]/asset-url/route.ts",
+      "sourceSha256": "b06c8039bf5680a02b40f9b9826500eb3c3b11b57ff80ad1f452822519d49851",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "generationAssetUrlResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/health/providers",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/health/providers/route.ts",
+      "sourceSha256": "8008ff38d2ade0e0cf382f073102988694665d77dd907b605212c651c1b43fda",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "providerStatusResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/health/ready",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/health/ready/route.ts",
+      "sourceSha256": "8b4253fd7a39056b4f426d708960f45edf9338cd30c91cc5e6a7cfa9b23ee232",
+      "policyByMethod": {
+        "GET": "route-level-public-dto"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": []
+    },
+    {
+      "path": "/api/image/[id]",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/image/[id]/route.ts",
+      "sourceSha256": "3b19072701fe3e8f34126c63d8ed5cda12c88dddf02104da812397e69cf4d245",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "generationBatchResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/image/recreate",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/image/recreate/route.ts",
+      "sourceSha256": "f32daab9c9b70dd263567480dd360b1942c36839383eaec105fb26c79eab42f3",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "recreateImageRequestSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/image",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/image/route.ts",
+      "sourceSha256": "5f783ae4d5b24feb85d9dbb0d5e3688f27e2a525a100e7f86654ce5e8d83b257",
+      "policyByMethod": {
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "imageRequestSchema",
+        "imageSubmissionResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/internal/creative-batch-worker",
+      "methods": [
+        "POST"
+      ],
+      "source": "apps/web/app/api/internal/creative-batch-worker/route.ts",
+      "sourceSha256": "5e02289a2c033ec70102c9c4d442f767b1d02fecda3fec6f0e5f3f56f537223c",
+      "policyByMethod": {
+        "POST": "retired-410"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": []
+    },
+    {
+      "path": "/api/openapi.json",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/openapi.json/route.ts",
+      "sourceSha256": "ec861ece7ac68476bb6b67d4e82979f27dec9582449882099f1f3d9fbadba8dd",
+      "policyByMethod": {
+        "GET": "route-level-public-dto"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": []
+    },
+    {
+      "path": "/api/quotas",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/quotas/route.ts",
+      "sourceSha256": "f49d4af150ce3628dfdf931256a6768679503f4ded6a277a1a79b4f0cc733db5",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "quotaSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/references/[id]/asset-url",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/references/[id]/asset-url/route.ts",
+      "sourceSha256": "9e53d57ffe1e09d6eb3761d78387c55fa5a6bf69e628fd001b27189d29365a6e",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/sessions/[id]",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "source": "apps/web/app/api/sessions/[id]/route.ts",
+      "sourceSha256": "55f748ced93a45ee77016fb238a53b2f5236ac4f9976351b57e7ac951a3d8fa4",
+      "policyByMethod": {
+        "PATCH": "verified-user-and-route-specific-ownership",
+        "DELETE": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "deleteSessionResponseSchema",
+        "renameSessionRequestSchema",
+        "sessionResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/sessions/[id]/timeline",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/sessions/[id]/timeline/route.ts",
+      "sourceSha256": "d651f42f4751f13d019a8c3235fb4e3e68977f2326844ccea02f0996a15362b7",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "querySchema",
+        "timelineResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/sessions",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "apps/web/app/api/sessions/route.ts",
+      "sourceSha256": "58c2efa931e8e26b986fa2f52123ebc17f199c538a617a71da140b7e7b8b84ee",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "createSessionRequestSchema",
+        "listSessionsResponseSchema",
+        "sessionResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    },
+    {
+      "path": "/api/skills",
+      "methods": [
+        "GET"
+      ],
+      "source": "apps/web/app/api/skills/route.ts",
+      "sourceSha256": "4c813c2c351752c118b67bf872c1265859090e0ee118bac4e6c8f18e85730e7b",
+      "policyByMethod": {
+        "GET": "route-level-public-dto"
+      },
+      "routeFileSchemaIdentifiers": [
+        "skillsResponseSchema"
+      ],
+      "delegates": []
+    },
+    {
+      "path": "/api/uploads",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source": "apps/web/app/api/uploads/route.ts",
+      "sourceSha256": "66ad3c251ab5adc663ccd1ecd948d8ea1ce416d5ca05d97e07bf9793cdab0c66",
+      "policyByMethod": {
+        "GET": "verified-user-and-route-specific-ownership",
+        "POST": "verified-user-and-route-specific-ownership"
+      },
+      "routeFileSchemaIdentifiers": [
+        "referenceUploadResponseSchema"
+      ],
+      "delegates": [
+        "requireVerifiedUserId"
+      ]
+    }
+  ]
+}

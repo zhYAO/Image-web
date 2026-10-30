@@ -1,6 +1,5 @@
-import { retainCreditRequest, completeCreditRequest, rejectCreditRequest } from "./pending-credit-request";
 import { getWorkspaceGateway } from "./index";
-import { notifyCreditsChanged } from "./mock-credit-ledger";
+import { HttpWorkspaceGateway } from "./http-workspace-gateway";
 import {
   creativeTextFieldLimits,
   creativeTextOptimizeRequestSchema,
@@ -34,23 +33,9 @@ export async function requestCreativeTextOptimization(
     return creativeTextOptimizeResponseSchema.parse({ text, mock: true });
   }
   if (mode !== "http") throw new Error("Unsupported data mode");
-  const pending=retainCreditRequest("/api/creative-text/optimize",JSON.stringify(input));
-  const response = await fetch("/api/creative-text/optimize", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: pending?.body??JSON.stringify(input),
-    signal,
-  });
-  notifyCreditsChanged();
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    rejectCreditRequest(pending,error);
-    throw Object.assign(new Error(error?.message ?? "优化失败，请稍后重试。"),{userMessage:true,newRequest:["provider_error","price_changed","insufficient_credits","quota_exceeded","bad_request"].includes(error?.code)});
-  }
-  const result = creativeTextOptimizeResponseSchema.parse(
-    await response.json(),
-  );
-  if (result.text.length > Math.min(input.maxLength ?? 6000, creativeTextFieldLimits[input.field])) throw new Error('optimized_text_too_long');
-  completeCreditRequest(pending);
-  return result;
+  const gateway = getWorkspaceGateway();
+  if (!(gateway instanceof HttpWorkspaceGateway)) throw new Error('HTTP workspace is unavailable');
+  const scope = gateway.createOwnerScope(() => !signal?.aborted);
+  try { return await scope.gateway.optimizeText(input, signal); }
+  finally { scope.dispose(); }
 }

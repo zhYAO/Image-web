@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "baselineSourceSha": "48e35686e0e4d6b302a1940cb12f5ea1be84860e",
+  "evidence": "source-diff-review-and-targeted-tests-not-real-service-acceptance",
+  "routes": [
+    {
+      "path": "/api/chat",
+      "source": "apps/web/app/api/chat/route.ts",
+      "beforeSha256": "25d68df36cce9849a4189d803b23391609747f1b9083d04365f95d5020ee3dcb",
+      "afterSha256": "c4abb14059f091ad9c475616dddd1d0b8494e5cd129ac856fa7631d2ce3c4ef3",
+      "reason": "Track the existing detached chat graph through pending finalizers; preserve POST/SSE payloads and request identity."
+    },
+    {
+      "path": "/api/uploads",
+      "source": "apps/web/app/api/uploads/route.ts",
+      "beforeSha256": "66ad3c251ab5adc663ccd1ecd948d8ea1ce416d5ca05d97e07bf9793cdab0c66",
+      "afterSha256": "488b9ace5a963671cc067cda87ab40ea6ef935f60bd6de1add35606566631b5b",
+      "reason": "Bound upload ingestion before parsing and retain route-owned identity/cookie checks, GET/POST DTOs and durable reference intents."
+    }
+  ]
+}

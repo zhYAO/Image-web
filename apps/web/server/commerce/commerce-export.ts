@@ -1,3 +1,4 @@
+import { beginWork, trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import sharp from 'sharp';
 import { ApiRouteError } from '@/server/api-error';
 import { renderCommerceSafePng } from './commerce-safe-export';
@@ -97,11 +98,15 @@ export function zipCommerceStream(files: AsyncIterable<{ name: string; bytes: Ui
     yield end;
   }
   const iterator = chunks();
+  const endExport = beginWork('activeExports');
+  const closeIterator = () => trackFinalizer(async () => {
+    try { await iterator.return(undefined); } finally { endExport(); }
+  });
   return new ReadableStream({
     async pull(controller) {
-      try { const result = await iterator.next(); if (result.done) controller.close(); else controller.enqueue(result.value); }
-      catch (cause) { controller.error(cause); }
+      try { const result = await iterator.next(); if (result.done) { controller.close(); endExport(); } else controller.enqueue(result.value); }
+      catch (cause) { try { await closeIterator(); } finally { controller.error(cause); } }
     },
-    async cancel() { await iterator.return(undefined); },
+    async cancel() { await closeIterator(); },
   });
 }

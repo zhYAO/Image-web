@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "48e35686e0e4d6b302a1940cb12f5ea1be84860e",
+  "status": "frozen-migration-policy-not-installed-ingress",
+  "validSceneIds": [
+    "product-main",
+    "product-set",
+    "detail",
+    "clone",
+    "social",
+    "style-reference",
+    "model",
+    "xhs-poster",
+    "apparel-catalog"
+  ],
+  "routes": [
+    {
+      "pattern": "/",
+      "kind": "public-prerender",
+      "alias": "/home",
+      "queryRules": {
+        "scene": "valid scene redirects to canonical /create/:scene; invalid/batch remains 404",
+        "platform": "existing domain values",
+        "template": "existing query preserved"
+      }
+    },
+    {
+      "pattern": "/workspace",
+      "kind": "protected-client-shell",
+      "queryRules": {
+        "scene": "existing legacy scene mapping"
+      }
+    },
+    {
+      "pattern": "/sessions/:sessionId",
+      "kind": "protected-client-shell",
+      "queryParameters": [
+        "task",
+        "batch",
+        "view"
+      ],
+      "stateAuthority": "authenticated API; private IDs never enumerated at build"
+    },
+    {
+      "pattern": "/create",
+      "kind": "public-catalogue-with-authorized-workspace"
+    },
+    {
+      "pattern": "/create/:scene",
+      "kind": "existing-validated-scene",
+      "sceneIds": [
+        "product-main",
+        "product-set",
+        "detail",
+        "clone",
+        "social",
+        "style-reference",
+        "model",
+        "xhs-poster",
+        "apparel-catalog"
+      ]
+    },
+    {
+      "pattern": "/assets",
+      "kind": "guest-placeholder-or-authorized-assets",
+      "note": "business page, not a static assets directory"
+    },
+    {
+      "pattern": "/account",
+      "kind": "protected-account",
+      "currentGuestBehavior": "server redirect /home",
+      "targetGuestBehavior": "static shell without private data; authenticated API then safe client redirect"
+    },
+    {
+      "pattern": "/login",
+      "kind": "public-auth",
+      "aliasOf": "/auth"
+    },
+    {
+      "pattern": "/auth",
+      "kind": "public-auth"
+    },
+    {
+      "pattern": "/auth/verify",
+      "kind": "otp-view-no-automatic-consumption"
+    },
+    {
+      "pattern": "/auth/reset",
+      "kind": "recovery-view-no-automatic-consumption"
+    },
+    {
+      "pattern": "/terms",
+      "kind": "public-prerender-preserve-current-legal-approval-state"
+    },
+    {
+      "pattern": "/privacy",
+      "kind": "public-prerender-preserve-current-legal-approval-state"
+    },
+    {
+      "pattern": "/chat",
+      "kind": "redirect",
+      "target": "/workspace"
+    },
+    {
+      "pattern": "/image",
+      "kind": "redirect",
+      "target": "/workspace"
+    },
+    {
+      "pattern": "/skills",
+      "kind": "redirect",
+      "target": "/create"
+    },
+    {
+      "pattern": "/skills/:id",
+      "kind": "redirect",
+      "target": "/create"
+    },
+    {
+      "pattern": "/create/batch",
+      "kind": "retired",
+      "statusCode": 404,
+      "cacheControl": "no-store",
+      "robots": "noindex"
+    }
+  ],
+  "fallbackRules": [
+    "/api and /api/** never return SPA index.",
+    "Missing JS/CSS/media or unknown routes return actual 404.",
+    "Preserve existing query/hash/history behavior; do not hard reload drafts or unresolved paid requests.",
+    "Public static payload never includes private account/session/asset data.",
+    "Maintain old Next build resources and actual RSC protocol during the verified compatibility window."
+  ]
+}

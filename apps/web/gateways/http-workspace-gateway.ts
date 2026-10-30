@@ -1,5 +1,9 @@
 import { retainCreditRequest, completeCreditRequest, rejectCreditRequest } from "./pending-credit-request";
 import {
+  creativeTextFieldLimits,
+  creativeTextOptimizeRequestSchema,
+  creativeTextOptimizeResponseSchema,
+  type CreativeTextOptimizeRequest,
   creditQuoteSchema,
   type CreditItem,
   creditCatalogSchema,
@@ -47,6 +51,7 @@ export function resetAuthRequiredNotification() {
 
 interface HttpWorkspaceGatewayOptions {
   fetcher?: Fetcher;
+  assertActive?: () => void;
 }
 
 const errorCodes: Record<string, ErrorCode> = {
@@ -104,12 +109,42 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   private readonly signedAssetUrls = new Map<string, ReturnType<typeof generationAssetUrlResponseSchema.parse>>();
   private readonly pendingSignedAssetUrls = new Map<string, Promise<ReturnType<typeof generationAssetUrlResponseSchema.parse>>>();
   private assetEpoch = 0;
+  private readonly ownerScopes = new Set<AbortController>();
+  private readonly assertActive: () => void;
 
   constructor(options: HttpWorkspaceGatewayOptions = {}) {
-    this.fetcher = options.fetcher ?? fetch.bind(globalThis);
+    this.fetcher = options.fetcher ?? ((input, init) => globalThis.fetch(input, init));
+    this.assertActive = options.assertActive ?? (() => undefined);
     this.commerce = new HttpCommerceGateway((path, schema, init) =>
-      this.json(path, schema, init), this.fetcher,
+      this.json(path, schema, init), this.fetcher, this.assertActive,
     );
+  }
+
+  /** Fixed owner/mount context. Never retarget an old operation to new cookies.
+   * Cancellation does not infer a billing outcome or create a replacement request.
+   */
+  createOwnerScope(isCurrent: () => boolean) {
+    const controller = new AbortController();
+    const assertActive = () => {
+      this.assertActive();
+      if (!isCurrent() || controller.signal.aborted) throw new DOMException('Workspace owner changed', 'AbortError');
+    };
+    const gateway = new HttpWorkspaceGateway({
+      assertActive,
+      fetcher: async (input, init) => {
+        assertActive();
+        this.ownerScopes.add(controller);
+        const response = await this.fetcher(input, { ...init,
+          signal: init?.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal });
+        assertActive();
+        return response;
+      },
+    });
+    return { gateway, isCurrent: () => !controller.signal.aborted && isCurrent(), dispose: () => {
+      controller.abort();
+      this.ownerScopes.delete(controller);
+      gateway.clearAssetCaches();
+    } };
   }
 
   async listSessions() {
@@ -167,6 +202,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     request: ChatRequest,
     signal?: AbortSignal,
   ): AsyncIterable<ChatEvent> {
+    this.assertActive();
     const rawBody = JSON.stringify({
         billing: request.billing,
         requestId: request.requestId,
@@ -185,7 +221,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
       });
     const pending=retainCreditRequest("/api/chat",rawBody);
     const response = await this.fetcher("/api/chat", {body:pending?.body??rawBody,headers:{"content-type":"application/json"},method:"POST",signal});
-    if (!response.ok || !response.body) {const body=await this.readBody(response);rejectCreditRequest(pending,body);if(pending)notifyCreditsChanged();throw workspaceError(body,response.status);}
+    if (!response.ok || !response.body) {const body=await this.readBody(response);this.assertActive();rejectCreditRequest(pending,body);if(pending)notifyCreditsChanged();throw workspaceError(body,response.status);}
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -194,6 +230,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     try {
       while (true) {
         const { done, value } = await reader.read();
+        this.assertActive();
         buffer += decoder.decode(value, { stream: !done });
         // Normalize complete CRLF pairs, including pairs split across chunks.
         buffer = buffer.replaceAll("\r\n", "\n");
@@ -221,6 +258,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
         if (done) break;
       }
     } catch (error) {
+      this.assertActive();
       if (signal?.aborted) throw error;
     } finally {
       await reader.cancel().catch(() => undefined);
@@ -355,6 +393,35 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     }
   }
 
+  async optimizeText(value: CreativeTextOptimizeRequest, signal?: AbortSignal) {
+    this.assertActive();
+    signal?.throwIfAborted();
+    const input = creativeTextOptimizeRequestSchema.parse({ ...value, context: value.context?.slice(0, 2000) });
+    const pending = retainCreditRequest('/api/creative-text/optimize', JSON.stringify(input));
+    const response = await this.fetcher('/api/creative-text/optimize', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: pending?.body ?? JSON.stringify(input), signal,
+    });
+    this.assertActive();
+    signal?.throwIfAborted();
+    notifyCreditsChanged();
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      this.assertActive();
+      signal?.throwIfAborted();
+      rejectCreditRequest(pending, error);
+      throw Object.assign(new Error(error?.message ?? '优化失败，请稍后重试。'), {
+        userMessage: true, newRequest: ['provider_error', 'price_changed', 'insufficient_credits', 'quota_exceeded', 'bad_request'].includes(error?.code),
+      });
+    }
+    const body = await response.json();
+    this.assertActive();
+    signal?.throwIfAborted();
+    const result = creativeTextOptimizeResponseSchema.parse(body);
+    if (result.text.length > Math.min(input.maxLength ?? 6000, creativeTextFieldLimits[input.field])) throw new Error('optimized_text_too_long');
+    completeCreditRequest(pending);
+    return result;
+  }
+
   async getCreditQuote(items: CreditItem[]) {
     return this.json("/api/credits/quote", creditQuoteSchema, {
       method: "POST",
@@ -391,6 +458,8 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
   }
 
   clearAssetCaches() {
+    for (const controller of this.ownerScopes) controller.abort();
+    this.ownerScopes.clear();
     this.assetEpoch++;
     this.signedAssetUrls.clear();
     this.pendingSignedAssetUrls.clear();
@@ -439,6 +508,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
     schema: ZodType<T>,
     init: RequestInit = {},
   ): Promise<T> {
+    this.assertActive();
     const headers = new Headers(init.headers);
     headers.set("accept", "application/json");
     if (typeof init.body === 'string') headers.set('content-type', 'application/json');
@@ -451,6 +521,7 @@ export class HttpWorkspaceGateway implements WorkspaceGateway {
       method: init.method ?? "GET",
     });
     const body = await this.readBody(response);
+    this.assertActive();
     if (!response.ok) {rejectCreditRequest(pending,body);if(pending)notifyCreditsChanged();throw workspaceError(body, response.status);}
     const parsed=schema.parse(body);completeCreditRequest(pending);return parsed;
   }

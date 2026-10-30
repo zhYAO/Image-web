@@ -1,5 +1,104 @@
 # ZImage 项目进度
 
+## 2026-10-30 明确授权后恢复（候选语法通过，正式Linux待验，未发布，UTC）
+
+- 用户明确批准当前私有迁移分支提交/push，以及47.100.222.24 `/tmp`候选上传仅nginx-t；此前拒绝由新授权允许正常流程重试。临时删除旧数据的提议已撤回，原数据/草稿兼容/排空/回滚全部保留，无删除。详见[恢复检查点](./separation/approval-resume-20261030.md)。
+- 已实际完成获批的一次Nginx上传/检查：目标1.18下maintenance/legacy/split三份独立配置均exit0，保留TLS/MIME内部加载，前后web/nginx PID/启动时间/重启数和current/previous同；没有安装、启用、reload/restart或入口切换。上传前修复重复open_file_cache和未引号量词两个源问题，回归先red2后18/18通过。仍未代表生产全局路由/TLS握手/真实业务验收。
+- 提交仅精确变更源码、测试、文档及必要配置，原scanner与凭据路径排除不弱化，不含QA/log/build产物；不main合并、force、PR或CI。提交后精确SHA/remote-ref/全源manifest由外部receipt绑定；源码发布不是生产发布，旧dirty包不重标正式输入。
+- fresh本地86项HTTP通过，切前Flight0/切后原B0 Flight3/document0，文本保留；原生输入noWindowsAvailable使引用/focus继续BLOCKED，authGET0，不绕过。自有PID29564已exit0、PID不存在/端口拒绝；生产B0仍保留。正式Linux、原B0历史completion、资源、真实功能与安全切换门槛仍未过。
+
+## 2026-10-29 资源受限架构收尾（报告完成，等待既有输入，未发布，UTC）
+
+- 已完成[最小安全切换短报告](./separation/minimal-safe-cutover-20261029.md)：旧草稿在浏览器，不天然要求永久运行完整旧服务；原B0 PID是否能停止却取决于其历史已准入工作是否闭合。轻量层不接管Promise/native任务，也不能先从预算删掉原进程。若原完成记录不存在，当前无已证明的不丢业务首停路径。
+- 公开静态/预渲染子集并非原理不可能，但真实B0账号SSR、Cookie/重定向、动态参数和具体session Flight不能用公共抓包代替；原server/app/rsc/segments库存尚未知，不能断言不存在。多构建旧renderer也不能假定零额外内存；不为赶期新增该架构、不伪造B0身份。79来源/5原Flight/435静态哈希离线核验exit0；最初对比8输入绑定保留，账本后续新增的预期漂移单独记录，不重标旧快照。
+- 推荐现在保持B0；取得旧页保存退出与原进程全部收尾证据后，优先单实例顺序维护。低峰只降影响；既有匹配资源/有上限临时容量只解容量，不补退休证据。价格/实际规格/是否需停机/计费及恢复条件均未核价，不购买、不扩容，无生产动作。
+- Mac解锁、私有分支提交/push及Nginx/tmp检查已由父会话统一询问，仍未答复；本轮未重试或绕过。完整交接保存`minimal-cutover-analysis/HANDOFF.md`（ignored QA目录），旧源码包保持原状、无正式Linux输入。报告独立复核后停止本轮，后续依赖上述输入及原操作证据，不宣称上线完成。
+
+## 2026-10-29 切换兼容与共存资源补验（本地收尾，完整验收未通过，未发布，UTC）
+
+- 继续实际补验，22份已复审运行时代码hash未变。新装置拒绝全部切前成功Flight；切F1后旧标签实际发出3条精确B0 Flight并200，零document/凭据/mutation，Terra确认home/Back后未发送文本完整。此轮关闭此前“仅切前缓存”的证据缺口，仍不代表完整业务/生产兼容。
+- 干净nonce localhost origin与Host/marker归因排除旧127标签来源不明凭据布尔；不输出或转发值。新有限HTTP78、离线边界98、所有权16、日志对抗12通过，独立复核无P1。真实公共B0 optimizer单变体200/33768字节原样捕获，回放与拒绝4项通过；源文件/旧失败保留。
+- 新F1原dist/命名空间、新开取消B0原文档与未刷新旧tab草稿已实证。已有session独立新页经真实B0 Flight后，切F1→旧home→Back回同UUID/标题/草稿；该轮home用切前缓存，明确独立于主轮新网络证据。503/401仅初加载控制，503恢复后真实重试200。Mac锁屏使引用选择、真实focus/visibility认证重检BLOCKED，不能将初加载GET当focus或在途状态迁移通过。详见[切换补验](./separation/cutover-compatibility-validation-20261029.md)。
+- Terra本轮浏览器操作已完成；两个自有QA listener均按PID/token停止、exec退出0且独立确认PID不存在/端口拒绝，生产B0未停止。651相关应用输入与此前1636项基线全同，22复审源码全同；root最终HEAD48e、当前分支/index空、diff-check0。保留全部失败/锁屏/缺变体对照与最终证据，不把本地收尾当完整迁移完成。
+- 生产仅只读资源观测：RAM总1608.910MiB，可用598.184–602.949MiB，B0当前cgroup387.844MiB；两个850MiB预算1700已超物理RAM，正式B1 Linux/native峰值及新增磁盘峰值UNKNOWN，当前共存不放行。未启动B1/新增资源/扩容，B0退出仍须旧页与旧进程分别闭合，无固定安全天数。具体授权/替代/费用边界见[资源方案](./separation/coexist-resource-plan-20261029.md)。
+- Git私有目标仅核实为https://github.com/zhYAO/Image-web.git（zhYAO/Image-web）；提交/push与Nginx配置上传/nginx-t两项拒绝均保持暂停、未重试。旧dirty源码包和manifest校验和保持，未上传或重标Linux正式输入；生产current/服务/入口未切换，无DB/Worker或收费请求。下方均为历史检查点。
+
+## 2026-10-29 首窗与全请求排空修复（本地代码复审通过，生产未发布，UTC）
+
+- 接续上一节实证问题继续实现，未停在记录阻塞。Node HTTP同步准入+业务/HTTP/framework计数覆盖零快照后GET，以及锁定Next16.4.1的stale优化、缓存写入、磁盘init/eviction。缺hook/版本/hash/bridge失败关闭；维护错误保持原network/UUID/retryable合同。
+- 独立first-window协调器解决真正无静态current/B0meta的首窗，恢复走真实B0身份与安全只读检查/单独钱包审计；不伪造历史收尾。复审发现的取消时前端漂移开门、未知PID收养、审批hash竞争与crash阶段遗漏均修复，最终独立复核无剩余Critical/P1。backend85、CLI34、Node24边界18、新入口8+split8通过；证据见[修复验收](./separation/repair-validation-20261029.md)。
+- 实际新Mac Node24 standalone构建61.132秒成功，11项HTTP/优化器/检查准入通过，17次观察记录HTTP峰1/framework峰5，归零后停止自有进程并独立确认端口关闭。QA显式注入不等于Linux root文件/socket或真实业务验收；自建编译输出清理，失败拷贝轮保留。
+- 新完整Web首轮1188/1失败为localhost fixture的sandbox EPERM，定向获准环境1/1后完整重跑单轮144文件/1189全通过；frontend167/domain195/Worker80/预算5，合计1636，lint510零诊断/三tsc通过。原失败、汇总排序元数据失败和宽输入/相关输入投影差异保留，不合并两轮冒充单轮成功。
+- 旧B0草稿的可行候选为固定B0Flight/资源/optimizer与身份连续，不能补新JS影响已加载页面。Terra新对照同版预取缓存下草稿返回仍在、无document；切换后新Flight/全部业务未验。临时B0+B1限额共存取舍已明确提出待答复，未默开生产第二进程；旧B0历史收尾/退休仍有硬门槛。
+- Linux guarded build/source/return适配器原样纳入仓库并23项守卫通过，具体父/云动作见[源码传递](./separation/linux-source-transfer.md)。最终真实commit/全索引/指纹/包SHA以提交后外部receipt为准；未上传本地包不称云可用，旧48e产物不重标。
+- 新源码冻结动作（stage/commit并push到GitHub zhYAO/Image-web的当前codex分支）被自动审批在CreateProcess前拒绝，理由是具体外部目标/源码发布授权不明确；整条命令未执行，HEAD仍48e、无暂存，改动完整保留。已问明确批准，未重试/换通道；只读已核实该remote是当前账号的private仓库且具push/admin权限，这不代替授权答复。正式Linux clean提交输入因此尚未形成。
+- Nginx候选上传47.100.222.24:/tmp和nginx-t仍为既有自动审批拒绝、未执行、待明确配置出站授权；本轮未重试或绕路。生产未改、无DB/Worker迁移或收费请求。下方旧检查点保留为历史，本节/修复报告优先。
+
+## 2026-10-29 分离迁移接棒复验（完整测试通过，迁移验收未通过，未发布，UTC）
+
+- 保留 `codex/frontend-backend-separation-20261029` 的全部未提交成果，HEAD 仍 `48e35686e0e4d6b302a1940cb12f5ea1be84860e`；未 reset/stash、最终 commit/push、合并 main 或运行 Actions。下方 Wave 2 本地检查点作为历史保留，本节及[接棒验收报告](./separation/resume-validation-20261029.md)是最新结论。
+- 旧 `authenticated_health.py` 已移除可能初始化 wallet/welcome grant 的 `/api/credits`，只探测 account/sessions，成功输出移除账号 ID 和积分声明。两项准确失败对照之后 4/4 通过；未使用真实 Cookie 执行旧探针，不能用它代替 v2 verifier/账务审计。
+- 最新完整测试 **Web143文件/1184、frontend167、domain195、Worker80、预算5，共1631项通过**；lint509文件0诊断，web/frontend/domain tsc全部exit0。651测试输入文件十快照一致；预算汇总器最初漏认Node24 spec字符导致的exit1与修正后的独立原始日志核验分别保留。证据 `resume-quality-20261029/verified-result.json`。
+- 额外工具：backend48、frontend47、release CLI19通过；Node release/packaging合计22通过/1固定Node条件跳过。旧运维Python212项在Mac**未全绿**，规范tmp/localhost权限后仍50 fail/39 error，包含Linux/glibc/renameat2/GNU工具与Mac系统代理/连接行为；失败保留，不冒称Linux运维验收。
+- 真实B0435静态文件/7原HTML逐字匹配，B1368静态与B0仅2同URL同字节、0冲突，localhost协议20/20。全部API仍是明确合成夹具，B1/F1仍Mac/dirty QA，不是正式产物。**Terra已复现旧B0未发送草稿经B1 Flight整页导航后丢失，组合兼容不通过。**
+- 独立复审新增两项P1：①backend首次需要静态frontend/current，而frontend首次需要B0没有的meta，legacy恢复也缺分支；②维护只关写，新GET可在零快照后进入，`/_next/image`未被API计数覆盖。离线已复现stop时仍有activeStreams；需独立首窗/恢复状态机和覆盖所有新应用请求的持久准入封口。未用伪meta/零计数/重复采样或30秒stop绕过。详见 `resume-safety-review-20261029/REVIEW.md`。
+- 本轮只读生产复核仍为current `9c5c3ea9…`、previous `8cbb7086…`、MainPID399199 active/running，TimeoutStop30秒/SendSIGKILL=yes；没有安装helper、上传配置、reload/restart、切换或回滚。真实B0最终收尾、fresh clean Linux候选/受控传递、真实认证/Storage/SSE/队列/账务、Windows和生产观察仍缺。
+- **Nginx候选上传到47.100.222.24:/tmp并nginx-t仍为自动审批拒绝、未执行，待明确配置出站授权；本轮未重试或绕路。** 新P1及旧草稿失败未关闭前不最终冻结或上线，不将本次接棒验证当迁移完成。
+
+## 2026-10-29 分离迁移 Wave 2 本地检查点（未上线，UTC）
+
+- 当前分支仍为 `codex/frontend-backend-separation-20261029`，HEAD `48e35686e0e4d6b302a1940cb12f5ea1be84860e`；全部迁移改动未提交且保留，未 reset/stash、未 push/main 合并或触发 Actions。此节是最新状态，早期交接中的待安装/待构建描述保留为历史，不代表当前结果。
+- **本地实现与代码验收通过，完整迁移/生产仍未完成。** 已补齐七项前端直接依赖和五步构建；原891包的版本、integrity、既有依赖图和原importer均不变。独立临时安装仅314包，没有Next/Supabase/Sharp/LangChain后端包，TypeScript和浏览器/SSR/素材/预渲染/资源闭包全部通过。主QA静态payload为336文件、17,406,204字节；独立无Git QA为336文件、17,406,540字节，均为dirty候选，不是正式Linux制品或已验证发布组合。
+- Auth/API保留多批及同名不同scope的完整Set-Cookie、SDK响应头和旧Next页面Cookie行为；private/no-store、live RPC、401/503、Origin及owner核验已接通。已修复账号切换后的迟到草稿/POST/文案待核账/私有下载旁路，保留原requestId、未知账务恢复和单一workspace/store。S4原编译配置来源P1已独立复核清除。
+- 上传采用实际body字节预算10MiB+256KiB、接收阶段30秒、每进程2个已准入处理名额至Storage收尾。Astra用锁定Next源码实证Proxy会整块截断，故精确排除`/api/uploads[/]`的预缓冲，路由名额内保留claims刷新和live RPC；不提高全局clone cap。单File违规保持原400，完整multipart越界413；挂起SDK仍持名额/计数，不能声称其也30秒返回或总RSS固定为2倍bodycap。
+- **最终质量：Web142文件/1153项、frontend20文件/167项、domain195项、Worker80项、预算5项通过；完整lint及web/frontend类型通过。** 首轮Web1135通过/6失败保留：5个旧formData模拟夹具改真实multipart，1个原始byte-freeze改为只允许chat/uploads两个有精确hash的批准修订，原API基线JSON未改。前端来源专项45项通过；发布工具frontend47、backend43、CLI18、入口fixture8项通过，独立安全复审发现的本轮P1均已修复并复验。
+- 最终Mac Node24.19.0 Next16.4.1 webpack standalone构建94.637秒成功；**39项真实编译HTTP+15次同PID只读计数观测通过**，包括4条Cookie、刷新单次、合法10MiB包络、无长度越界413、两名额占满及第三503、释放归零。均用本地合成Supabase服务，不是实Supabase/OTP/Storage/付费生成验收；自有API/fixture/浏览器服务器均已停止。来源指纹与历史失败分开保存。
+- Terra在实际隔离dist上完成Edge桌面/窄屏访客、目录、认证表单不提交、未批准法律禁注册、回跳、history/query/hash及故障/不兼容场景检查；API为显式HTTP夹具。未把它称为真实认证、旧B0标签、Windows或Nginx验收。
+- 发布/回退不再是空壳：已实现manifest/index/来源/工具链绑定、真实验收证据门禁、缺失blob传输、root私有stage封存、公开映射前批准、共享锁、原子前端指针、CAS/崩溃恢复和精确回退。后端有持久维护、完整收尾计数、超时取消、原native/font门禁、普通私有Unix socket的PID/UID核验、固定receipt摘要接收和常驻只读verifier；统一CLI采用既有受信root SSH身份，不增加账号/密钥/sudo。首个静态发布仅准入formalAuth=true/http，legacy源码/DB未删除或放宽。
+- **生产未改。** 只读实测current为`9c5c3ea95e0c66193b23a2db50643530aa7d095a`、previous为`8cbb708645e93d3d71d17641b860cc60301fa005`，服务active，567MiB可用、13GiB磁盘余量（只读观测时点，不是持续监控）。可信Node24.19/ABI137/API10/glibc2.35匹配；没有在生产构建、安装helper、reload/restart或执行切换/回滚。
+- **阻塞/剩余门槛：** 已保存隔离Linux构建入口尚未可调用，故没有本次精确提交的Linux产物/稳定build:backend取回；首次无drain的B0仍须安全排空方案及真实证据；真正B0旧标签RSC/chunk/图片/草稿与split→legacy整组恢复、Windows、实Supabase/私有Storage/SSE/账务及生产回退未验。pair/build命令不以空壳代替；当前无新正式commit/生产artifactId。
+- **审批状态：** 上传候选Nginx配置到`47.100.222.24:/tmp`并运行`nginx -t`被自动审批拒绝，理由是配置出站传输缺少明确授权；该动作未执行，限定授权问题待回复，未改用其他通道重试。Linux入口问题也已提出；其余本地工作已继续完成。详见[Wave 2验收与交接](./separation/wave2-validation.md)。
+
+## 2026-10-29 分离迁移接管与继续实现（UTC）
+
+- 新执行会话接管 `codex/frontend-backend-separation-20261029`，基线仍为 `48e35686`，所有后续成果未提交且完整保留。旧协调与前端写入已结束；本会话独占共享 package/lock/配置及集成，分别划定 Auth 后端、静态发布、后端排空的互斥写入范围，另做只读安全复审。
+- 用户后续“今天把本次迁移完工并上线”“继续任务，直到完成”“重新开会话执行任务”已授权继续实现，并在功能、安全、回滚验收全部通过后发布 `www.zimage.store`；旧规划和早期进度中的生产暂停/不提交措辞不再表示永远禁止发布，但任何 gate 未通过仍保持旧健康版本。禁止合并 main、强推、触发 Actions、新增付费资源/凭据或真实 OTP/收费生图。
+- 接管时仅开始补齐前端七项直接依赖和 public copy/check 构建步骤；完成的后续结果见上方最新Wave 2检查点，完整迁移和生产切换仍须全部门槛通过。
+
+## 2026-10-29 静态前端包接入（共享依赖已就绪，真实模块迁移待续）
+
+- 已新增独立workspace包`@zimage/frontend`，固定Vite7.3.6、React19.2.7等现有版本；根`build:frontend`及lint接入，`pnpm-workspace.yaml`原有apps通配已覆盖，无需改写。前端构建仍要求显式namespace及有依据的兼容描述，不补造verified backend ID。
+- 官方npm源、忽略生命周期脚本的显式安装已完成。首次沙箱DNS失败后已停止，获准的限定网络安装成功；未改registry持久配置/生产。锁文件891份package版本/完整性与原版逐字相同，只新增frontend importer，既有snapshots仅规范化optional标记，依赖图未变。证据：`.design-qa/2026-10-29-separation/frontend-install-evidence.json`。
+- 新包实际命令TypeScript、首增量6文件81项专项通过；接入ESLint时移除了多余的全局图片规则覆盖，并覆盖前端mjs脚本。随后静态任务已开始新增auth模块，最新lint发现`auth-status.tsx`清理函数的ref依赖警告，由该文件所有者修复；不把并行中的源码称为全部lint通过。尚无完整Vite/预渲染产物、真实Auth/Account/Workspace迁移、业务或浏览器验收，不能替代旧Next上线。根package/lock/eslint及frontend/package.json继续由协调者独占。
+- 下一波边界已保存仓库外`/tmp/zimage-frontend-backend-plan-20261029/wave2-ownership.md`：静态任务可继续写frontend内其余模块；独立Auth/API任务可接管明确列出的旧web认证文件；原runtime六文件仅由S2修P1。S4旧集成源码已冻结至QA副本，后续新Auth改动另行验证，不冒用旧快照结果。
+
+## 2026-10-29 前后端分离 S4（本地验收通过，独立审查待确认）
+
+- **S4本地代码门槛已通过，独立审查待确认**：P1修复后真实standalone构建91.404秒成功，同一产物在无重复构建env、残留另一合法SHA/公开flags、运行期撤销法务版本三个场景的18项HTTP全部通过；身份RPC故障对照实际访问本地夹具并返回503，所有自有服务器已停止。完整Web1079、domain195、预算5、Worker80、阶段0/1完整lint及严格类型通过。范围与历史失败说明见[集成验证报告](./separation/stage01-validation.md)。不把Mac QA或该范围通过当作前端真实模块、Linux发布或生产回退已完成。
+- S2配置来源修复已冻结，协调者在隔离QA快照完成全量Web补跑：**132文件/1079项全通过，339.86秒**。快照指纹`2dc028dbadd96fbbb46ad9e9fa26adca6e9a79a5bb1591d2921c3f5d4c6b4988`，证据`.design-qa/2026-10-29-separation/test-web-stage01-final-result.json`；与首次1062/15历史失败分开保留。后续standalone/HTTP结论见本节首项。
+- S2/S3已停笔，协调者补完两个公开runtime路径的精确GET/HEAD/OPTIONS Proxy例外及29项回归；其他路径/方法保持原认证刷新。domain冻结接口未改；完整项目类型检查发现OpenAPI/兼容测试的严格索引错误，已修复且未放宽TypeScript配置。完整lint、domain/web TypeScript和domain **195/195**通过。
+- 首轮完整Web为 **1062通过/15失败，共1077项、132文件**，不计为通过。已定位13项由Node25原生不完整localStorage抢占jsdom引起，2项由Mac临时路径别名与realpath比较引起；仅用命令环境`NODE_OPTIONS=--no-experimental-webstorage`与规范`TMPDIR=/private/tmp`纠正，保持产品、字体及安全断言不变，相关4文件 **65/65**复验通过。完整Web须在修复后的冻结快照补跑一次。
+- 独立安全代码审查发现1项P1、无Critical：新接口动态env来源可能与实际Next编译身份/auth/CAPTCHA不同。原S2六文件的写入所有权交还该会话，修复前不得将meta/config作为真实兼容准入。协调者负责随后构建时给值、启动不重复给值及启动残留合法旧SHA/flags的真实HTTP验证，不能只给测试补env。
+- 必需字体从已有本地原件准备，原始字体及固定许可/来源hash均严格匹配；未联网下载或替换字体。独立预算/Worker结果见`.design-qa/2026-10-29-separation/stage01-independent-regressions.json`；完整阶段结果、历史失败与当前阻塞见`stage4-checkpoint.json`，未把测试夹具当真实业务通过。
+- 阶段2允许仅新增`apps/frontend/**`的静态UI/路由适配并行；协调者独占共享package/workspace/lock/tsconfig与旧web集成，禁止并行安装/全量构建。生产仍暂停，无commit/push或真实外部业务调用。
+
+## 2026-10-29 前后端分离 S1（纯契约已冻结，S2/S3并行中）
+
+- S1仅新增 `packages/domain/src/runtime-contracts.ts`、`packages/domain/tests/runtime-contracts.test.ts`，并在 `index.ts`增加导出；协调者已读取冻结源码及S1实际命令输出。严格公开配置/API meta、前端manifest/独立payload索引、兼容判定已定义，未改既有业务schema或处理器。固定字段与写入边界见 [执行基线](./separation-stage01.md#s1冻结合同与s4交接)。
+- S1新增测试先89项失败，首次实现剩1项own `__proto__`未拒绝，补严格对象边界后 **89/89**；domain完整 **13文件/195项**通过，domain TypeScript通过。S1三文件ESLint记录无规则错误、保留根目录React自动探测提示；完整web lint/类型/单元/预算/构建仍待S4，不据此宣称阶段1整体验收完成。已核查命令输出及冻结文件hash保留于 `.design-qa/2026-10-29-separation/task1-contract-evidence.json`，协调者未在S2/S3写入时重跑全量。
+- **依赖异常已隔离，未重装**：S1首次裸pnpm测试因pnpm11.19.0默认脚本前核验发现安装状态过期，自动转install，访问现registry时报ENOTFOUND，随后中止；锁文件/manifest未改。输出 `Packages: -288` 先作为可能裁剪报告，协调只读复核39个直接依赖manifest/版本及types/bin均匹配；891个锁定包中769个实际存在、122个在显式skipped列表，无未解释缺项，另288个旧版本仍存在。完整传递链接/native/加载能力未验，不把这份存在性检查当S4通过，也不把后续缺依赖错误算业务回归。
+- 依赖预检记录为 `.design-qa/2026-10-29-separation/dependency-manifest-preflight.json`、`dependency-lock-presence.json`。最初用require入口的探测会把纯types、CLI和仅ESM导出误报为missing，已用实际manifest/types/bin复核纠正，原记录保留。当前Node实读v25.9.0/darwin/x64，固定Linux发布工具链仍另验。
+- S2新增只读配置/meta与S3清单/OpenAPI依互斥边界并行；两者停笔后协调者统一处理依赖和S4完整验证，不并行安装或全量构建。生产继续暂停，无commit/push、真实模型消费或生产操作。
+
+## 2026-10-29 前后端分离 S0（本地基线冻结完成，S1待实施）
+
+- 用户确认保留Next API/Supabase/Worker、首页预渲染及后端受保护短维护后，最新“复核计划后，开干”已授权本地分阶段开发/测试；安全最终复核对Task0/1为GO，无Critical/Important阻止开始。规划原件的旧只读措辞由 [执行基线](./separation-stage01.md) 同步覆盖；没有扩大为生产、付费或commit/push授权，旧发布继续暂停。
+- 从已复核干净 `48e35686e0e4d6b302a1940cb12f5ea1be84860e` 创建本地分支 `codex/frontend-backend-separation-20261029`，未从旧main开始、未重置用户改动。首次普通Git元数据写被沙箱文件权限阻止，随后仅针对本地分支操作的权限审查通过并创建成功；不是生产操作。
+- 冻结 [API源码基线](./separation/api-baseline.json) 的49个route文件/58个显式方法及逐文件SHA256、[页面路由策略](./separation/route-policy.json) 的9个既有合法scene与别名/退役/query/hash边界。包含停用和本地mock入口，不代表58项生产能力；隐式HEAD/OPTIONS、逐方法运行期行为和完整OpenAPI仍由S1合同/后续HTTP验证承担。
+- 本地一致性检查通过：精确HEAD/分支、49份源码hash及导出方法、9个scene、既有应用/domain/DB/Worker/运维/依赖文件均未改；`git diff --check`通过。本阶段只改需求/选型/架构/进度和基线文档/JSON，没有为文档变更执行应用构建、真实账号/模型/Storage调用。验证记录位于 `.design-qa/2026-10-29-separation/task0-baseline-verification.json`。
+- `ps`进程清单被当前Mac沙箱拒绝，未取得活动构建/缓存所有权；未停止进程或删除 `.next`/历史QA目录。进入构建阶段前仍需使用允许的通道确认自有进程与输出目录，不将该限制当作清理授权。
+- 当前写入调度为S0→S1纯domain三文件→S2新只读接口∥S3清单/OpenAPI→S4协调集成/独立复核，边界见执行基线。未新增接口/框架、未安装、未改锁文件；真实排空/RSC/Linux构建取回/native/生产精确回退留后续门槛，不能以S0通过宣称分离完成。
+
 ## 2026-10-29 已批准的独立可信 Node（安装/兼容验证完成，未激活新应用）
 
 - 用户明确批准新增部署专用root Node、固定helper路径及ExecStart-only drop-in，不修改旧www安装、不新增账号/密钥或扩大SSH/sudo。官方HTTPS固定版本归档31,633,904字节，SHA256 `14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647`；仅提取node成员并核验SHA256 `bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12`。

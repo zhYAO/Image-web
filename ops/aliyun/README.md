@@ -79,7 +79,7 @@ GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_
 3. 核对 `cron.job_run_details`、`net._http_response`、应用日志和批次检查点，确认租约与固定请求 ID 生效。第二版网站再发布前端减流修改。发布前先核对图片报价；测试账号最多提交两张真实图片，关闭页面后验证后台推进、积分只结算一次。
 4. 发布 15 分钟和 24 小时检查批次请求、Storage 签名与 GET、Cron 和错误日志，按来源区分本地开发与网站流量。异常时先调用 `unschedule_creative_batch_worker()`，再使用现有 GitHub 发布回滚网站；保留兼容迁移与数据。历史待核对批次须依据供应商证据人工处理。
 
-登录后只读健康检查：在可信机器上将测试账号当前会话的完整 Cookie 放入 `ZIMAGE_AUTH_COOKIE` 环境变量，然后执行 `python3 ops/aliyun/authenticated_health.py`。它检查账号、会话列表和积分接口，不创建任务或消耗图片额度；脚本不会输出 Cookie。会话过期会返回失败，需用测试账号重新登录。不要将 Cookie 写入命令历史、工单或仓库。
+登录后账号/会话健康检查：在可信机器上将测试账号当前会话的完整 Cookie 放入 `ZIMAGE_AUTH_COOKIE` 环境变量，然后执行 `python3 ops/aliyun/authenticated_health.py`。它只检查账号和会话列表，不创建任务或消耗图片额度；不请求可能初始化钱包和 welcome grant 的 wallet/ledger GET，也不证明账务健康。成功输出不包含账号 ID 或 Cookie。会话过期会返回失败，需用测试账号重新登录。不要将 Cookie 写入命令历史、工单或仓库。
 
 证书续期演练：先检查 `/etc/letsencrypt/renewal/www.zimage.store.conf` 的 authenticator；若仍为 manual DNS，不应把 `certbot.timer` 视为自动续期成功。备案和公网 HTTP 验证可用后切换为 webroot，运行 `certbot renew --dry-run`，再核对 Nginx reload hook 和公网证书到期日期。`dry-run` 成功与配置记录应写入项目进度；演练前证书自动续期状态仍为待完成。
 

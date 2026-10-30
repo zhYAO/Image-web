@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { creativeBatchSchema, type CommerceGateway, type CommerceTask, type CreativeBatch } from '@zimage/domain';
 import { z } from 'zod';
+import { HttpCommerceGateway } from '@/gateways/http-commerce-gateway';
 import { sessionHref } from '@/features/workspace/workspace-route';
 import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 import styles from './commerce.module.css';
@@ -32,11 +33,15 @@ export function LegacyCreativeBatchHistory({ ownerKey, sessionId, batchId, gatew
     let timer: number | undefined;
     let cached: CreativeBatch | undefined;
     let terminal = false;
-    const alive = () => !stopped;
+    const alive = () => {
+      if (stopped) return false;
+      try { if (gateway instanceof HttpCommerceGateway) gateway.assertOwnerCurrent(); } catch { return false; }
+      return true;
+    };
     aliveRef.current = alive;
     setHistory({ scope });
     const refresh = async () => {
-      if (stopped || reading) return;
+      if (!alive() || reading) return;
       reading = true;
       try {
         let batch: CreativeBatch;
@@ -51,7 +56,7 @@ export function LegacyCreativeBatchHistory({ ownerKey, sessionId, batchId, gatew
           if (!response.ok) throw new Error('批量任务不存在或无权访问。');
           batch = creativeBatchSchema.parse(await response.json());
         }
-        if (stopped) return;
+        if (!alive()) return;
         if (batch.id !== batchId || batch.sessionId !== sessionId) throw new Error('批量任务不存在或无权访问。');
         cached = batch;
         let progress: Progress | undefined;
@@ -82,15 +87,15 @@ export function LegacyCreativeBatchHistory({ ownerKey, sessionId, batchId, gatew
           // read-only projection is authoritative for matching existing runs.
           terminal = !progress.items.some(item => item.processing > 0 || item.status === 'submitted' && item.succeeded + item.failed + item.review < item.total);
         }
-        if (!stopped) setHistory({ scope, batch, progress, tasks });
+        if (alive()) setHistory({ scope, batch, progress, tasks });
       } catch (cause) {
-        if (!stopped) setHistory(previous => ({ ...(previous.scope === scope ? previous : { scope }), error: cause instanceof Error ? cause.message : '无法读取历史批量任务。' }));
+        if (alive()) setHistory(previous => ({ ...(previous.scope === scope ? previous : { scope }), error: cause instanceof Error ? cause.message : '无法读取历史批量任务。' }));
       } finally { reading = false; }
     };
     refreshRef.current = refresh;
     const schedule = () => {
       const delay = cached ? nextPollingDelay(cached.createdAt, 'commerce') : 5000;
-      if (stopped || terminal || delay === null) return;
+      if (!alive() || terminal || delay === null) return;
       timer = window.setTimeout(async () => {
         if (document.visibilityState !== 'hidden') await refresh();
         schedule();
@@ -103,6 +108,7 @@ export function LegacyCreativeBatchHistory({ ownerKey, sessionId, batchId, gatew
   const download = async () => {
     if (!current?.batch) return;
     const alive = aliveRef.current;
+    if (!alive()) return;
     const saveBlob = (blob: Blob, filename: string) => {
       if (!alive()) return;
       const url = URL.createObjectURL(blob);

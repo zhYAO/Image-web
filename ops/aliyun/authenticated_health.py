@@ -1,7 +1,8 @@
-"""Read-only post-login smoke check using a short-lived test account cookie.
+"""Account/session post-login smoke check using an existing test account cookie.
 
 Set ZIMAGE_AUTH_COOKIE in the shell and run this from a trusted machine. The
-cookie is never logged or written to disk by this script.
+cookie is never logged or written to disk by this script. Wallet and ledger GETs
+are excluded because they can initialize wallets and welcome credits.
 """
 
 import json
@@ -24,7 +25,7 @@ def check(base: str, cookie: str) -> str:
         raise ValueError('Authenticated smoke checks require HTTPS')
     opener = urllib.request.build_opener(NoRedirect())
     account_id = ''
-    for path in ('/api/account', '/api/sessions', '/api/credits'):
+    for path in ('/api/account', '/api/sessions'):
         request = urllib.request.Request(
             urljoin(base.rstrip('/') + '/', path.lstrip('/')),
             headers={'Cookie': cookie, 'Accept': 'application/json'},
@@ -47,11 +48,11 @@ def check(base: str, cookie: str) -> str:
 
 if __name__ == '__main__':
     try:
-        user_id = check(
+        check(
             os.environ.get('ZIMAGE_HEALTH_BASE', 'https://www.zimage.store'),
             os.environ.get('ZIMAGE_AUTH_COOKIE', ''),
         )
-        print(f'Authenticated account, sessions, and credits healthy for {user_id}')
+        print('Authenticated account and sessions healthy')
     except (ValueError, RuntimeError, urllib.error.URLError) as error:
         print(f'Authenticated health check failed: {error}', file=sys.stderr)
         raise SystemExit(1)

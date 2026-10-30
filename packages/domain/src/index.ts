@@ -15,3 +15,4 @@ export * from "./commerce-batch";
 export * from "./credits";
 export * from "./apparel";
 export * from "./image-composition";
+export * from "./runtime-contracts";

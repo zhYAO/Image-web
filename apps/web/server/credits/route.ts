@@ -3,6 +3,7 @@ import { z } from "zod";
 import { creditItemSchema } from "@zimage/domain";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertMutationAdmission } from "@/server/lifecycle/request-lifecycle";
 import {
   assertTrustedOrigin,
   executeRoute,
@@ -30,6 +31,10 @@ export function creditRoute(
 ) {
   return executeRoute(async () => {
     if (request.method === "POST") assertTrustedOrigin(request);
+    // Wallet and ledger dispatch can create a wallet and its welcome grant.
+    if (action === "wallet" || action === "ledger") assertMutationAdmission();
+    const catalogProbe = action === "catalog"
+      && request.headers.get("x-zimage-readonly-probe") === "catalog-v1";
     const user = await requireVerifiedUserId(
       await createSupabaseServerClient(),
     );
@@ -45,12 +50,15 @@ export function creditRoute(
         : action === "ledger"
           ? await readLedger(admin, user, cursor)
           : action === "catalog"
-            ? await readPrices(admin, user)
+            ? await readPrices(admin, user, { allowUnavailableFallback: !catalogProbe })
             : await readQuote(
                 admin,
                 user,
                 quoteRequest.parse(await readJson(request)),
               );
-    return Response.json(result, { headers: { "cache-control": "no-store" } });
+    return Response.json(result, { headers: {
+      "cache-control": "no-store",
+      ...(catalogProbe ? { "x-zimage-readonly-probe": "catalog-v1" } : {}),
+    } });
   });
 }

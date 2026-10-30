@@ -20,6 +20,7 @@ export class HttpApparelGateway implements ApparelGateway {
       reference: UploadReference,
     ) => Promise<string>,
     private fetcher: typeof fetch = fetch,
+    readonly assertOwnerCurrent: () => void = () => undefined,
   ) {}
   private path(id?: string, operation?: string) {
     return `/api/creative-tasks${id ? `/${id}` : ""}${operation ? `/${operation}` : ""}?engine=apparel-catalog`;
@@ -64,6 +65,7 @@ export class HttpApparelGateway implements ApparelGateway {
     });
   }
   async download(id: string, input: Parameters<ApparelGateway["export"]>[1]) {
+    this.assertOwnerCurrent();
     const networkError = () => new WorkspaceError({
       code: "NETWORK",
       message: "下载失败，请稍后重试。",
@@ -78,12 +80,15 @@ export class HttpApparelGateway implements ApparelGateway {
         credentials: "same-origin",
       });
     } catch {
+      this.assertOwnerCurrent();
       throw networkError();
     }
+    this.assertOwnerCurrent();
     if (!response.ok) {
       const parsed = apiErrorSchema.safeParse(
         await response.json().catch(() => null),
       );
+      this.assertOwnerCurrent();
       throw new WorkspaceError({
         code:
           response.status === 410
@@ -100,8 +105,11 @@ export class HttpApparelGateway implements ApparelGateway {
       });
     }
     try {
-      return await response.blob();
+      const blob = await response.blob();
+      this.assertOwnerCurrent();
+      return blob;
     } catch {
+      this.assertOwnerCurrent();
       throw networkError();
     }
   }

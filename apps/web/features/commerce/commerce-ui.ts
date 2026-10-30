@@ -98,7 +98,12 @@ export async function exportCommerceImages(
       expired: item.expired,
     })),
   };
-  const result = await downloadImages(batch);
+  const result = await downloadImages(batch, () => {
+    if (gateway instanceof HttpCommerceGateway) {
+      try { gateway.assertOwnerCurrent(); } catch { return false; }
+    }
+    return true;
+  });
   const expired = snapshot.items.filter(
     (item) => item.expired || !item.url,
   ).length;
@@ -113,15 +118,10 @@ export async function downloadCommerceFile(gateway: CommerceGateway, task: Comme
     return selection ? [{ slotId: slot.id, generationId: selection.generationId }] : [];
   });
   if (!selections.length) throw new Error('当前没有已选图片。');
-  const response = await fetch(`/api/creative-tasks/${task.id}/download`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ requestId: crypto.randomUUID(), revision: task.revision, selections, mode, format, focus, ...(safeExport ? { safeExport } : {}) }),
+  const blob = await gateway.downloadFile(task.id, {
+    requestId: crypto.randomUUID(), revision: task.revision, selections, mode, format, focus, ...(safeExport ? { safeExport } : {}),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || '导出失败，请稍后重试。');
-  }
-  const blob = await response.blob();
+  gateway.assertOwnerCurrent();
   const url = URL.createObjectURL(blob);
   const name = safeExport ? 'commerce-safe-image.png' : mode === 'zip' ? 'commerce-images.zip' : mode === 'long' ? `commerce-long.${format}` : `commerce-image.${format}`;
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();

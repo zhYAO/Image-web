@@ -13,7 +13,8 @@ import {
   type ApparelGateway,
   type UploadReference,
 } from "@zimage/domain";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { HttpApparelGateway } from "@/gateways/http-apparel-gateway";
 
 import { Download, Upload, X } from "lucide-react";
 import { isLocalCommerceDraft } from "@/features/workspace/workspace-route";
@@ -83,6 +84,19 @@ export function ApparelWorkspace({
   onTask,
 }: Props) {
   const storageKey = `${ownerKey}:${sessionId}:${task?.id ?? "new"}`;
+  const ownerScope = useRef({ active: false, epoch: 0, storageKey, gateway });
+  useLayoutEffect(() => {
+    ownerScope.current = { active: true, epoch: ownerScope.current.epoch + 1, storageKey, gateway };
+    return () => { ownerScope.current.active = false; ownerScope.current.epoch++; };
+  }, [storageKey, gateway]);
+  const captureOwner = useCallback(() => {
+    const epoch = ownerScope.current.epoch;
+    return () => {
+      if (!ownerScope.current.active || ownerScope.current.epoch !== epoch || ownerScope.current.storageKey !== storageKey || ownerScope.current.gateway !== gateway) return false;
+      try { if (gateway instanceof HttpApparelGateway) gateway.assertOwnerCurrent(); } catch { return false; }
+      return true;
+    };
+  }, [storageKey, gateway]);
   const [draft, setDraft] = useState<ApparelDraft>(
     () =>
       loadApparelDraft(storageKey) ?? {
@@ -98,10 +112,11 @@ export function ApparelWorkspace({
     [error, setError] = useState<string>(),
     [previewRun, setPreviewRun] = useState<string>();
   useEffect(() => {
+    if (!captureOwner()()) return;
     try {
       saveApparelDraft(storageKey, draft);
     } catch {}
-  }, [storageKey, draft]);
+  }, [captureOwner, storageKey, draft]);
   const update = (patch: Partial<ApparelDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
   const roleOf = (ref: UploadReference) => {
@@ -211,20 +226,21 @@ export function ApparelWorkspace({
     field: keyof Omit<ApparelBrief, "measurements">,
     value: string,
   ) => update({ brief: { ...draft.brief, [field]: value } });
-  const act = async (work: () => Promise<void>) => {
-    if (busy) return;
+  const act = async (work: (isCurrent: () => boolean) => Promise<void>) => {
+    const isCurrent = captureOwner();
+    if (busy || !isCurrent()) return;
     setBusy(true);
     setError(undefined);
     try {
-      await work();
+      await work(isCurrent);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "操作失败，请重试。");
+      if (isCurrent()) setError(error instanceof Error ? error.message : "操作失败，请重试。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
   const save = () =>
-    act(async () => {
+    act(async (isCurrent) => {
       if (!gateway) throw new Error("服装排版服务尚未就绪。");
       let current = { ...draft };
       if (!current.pending) {
@@ -245,6 +261,7 @@ export function ApparelWorkspace({
         (isLocalCommerceDraft(sessionId)
           ? await ensureSession?.(current.brief.name, current.sessionRequest)
           : sessionId);
+      if (!isCurrent()) return;
       if (!remote) throw new Error("无法保存会话，请重试。");
       current = { ...current, remoteSession: remote };
       saveApparelDraft(storageKey, current);
@@ -253,6 +270,7 @@ export function ApparelWorkspace({
         const ids = new Map<UploadReference, string>();
         for (const ref of materials.filter((ref) => roleOf(ref) !== "unused")) {
           const id = await gateway.upload(remote, ref);
+          if (!isCurrent()) return;
           ids.set(ref, id);
           onReferenceUploaded(ref, id, sessionId);
         }
@@ -298,6 +316,7 @@ export function ApparelWorkspace({
               sessionId: remote,
               plan: pending.plan,
             });
+      if (!isCurrent()) return;
       current = {
         ...current,
         pending: undefined,
@@ -310,7 +329,7 @@ export function ApparelWorkspace({
       onTask(saved, sessionId);
     });
   const submit = () =>
-    act(async () => {
+    act(async (isCurrent) => {
       if (!gateway || !task) return;
       const last = task.runs
         .filter(
@@ -328,6 +347,7 @@ export function ApparelWorkspace({
       saveApparelDraft(storageKey, current);
       setDraft(current);
       const result = await gateway.submit(task.id, input);
+      if (!isCurrent()) return;
       onTask(result, sessionId);
       if (
         result.runs.some(
@@ -344,13 +364,14 @@ export function ApparelWorkspace({
     task?.runs.find((item) => item.id === (previewRun ?? task.selectedRunId)) ??
     task?.runs.at(-1);
   const download = () =>
-    act(async () => {
+    act(async (isCurrent) => {
       if (!gateway || !task || !run) return;
       const blob = await gateway.download(task.id, {
         requestId: crypto.randomUUID(),
         revision: task.revision,
         runId: run.id,
       });
+      if (!isCurrent()) return;
       const url = URL.createObjectURL(blob),
         a = document.createElement("a");
       a.href = url;

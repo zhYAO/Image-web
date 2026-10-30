@@ -8,6 +8,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // The upload route owns streaming ingestion and refreshes its own session.
+    // Matching it here would make Next buffer the body before its byte/time/
+    // concurrency budgets can run. Keep this exclusion exact, including slash.
+    '/((?!api/uploads/?$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

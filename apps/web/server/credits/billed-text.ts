@@ -1,3 +1,4 @@
+import { trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import {
   chatEventSchema,
   sessionSchema,
@@ -234,7 +235,7 @@ export async function billedChat(
           /* client disconnected */
         }
       };
-      void (async () => {
+      void trackFinalizer(async () => {
         if (started.created)
           emit({ type: "session.created", session: started.session });
         let content = "";
@@ -268,11 +269,11 @@ export async function billedChat(
           });
           const complete = await textStep(admin, user, requestId, "complete");
           emit(finalEvents(complete).at(-1)!);
-          void store.recordProviderResult(model, false).catch(() => undefined);
+          void trackFinalizer(() => store.recordProviderResult(model, false)).catch(() => undefined);
         } catch (error) {
           await failure(admin, user, requestId, error);
           if (!modelDone)
-            void store.recordProviderResult(model, true).catch(() => undefined);
+            void trackFinalizer(() => store.recordProviderResult(model, true)).catch(() => undefined);
           emit({
             type: "stream.failed",
             error: {
@@ -290,7 +291,7 @@ export async function billedChat(
             /* disconnected */
           }
         }
-      })();
+      });
     },
   });
   return new Response(stream, {
@@ -364,7 +365,7 @@ export async function billedOptimize(
     outputValidated = true;
     await textStep(admin, user, requestId, "result", { result });
     await textStep(admin, user, requestId, "complete");
-    void health.recordProviderResult(model, false).catch(() => undefined);
+    void trackFinalizer(() => health.recordProviderResult(model, false)).catch(() => undefined);
     return result;
   } catch (error) {
     const definite = await failure(
@@ -375,7 +376,7 @@ export async function billedOptimize(
       !outputValidated && upstreamDone,
     );
     if (!outputValidated)
-      void health.recordProviderResult(model, true).catch(() => undefined);
+      void trackFinalizer(() => health.recordProviderResult(model, true)).catch(() => undefined);
     throw !definite
       ? pendingCreditError()
       : new ApiRouteError({

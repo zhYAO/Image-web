@@ -1,3 +1,4 @@
+import { beginWork, trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import {
   apparelCreateSchema,
   apparelSaveSchema,
@@ -185,9 +186,11 @@ export function createApparelService(client: Client) {
       if (!claim.claimed) return hydrate(claim.task);
       if (!claim.runId || !claim.claimToken || !claim.plan || !taskId)
         throw failure("invalid_claim");
+      const endRender = beginWork('activeRenders');
       const fence = { runId: claim.runId, claimToken: claim.claimToken };
       let leaseError: unknown;
       let renewing = false;
+      let renewal: Promise<void> | undefined;
       const renew = async () => {
         if (leaseError) throw leaseError;
         await rpc(userId, "renew", taskId, fence, correlationId);
@@ -196,7 +199,7 @@ export function createApparelService(client: Client) {
       const timer = setInterval(() => {
         if (renewing) return;
         renewing = true;
-        renew()
+        renewal = trackFinalizer(renew)
           .catch((error) => {
             leaseError = error;
           })
@@ -317,8 +320,10 @@ export function createApparelService(client: Client) {
           message,
         });
       } finally {
-        sourceReader?.dispose();
         clearInterval(timer);
+        // clearInterval does not cancel an already running lease RPC.
+        // Keep the claim counted until that write and all Storage work settle.
+        try { await renewal; } finally { sourceReader?.dispose(); endRender(); }
       }
     },
   };

@@ -21,5 +21,9 @@ test-results
 # Isolated Next.js verification builds
 .next-*
 
+# Independent frontend build outputs
+apps/frontend/dist/
+apps/frontend/.prerender/
+
 # Python deployment checks
 __pycache__/

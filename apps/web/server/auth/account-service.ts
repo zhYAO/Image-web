@@ -14,9 +14,9 @@ export async function readAccount(client: SupabaseClient): Promise<Account> {
   const [{ data: userData, error: userError }, profileResult] = await Promise.all([
     client.auth.getUser(),
     (client as ProfileClient).from('account_profiles').select('display_name,status').eq('user_id', id).single(),
-  ]);
+  ]).catch(() => { throw unavailable(); });
   const profile = profileResult.data as { display_name: string | null; status: 'active' | 'deleting' } | null;
-  if (userError || !userData.user?.email || profileResult.error || !profile) throw unavailable();
+  if (userError || !userData.user?.email || userData.user.id !== id || profileResult.error || !profile) throw unavailable();
   return { id, email: userData.user.email, displayName: profile.display_name, status: profile.status };
 }
 

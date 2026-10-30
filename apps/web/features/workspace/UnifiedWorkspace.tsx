@@ -39,6 +39,7 @@ import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce
 
 import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
+import { HttpWorkspaceGateway } from '@/gateways/http-workspace-gateway';
 import { normalizeReferenceUploadFile } from '@/gateways/reference-upload-file';
 import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
 import { zhCN } from '@/i18n';
@@ -122,7 +123,32 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [routeError, setRouteError] = useState<string>();
   const [commerceDraftIds, setCommerceDraftIds] = useState<ReadonlySet<string>>(new Set());
   const onDraftSessionsChange = useCallback((ids: string[]) => setCommerceDraftIds(new Set(ids)), []);
-  const gateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
+  const baseGateway = useMemo(() => providedGateway ?? getWorkspaceGateway(), [providedGateway]);
+  // A response belongs to the owner and mount that started it, even if the
+  // global store has since been reset and another account has mounted.
+  const ownerScope = useRef({ active: false, epoch: 0, baseGateway, ownerKey });
+  const isOwnerActive = useCallback(() => ownerScope.current.active
+    && ownerScope.current.baseGateway === baseGateway && ownerScope.current.ownerKey === ownerKey, [baseGateway, ownerKey]);
+  const scopedGateway = useMemo(() => baseGateway instanceof HttpWorkspaceGateway
+    // The factory only stores this callback; it reads the ref at request time.
+    // eslint-disable-next-line react-hooks/refs
+    ? baseGateway.createOwnerScope(isOwnerActive) : undefined, [baseGateway, isOwnerActive]);
+  const isOwnerCurrent = useCallback(() => isOwnerActive() && (scopedGateway?.isCurrent() ?? true), [isOwnerActive, scopedGateway]);
+  const captureOwner = useCallback(() => {
+    const epoch = ownerScope.current.epoch;
+    return () => isOwnerCurrent() && ownerScope.current.epoch === epoch;
+  }, [isOwnerCurrent]);
+  const gateway = scopedGateway?.gateway ?? baseGateway;
+  useLayoutEffect(() => {
+    ownerScope.current = { active: true, epoch: ownerScope.current.epoch + 1, baseGateway, ownerKey };
+    return () => {
+      ownerScope.current.active = false;
+      ownerScope.current.epoch++;
+      // StrictMode replays setup synchronously. Results are already blocked by
+      // active/epoch; abort after that replay so the live mount keeps its scope.
+      queueMicrotask(() => { if (!isOwnerActive()) scopedGateway?.dispose(); });
+    };
+  }, [baseGateway, ownerKey, isOwnerActive, scopedGateway]);
   const {
     activateComposer,
     forgetComposer,
@@ -194,10 +220,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   const [quota, setQuota] = useState<Quota>();
   const quotaRequestVersion = useRef(0);
   const refreshQuota = useCallback(async () => {
+    const current = captureOwner();
+    if (!current()) return;
     const version = ++quotaRequestVersion.current;
-    const next = await gateway.getQuota();
-    if (version === quotaRequestVersion.current) setQuota(next);
-  }, [gateway]);
+    const next = await gateway.getQuota().catch(error => { if (current()) throw error; return undefined; });
+    if (current() && version === quotaRequestVersion.current) setQuota(next);
+  }, [captureOwner, gateway]);
   const [capabilities, setCapabilities] = useState<ProviderCapability[]>([]);
   const [health, setHealth] = useState<ProviderHealth[]>([]);
   const commerceCapabilities = useMemo(() => {
@@ -245,14 +273,18 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   }, []);
 
   const refreshSessions = useCallback(async () => {
+    const current = captureOwner();
+    if (!current()) return sessionsRef.current;
     const version = ++sessionListVersion.current;
-    const next = await gateway.listSessions();
-    if (version !== sessionListVersion.current) return sessionsRef.current;
+    const next = await gateway.listSessions().catch(error => { if (current()) throw error; return sessionsRef.current; });
+    if (!current() || version !== sessionListVersion.current) return sessionsRef.current;
     updateSessions(next);
     return next;
-  }, [gateway, updateSessions]);
+  }, [captureOwner, gateway, updateSessions]);
 
   const refreshTimeline = useCallback(async (sessionId: string, showLoading = false) => {
+    const current = captureOwner();
+    if (!current()) return;
     const version = (timelineRequestVersions.current.get(sessionId) ?? 0) + 1;
     timelineRequestVersions.current.set(sessionId, version);
     if (showLoading) {
@@ -260,10 +292,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }
     try {
       const timeline = await gateway.getTimeline(sessionId);
-      if (timelineRequestVersions.current.get(sessionId) !== version) return;
+      if (!current() || timelineRequestVersions.current.get(sessionId) !== version) return;
       updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: undefined, loadStatus: 'ready', ...reconcileChatTimeline(timeline, runtime.retainedItems, runtime.chatFailures) }));
     } catch (error: unknown) {
-      if (timelineRequestVersions.current.get(sessionId) !== version) return;
+      if (!current() || timelineRequestVersions.current.get(sessionId) !== version) return;
       const safe = sanitizeError(error);
       if (safe.code === 'SESSION_NOT_FOUND') {
         updateRuntime(sessionId, (runtime) => ({ ...runtime, loadStatus: 'ready', timeline: [] }));
@@ -271,14 +303,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       }
       updateRuntime(sessionId, (runtime) => ({ ...runtime, loadError: safe, loadStatus: 'error' }));
     }
-  }, [gateway, updateRuntime]);
+  }, [captureOwner, gateway, updateRuntime]);
 
   useEffect(() => {
     let cancelled = false;
+    const current = captureOwner();
     const initialize = async () => {
       const version = ++sessionListVersion.current;
       const nextSessions = await gateway.listSessions();
-      if (cancelled || version !== sessionListVersion.current) return;
+      if (!current() || cancelled || version !== sessionListVersion.current) return;
       updateSessions(nextSessions);
       const launchUrl = new URL(window.location.href);
       const launchCommerce = resolveCommerceLaunch(launchUrl.search);
@@ -286,7 +319,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       let initialId = lastComposerSession(nextSessions.map(session => session.id)) ?? nextSessions[0]?.id;
       if (launchScene && !routeRef.current) {
         const session = await gateway.createSession();
-        if (cancelled) return;
+        if (!current() || cancelled) return;
         updateSessions([session, ...nextSessions]);
         initialId = session.id;
       }
@@ -308,39 +341,41 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
       }
       if (initialId) await refreshTimeline(initialId, true);
-      if (!cancelled && gateway instanceof MockWorkspaceGateway) {
+      if (current() && !cancelled && gateway instanceof MockWorkspaceGateway) {
         const recoveryNotice = gateway.getRecoveryNotice();
         if (recoveryNotice) setFeedback({ message: recoveryNotice });
       }
     };
     void initialize().catch((error: unknown) => {
-      if (!cancelled) {
+      if (current() && !cancelled) {
         const safe = sanitizeError(error);
         if (safe.code === 'UNAUTHORIZED') return;
         setInitializationError(safe.message);
         setFeedback({ error: safe, message: safe.message });
       }
     }).finally(() => {
-      if (!cancelled) setInitializing(false);
+      if (current() && !cancelled) setInitializing(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
+  }, [captureOwner, gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
 
   useEffect(() => {
     let cancelled = false;
+    const current = captureOwner();
     const version = ++quotaRequestVersion.current;
     void gateway.getQuota().then(next => {
-      if (!cancelled && version === quotaRequestVersion.current) { setQuota(next); setQuotaError(undefined); }
-    }).catch(error => { if (!cancelled) setQuotaError(sanitizeError(error).message); });
+      if (current() && !cancelled && version === quotaRequestVersion.current) { setQuota(next); setQuotaError(undefined); }
+    }).catch(error => { if (current() && !cancelled) setQuotaError(sanitizeError(error).message); });
     return () => { cancelled = true; };
-  }, [gateway, quotaAttempt]);
+  }, [captureOwner, gateway, quotaAttempt]);
 
   useEffect(() => {
     let cancelled = false;
+    const currentOwner = captureOwner();
     void Promise.all([gateway.getProviderCapabilities(), gateway.getProviderHealth()]).then(([nextCapabilities, nextHealth]) => {
-      if (cancelled) return;
+      if (!currentOwner() || cancelled) return;
       setCapabilities(nextCapabilities);
       setHealth(nextHealth);
       setModelsError(undefined);
@@ -360,10 +395,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         setCount(initial.count);
         setResolution(initial.resolution);
       }
-    }).catch(error => { if (!cancelled) setModelsError(sanitizeError(error).message); })
-      .finally(() => { if (!cancelled) setModelsLoading(false); });
+    }).catch(error => { if (currentOwner() && !cancelled) setModelsError(sanitizeError(error).message); })
+      .finally(() => { if (currentOwner() && !cancelled) setModelsLoading(false); });
     return () => { cancelled = true; };
-  }, [gateway, modelsAttempt, setSelectedProvider, setSelectedModelId, setAspectRatio, setCount, setResolution]);
+  }, [captureOwner, gateway, modelsAttempt, setSelectedProvider, setSelectedModelId, setAspectRatio, setCount, setResolution]);
 
   const appliedRoute = useRef<string | undefined>(undefined);
   const routeScope = route?.kind === 'session' ? `session:${route.sessionId}` : route?.kind === 'commerce' ? `commerce:${ownerKey}:${route.scene}` : route?.kind;
@@ -408,11 +443,15 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   }, [route, routeScope, initializing, ownerKey, setActiveSessionId, setActivePopover, setConfigDrawerOpen, refreshTimeline, updateRuntime]);
 
   const ensureCommerceSession = async (title: string, requestId: string) => {
+    const current = captureOwner();
+    if (!current()) throw new DOMException("Workspace owner changed", "AbortError");
     const session = await gateway.createSession(title.slice(0, 100), requestId);
+    if (!current()) throw new DOMException("Workspace owner changed", "AbortError");
     updateSessions([{ ...session, activityTypes: ['commerce'] }, ...sessionsRef.current.filter(item => item.id !== session.id)]);
     return session.id;
   };
   const commerceSaved = (task: import('@zimage/domain').CreativeCommerceTask, sourceId: string) => {
+    if (!isOwnerCurrent()) return;
     const current = useWorkspaceStore.getState();
     const stillHere = current.activeComposerSessionId === sourceId && routeRef.current?.kind !== 'outside' && routeRef.current?.kind !== 'catalogue';
     if (isLocalCommerceDraft(sourceId)) current.transferComposer(sourceId, task.sessionId);
@@ -462,14 +501,16 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     if (!pendingBatchKey) return;
     let stopped = false;
     let timer: number | undefined;
+    const current = captureOwner();
     const poll = async () => {
-      if (document.visibilityState === 'hidden') return;
+      if (!current() || stopped || document.visibilityState === 'hidden') return;
       await Promise.all(pendingBatchEntries.map(async ({ batchId, sessionId, createdAt }) => {
         const delay = gateway instanceof MockWorkspaceGateway ? 300 : nextPollingDelay(createdAt, 'generation');
         if (delay === null || batchPollInFlight.current.has(batchId) || Date.now() - (batchLastPolled.current.get(batchId) ?? 0) < delay) return;
         batchPollInFlight.current.add(batchId);
         batchLastPolled.current.set(batchId, Date.now());
         await gateway.getGenerationBatch(batchId).then((batch) => {
+          if (!current() || stopped) return;
           if (batch.status !== 'pending' && batch.status !== 'processing') {
             void refreshQuota().catch(() => undefined);
           }
@@ -494,7 +535,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     document.addEventListener('visibilitychange', poll);
     return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer);
       window.removeEventListener('focus', poll); document.removeEventListener('visibilitychange', poll); };
-  }, [gateway, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
+  }, [captureOwner, gateway, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
 
   const imageCreationEnabled = explicitImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
@@ -541,24 +582,32 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const createSession = async () => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     if (onNavigate) {
       setActiveSessionId(undefined); setDraft(''); setReferences([]); onNavigate('/workspace'); return;
     }
     try {
       const session = await gateway.createSession();
+      if (!currentOwner()) return;
       updateRuntime(session.id, () => createRuntime('ready'));
       setActiveSessionId(session.id);
       await refreshSessions();
+      if (!currentOwner()) return;
       setSessionDrawerOpen(false);
     } catch (error: unknown) {
+      if (!currentOwner()) return;
       const safe = sanitizeError(error);
       if (safe.code !== 'UNAUTHORIZED') setFeedback({ error: safe, message: safe.message });
     }
   };
 
   const ensureSession = async (prompt: string, sourceVersion: number, sourceComposer: ComposerState) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) throw new DOMException("Workspace owner changed", "AbortError");
     if (activeSessionId) return activeSessionId;
     const session = await gateway.createSession(prompt.slice(0, 100));
+    if (!currentOwner()) throw new DOMException("Workspace owner changed", "AbortError");
     updateSessions([session, ...sessionsRef.current.filter(item => item.id !== session.id)]);
     updateRuntime(session.id, () => createRuntime('ready'));
     useWorkspaceStore.setState(state => ({ composers: { ...state.composers, [session.id]: { ...sourceComposer, draft: '' } } }));
@@ -571,15 +620,18 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const renameIfDefaultTitle = useCallback(async (sessionId: string, prompt: string) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     const current = sessionsRef.current.find((item) => item.id === sessionId);
     if (!current || current.title !== zhCN.workspace.defaultSessionTitle) return;
     try {
       const renamed = await gateway.renameSession(sessionId, prompt);
+      if (!currentOwner()) return;
       updateSessions(sessionsRef.current.map((item) => (item.id === renamed.id ? renamed : item)));
     } catch {
       // Non-critical: the user can still rename manually from the sidebar.
     }
-  }, [gateway, updateSessions]);
+  }, [captureOwner, gateway, updateSessions]);
 
   const cleanupPreviewUrls = useCallback((urls: string[]) => {
     for (const previewUrl of urls) {
@@ -588,6 +640,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   }, []);
 
   const admitImageTurn = useCallback(async (sessionId: string, turnId: string, initialTurn?: OptimisticImageTurn) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     const turn = initialTurn ?? runtimesRef.current[sessionId]?.optimisticImages.find((item) => item.id === turnId);
     if (!turn) return;
     updateRuntime(sessionId, (runtime) => ({
@@ -604,6 +658,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }));
     try {
       const batch = await gateway.submitImage(turn.request);
+      if (!currentOwner()) return;
       updateRuntime(sessionId, (runtime) => ({
         ...runtime,
         optimisticImages: runtime.optimisticImages.filter((item) => item.id !== turnId),
@@ -622,6 +677,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       void refreshSessions();
       void refreshQuota().catch(() => undefined);
     } catch (error: unknown) {
+      if (!currentOwner()) return;
       const safe = sanitizeError(error);
       const composer = useWorkspaceStore.getState();
       if (['QUOTA_EXCEEDED','CONFLICT'].includes(safe.code) && composer.activeComposerSessionId === sessionId && !composer.draft.trim()) {
@@ -641,9 +697,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         } : item),
       }));
     }
-  }, [cleanupPreviewUrls, gateway, refreshQuota, refreshSessions, updateRuntime]);
+  }, [captureOwner, cleanupPreviewUrls, gateway, refreshQuota, refreshSessions, updateRuntime]);
 
   const beginImageTurn = useCallback((sessionId: string, prompt: string, billing?: CreditConfirmation) => {
+    if (!isOwnerCurrent()) return;
     const createdAt = new Date().toISOString();
     const turnId = `optimistic-image-${crypto.randomUUID()}`;
     const previewUrls = references.flatMap((reference) => reference.previewUrl ? [reference.previewUrl] : []);
@@ -695,9 +752,11 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       ...(state.composers[sessionId] ? { [sessionId]: { ...state.composers[sessionId], references: [] } } : {}) } }));
     void renameIfDefaultTitle(sessionId, prompt);
     void admitImageTurn(sessionId, turnId, turn);
-  }, [admitImageTurn, aspectRatio, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
+  }, [isOwnerCurrent, admitImageTurn, aspectRatio, references, renameIfDefaultTitle, resolution, scenario, selectedModelId, selectedProvider, updateRuntime, setReferences]);
 
   const runChat = useCallback(async (sessionId: string, request: ChatRequest, user: MessageTimelineItem, knownItemIds: string[]) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     const controller = new AbortController();
     chatControllers.current.set(sessionId, controller);
     const timeout = window.setTimeout(() => controller.abort('chat_stream_timeout'), CHAT_STREAM_TIMEOUT_MS);
@@ -707,6 +766,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     let streamFailure: SafeError | undefined;
     try {
       for await (const event of gateway.streamChat(request, controller.signal)) {
+        if (!currentOwner()) return;
         if (event.type === 'message.delta') {
           assistantMessageId = event.messageId;
           finalText += event.delta;
@@ -726,44 +786,45 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     } finally {
       window.clearTimeout(timeout);
       if (chatControllers.current.get(sessionId) === controller) chatControllers.current.delete(sessionId);
-      if (!completed && !streamFailure) streamFailure = {
-        code: 'STREAM_INTERRUPTED', message: '回复未完成，已保留收到的内容。请重试。', retryable: true,
-      };
-      if (streamFailure && ['QUOTA_EXCEEDED','CONFLICT'].includes(streamFailure.code)) {
-        const composer = useWorkspaceStore.getState();
-        if (composer.activeComposerSessionId === sessionId && !composer.draft.trim()) composer.setDraft(request.message);
-      }
-      updateRuntime(sessionId, (runtime) => {
-        const additions: TimelineItem[] = [];
-        if (finalText.trim()) additions.push({
-          content: finalText, createdAt: new Date().toISOString(),
-          id: assistantMessageId ?? `local-assistant-${crypto.randomUUID()}`, role: 'assistant',
-          sequence: nextSequence(runtime.timeline), sessionId, type: 'message',
-        });
-        const failure: FailedChatAttempt | undefined = streamFailure ? {
-          request, user, knownItemIds, assistantId: additions[0]?.id,
-          error: {
-            createdAt: new Date().toISOString(), error: streamFailure,
-            id: `chat-error-${crypto.randomUUID()}`, sequence: nextSequence(runtime.timeline) + additions.length,
-            sessionId, type: 'error',
-          },
-        } : undefined;
-        if (failure) additions.push(failure.error);
-        return {
-          ...runtime, awaitingFirstDelta: false, chatBusy: false, isChatStreaming: false, streamingText: '',
-          timeline: [...runtime.timeline, ...additions],
-          retainedItems: failure ? [...runtime.retainedItems, user, ...additions] : runtime.retainedItems,
-          chatFailures: failure ? [...runtime.chatFailures, failure] : runtime.chatFailures,
-        };
-      });
-      void refreshTimeline(sessionId);
-      void refreshSessions();
-      void refreshQuota().catch(() => undefined);
     }
-  }, [gateway, refreshQuota, refreshSessions, refreshTimeline, updateRuntime]);
+    if (!currentOwner()) return;
+    if (!completed && !streamFailure) streamFailure = {
+      code: 'STREAM_INTERRUPTED', message: '回复未完成，已保留收到的内容。请重试。', retryable: true,
+    };
+    if (streamFailure && ['QUOTA_EXCEEDED','CONFLICT'].includes(streamFailure.code)) {
+      const composer = useWorkspaceStore.getState();
+      if (composer.activeComposerSessionId === sessionId && !composer.draft.trim()) composer.setDraft(request.message);
+    }
+    updateRuntime(sessionId, (runtime) => {
+      const additions: TimelineItem[] = [];
+      if (finalText.trim()) additions.push({
+        content: finalText, createdAt: new Date().toISOString(),
+        id: assistantMessageId ?? `local-assistant-${crypto.randomUUID()}`, role: 'assistant',
+        sequence: nextSequence(runtime.timeline), sessionId, type: 'message',
+      });
+      const failure: FailedChatAttempt | undefined = streamFailure ? {
+        request, user, knownItemIds, assistantId: additions[0]?.id,
+        error: {
+          createdAt: new Date().toISOString(), error: streamFailure,
+          id: `chat-error-${crypto.randomUUID()}`, sequence: nextSequence(runtime.timeline) + additions.length,
+          sessionId, type: 'error',
+        },
+      } : undefined;
+      if (failure) additions.push(failure.error);
+      return {
+        ...runtime, awaitingFirstDelta: false, chatBusy: false, isChatStreaming: false, streamingText: '',
+        timeline: [...runtime.timeline, ...additions],
+        retainedItems: failure ? [...runtime.retainedItems, user, ...additions] : runtime.retainedItems,
+        chatFailures: failure ? [...runtime.chatFailures, failure] : runtime.chatFailures,
+      };
+    });
+    void refreshTimeline(sessionId);
+    void refreshSessions();
+    void refreshQuota().catch(() => undefined);
+  }, [captureOwner, gateway, refreshQuota, refreshSessions, refreshTimeline, updateRuntime]);
 
   const beginChatTurn = useCallback((sessionId: string, prompt: string, originalRequest?: ChatRequest, billing?: CreditConfirmation) => {
-    if (chatControllers.current.has(sessionId)) return;
+    if (!isOwnerCurrent() || chatControllers.current.has(sessionId)) return;
     const knownItemIds = (runtimesRef.current[sessionId]?.timeline ?? []).map((item) => item.id);
     const user: MessageTimelineItem = {
       content: prompt, createdAt: new Date().toISOString(),
@@ -780,7 +841,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }));
     void renameIfDefaultTitle(sessionId, prompt);
     void runChat(sessionId, request, user, knownItemIds);
-  }, [renameIfDefaultTitle, runChat, scenario, selectedChatModel, selectedProvider, updateRuntime]);
+  }, [isOwnerCurrent, renameIfDefaultTitle, runChat, scenario, selectedChatModel, selectedProvider, updateRuntime]);
 
   const recoveryActions = chatRecoveryActions(activeRuntime?.timeline ?? [], activeRuntime?.chatFailures ?? []);
   const recoverChat = (errorId: string) => {
@@ -804,6 +865,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const submit = () => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     const prompt = draft.trim();
     if (!prompt || activeBusy || composerDisabled || (!activeSessionId && firstSubmissionLock.current)) return;
     if (commerceRef.current?.edit(prompt)) { setDraft(''); return; }
@@ -830,6 +893,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     setDraft('');
     requestFollow('smooth');
     const start = (sessionId: string) => {
+      if (!currentOwner()) return;
       if (generate) beginImageTurn(sessionId, prompt, billing);
       else beginChatTurn(sessionId, prompt, undefined, billing);
     };
@@ -841,12 +905,14 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       setPendingFirstMessage({ id: `pending-user-${crypto.randomUUID()}`, type: 'message', role: 'user',
         content: prompt, createdAt: new Date().toISOString(), sessionId: '', sequence: 1 });
       void ensureSession(prompt, sourceVersion, sourceComposer).then(start).catch((error: unknown) => {
+        if (!currentOwner()) return;
         const safe = sanitizeError(error);
         if (safe.code === 'UNAUTHORIZED') return;
         setFeedback({ error: safe, message: safe.message });
         if (selectionVersion.current === sourceVersion || (!useWorkspaceStore.getState().activeComposerSessionId && !useWorkspaceStore.getState().draft)) setDraft(prompt);
         else useWorkspaceStore.setState(state => ({ composers: { ...state.composers, '': sourceComposer } }));
       }).finally(() => {
+        if (!currentOwner()) return;
         firstSubmissionLock.current = false;
         setPendingFirstMessage(undefined);
       });
@@ -854,13 +920,17 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const deleteSession = async (sessionId: string) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     if (deletionLock.current) return;
     deletionLock.current = true;
     setDeletingSessionId(sessionId);
     try {
       await gateway.deleteSession(sessionId);
+      if (!currentOwner()) return;
       // A completed deletion stays completed even if refreshing the list fails.
       const next = await gateway.listSessions().catch(() => sessionsRef.current.filter((session) => session.id !== sessionId));
+      if (!currentOwner()) return;
       updateSessions(next);
       setFeedback({ message: zhCN.workspace.deleteCompleted });
       chatControllers.current.get(sessionId)?.abort();
@@ -875,20 +945,25 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         if (nextId) await refreshTimeline(nextId, true);
       }
     } catch (error: unknown) {
+      if (!currentOwner()) return;
       const safe = sanitizeError(error);
       if (safe.code === 'UNAUTHORIZED') return;
       setFeedback({ error: safe, message: safe.message, retrySessionId: safe.retryable ? sessionId : undefined });
     } finally {
       deletionLock.current = false;
-      setDeletingSessionId(undefined);
+      if (currentOwner()) setDeletingSessionId(undefined);
     }
   };
 
   const renameSession = async (sessionId: string, title: string) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     try {
       await gateway.renameSession(sessionId, title);
+      if (!currentOwner()) return;
       await refreshSessions();
     } catch (error: unknown) {
+      if (!currentOwner()) return;
       const safe = sanitizeError(error);
       if (safe.code !== 'UNAUTHORIZED') setFeedback({ error: safe, message: safe.message });
     }
@@ -905,7 +980,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     if (recreateActionRef.current !== action || action.pending || action.version !== selectionVersion.current) return;
     action.pending = true;
     setRecreateAction({ ...action });
-    const current = () => recreateActionRef.current === action && action.version === selectionVersion.current;
+    const currentOwner = captureOwner();
+    const current = () => currentOwner() && recreateActionRef.current === action && action.version === selectionVersion.current;
     try {
       const { batch, scope, generationId, billing } = action;
       const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope, requestId: crypto.randomUUID(), billing });
@@ -922,7 +998,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         }],
       }));
       void refreshQuota().catch(() => {
-        if (action.version === selectionVersion.current) setFeedback({ message: '图片任务已提交，额度暂未刷新；请稍后查看。' });
+        if (current() && action.version === selectionVersion.current) setFeedback({ message: '图片任务已提交，额度暂未刷新；请稍后查看。' });
       });
     } catch (error: unknown) {
       if (!current()) return;
@@ -973,6 +1049,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
 
   const downloadBatch = async (batch: GenerationBatch) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     if (downloadingBatches.current.has(batch.id)) return;
     downloadingBatches.current.add(batch.id);
     setFeedback({ message: '正在准备图片下载…' });
@@ -982,7 +1060,9 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         try { return { ...asset, url: await gateway.getGenerationAssetUrl(asset.id) }; }
         catch { return asset; }
       }));
-      const result = await downloadImages({ ...batch, assets });
+      if (!currentOwner()) return;
+      const result = await downloadImages({ ...batch, assets }, currentOwner);
+      if (!currentOwner()) return;
       setFeedback({ message: result.failed > 0
         ? `有 ${result.failed} 张图片下载失败，请刷新页面后重试。`
         : result.downloaded > 0 ? `已发起 ${result.downloaded} 张图片下载。` : '当前没有可下载的图片。' });
@@ -992,15 +1072,20 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
   };
   const resolveAssetUrl = useMemo(() => gateway.getGenerationAssetUrl?.bind(gateway), [gateway]);
   const refreshGenerationBatch = async (target: GenerationBatch) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     try {
       const batch = await gateway.getGenerationBatch(target.id);
+      if (!currentOwner()) return;
       updateRuntime(target.sessionId, runtime => ({ ...runtime, timeline: runtime.timeline.map(item =>
         item.type === 'generation' && item.batch.id === target.id ? { ...item, batch } : item) }));
       if (batch.status !== 'pending' && batch.status !== 'processing') void refreshQuota().catch(() => undefined);
-    } catch { setFeedback({ message: '进度暂时无法刷新，请稍后重试。' }); }
+    } catch { if (currentOwner()) setFeedback({ message: '进度暂时无法刷新，请稍后重试。' }); }
   };
 
   const addReferences = async (files: FileList) => {
+    const currentOwner = captureOwner();
+    if (!currentOwner()) return;
     const incoming = Array.from(files);
     const version = selectionVersion.current;
     const source = useWorkspaceStore.getState().activeComposerSessionId;
@@ -1029,7 +1114,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       // Decoding can finish after navigation or logout. Never attach its result to
       // a different composer or account, and enforce the limit against fresh state.
       const current = useWorkspaceStore.getState();
-      if (selectionVersion.current !== version || current.activeComposerSessionId !== source || routeRef.current !== sourceRoute) return;
+      if (!currentOwner() || selectionVersion.current !== version || current.activeComposerSessionId !== source || routeRef.current !== sourceRoute) return;
       const remaining = Math.max(0, maxActiveReferences - current.references.length);
       const acceptedFiles = validFiles.slice(0, remaining);
       if (validFiles.length > remaining) validationError = { code: 'VALIDATION_IMAGE_COUNT', message: `当前最多可添加 ${maxActiveReferences} 张参考图。`, retryable: false };
@@ -1041,7 +1126,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       if (validationError) setFeedback({ error: validationError, message: validationError.message });
       setReferences((current) => [...current, ...additions]);
     } finally {
-      if (needsPreparation) setReferencePreparation(current => current?.version === version && current.scope === referenceScope
+      if (currentOwner() && needsPreparation) setReferencePreparation(current => current?.version === version && current.scope === referenceScope
         ? { ...current, count: current.count - 1 } : current);
     }
   };
@@ -1152,6 +1237,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               settings={{ provider: selectedProvider ?? 'seedream', model: selectedModelId ?? 'doubao-seedream-5.0-pro', aspectRatio, resolution }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference} referencesPreparing={preparingReferences > 0}
               onReferencesAdopt={(next, sessionId) => {
+                if (!isOwnerCurrent()) return false;
                 const current = useWorkspaceStore.getState();
                 if (current.activeComposerSessionId !== sessionId) return false;
                 const merged = [...current.references, ...next.filter((reference) => !current.references.some((item) => reference.id ? item.id === reference.id : item === reference))];
@@ -1160,7 +1246,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
                 return true;
               }}
               onReferenceUploaded={(reference, id, sessionId) => {
-                if (useWorkspaceStore.getState().activeComposerSessionId === sessionId) setReferences((current) => current.map((item) => item === reference ? { ...item, id } : item));
+                if (isOwnerCurrent() && useWorkspaceStore.getState().activeComposerSessionId === sessionId) setReferences((current) => current.map((item) => item === reference ? { ...item, id } : item));
               }}
               renderTimeline={(items, tail, hasCommerce, loading) => {
                 if (tail && hasCommerce && !loading && !activeRuntime?.loadError && !activeRuntime?.streamingText && !activeRuntime?.awaitingFirstDelta && !activeRuntime?.optimisticImages.length) return null;

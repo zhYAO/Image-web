@@ -59,7 +59,10 @@ function uploadFixture(count: number, fail?: 'register' | 'finalize' | 'unconfir
     maybeSingle: vi.fn().mockResolvedValue({ data: { id: taskId }, error: null }),
     or: vi.fn().mockResolvedValue({ count, error: null }),
   };
-  mocks.user.mockResolvedValue({ rpc: vi.fn().mockResolvedValue({ data: userId, error: null }), from: () => userTable });
+  mocks.user.mockResolvedValue({
+    auth: { getClaims: vi.fn().mockResolvedValue({ data: { claims: { sub: userId } }, error: null }) },
+    rpc: vi.fn().mockResolvedValue({ data: userId, error: null }), from: () => userTable,
+  });
   const insert = vi.fn((row: Record<string, unknown>) => {
     sequence.push('metadata');
     return { select: () => ({ single: async () => ({ data: { ...row, upload_expires_at: '2026-10-01T00:00:00Z' }, error: null }) }) };
@@ -80,9 +83,13 @@ function uploadFixture(count: number, fail?: 'register' | 'finalize' | 'unconfir
   };
   mocks.admin.mockReturnValue(admin);
   vi.stubGlobal('File', File);
-  const req = new Request('https://app.test/api/uploads', { method: 'POST', headers: { origin: 'https://app.test' } });
-  const file = new File([png], 'reference.png', { type: 'image/png' });
-  vi.spyOn(req, 'formData').mockResolvedValue({ get: (key: string) => key === 'file' ? file : taskId } as unknown as FormData);
+  const prefix = new TextEncoder().encode(`--reference-fixture\r\nContent-Disposition: form-data; name="sessionId"\r\n\r\n${taskId}\r\n--reference-fixture\r\nContent-Disposition: form-data; name="file"; filename="reference.png"\r\nContent-Type: image/png\r\n\r\n`);
+  const suffix = new TextEncoder().encode('\r\n--reference-fixture--\r\n');
+  const req = new Request('https://app.test/api/uploads', {
+    method: 'POST', duplex: 'half',
+    headers: { origin: 'https://app.test', 'content-type': 'multipart/form-data; boundary=reference-fixture' },
+    body: new ReadableStream({ start(controller) { controller.enqueue(prefix); controller.enqueue(png); controller.enqueue(suffix); controller.close(); } }),
+  } as RequestInit);
   return { run: () => upload(req), sequence, insert };
 }
 describe('ordinary uploads share durable reference intents', () => {

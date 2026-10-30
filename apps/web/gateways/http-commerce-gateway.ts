@@ -28,8 +28,23 @@ export class HttpCommerceGateway implements CommerceGateway {
   private readonly referenceRequests = new Map<string, Promise<{ url?: string; expired: boolean }>>();
   private assetEpoch = 0;
   readonly apparel: HttpApparelGateway;
-  constructor(private readonly json: JsonRequest, fetcher: typeof fetch = fetch) {
-    this.apparel = new HttpApparelGateway(json, (sessionId, reference) => this.upload(sessionId, reference), fetcher);
+  constructor(private readonly json: JsonRequest, private readonly fetcher: typeof fetch = fetch, readonly assertOwnerCurrent: () => void = () => undefined) {
+    this.apparel = new HttpApparelGateway(json, (sessionId, reference) => this.upload(sessionId, reference), fetcher, assertOwnerCurrent);
+  }
+  async downloadFile(taskId: string, input: unknown) {
+    this.assertOwnerCurrent();
+    const response = await this.fetcher(`/api/creative-tasks/${taskId}/download`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input),
+    });
+    this.assertOwnerCurrent();
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      this.assertOwnerCurrent();
+      throw new Error(body?.message || '导出失败，请稍后重试。');
+    }
+    const blob = await response.blob();
+    this.assertOwnerCurrent();
+    return blob;
   }
   async list(sessionId: string) {
     return this.json(`/api/creative-tasks?sessionId=${encodeURIComponent(sessionId)}`,
