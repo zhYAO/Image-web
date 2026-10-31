@@ -403,10 +403,6 @@ export function ChatModelPopover({ health, onOpenChange, onSelect, open, selecte
     onChange={next => { if (CHAT_PROVIDER_MODELS.some(model => model.id === next)) onSelect(next); }}/>;
 }
 
-export function buildSkillPromptPreview(skill: Skill | undefined, values: Record<string, string>, prompt: string) {
-  return skill ? `${skill.defaults}\n\n用户要求：${prompt.trim()}` : prompt;
-}
-
 interface SkillPopoverProps {
   editablePrompt?: boolean;
   focusFieldKey?: string;

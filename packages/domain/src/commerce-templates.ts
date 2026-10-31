@@ -107,16 +107,6 @@ export const COMMERCE_TEMPLATES = (
   validation: "待真实模型评测",
   published: true,
 }));
-export function sceneForSkill(skillId?: string) {
-  return skillId === "white-background"
-    ? "product-main"
-    : skillId === "model"
-      ? "model"
-      : skillId === "social"
-        ? "social"
-        : undefined;
-}
-
 export function templatesForScene(scene: string) {
   if (scene === 'clone') return COMMERCE_TEMPLATES.filter(t => t.published);
   if (scene === 'product-main') return COMMERCE_TEMPLATES.filter(t => t.published && (t.visual.scenes.includes('product-main') || t.visual.scenes.includes('product-set')));

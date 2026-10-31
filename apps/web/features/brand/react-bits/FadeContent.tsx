@@ -38,10 +38,6 @@ export interface FadeContentProps
   children: ReactNode;
 }
 
-export interface FadeContentEffectProps extends FadeContentOptions {
-  targetRef: RefObject<HTMLDivElement | null>;
-}
-
 function useFadeContentAnimation(
   ref: RefObject<HTMLDivElement | null>,
   {
@@ -174,18 +170,6 @@ function useFadeContentAnimation(
     rootMargin,
     threshold,
   ]);
-}
-
-/**
- * Deferred effect controller for an existing stable host. It adds no DOM and
- * does not wrap, replace, or remount the server-rendered children when loaded.
- */
-export function FadeContentEffect({
-  targetRef,
-  ...options
-}: FadeContentEffectProps) {
-  useFadeContentAnimation(targetRef, options);
-  return null;
 }
 
 export default function FadeContent({

@@ -8,17 +8,21 @@ import { createServer, type PluginOption, type ViteDevServer } from 'vite';
 import { devAssets } from '../build/dev-assets';
 import { devProxyOptions } from '../build/dev-runtime.mjs';
 
-let backend: Server | undefined, frontend: ViteDevServer | undefined, directory: string | undefined;
+let backend: Server | undefined, frontend: ViteDevServer | undefined, frontendListener: Server | undefined, directory: string | undefined;
 afterEach(async () => {
+  if (frontendListener) { const current = frontendListener; current.closeAllConnections(); await new Promise<void>(resolve => current.close(() => resolve())); frontendListener = undefined; }
   await frontend?.close(); frontend = undefined;
   if (backend) { const current = backend; current.closeAllConnections(); await new Promise<void>(resolve => current.close(() => resolve())); backend = undefined; }
   if (directory) await rm(directory, { recursive: true, force: true }); directory = undefined;
 });
 async function startFrontend(plugins: PluginOption[], proxy?: ReturnType<typeof devProxyOptions>) {
   frontend = await createServer({ configFile: false, envFile: false, root: directory, publicDir: false, logLevel: 'silent', plugins,
-    server: { host: '127.0.0.1', port: 0, strictPort: true, proxy } });
-  await frontend.listen();
-  const address = frontend.httpServer!.address();
+    server: { middlewareMode: true, hmr: false, proxy } });
+  // Vite 7 resolves a configured port 0 to 5173. Let Node allocate a real
+  // ephemeral listener so these fixtures never compete with dev:split.
+  frontendListener = createHttpServer(frontend.middlewares);
+  await new Promise<void>(resolve => frontendListener!.listen(0, '127.0.0.1', resolve));
+  const address = frontendListener.address();
   if (!address || typeof address === 'string') throw new Error('Missing development listener');
   return `http://127.0.0.1:${address.port}`;
 }

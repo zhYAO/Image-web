@@ -16,7 +16,3 @@ export const visibleImageSettingsSchema = z.object({
   resolution: z.enum(['1K', '2K']), count: z.number().int().min(1).max(4),
   provider: z.string().min(1), model: z.string().min(1),
 });
-export const taskActionSchema = z.strictObject({
-  requestId: z.uuid(), taskId: z.uuid(), revision: z.number().int().positive(),
-  action: z.enum(['cancel', 'replace']),
-});

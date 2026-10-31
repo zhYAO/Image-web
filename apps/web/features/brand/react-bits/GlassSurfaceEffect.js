@@ -9,7 +9,6 @@
  */
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FILTER_PROPERTY = "--liquid-glass-filter";
-const REFRACT_SELECTOR = '[data-liquid-glass="refract"]';
 const managers = new WeakMap();
 let nextFilterId = 0;
 const finite = (value, fallback = 0) =>
@@ -388,21 +387,4 @@ export function enhanceLiquidGlass(element) {
     managers.set(document, manager);
   }
   return manager.add(element);
-}
-
-/** CSS-only surfaces allocate no observers or SVG nodes. Safe for server/test rendering. */
-export function initLiquidGlass(root) {
-  if (!root) return () => {};
-  const targets = [
-    ...(root.matches?.(REFRACT_SELECTOR) ? [root] : []),
-    ...Array.from(root.querySelectorAll?.(REFRACT_SELECTOR) || []),
-  ];
-  const disposers = [...new Set(targets)].map(enhanceLiquidGlass);
-  let disposed = false;
-  return () => {
-    if (!disposed) {
-      disposed = true;
-      disposers.forEach((dispose) => dispose());
-    }
-  };
 }
