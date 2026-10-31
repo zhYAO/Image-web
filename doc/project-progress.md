@@ -1,5 +1,14 @@
 # ZImage 项目进度
 
+## 2026-10-31 继续发布：候选已上传验真，切换待决策
+
+- 本轮代码已保存本地提交 `fb4fb09f909c0ae5dce98ebd0d9540386685ddb7`，未推送。最后类型修复复验通过；从独立clean源码在Ubuntu22.04/amd64、Node24.19/pnpm11.19下完成后端185.3秒、前端21.6秒生产构建。pnpm入口/重复安装的初次失败与中断分别保留，不改写成一遍通过。
+- 后端三层及前端正式封包已完成；Sharp、两字体和六项编解码通过，实际候选匿名ready/meta/public-config为200，认证/账号/会话为401。前端只绑定真实但有限的匿名发布检查，用户已暂停的最终Chrome UI、登录和业务复测仍未执行，没有安装生产批准。
+- 候选上传到 `/opt/zimage/incoming/candidate-fb4fb09-20261031/`，六件包/报告SHA256全部一致；线上current仍9c5c3ea、MainPID399199且active。没有重启、改Nginx或切换。
+- 实际前端压缩包9,873,452 B（9.42 MiB），后端完整transport53,516,727 B（51.04 MiB），两个归档合计60.45 MiB；各层及内容占比见[候选发布包报告](./separation/release-candidate-20261031.md)。这些是已上传未激活候选，不能称线上包。
+- 原B0完整收尾证据仍缺失；已发单题卡片，询问用户是否接受维护中断未完成请求的风险。回复前不停止旧服务、不伪造completion或绕过现有guard。若接受，须先明确受控维护步骤与恢复条件再执行。预算占用35/实际消费30 minor不变。
+- 本地本轮Supabase六个测试容器已停止，容器/卷保留；没有完成数据库测试。构建与产物证据持久保存在 `.design-qa/2026-10-31-release-handoff/fb4fb09/`。交接入口：[Agent文档](./separation/agent-deployment-handoff-20261031.md)。
+
 ## 2026-10-31 发布交接（尚未上线，用户已暂停进一步功能测试）
 
 - 目标固定为 `https://www.zimage.store`，已有手工上线及现有 SSH 连接授权；用户最新要求停止后续模型测试，先处理上线，并交付供 Agent 阅读的项目内 Markdown。执行入口见[Agent 上线交接](./separation/agent-deployment-handoff-20261031.md)，含环境、实际状态、构建/封包、首装顺序、阻塞与回退。
