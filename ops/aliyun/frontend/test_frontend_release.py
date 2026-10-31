@@ -13,7 +13,7 @@ import tempfile
 import threading
 import tracemalloc
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 HERE = Path(__file__).resolve().parent
 
@@ -457,6 +457,40 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 self.m.unpack(archive, self.root / ('link-input-' + kind), report['manifestSha256'])
             archive.unlink()
+
+    def test_local_ingress_preserves_verified_public_tls_identity(self):
+        context = self.r.ssl.create_default_context()
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, self.r.ssl.CERT_REQUIRED)
+        sock, wrapped = Mock(), Mock()
+        connection = self.r.LocalIngressHTTPSConnection('www.zimage.store', timeout=15, context=context)
+        with patch.object(self.r.socket, 'create_connection', return_value=sock) as connect, patch.object(context, 'wrap_socket', return_value=wrapped) as wrap:
+            connection.connect()
+        connect.assert_called_once_with(('127.0.0.1', 443), 15, None)
+        wrap.assert_called_once_with(sock, server_hostname='www.zimage.store')
+        self.assertIs(connection.sock, wrapped)
+        sock.close.assert_not_called()
+
+    def test_local_ingress_rejects_other_origins_and_credentials(self):
+        handler = self.r.LocalIngressHTTPSHandler(context=self.r.ssl.create_default_context())
+        for url in ['https://example.com/', 'https://www.zimage.store:444/',
+                    'https://user@www.zimage.store/', 'https://user:pass@www.zimage.store/']:
+            with self.subTest(url=url), patch.object(handler, 'do_open') as open_request:
+                with self.assertRaisesRegex(ValueError, 'origin rejected'):
+                    handler.https_open(self.r.urllib.request.Request(url))
+                open_request.assert_not_called()
+        with patch.object(handler, 'do_open', return_value='verified') as open_request:
+            request = self.r.urllib.request.Request('https://www.zimage.store:443/version.json')
+            self.assertEqual(handler.https_open(request), 'verified')
+            open_request.assert_called_once_with(self.r.LocalIngressHTTPSConnection, request, context=handler._context)
+
+    def test_local_ingress_closes_socket_on_tls_failure_without_fallback(self):
+        context, sock = self.r.ssl.create_default_context(), Mock()
+        connection = self.r.LocalIngressHTTPSConnection('www.zimage.store', context=context)
+        with patch.object(self.r.socket, 'create_connection', return_value=sock) as connect, patch.object(context, 'wrap_socket', side_effect=self.r.ssl.SSLError('certificate rejected')):
+            with self.assertRaises(self.r.ssl.SSLError): connection.connect()
+        self.assertEqual(connect.call_count, 1)
+        sock.close.assert_called_once_with()
 
     def test_actual_http_probe_checks_namespace_mime_hash_cache_and_missing_chunk(self):
         report = self.pack()

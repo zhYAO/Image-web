@@ -1,14 +1,82 @@
-# ZImage 上线 Agent 交接与包体报告要求
+# ZImage 上线 Agent 操作记录与后续接手说明
 
-> 记录日期：2026-10-31，Asia/Shanghai。**本轮候选已构建、封包、上传验真，尚未上线。** 本文不是上线成功证明；最新续接结果以下节为准，保留后续原交接检查点供溯源。
+> 最终状态：**2026-10-31 21:38:30（Asia/Shanghai）已上线并开放 https://www.zimage.store**。以下当前状态优先于后半部分明确标记的历史检查点。用户已暂停进一步功能/模型复测，接手时不要自动重放付费请求。
 
-## 最新续接结果
+## 当前版本与证据
 
-- 本地提交 `fb4fb09f909c0ae5dce98ebd0d9540386685ddb7`，未推送。最后类型修复复验通过；Linux后端/前端生产构建均成功，完整源码身份为clean。
-- 后端分层包、前端包已生成，Sharp/字体/编解码及匿名版本/配置/401检查通过。限定报告不包含最终Chrome、登录或业务复测，不冒称全功能通过。
-- 已上传并逐件验真：服务器 `/opt/zimage/incoming/candidate-fb4fb09-20261031/`。前端9.42 MiB、后端完整transport51.04 MiB；详细占比、摘要及限制见[候选发布报告](release-candidate-20261031.md)。
-- 线上版本9c5c3ea及原PID399199未改变，发布helper/批准尚未安装，尚未进入维护或切换。原B0收尾证明仍缺失，已向用户发送一次风险选择卡片；回复前保持旧服务。
-- Linux正式检出改用容器 `/release-source`，产物 `/release-artifacts`；构建时只使用公开配置，原生依赖来自同一Linux环境。完整候选与证据已保存 `.design-qa/2026-10-31-release-handoff/fb4fb09/`。下方“尚未构建/未提交”是首次交接历史，不是当前状态。
+| 项目 | 实际值 |
+| --- | --- |
+| 应用源码 / 后端版本 | `fb4fb09f909c0ae5dce98ebd0d9540386685ddb7` |
+| 前端 namespace | `release-fb4fb09f909c` |
+| 前端 artifact ID | `463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06` |
+| 资源 SHA | `bfb3e444b4b032f43ba6d977c33ba72922eea253f34c7d7fe222cb820c4dd23b` |
+| 旧后端 / 回退目标 | `9c5c3ea95e0c66193b23a2db50643530aa7d095a`，配套原 Next 页面入口 |
+| 更早版本 | `8cbb708645e93d3d71d17641b860cc60301fa005`，保留 |
+| 切换后 MainPID | `456496`（历史采样；接手重新查询） |
+| 发布 operation | `manual-fb4fb09-20261031`，sequence 90，`phase=opened` |
+| 当前写入状态 | 已开放；`writesMayHaveOpened=true` |
+| 实际部署包 | 前端 9.42 MiB，后端 transport 51.04 MiB，合计 60.45 MiB |
+
+应用归档未因后续文档/运维修复改变；不要拿后续仓库 HEAD 冒充应用构建版本。本轮只本地提交，未推送、未触发 Actions。详情见 [上线结果与包体](release-candidate-20261031.md)。
+
+服务器权威材料：
+
+- `/opt/zimage/backups/manual-fb4fb09-20261031/operation.json`：操作阶段、实际失败与恢复、风险接受；`postopen-check.json`：开放后只读结果。
+- 同目录 `preopen-drained.json`、`opened-status.json`、`backend-observed.json`、`frontend-result.json`、`legacy-original-resource-check.json`、`frontend-helper-postfix.json`。本地非秘密副本在 [.design-qa 证据目录](../../.design-qa/2026-10-31-release-handoff/fb4fb09/server/)。
+- `/opt/zimage/backups/split-preflight-20261031-130532/config.tar` 及其 manifest；这是配置备份，**不是数据库备份**。归档 SHA256 `fb8b7ef98e671dfc3544c25c7628295159ca2b196f8ff10ff2ba53151ea68a54`。不要下载、展示或提交其中环境秘密。
+- 本次目录保留 `original-nginx.conf`、`frontend-release-before-loopback.py`；新旧 release、资源层、上传包均保留。
+- `/usr/local/libexec/zimage-manual-fb4fb09.py`：本次唯一协调器，SHA256 `0cb44f256b17b373be491d6773e128ddcfa5a127571e43b222990585bcdf6baf`。原始 25 文件工具闭包在 `/usr/local/libexec/zimage-manual-fb4fb09-source/`，它是历史安装基准，不覆盖下述后续 helper 修复。
+
+## 已实际执行的维护切换
+
+1. 已完成 Node24.19 / pnpm11.19、Ubuntu22.04 linux/amd64 的干净源码构建、封包和六件上传摘要验证；原生 Sharp、两字体、六项编解码与匿名 API 检查通过。源应用 commit 固定为上述 fb4fb09，未上传 Mac 原生运行依赖。
+2. 用户明确回复“接受上述中断风险，继续维护切换”。旧版本缺少完整收尾记录，协调器如实记录 `legacyCompletionProven=false` 和 `acceptedPotentialRequestInterruption=true`。这是本次人工风险接受，不是历史任务全部完成，也不是以后绕过 first-window 的通用许可。原有 first-window 守卫不变。
+3. 保存配置、旧指针及资源；安装受信任工具闭包、精确平台目标配置、前端批准和同域 Nginx 维护入口。`/etc/zimage` 从700改755前逐件确认原两秘密文件均为root0600，并保持权限。
+4. 封闭入口并确认实际维护响应后停止旧 systemd 服务；旧 MainPID 已归零，但没有宣称旧请求全部优雅完成。安装新生命周期 drop-in、精确资源绑定，激活并核对 fb4fb09 后端。
+5. 保持 checking 模式，真实检查新进程身份及生命周期计数；安装 immutable 前端 namespace，通过版本、摘要、MIME/资源和兼容检查后切换前端。未虚构旧静态前端 F0。
+6. Terra 在 Chrome 对公网版本、页面做只读检查；开放前新后端七项计数归零。先记录可能开放写入，再开放后端和入口，21:38:30记录opened。
+7. 服务器页面/API/资源检查通过；Chrome 开放后首页三图、五项电商目录、现有账户及51条会话可见。没有新增业务提交。未升级 Worker、改模型/价格、迁移数据库、退款或重放旧未知任务。
+
+初次准备因旧资源 LICENSE/README 原始 LF 字节与新校验器预期不同而停止；协调器固定旧两份元数据摘要并重新验证全部旧资源与原生渲染，不改旧资源。Nginx reload 老 worker 时序导致初次封口探测见200，已确认503且增加新 worker 生效检查后才继续。服务器公网回环超时发生在前端映射前，使用本机真实 TLS 入口探测并追加公网 Chrome 证据后续接。初次失败过程分别记录于本文；最终 operation 保留最近一次失败项，不写成一次成功。
+
+## 发布探测工具的独立修复
+
+安装 `/opt/zimage/frontend-tools/release.py` SHA256 `6d1300b2aa330055955b1a1951f1c1165f0879688cb6dbbd5eb5a9eeaf1fa854`；与本仓库 `ops/aliyun/frontend/release.py` 一致。未重启应用、未改部署包。依赖 `manifest.py` 为 `e20ef928a105c845ce63a2a5ba7b4f99d09d94535ffdf55c36bfa37cd7d57231`，`transport.py` 为 `20bc0a02bc1f8f1977a9409ae1cc471abf2adb48b624377e03edba916ffe2274`，均未修改。
+
+服务器内 HTTPS 连接固定到127.0.0.1:443，仍用 `www.zimage.store` 的 SNI、默认可信证书和主机名校验，拒绝其他域、端口、URL凭证及重定向，禁用环境代理。该结果证明本机 Nginx 入口；独立公网 DNS/路由验证仍需要 Chrome。3项 TLS 安全测试首次通过，真实 HTTP fixture 首次沙箱 EPERM；获准同码重跑4/4通过。生产正式 `status` 已返回 `httpVerified=true`。
+
+接手先只读核对，命令不会建立计费请求：
+
+```sh
+ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+  -i /Users/zzz/.ssh/image-web-aliyun-ed25519 root@47.100.222.24 \
+  '/usr/bin/python3 -I -B /opt/zimage/frontend-tools/release.py status'
+```
+
+随后读 operation、current/previous、systemd PID、实际准入及生命周期状态；不根据文档里的旧 PID 直接发信号。现有 SSH 已获授权，连接失败可重连；不要关闭 known-host 检查。浏览器仍须 GPT-6.1 Terra + Chrome。
+
+## 开放后的回退步骤与停止条件
+
+**现在不能运行一次性协调器的 `recover`，也不能仅把后端 current 改回 previous。** `writesMayHaveOpened=true` 后该 recover 有意拒绝；F1 只验收过 fb4fb09，旧后端缺少新兼容接口。现阶段是配对回退，且先核对新产生的写入和未结算结果。
+
+1. 记录当前准确版本/PID/准入与最新操作日志，保留故障日志、数据库记录、两套归档及资源；若发现身份与此文不符，停止按此旧版本操作。
+2. 以新的 operation 和当前 Nginx 摘要关闭新任务及入口准入；等待真实维护响应。使用已安装的生命周期工具核对精确 B1 进程，等待 HTTP/framework/business 七项计数归零。不得将空队列或等待若干秒视为完成。
+3. 核对开放以来实际请求、任务及未结算状态；结果未知时停止新提交，不自动重试、退款或以旧数据库快照覆盖。若仍有不能解释的活动/账务状态，保留封口并提出具体异常；本次接受旧版中断风险不自动授权以后中断新请求。
+4. 准备并审阅一个绑定新 operation 的配对恢复计划：旧后端9c5c3ea、其原资源绑定、受控 legacy Nginx 模板与 backend-legacy 生命周期配置。先真实校验原旧资源与原生库，不能修改旧 LICENSE 使其“通过”新摘要。
+5. 在封口下停已排空 B1，恢复旧后端和匹配 legacy 入口，处理精确 F1 current 指针及 B1 drop-in；保留 F1 目录、objects、层缓存和全部数据。不要把原始 ungated Nginx 提前恢复导致流量绕过维护门。
+6. 先在维护下验证旧 ready、页面/资源、匿名401，再由 Terra Chrome 核对既有登录/会话及必要账务状态；失败保持封口。确认组合和结算状态后，先持久化开放意图再恢复入口，记录真实版本与结果。
+
+这是回退操作顺序和停止条件，**不是已演练的开放后自动回退工具**。原 `recover` 只适用于尚未开放的同一操作，不可删其守卫来套用。正常未来发布应遵循已安装生命周期及前后端协议；首次风险例外不应复制为常规发布路径。
+
+## 验收范围与余额
+
+详见 [Chrome 记录](../../.design-qa/2026-10-31-release-handoff/fb4fb09/chrome-postopen.md) 与 [完整实施记录](implementation-validation-20261031.md)。截图只在工具内目视验证，没有可交付本地截图文件。上线后未重测登录动作、上传、生成、下载或全部窄屏/错误路径；前端单测最后两项端口冲突、数据库测试未完成仍如实保留。
+
+本轮真实测试预算占用35 minor（0.35积分）、实际净消费30 minor（0.30积分），退款不回补本轮预算额度。线上账户可用3.11/冻结0.60积分是已有钱包快照，不是本轮消费；历史未结算记录未改变。
+
+---
+
+下列为此前实施与交接材料；涉及“尚未上线/待用户回复/尚未构建”的段落仅作历史，当前执行以以上最终记录为准。
 
 ## 1. 用户要求及执行边界
 
@@ -38,7 +106,7 @@ git rev-parse HEAD
 git diff --check
 ```
 
-交接时分支 `codex/frontend-backend-separation-20261029`，HEAD `3eb5b24a54df3d9f66bcbb154cbc313ecf9ceb9b`；业务、测试、运维和文档修改尚未提交或推送。**此 HEAD 不包含当前修复，不能用它冒充最终构建源码。** 先审阅并保留全部修改；正式封包必须来自包含最终修改的真实 clean 提交。不得为满足 clean 检查删除用户修改、修改身份标记或推送触发 CI。
+**首次交接历史**：分支 `codex/frontend-backend-separation-20261029`，HEAD `3eb5b24a54df3d9f66bcbb154cbc313ecf9ceb9b`；业务、测试、运维和文档修改尚未提交或推送。**此 HEAD 不包含当前修复，不能用它冒充最终构建源码。** 先审阅并保留全部修改；正式封包必须来自包含最终修改的真实 clean 提交。不得为满足 clean 检查删除用户修改、修改身份标记或推送触发 CI。
 
 ## 3. 已完成的代码工作
 

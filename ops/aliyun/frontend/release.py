@@ -8,17 +8,21 @@ import argparse
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import http.client
 import importlib.util
 import json
 import os
 from pathlib import Path
 import secrets
 import shutil
+import socket
+import ssl
 import stat
 import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Validate every dependency before a privileged dynamic import. Checking after
@@ -420,11 +424,33 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('Probe redirect rejected')
 
 
+class LocalIngressHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        # Verify this host's ingress without relying on public-IP hairpin routing.
+        # The real public hostname remains the TLS SNI and certificate identity.
+        sock = socket.create_connection(('127.0.0.1', 443), self.timeout, self.source_address)
+        try:
+            self.sock = self._context.wrap_socket(sock, server_hostname='www.zimage.store')
+        except BaseException:
+            sock.close()
+            raise
+
+
+class LocalIngressHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, request):
+        origin = urllib.parse.urlsplit(request.full_url)
+        if (origin.scheme != 'https' or origin.hostname != 'www.zimage.store'
+                or origin.port not in (None, 443) or origin.username is not None or origin.password is not None):
+            raise ValueError('Probe origin rejected')
+        return self.do_open(LocalIngressHTTPSConnection, request, context=self._context)
+
+
 def http_read(url, limit=1024 * 1024, method='GET'):
     request = urllib.request.Request(url, headers={'User-Agent': 'ZImageFrontendRelease/1', 'Cache-Control': 'no-cache'}, method=method)
     # Ignore proxy environment inherited from sudo/deploy. TLS verification
     # remains on, and redirects cannot silently change the trusted origin.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(),
+                                       LocalIngressHTTPSHandler(context=ssl.create_default_context()))
     with opener.open(request, timeout=15) as response:
         body = response.read(limit + 1)
         if response.status != 200 or len(body) > limit: raise ValueError('HTTP acceptance bound/status failed')

@@ -1,6 +1,8 @@
 # 独立前端制品与原子发布
 
-这些工具已实现本地封包和受控目录发布；**本轮未安装 helper、未连接生产、未执行 root/SSH、未修改 Nginx/systemd**。真实 Cookie/账号、旧 Next 标签页、生产入口和 Windows 验收仍是独立门禁。测试生成的 backend ID、报告摘要和 approval 都只属于 fixture，不能用于上线。
+这些工具支持本地封包和受控目录发布。2026-10-31 已按明确授权安装生产 helper 并完成首次分离上线，实际范围与例外见 [上线 Agent 记录](../../../doc/separation/agent-deployment-handoff-20261031.md)；测试 fixture 不能用于生产批准，有限上线检查也不代表完整功能验收。
+
+生产 HTTPS 探测连接本机 `127.0.0.1:443`，保持真实 `www.zimage.store` Host/SNI 与默认可信证书及主机名验证，以避免 ECS 公网 IP 回环超时；拒绝其他 HTTPS 来源、端口、URL 凭证及重定向，忽略环境代理。该探测证明本机实际 Nginx 入口；公网 DNS、路由与用户浏览器仍需独立外部验证。HTTP 回环 API 探测不受影响。
 
 本目录只使用 Node/Python 标准库。服务器无需安装前端依赖；发布和回退不运行 Node、构建、上传脚本、包管理器、systemd 或数据库命令。发布保留所有旧目录，不包含 GC。
 
