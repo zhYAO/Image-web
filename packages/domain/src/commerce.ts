@@ -40,6 +40,8 @@ export const commerceBriefSchema = z.object({
   listingCopy: z.object({ title: z.string().max(300), highlights: z.string().max(2000), description: z.string().max(4000), keywords: z.string().max(1000) }).optional(),
   visualStrategy: z.string().max(2000).optional(),
   moduleCopy: z.record(z.string(), z.string().max(1000)).optional(),
+  // Absence preserves the legacy undefined/empty/nonempty moduleCopy meaning.
+  moduleTextModes: z.record(z.string(), z.enum(['auto', 'exact', 'none'])).optional(),
   placement: z.string().max(120),
   productReferenceIds: z.array(z.uuid()).max(6),
   styleReferenceIds: z.array(z.uuid()).max(20),

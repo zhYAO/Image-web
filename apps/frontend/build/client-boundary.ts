@@ -8,6 +8,9 @@ export function isAllowedClientModule(rawId: string): boolean {
     || /\/react-dom\/(?:server|cjs\/react-dom-server)/.test(id)
     || /\.(?:otf|ttf|node)$/i.test(id)) return false;
   if (!id.includes('/apps/web/')) return true;
+  // This platform implementation belongs only to Next. The static frontend
+  // resolves the explicit interface to its own HTTP implementation.
+  if (id.endsWith('/apps/web/features/platform/client-runtime.ts')) return false;
   if (/\/apps\/web\/(?:server|lib|app)\//.test(id)) return id.endsWith('/apps/web/app/globals.css');
   if (/\/apps\/web\/gateways\/mock-/.test(id)) return false;
   return id.includes('/apps/web/features/')

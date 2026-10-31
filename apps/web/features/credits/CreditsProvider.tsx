@@ -59,7 +59,11 @@ function OwnerCreditsProvider({ children }: { children: ReactNode }) {
   const lastChecked = useRef(0);
   const refreshRef = useRef<() => void>(() => {});
   const refresh = useCallback(() => {
-    if (inFlight.current || document.visibilityState === 'hidden') return;
+    if (inFlight.current || document.visibilityState === 'hidden') {
+      invalidated.current = true;
+      return;
+    }
+    invalidated.current = false;
     const current = ++epoch.current;
     if (status !== "authorized") {
       setWallet(undefined);
@@ -85,7 +89,7 @@ function OwnerCreditsProvider({ children }: { children: ReactNode }) {
       if (epoch.current !== current) return;
       inFlight.current = false;
       lastChecked.current = Date.now();
-      if (invalidated.current) { invalidated.current = false; refreshRef.current(); }
+      if (invalidated.current) refreshRef.current();
     });
   }, [status]);
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
@@ -95,12 +99,9 @@ function OwnerCreditsProvider({ children }: { children: ReactNode }) {
     void Promise.resolve().then(() => {
       if (active) refresh();
     });
-    const changed = () => {
-      if (inFlight.current) invalidated.current = true;
-      else refresh();
-    };
+    const changed = () => refresh();
     const visible = () => {
-      if (document.visibilityState === 'visible' && Date.now() - lastChecked.current > 1000) refresh();
+      if (document.visibilityState === 'visible' && (invalidated.current || Date.now() - lastChecked.current > 1000)) refresh();
     };
     window.addEventListener("zimage:credits-changed", changed);
     window.addEventListener("focus", visible);

@@ -56,6 +56,22 @@ describe('actual migrated business modules over HTTP fixtures', () => {
     expect(screen.getByRole('button', { name: '保存资料' })).not.toBeNull();
     expect(screen.getByRole('button', { name: '修改密码' })).not.toBeNull();
   }, 30000);
+  it('returns from the account panel through client navigation without losing the editor draft', async () => {
+    const request = api(); vi.stubGlobal('fetch', request);
+    mount();
+    const input = await screen.findByLabelText('创作输入', {}, { timeout: 20000 });
+    fireEvent.change(input, { target: { value: 'retain this account round-trip draft' } });
+    act(() => { window.history.pushState(null, '', '/account'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await screen.findByText('邮箱：owner@example.test', {}, { timeout: 20000 });
+    const link = screen.getByRole('link', { name: '返回工作区' });
+    expect(link.getAttribute('href')).toBe('/workspace');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    act(() => { link.dispatchEvent(click); });
+    expect(click.defaultPrevented).toBe(true);
+    await waitFor(() => expect(window.location.pathname).toBe('/workspace'));
+    expect((await screen.findByLabelText('创作输入') as HTMLTextAreaElement).value).toBe('retain this account round-trip draft');
+    expect(request.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true);
+  }, 30000);
   it('renders actual login UI and keeps registration closed without legal approval', async () => {
     window.history.replaceState(null, '', '/login?returnTo=%2Fworkspace');
     vi.stubGlobal('fetch', api(false)); mount();
@@ -67,6 +83,18 @@ describe('actual migrated business modules over HTTP fixtures', () => {
   it('returns guests from a private workspace to the public home', async () => {
     vi.stubGlobal('fetch', api(false)); mount();
     await waitFor(() => expect(window.location.pathname).toBe('/home'), { timeout: 20000 });
+    expect(screen.queryByLabelText('创作输入')).toBeNull();
+  }, 30000);
+  it.each([
+    '/create/product-main?platform=amazon&template=white-main#examples',
+    '/workspace?scene=clone&platform=taobao',
+  ])('preserves a guest commerce destination through login: %s', async href => {
+    window.history.replaceState(null, '', href);
+    const request = api(false); vi.stubGlobal('fetch', request); mount();
+    await screen.findByRole('heading', { name: '登录' }, { timeout: 20000 });
+    expect(window.location.pathname).toBe('/login');
+    expect(new URLSearchParams(window.location.search).get('returnTo')).toBe(href);
+    expect(request.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true);
     expect(screen.queryByLabelText('创作输入')).toBeNull();
   }, 30000);
 });

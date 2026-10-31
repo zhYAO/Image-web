@@ -125,6 +125,60 @@ async function wizard(scene: CommerceScene, references = [ref("product.png")]) {
 }
 
 describe("Meitu commerce workflow contracts", () => {
+  it('persists explicit automatic, exact and no-text choices without stale copy taking precedence', async () => {
+    const view = await wizard('detail');
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    fireEvent.click(screen.getByRole('button', { name: /下一步：确认模块内容/ }));
+    fireEvent.change(screen.getByLabelText('品牌首屏模块文案'), { target: { value: '旧的指定文案' } });
+    fireEvent.change(screen.getByLabelText('品牌首屏文字模式'), { target: { value: 'auto' } });
+    fireEvent.change(screen.getByLabelText('核心卖点模块文案'), { target: { value: '确认文案' } });
+    fireEvent.change(screen.getByLabelText('产品展示文字模式'), { target: { value: 'none' } });
+    expect(screen.getByLabelText('产品展示模块文案')).toBeDisabled();
+    view.unmount();
+    render(<CommerceWizard {...view.props} />);
+    expect(screen.getByLabelText('品牌首屏文字模式')).toHaveValue('auto');
+    expect(screen.getByLabelText('核心卖点文字模式')).toHaveValue('exact');
+    expect(screen.getByLabelText('产品展示文字模式')).toHaveValue('none');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    const plan = create.mock.calls[0]![0].plan;
+    expect(plan.slots.find(slot => slot.module === '品牌首屏')).toMatchObject({ textMode: 'auto' });
+    expect(plan.slots.find(slot => slot.module === '品牌首屏')?.exactText).not.toBe('旧的指定文案');
+    expect(plan.slots.find(slot => slot.module === '核心卖点')).toMatchObject({ textMode: 'exact', exactText: '确认文案' });
+    expect(plan.slots.find(slot => slot.module === '产品展示')).toMatchObject({ textMode: 'none', exactText: '' });
+  });
+  it('does not silently turn cleared exact copy into an image without text', async () => {
+    const view = await wizard('detail');
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    fireEvent.click(screen.getByRole('button', { name: /下一步：确认模块内容/ }));
+    fireEvent.change(screen.getByLabelText('品牌首屏模块文案'), { target: { value: '需要编辑' } });
+    fireEvent.change(screen.getByLabelText('品牌首屏模块文案'), { target: { value: '' } });
+    expect(screen.getByLabelText('品牌首屏文字模式')).toHaveValue('exact');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await screen.findByText('请填写「品牌首屏」的指定文案，或选择自动文案、不显示文字。');
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('品牌首屏文字模式'), { target: { value: 'auto' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0].plan.slots.find(slot => slot.module === '品牌首屏')?.textMode).toBe('auto');
+  });
+  it('retains the meaning of untouched legacy empty and nonempty module copy', async () => {
+    const view = await wizard('detail');
+    view.unmount();
+    const draft = loadCommerceDraft('unit-draft')!;
+    saveCommerceDraft('unit-draft', { ...draft, editorStage: 'review', brief: { ...draft.brief, moduleCopy: { 品牌首屏: '', 核心卖点: '旧确认文案' } } });
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    render(<CommerceWizard {...view.props} />);
+    expect(screen.getByLabelText('品牌首屏文字模式')).toHaveValue('none');
+    expect(screen.getByLabelText('核心卖点文字模式')).toHaveValue('exact');
+    expect(screen.getByLabelText('产品展示文字模式')).toHaveValue('auto');
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    const slots = create.mock.calls[0]![0].plan.slots;
+    expect(slots.find(slot => slot.module === '品牌首屏')?.textMode).toBe('none');
+    expect(slots.find(slot => slot.module === '核心卖点')).toMatchObject({ textMode: 'exact', exactText: '旧确认文案' });
+    expect(slots.find(slot => slot.module === '产品展示')?.textMode).toBe('auto');
+  });
   it.each(['product-set', 'detail', 'clone', 'product-main'] as const)("keeps only output settings in %s without the technical plan editor", async scene => {
     await wizard(scene);
     expect(screen.queryByLabelText('创作平台')).toBeNull();

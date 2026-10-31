@@ -40,8 +40,9 @@ import { isCommerceDiscussion, resolveCommerceLaunch } from '@/features/commerce
 import { useCredits, CreditBalance } from '@/features/credits/CreditsProvider';
 import { getWorkspaceGateway } from '@/gateways';
 import { HttpWorkspaceGateway } from '@/gateways/http-workspace-gateway';
+import { notifyCreditsChanged } from '@/gateways/mock-credit-ledger';
 import { normalizeReferenceUploadFile } from '@/gateways/reference-upload-file';
-import { MockWorkspaceGateway } from '@/gateways/mock-workspace-gateway';
+import { clientRuntime } from '@/features/platform/client-runtime';
 import { zhCN } from '@/i18n';
 import { NavGlassFilter } from './NavGlassFilter';
 import { useWorkspaceStore, snapshotComposer, type ComposerState } from '@/store/workspace-store';
@@ -100,6 +101,10 @@ const MAX_REFERENCES = 4;
 const CHAT_STREAM_TIMEOUT_MS = 75_000;
 const ALLOWED_REFERENCE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+const refreshSettledImageCredits = (batch: GenerationBatch) => {
+  if (batch.status !== 'pending' && batch.status !== 'processing') notifyCreditsChanged();
+};
+
 const createRuntime = (loadStatus: SessionRuntime['loadStatus'] = 'idle'): SessionRuntime => ({
   awaitingFirstDelta: false,
   chatBusy: false,
@@ -139,6 +144,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     return () => isOwnerCurrent() && ownerScope.current.epoch === epoch;
   }, [isOwnerCurrent]);
   const gateway = scopedGateway?.gateway ?? baseGateway;
+  const previewControls = useMemo(() => clientRuntime.workspacePreview(gateway), [gateway]);
   useLayoutEffect(() => {
     ownerScope.current = { active: true, epoch: ownerScope.current.epoch + 1, baseGateway, ownerKey };
     return () => {
@@ -305,6 +311,12 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     }
   }, [captureOwner, gateway, updateRuntime]);
 
+  const onCommerceTaskChanged = useCallback(async (sessionId: string) => {
+    // Commerce owns its polling while active. Its terminal snapshot must also
+    // reconcile the timeline used by the sidebar's processing indicator.
+    await Promise.allSettled([refreshSessions(), refreshTimeline(sessionId), refreshQuota()]);
+  }, [refreshSessions, refreshTimeline, refreshQuota]);
+
   useEffect(() => {
     let cancelled = false;
     const current = captureOwner();
@@ -341,8 +353,8 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
         window.history.replaceState(window.history.state, '', `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
       }
       if (initialId) await refreshTimeline(initialId, true);
-      if (current() && !cancelled && gateway instanceof MockWorkspaceGateway) {
-        const recoveryNotice = gateway.getRecoveryNotice();
+      if (current() && !cancelled && previewControls) {
+        const recoveryNotice = previewControls.getRecoveryNotice();
         if (recoveryNotice) setFeedback({ message: recoveryNotice });
       }
     };
@@ -359,7 +371,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     return () => {
       cancelled = true;
     };
-  }, [captureOwner, gateway, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
+  }, [captureOwner, gateway, previewControls, initializationAttempt, refreshTimeline, updateSessions, setActiveSessionId, setAspectRatio, setCount, setResolution, setSelectedProvider, setSelectedModelId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -505,12 +517,13 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     const poll = async () => {
       if (!current() || stopped || document.visibilityState === 'hidden') return;
       await Promise.all(pendingBatchEntries.map(async ({ batchId, sessionId, createdAt }) => {
-        const delay = gateway instanceof MockWorkspaceGateway ? 300 : nextPollingDelay(createdAt, 'generation');
+        const delay = previewControls ? 300 : nextPollingDelay(createdAt, 'generation');
         if (delay === null || batchPollInFlight.current.has(batchId) || Date.now() - (batchLastPolled.current.get(batchId) ?? 0) < delay) return;
         batchPollInFlight.current.add(batchId);
         batchLastPolled.current.set(batchId, Date.now());
         await gateway.getGenerationBatch(batchId).then((batch) => {
           if (!current() || stopped) return;
+          refreshSettledImageCredits(batch);
           if (batch.status !== 'pending' && batch.status !== 'processing') {
             void refreshQuota().catch(() => undefined);
           }
@@ -525,7 +538,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       }));
     };
     const schedule = () => {
-      const delays = pendingBatchEntries.map(entry => gateway instanceof MockWorkspaceGateway ? 300 : nextPollingDelay(entry.createdAt, 'generation'))
+      const delays = pendingBatchEntries.map(entry => previewControls ? 300 : nextPollingDelay(entry.createdAt, 'generation'))
         .filter((value): value is number => value !== null);
       if (!delays.length || stopped) return;
       timer = window.setTimeout(async () => { await poll(); schedule(); }, Math.min(...delays));
@@ -535,7 +548,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     document.addEventListener('visibilitychange', poll);
     return () => { stopped = true; if (timer !== undefined) window.clearTimeout(timer);
       window.removeEventListener('focus', poll); document.removeEventListener('visibilitychange', poll); };
-  }, [captureOwner, gateway, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
+  }, [captureOwner, gateway, previewControls, pendingBatchKey, pendingBatchEntries, refreshQuota, updateRuntime]);
 
   const imageCreationEnabled = explicitImageToolEnabled;
   const selectedModel = findModelCapability(capabilities, selectedProvider, selectedModelId)?.model;
@@ -578,7 +591,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
 
   const changeScenario = (value: typeof scenario) => {
     setScenario(value);
-    if (gateway instanceof MockWorkspaceGateway) gateway.setScenario(value);
+    previewControls?.setScenario(value);
   };
 
   const createSession = async () => {
@@ -659,6 +672,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     try {
       const batch = await gateway.submitImage(turn.request);
       if (!currentOwner()) return;
+      refreshSettledImageCredits(batch);
       updateRuntime(sessionId, (runtime) => ({
         ...runtime,
         optimisticImages: runtime.optimisticImages.filter((item) => item.id !== turnId),
@@ -986,6 +1000,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       const { batch, scope, generationId, billing } = action;
       const nextBatch = await gateway.recreateGeneration({ batchId: batch.id, generationId, scope, requestId: crypto.randomUUID(), billing });
       if (!current()) return;
+      refreshSettledImageCredits(nextBatch);
       updateRuntime(batch.sessionId, (runtime) => ({
         ...runtime,
         timeline: [...runtime.timeline, {
@@ -1077,6 +1092,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
     try {
       const batch = await gateway.getGenerationBatch(target.id);
       if (!currentOwner()) return;
+      refreshSettledImageCredits(batch);
       updateRuntime(target.sessionId, runtime => ({ ...runtime, timeline: runtime.timeline.map(item =>
         item.type === 'generation' && item.batch.id === target.id ? { ...item, batch } : item) }));
       if (batch.status !== 'pending' && batch.status !== 'processing') void refreshQuota().catch(() => undefined);
@@ -1196,7 +1212,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
           <ControlCluster className={styles.headerStart}><ActionButton aria-label="打开会话" className={styles.mobileControl} icon={<Menu size={18} />} onClick={() => setSessionDrawerOpen(true)} variant="text" /><span className={styles.headerTitle}>{assetsActive ? '资产库' : catalogueActive ? '电商生图' : commerceShell ? COMMERCE_SCENES.find(item => item.id === (route?.kind === 'commerce' ? route.scene : commerceMode?.scene))?.name ?? '电商生图' : activeSession?.title ?? zhCN.workspace.creationTitle}</span></ControlCluster>
           <ControlCluster className={styles.headerNav}>
             <CreditBalance /><Link className={styles.commerceHeaderLink} href="/create">{commerceShell && !catalogueActive ? '返回工具目录' : '电商生图'}</Link><Link href="/account">账号</Link>
-            {gateway instanceof MockWorkspaceGateway && (
+            {previewControls && (
               <GlideSelect ariaLabel={zhCN.workspace.mockScenario} className={styles.devScenario} onChange={(value) => changeScenario(value as typeof scenario)} options={[
                 { label: 'Mock · 正常', value: 'happy' }, { label: 'Mock · 部分成功', value: 'partial' }, { label: 'Mock · 服务不可用', value: 'provider-unavailable' }, { label: 'Mock · 资源过期', value: 'expired' }, { label: 'Mock · 删除重试', value: 'delete-retry' },
               ].map(option => ({ ...option, textValue: option.label }))} value={scenario} />
@@ -1207,7 +1223,7 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       }>
         {catalogueActive && <CommerceCatalogue />}
         {assetsActive && <SessionAssets key={ownerKey} gateway={gateway} sessions={sessions} ownerKey={ownerKey} loading={initializing} error={initializationError} onRetry={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }} />}
-        {gateway instanceof MockWorkspaceGateway && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
+        {previewControls && <div className={styles.previewNotice} role="note">模拟预览 · 不调用真实模型，不消耗真实额度</div>}
         {feedback && <div className={styles.statusFeedback}><InlineNotice action={feedback.retrySessionId ? <ActionButton onClick={() => void deleteSession(feedback.retrySessionId!)} size="small">重试清理</ActionButton> : undefined} dismissible onDismiss={() => setFeedback(undefined)} role="alert"  title={feedback.message} tone={feedback.error ? 'error' : 'info'} /></div>}
         {(quotaError || modelsError || !quota || modelsLoading) && <div className={styles.bootstrapStatus} role="status">
           {quotaError ? <span>额度暂不可用 <button type="button" onClick={() => setQuotaAttempt(value => value + 1)}>重试额度</button></span> : !quota ? <span>正在加载额度…</span> : null}
@@ -1231,9 +1247,10 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               requestedView={route?.kind === 'session' ? route.view : undefined}
               routeDriven={Boolean(route)}
               onViewChange={(id, task, view) => { if (onNavigate && !isLocalCommerceDraft(id)) onNavigate(sessionHref(id, task, view)); }}
-              ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={refreshSessions}
+              ref={commerceRef} gateway={gateway.commerce} sessionId={activeSessionId} launch={commerceLaunch} onModeChange={onCommerceModeChange} onTaskChanged={onCommerceTaskChanged}
               items={activeRuntime?.timeline ?? []} references={references} capabilities={commerceCapabilities}
-              timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'}
+              timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'
+                || (route?.kind === 'session' && activeSessionId !== route.sessionId)}
               settings={{ provider: selectedProvider ?? 'seedream', model: selectedModelId ?? 'doubao-seedream-5.0-pro', aspectRatio, resolution }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference} referencesPreparing={preparingReferences > 0}
               onReferencesAdopt={(next, sessionId) => {

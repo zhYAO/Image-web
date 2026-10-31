@@ -12,6 +12,7 @@ import { useAccountData } from "./account-data";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { notifyAuthChange, useAuthStatus } from "@/features/auth/AuthStatusProvider";
+import Link from '../platform/link';
 
 export function AccountPanel({ account }: { account: Account }) {
   const router = useRouter();
@@ -146,7 +147,7 @@ export function AccountPanel({ account }: { account: Account }) {
     return <main className="glass-page"><section className="glass-card glass-form">
       <p role="status">{guest ? '尚未登录，正在返回首页…' : identityStatus === 'error' ? '暂时无法检查登录状态，请重试。' : '正在确认账号…'}</p>
       {identityStatus === 'error' && <button type="button" onClick={refreshIdentity}>重新检查</button>}
-      <a href="/home">返回首页</a>
+      <Link href="/home">返回首页</Link>
     </section></main>;
   }
 
@@ -159,7 +160,7 @@ export function AccountPanel({ account }: { account: Account }) {
         </>}>
           <p>注销将立即停止访问，后台将继续删除账号数据。确认后才会提交申请。</p>
         </ContentDialog>
-        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><a className="zi-button" href="/workspace">返回工作区</a></header>
+        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><Link className="zi-button" href="/workspace">返回工作区</Link></header>
         <div className="zi-account-grid"><div className="zi-account-main glass-card"><CreditAccount /></div><div className="zi-account-settings glass-form glass-card">
         <p className="glass-muted">邮箱：{account.email}</p>
         <form onSubmit={patch}><label>显示名称<input defaultValue={account.displayName ?? ''} name="displayName" /></label><button disabled={pending} type="submit">保存资料</button></form>

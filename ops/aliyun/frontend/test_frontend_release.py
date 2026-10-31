@@ -691,5 +691,46 @@ class ReleaseTests(unittest.TestCase):
                 self.adapter.deploy(operation, namespace, report['archiveSha256'], report['manifestSha256'], None)
 
 
+class BootstrapControlTests(unittest.TestCase):
+    def test_empty_frontend_baseline_reads_only_independent_public_api(self):
+        r = load('release')
+        meta = {'schemaVersion': 1, 'backendRelease': 'backend-A', 'api': {'major': 1, 'minor': 2}, 'capabilities': []}
+        headers = Message(); headers['Content-Type'] = 'application/json'
+        with patch.object(r, 'http_read', return_value=(json.dumps(meta).encode(), headers)) as read:
+            self.assertTrue(r.production_bootstrap_probe(None, 'backend-A'))
+            read.assert_called_once_with(r.ORIGIN + '/api/meta')
+        with patch.object(r, 'production_probe', return_value=True) as full:
+            self.assertTrue(r.production_bootstrap_probe('web-A', 'backend-A'))
+            full.assert_called_once_with('web-A', 'backend-A')
+
+    def test_public_baseline_rejects_wrong_release_or_mime(self):
+        r = load('release')
+        for release, mime in [('backend-B', 'application/json'), ('backend-A', 'text/html')]:
+            meta = {'schemaVersion': 1, 'backendRelease': release, 'api': {'major': 1, 'minor': 2}, 'capabilities': []}
+            headers = Message(); headers['Content-Type'] = mime
+            with patch.object(r, 'http_read', return_value=(json.dumps(meta).encode(), headers)):
+                self.assertFalse(r.production_bootstrap_probe(None, 'backend-A'))
+
+    def test_ordinary_mutations_cannot_bypass_an_unfinished_first_window(self):
+        r = load('release')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); (root / 'backend-operations').mkdir()
+            path = root / 'backend-operations/first-window-current.json'
+            with patch.object(r, 'ROOT', root), patch.object(r, 'owned'):
+                for record in ({'phase': 'backend_ready', 'writesOpened': False},
+                               {'phase': 'opening', 'writesOpened': False},
+                               {'phase': 'needs_attention', 'writesOpened': True},
+                               {'phase': 'committed', 'writesOpened': False}):
+                    path.write_text(json.dumps(record))
+                    with self.subTest(record=record), self.assertRaises(ValueError): r.require_no_active_bootstrap()
+                path.write_text(json.dumps({'phase': 'committed', 'writesOpened': True}))
+                r.require_no_active_bootstrap()
+
+    def test_orphan_static_checking_marker_blocks_ordinary_mutations(self):
+        r = load('release')
+        with patch.object(r.os.path, 'lexists', return_value=True):
+            with self.assertRaises(ValueError): r.require_no_active_bootstrap()
+
+
 if __name__ == '__main__':
     unittest.main()

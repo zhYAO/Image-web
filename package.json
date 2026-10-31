@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "dev:split": "node scripts/dev-split.mjs",
     "build": "pnpm --filter @zimage/web build",
     "build:frontend": "pnpm --filter @zimage/frontend build",
     "release:frontend": "node scripts/release.mjs frontend deploy",
@@ -22,6 +23,8 @@
     "test": "pnpm -r --if-present test",
     "test:run": "pnpm -r --if-present test:run",
     "test:dev": "node --test scripts/dev.test.mjs",
+    "test:dev-split": "node --test scripts/dev-split.test.mjs",
+    "test:credit-budget": "node --test scripts/acceptance-credit-budget.test.mjs",
     "test:coverage": "pnpm -r --if-present test:coverage",
     "setup:langgraph": "pnpm --filter @zimage/web setup:langgraph"
   },

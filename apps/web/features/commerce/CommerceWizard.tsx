@@ -17,6 +17,8 @@ import {
   SELLING_LAYOUTS,
   aPlusAspectRatio,
   maxCommerceSlots,
+  creativeListingCopySchema,
+  parseCreativeStrategy,
   templatesForScene,
   nextCommerceQuestion,
   validateCommercePlan,
@@ -404,6 +406,9 @@ export function CommerceWizard({
             )[index]?.exactText
           : generatedExactText(plan!.brief, previous.role)
         : undefined;
+      const moduleMode = detailModule ? preparedBrief.moduleTextModes?.[detailModule] : undefined;
+      if (preparedBrief.language !== 'none' && moduleMode === 'exact' && !preparedBrief.moduleCopy?.[detailModule!]?.trim())
+        throw new Error(`请填写「${detailModule}」的指定文案，或选择自动文案、不显示文字。`);
       return {
           ...slot,
           ...previous,
@@ -412,9 +417,10 @@ export function CommerceWizard({
           aspectRatio: outputSpec ? aPlusAspectRatio(outputSpec) : previous?.aspectRatio ?? slot.aspectRatio,
           targetWidth: target?.width, targetHeight: target?.height,
           layout: category === 'selling' ? (sellingLayouts[index - categoryCounts.white] ?? previous?.layout ?? '自动分配') as typeof SELLING_LAYOUTS[number] : undefined,
-          textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : detailModule && preparedBrief.moduleCopy?.[detailModule] !== undefined ? (preparedBrief.moduleCopy[detailModule] ? 'exact' as const : 'none' as const) : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined),
+          textMode: preparedBrief.language === 'none' || category === 'white' ? 'none' as const : moduleMode ?? (detailModule && preparedBrief.moduleCopy?.[detailModule] !== undefined ? (preparedBrief.moduleCopy[detailModule] ? 'exact' as const : 'none' as const) : previous?.textMode ?? (preparedBrief.description && !isPoster ? slot.role === '商品主图' ? 'none' as const : 'auto' as const : undefined)),
           exactText:
-            detailModule && preparedBrief.moduleCopy?.[detailModule] !== plan?.brief.moduleCopy?.[detailModule]
+            moduleMode === 'none' ? '' : moduleMode === 'auto' ? generatedExactText(preparedBrief, detailModule!) : moduleMode === 'exact' ? preparedBrief.moduleCopy![detailModule!]!
+            : detailModule && preparedBrief.moduleCopy?.[detailModule] !== plan?.brief.moduleCopy?.[detailModule]
               ? preparedBrief.moduleCopy?.[detailModule] ?? ''
               : previous && previous.exactText !== previousGeneratedText
               ? previous.exactText
@@ -476,21 +482,23 @@ export function CommerceWizard({
   const textBilling = () => credits.confirm([{ operation: 'optimize', provider: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', model: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', resolution: '', count: 1 }]);
   const generateStrategy = () => act(async () => {
     if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
-    const response = await requestCreativeTextOptimization({ field: 'strategy', text: `为这些模块制定视觉策略与简短文案。\n模块：${detailModules.join('、')}`, productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 4000 });
+    const response = await requestCreativeTextOptimization({ field: 'strategy', text: `为这些模块制定视觉策略与简短文案。\n模块：${detailModules.join('、')}`, expectedModules: detailModules, productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 4000 });
     notifyCreditsChanged();
-    const output = JSON.parse(response.text) as { strategy?: unknown; modules?: Array<{ name?: unknown; copy?: unknown }> };
-    if (typeof output.strategy !== 'string' || !Array.isArray(output.modules)) throw new Error('策划结果格式有误，请重试。');
+    const output = parseCreativeStrategy(JSON.parse(response.text), detailModules);
     const moduleCopy = { ...brief.moduleCopy };
-    for (const item of output.modules) if (typeof item.name === 'string' && typeof item.copy === 'string' && detailModules.includes(item.name)) moduleCopy[item.name] = item.copy.slice(0, 1000);
-    patch({ visualStrategy: output.strategy.slice(0, 2000), moduleCopy });
+    const moduleTextModes = { ...brief.moduleTextModes };
+    for (const item of output.modules) {
+      moduleCopy[item.name] = item.copy;
+      // Preserve an explicit choice; older drafts keep their existing copy semantics.
+      if (moduleTextModes[item.name] === undefined) moduleTextModes[item.name] = item.copy.trim() ? 'exact' : 'none';
+    }
+    patch({ visualStrategy: output.strategy, moduleCopy, moduleTextModes });
   });
   const generateListingCopy = () => act(async () => {
     if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
     const response = await requestCreativeTextOptimization({ field: 'listingCopy', text: '依据 productContext 中已确认的商品资料生成上架文案。', productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 6000 });
     notifyCreditsChanged();
-    const output = JSON.parse(response.text) as Record<string, unknown>;
-    if (!['title', 'highlights', 'description', 'keywords'].every(key => typeof output[key] === 'string')) throw new Error('上架文案格式有误，请重试。');
-    patch({ listingCopy: { title: String(output.title).slice(0, 300), highlights: String(output.highlights).slice(0, 2000), description: String(output.description).slice(0, 4000), keywords: String(output.keywords).slice(0, 1000) } });
+    patch({ listingCopy: creativeListingCopySchema.parse(JSON.parse(response.text)) });
   });
   const plannedCount = scene === 'product-set' ? Object.values(categoryCounts).reduce((sum, value) => sum + value, 0) : scene === 'detail' ? detailModules.length * (advancedAplus ? 2 : 1) : scene === 'clone' ? references.filter(reference => roleOf(reference) === 'style').length : count;
   const feeSlots = Array.from({ length: plannedCount }, (_, index) => plan?.slots[index] ?? generationSettings);

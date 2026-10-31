@@ -15,6 +15,7 @@
     "types": ["node"],
     "typeRoots": ["./node_modules/@types"],
     "paths": {
+      "@/features/platform/client-runtime": ["./src/platform/client-runtime.ts"],
       "@/app/use-media-query": ["./src/platform/use-media-query.ts"],
       "@/lib/public-assets": ["./src/platform/public-assets.ts"],
       "@/*": ["../web/*"],

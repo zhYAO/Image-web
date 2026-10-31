@@ -358,3 +358,78 @@ These protocols explicitly trust the authorized root operator and independent
 review of evidence; JSON/digests cannot prove truth against fabricated root
 attestations and add no cryptographic signer. No local fixture or historical
 snapshot is a production approval.
+
+## First static frontend during the same sealed window
+
+`frontend_bootstrap.py` extends the installed backend closure. It reuses the
+installed frontend `release.py`, `manifest.py`, and `transport.py` under
+`/opt/zimage/frontend-tools`, including its root acceptance, immutable artifact,
+API compatibility, same lock, and HTTPS checks. Install/review all of these
+before the window. Ordinary frontend deploy/rollback refuses an unfinished
+first-window journal or a static checking marker.
+
+The original first-window policy must contain `frontendBootstrap` **before B0
+run and completion review**. Its exact fields are `namespace`, `manifestSha256`,
+`splitIngressSha256`, `maintenanceMapsSha256`, and `maintenanceServerSha256`.
+These bind the already accepted F1 artifact, the split site at the original
+`ingressConfigPath`, and both fixed maintenance includes. Adding this field
+after B1 starts would change the approved policy/completion digests and is not a
+recovery mechanism. The original historical completion gate is unchanged.
+
+After `run` returns genuine `backend_ready`, the fixed root commands are:
+
+```sh
+/usr/bin/python3 -I /usr/local/libexec/zimage-backend/first-window.py prepare-frontend OP POLICY_SHA256 COMPLETION_SHA256
+# Independently install/test/reload the exact approved split ingress while sealed.
+# Review the actual loaded generation, include closure, and all six entry points.
+# Install the real receipt described below; this helper never creates it.
+/usr/bin/python3 -I /usr/local/libexec/zimage-backend/first-window.py frontend-deploy OP POLICY_SHA256 COMPLETION_SHA256 FRONTEND_OUTER_SHA256
+/usr/bin/python3 -I /usr/local/libexec/zimage-backend/first-window.py frontend-open OP POLICY_SHA256 COMPLETION_SHA256
+```
+
+Upload uses the existing `incoming/frontend-OP.tgz`. `prepare-frontend` requires
+the original gated legacy site and absent static current; it only moves B1 and
+ingress to checking. Do not switch the site before this command. In checking,
+the extra root-owned `/etc/zimage/frontend-checking.json` marker permits only
+GET/HEAD `/`, `/version.json`, and strict namespaced JS/MJS/CSS paths. The Node
+preload is unchanged: API writes, arbitrary pages, RSC, optimizers, and unknown
+paths remain closed. There is no invented F0: its baseline reads independent
+public `/api/meta`; post-switch F1 receives the original full static HTTPS probe.
+
+The root-owned `/etc/zimage/frontend-bootstrap-ingress.json` must have exactly:
+`schemaVersion:1`, `protocol:zimage-frontend-bootstrap-ingress-v1`, `operationId`,
+`policySha256`, `backendProcess` (the exact B1 PID/startTicks/bootId),
+`ingressConfigSha256` (split site), `maintenanceMapsSha256`,
+`maintenanceServerSha256`, `checkedAt`, `expiresAt` (maximum 600 seconds),
+`coverage`, `auditRefs`, and `reviewDecision:split-readonly-ingress-reviewed`.
+Coverage is the original six ingress categories in order, each with `category`,
+`evidenceSha256`, `auditRef`, and `outcome:writes-sealed`. References must cover
+the actual loaded Nginx generation and includes, retirement of older workers,
+and the real write-closed boundary. Disk hashes or these local tests alone are
+not that evidence. A fresh receipt can be independently installed before open;
+the original policy identity stays unchanged.
+
+Deploy/open recheck exact B1 process, epoch, site/include hashes, receipt, F1
+approval, pointer and frontend sequence. `frontend-open` repeats static checks,
+closes checking, drains B1's complete counters, rechecks the exact pair, and
+persists an opening intent before either write gate opens. A possible opening
+permanently prohibits automatic B0 recovery, even if a subsequent error reseals
+the site. `status` exposes that state without attempting recovery.
+
+Before opening, F1 can be undone with:
+
+```sh
+/usr/bin/python3 -I /usr/local/libexec/zimage-backend/first-window.py frontend-rollback OP POLICY_SHA256 COMPLETION_SHA256
+# Restore/test/reload the original reviewed gated legacy site, still sealed.
+/usr/bin/python3 -I /usr/local/libexec/zimage-backend/first-window.py recover OP POLICY_SHA256 COMPLETION_SHA256
+```
+
+This rollback removes only this operation's exact F1 current after a durable
+rollback intent and complete B1 drain. It preserves sealed artifacts and data,
+rejects another frontend sequence or process, and confirms a crash-time missing
+pointer only from the retained intent. It removes its exact static checking
+marker before legacy recovery; the original coordinator rejects any remaining
+marker. A failed/recovered frontend publication may also be closed by this
+command. It never deletes releases to manufacture an empty installation. B0
+recovery still requires its original safe-read receipt and separate wallet/
+ledger audit, and still leaves public ingress sealed for administrator review.

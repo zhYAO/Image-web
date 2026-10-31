@@ -49,6 +49,33 @@ describe('candidate build metadata emission without a bundle/build', () => {
   });
 });
 
+describe('verified local development configuration', () => {
+  it('requires the split launcher inputs and refuses a remote backend', () => {
+    if (typeof createConfig !== 'function') throw new Error('Expected Vite config factory');
+    expect(() => createConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false })).toThrow('pnpm dev:split');
+    const sha = 'a'.repeat(40);
+    vi.stubEnv('ZIMAGE_FRONTEND_COMPATIBILITY', JSON.stringify({ ...descriptor, allowedBackendReleases: [sha] }));
+    vi.stubEnv('ZIMAGE_DEV_BACKEND_SHA', sha);
+    vi.stubEnv('ZIMAGE_DEV_BACKEND_ORIGIN', 'https://zimage.store');
+    expect(() => createConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false })).toThrow('开发后端');
+  });
+  it('keeps development resources at the root and binds the proxy to exactly one local backend', async () => {
+    if (typeof createConfig !== 'function') throw new Error('Expected Vite config factory');
+    const sha = 'a'.repeat(40), compatibility = { ...descriptor, allowedBackendReleases: [sha] };
+    vi.stubEnv('ZIMAGE_FRONTEND_COMPATIBILITY', JSON.stringify(compatibility));
+    vi.stubEnv('ZIMAGE_DEV_BACKEND_SHA', sha);
+    vi.stubEnv('ZIMAGE_DEV_BACKEND_ORIGIN', 'http://127.0.0.1:7788');
+    vi.stubEnv('ZIMAGE_ASSET_NAMESPACE', 'production-must-not-affect-dev-routes');
+    const config = await createConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false });
+    expect(config.base).toBe('/');
+    expect(config.define?.__ZIMAGE_ASSET_NAMESPACE__).toBe('""');
+    expect(config.define?.__ZIMAGE_COMPATIBILITY__).toBe(JSON.stringify(compatibility));
+    expect(config.server).toMatchObject({ host: '127.0.0.1', strictPort: true, proxy: { '^/api(?:/|$)': { target: 'http://127.0.0.1:7788', changeOrigin: false, timeout: 0, proxyTimeout: 0 } } });
+    vi.stubEnv('ZIMAGE_DEV_BACKEND_SHA', 'b'.repeat(40));
+    expect(() => createConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false })).toThrow('identity');
+  });
+});
+
 describe('catalogue resource URLs in candidate browser and SSR code', () => {
   async function transform(source: string, module = 'features/brand/landing/HeroGallery.tsx', ssr = false) {
     const config = await candidateConfig(ssr);

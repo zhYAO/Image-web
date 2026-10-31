@@ -577,7 +577,12 @@ export function DetailFlow({ p }: { p: CommerceEditorProps }) {
           </label>
         </Section>
         <Section title="模块内容" extra={<small>可编辑、排序</small>}>
-          {p.modules.map((module, index) => (
+          {p.modules.map((module, index) => {
+            const copy = p.brief.moduleCopy?.[module];
+            const previousSlot = p.plan?.slots.find(slot => (slot.module ?? slot.role) === module);
+            const textMode = p.brief.moduleTextModes?.[module]
+              ?? (copy !== undefined ? copy ? 'exact' : 'none' : previousSlot?.textMode ?? 'auto');
+            return (
             <article className={styles.moduleReview} key={module}>
               <div>
                 <strong>
@@ -611,23 +616,37 @@ export function DetailFlow({ p }: { p: CommerceEditorProps }) {
                   ))}
                 </span>
               </div>
+              <label>
+                画面文字
+                <CommerceSelect aria-label={`${module}文字模式`} value={textMode} onChange={value => p.patch({
+                  moduleTextModes: { ...p.brief.moduleTextModes, [module]: value as 'auto' | 'exact' | 'none' },
+                  ...(value === 'exact' ? { moduleCopy: { ...p.brief.moduleCopy, [module]: copy ?? previousSlot?.exactText ?? '' } } : {}),
+                })}>
+                  <option value="auto">自动文案</option>
+                  <option value="exact">指定文案</option>
+                  <option value="none">不显示文字</option>
+                </CommerceSelect>
+              </label>
               <textarea
                 aria-label={`${module}模块文案`}
                 rows={3}
                 maxLength={1000}
-                placeholder="填写该模块要呈现的文案；留空由商品资料生成"
-                value={p.brief.moduleCopy?.[module] ?? ""}
+                placeholder={textMode === 'auto' ? '由商品资料生成；输入内容将切换为指定文案' : textMode === 'none' ? '此模块不显示文字' : '填写此模块要呈现的准确文案'}
+                disabled={textMode === 'none'}
+                value={textMode === 'exact' ? copy ?? previousSlot?.exactText ?? '' : ''}
                 onChange={(event) =>
                   p.patch({
                     moduleCopy: {
                       ...p.brief.moduleCopy,
                       [module]: event.target.value,
                     },
+                    moduleTextModes: { ...p.brief.moduleTextModes, [module]: 'exact' },
                   })
                 }
               />
             </article>
-          ))}
+            );
+          })}
         </Section>
       </>
     );

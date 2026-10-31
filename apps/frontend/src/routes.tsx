@@ -10,8 +10,8 @@ type RuntimePage = Exclude<PageId, 'home' | 'terms' | 'privacy'>;
 export type PageModules = Partial<Record<RuntimePage, ComponentType<{ route: PageRoute }>>>;
 const Catalogue = lazy(() => import('./pages/catalogue').then(module => ({ default: module.CataloguePage })));
 
-function Unavailable() {
-  return <main className="glass-page"><div className="glass-card" role="alert"><h1>此入口暂不可用</h1><p>请稍后重试。</p><Link href="/home">返回首页</Link></div></main>;
+function Unavailable({ retry, incompatible = false }: { retry?: () => void; incompatible?: boolean }) {
+  return <main className="glass-page"><div className="glass-card" role="alert"><h1>此入口暂不可用</h1><p>{incompatible ? '当前服务版本不兼容，请稍后再试。' : retry ? '暂时无法连接服务，请稍后重试。' : '请稍后重试。'}</p>{retry && <button type="button" onClick={retry}>重新连接</button>}<Link href="/home">返回首页</Link></div></main>;
 }
 export function Routes({ pages = {}, legalCreditBalance }: { pages?: PageModules; legalCreditBalance?: ReactNode }) {
   const navigation = useNavigation();
@@ -32,7 +32,7 @@ export function Routes({ pages = {}, legalCreditBalance }: { pages?: PageModules
   if (route.page === 'terms' || route.page === 'privacy') return <LegalPage kind={route.page} creditBalance={legalCreditBalance} />;
   if (route.page === 'catalogue') return <Suspense fallback={<p role="status">正在打开电商创作…</p>}><Catalogue /></Suspense>;
   if (runtime.status === 'checking') return <main className="glass-page"><p role="status">正在确认服务…</p></main>;
-  if (runtime.status !== 'ready') return <Unavailable />;
+  if (runtime.status !== 'ready') return <Unavailable retry={runtime.status === 'unavailable' ? runtime.retry : undefined} incompatible={runtime.status === 'incompatible'} />;
   const Page = pages[route.page];
   return Page ? <Suspense fallback={<p role="status">正在打开…</p>}><Page route={route} /></Suspense> : <Unavailable />;
 }

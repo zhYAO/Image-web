@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { creativeBatchSchema, type CommerceGateway, type CommerceTask, type CreativeBatch } from '@zimage/domain';
 import { z } from 'zod';
 import { HttpCommerceGateway } from '@/gateways/http-commerce-gateway';
+import { clientRuntime } from '@/features/platform/client-runtime';
 import { sessionHref } from '@/features/workspace/workspace-route';
 import { nextPollingDelay } from '@/features/workspace/bounded-polling';
 import styles from './commerce.module.css';
@@ -21,7 +22,7 @@ type History = { scope: string; batch?: CreativeBatch; progress?: Progress; task
 export function LegacyCreativeBatchHistory({ ownerKey, sessionId, batchId, gateway }: {
   ownerKey: string; sessionId: string; batchId: string; gateway?: CommerceGateway;
 }) {
-  const mockMode = process.env.NEXT_PUBLIC_DATA_MODE === 'mock';
+  const mockMode = clientRuntime.isMockDataMode();
   const scope = JSON.stringify([ownerKey, sessionId, batchId]);
   const [history, setHistory] = useState<History>({ scope });
   const refreshRef = useRef<() => Promise<void>>(async () => undefined);

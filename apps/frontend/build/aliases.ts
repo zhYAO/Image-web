@@ -5,6 +5,7 @@ const path = (relative: string) => fileURLToPath(new URL(relative, import.meta.u
 /** Narrow temporary bridges; no general Next or server-module compatibility. */
 export function frontendAliases() {
   return [
+    { find: '@/features/platform/client-runtime', replacement: path('../src/platform/client-runtime.ts') },
     { find: '@/app/use-media-query', replacement: path('../src/platform/use-media-query.ts') },
     { find: 'next/link', replacement: path('../src/platform/link.tsx') },
     { find: 'next/image', replacement: path('../src/platform/image.tsx') },

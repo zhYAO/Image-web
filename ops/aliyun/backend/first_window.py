@@ -75,9 +75,11 @@ def refs(value):
 
 
 def validate_policy(policy, operation, old, target, now):
-    exact(policy, ('schemaVersion', 'operationId', 'old', 'target', 'oldProcess', 'legacyFrontendSha256',
+    if type(policy) is not dict: raise ValueError('First-window policy must be an object')
+    fields = ('schemaVersion', 'operationId', 'old', 'target', 'oldProcess', 'legacyFrontendSha256',
                    'ingressConfigPath', 'ingressConfigSha256', 'candidateManifestSha256', 'compatibilitySha256',
-                   'candidatePolicy', 'serviceTemplates', 'originalServiceSha256', 'auditRefs', 'issuedAt', 'expiresAt'))
+                   'candidatePolicy', 'serviceTemplates', 'originalServiceSha256', 'auditRefs', 'issuedAt', 'expiresAt')
+    exact(policy, fields + (('frontendBootstrap',) if 'frontendBootstrap' in policy else ()))
     if type(policy['schemaVersion']) is not int or policy['schemaVersion'] != 1 or policy['operationId'] != operation or policy['old'] != old or policy['target'] != target:
         raise ValueError('Exact first-window policy identity rejected')
     if not tx.ID.fullmatch(operation) or not tx.SHA.fullmatch(old) or not tx.SHA.fullmatch(target) or old == target:
@@ -96,6 +98,14 @@ def validate_policy(policy, operation, old, target, now):
     exact(policy['serviceTemplates'], ('candidate', 'legacy'))
     for value in policy['serviceTemplates'].values(): hash64(value)
     refs(policy['auditRefs'])
+    if 'frontendBootstrap' in policy:
+        bootstrap = policy['frontendBootstrap']
+        exact(bootstrap, ('namespace', 'manifestSha256', 'splitIngressSha256', 'maintenanceMapsSha256', 'maintenanceServerSha256'))
+        if (type(bootstrap['namespace']) is not str or bootstrap['namespace'] == 'none'
+                or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', bootstrap['namespace']) is None):
+            raise ValueError('Exact static frontend namespace required')
+        for key in ('manifestSha256', 'splitIngressSha256', 'maintenanceMapsSha256', 'maintenanceServerSha256'):
+            hash64(bootstrap[key])
     fresh(policy['issuedAt'], policy['expiresAt'], now, 86400)
     return copy.deepcopy(policy)
 
@@ -188,7 +198,7 @@ def validate_legacy_audit(value, request, policy, now):
     refs(value['auditRefs'])
 
 
-def validate_record(record, policy, operation, completion_sha256=None):
+def validate_record(record, policy, operation, completion_sha256=None, *, allow_opened_status=False):
     required = {'schemaVersion', 'kind', 'operationId', 'sequence', 'old', 'target', 'oldPid', 'frontend',
                 'writesOpened', 'policySha256', 'completionSha256', 'oldProcess', 'phase'}
     if (type(record) is not dict or not required.issubset(record)
@@ -198,8 +208,13 @@ def validate_record(record, policy, operation, completion_sha256=None):
             or record['old'] != policy['old'] or record['target'] != policy['target']
             or record['oldProcess'] != policy['oldProcess'] or record['oldPid'] != policy['oldProcess']['pid']
             or record['policySha256'] != digest(policy) or record['frontend'] != policy['legacyFrontendSha256']
-            or record['writesOpened'] is not False or record.get('writesMayHaveOpened', False) is not False
-            or type(record['sequence']) is not int or record['sequence'] != 1 or record['phase'] not in PHASES):
+            or type(record['sequence']) is not int or record['sequence'] != 1):
+        raise tx.TransactionFailure('Exact unopened first-window journal required; uncertain writes prohibit automatic recovery')
+    opened = record.get('writesMayHaveOpened', False) is True
+    if opened and allow_opened_status:
+        if type(record['writesOpened']) is not bool or record['phase'] not in ('opening', 'committed', 'needs_attention'):
+            raise tx.TransactionFailure('Invalid opened first-window status')
+    elif record['writesOpened'] is not False or record.get('writesMayHaveOpened', False) is not False or record['phase'] not in PHASES:
         raise tx.TransactionFailure('Exact unopened first-window journal required; uncertain writes prohibit automatic recovery')
     hash64(record['completionSha256'])
     if completion_sha256 is not None and record['completionSha256'] != completion_sha256:
@@ -241,6 +256,8 @@ class FirstWindow:
         if original and self.ops.original_service_digest() != policy['originalServiceSha256']:
             raise tx.TransactionFailure('Original root-reviewed service metadata drift')
         if self.ops.frontend_current_exists(): raise tx.TransactionFailure('Dedicated B1-first path requires genuinely absent static frontend current')
+        if getattr(self.ops, 'frontend_checking', lambda: None)() is not None:
+            raise tx.TransactionFailure('Static checking must be removed by exact bootstrap recovery before legacy work')
         if self.ops.ingress_digest(policy) != policy['ingressConfigSha256']: raise tx.TransactionFailure('Legacy ingress configuration drift')
         token = self.ops.ingress_state()
         if token != seal_token(policy): raise tx.TransactionFailure('All-ingress external seal is missing or changed')

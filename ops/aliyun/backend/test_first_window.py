@@ -142,6 +142,16 @@ class FirstWindowTests(unittest.TestCase):
         self.assertIsNone(self.ops.checking)
         self.assertFalse(record['writesOpened'])
 
+    def test_opened_record_can_only_be_read_by_the_explicit_status_validator(self):
+        record = self.run_window()
+        record.update(phase='committed', writesOpened=True, writesMayHaveOpened=True)
+        with self.assertRaises(f.tx.TransactionFailure):
+            f.validate_record(record, self.ops.approved, OP, self.expected_completion_sha256)
+        f.validate_record(record, self.ops.approved, OP, self.expected_completion_sha256, allow_opened_status=True)
+        record['policySha256'] = '0' * 64
+        with self.assertRaises(f.tx.TransactionFailure):
+            f.validate_record(record, self.ops.approved, OP, self.expected_completion_sha256, allow_opened_status=True)
+
     def test_missing_unknown_or_boolean_completion_rejects_before_any_mutation(self):
         for mutate in (lambda x: x.clear(), lambda x: x.update(completion=True),
                        lambda x: x['completion'][0].update(outcome='unknown'),

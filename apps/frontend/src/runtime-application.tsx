@@ -17,6 +17,7 @@ import { AuthPage } from './pages/auth';
 import { AccountPage } from './pages/account';
 import { Routes } from './routes';
 import { resolveRoute } from './route-policy';
+import { workspaceRoute } from '../../web/features/workspace/workspace-route';
 import Link from './platform/link';
 
 const Workspace = lazy(() => loadWorkspace().then(module => ({ default: module.WorkspaceApplication })));
@@ -24,7 +25,13 @@ const resetIdentity = () => { clearWorkspaceAssetCaches(); useWorkspaceStore.get
 function WorkspaceGate() {
   const { status, refresh } = useAuthStatus();
   const navigation = useNavigation();
-  useEffect(() => { if (status === 'guest') navigation.replace('/home'); }, [status, navigation]);
+  useEffect(() => {
+    if (status !== 'guest') return;
+    const route = workspaceRoute(navigation.pathname, navigation.searchParams.toString());
+    const destination = route.kind === 'commerce'
+      ? `/login?${new URLSearchParams({ returnTo: navigation.href })}` : '/home';
+    navigation.replace(destination);
+  }, [status, navigation]);
   if (status === 'error') return <main className="glass-page"><p role="alert">暂时无法检查登录状态，请重试。</p><button type="button" onClick={refresh}>重新检查</button></main>;
   return <WorkspaceLoading />;
 }

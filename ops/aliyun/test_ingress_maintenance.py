@@ -35,9 +35,10 @@ def mapped(name, value):
     return default
 
 
-def blocked(closed, checking, method, uri, opened=False):
+def blocked(closed, checking, method, uri, opened=False, frontend=False, request_uri=None):
     probe = mapped('zimage_ingress_probe', method + ':' + uri)
-    return mapped('zimage_ingress_blocked', f'{int(opened)}:{int(closed)}:{int(checking)}:{probe}') == '1'
+    frontend_probe = mapped('zimage_frontend_probe', method + ':' + (request_uri if request_uri is not None else uri))
+    return mapped('zimage_ingress_blocked', f'{int(opened)}:{int(closed)}:{int(checking)}:{probe}:{int(frontend)}:{frontend_probe}') == '1'
 
 
 class IngressMaintenance(unittest.TestCase):
@@ -76,6 +77,51 @@ class IngressMaintenance(unittest.TestCase):
         for uri in ('/api/health/ready', '/api/account', '/_next/image', '/'):
             self.assertTrue(blocked(False, True, 'GET', uri))
 
+    def test_frontend_probe_requires_its_marker_and_exact_sealed_checking_tuple(self):
+        paths = ('/', '/version.json', '/frontend-assets/web-1/assets/main-a1.js',
+                 '/frontend-assets/web-1/assets/lazy.mjs', '/frontend-assets/web-1/assets/main.css')
+        for method in ('GET', 'HEAD'):
+            for uri in paths:
+                with self.subTest(method=method, uri=uri):
+                    self.assertFalse(blocked(True, True, method, uri, frontend=True))
+                    self.assertTrue(blocked(True, True, method, uri))
+                    for opened, closed, checking in ((False, False, False), (False, False, True),
+                                                     (False, True, False), (True, True, True),
+                                                     (True, False, True), (True, True, False)):
+                        self.assertTrue(blocked(closed, checking, method, uri, opened=opened, frontend=True))
+
+    def test_frontend_probe_never_admits_mutations_or_other_read_routes(self):
+        for method in ('POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS', 'TRACE'):
+            for uri in ('/', '/version.json', '/frontend-assets/web-1/assets/main.js'):
+                self.assertTrue(blocked(True, True, method, uri, frontend=True), (method, uri))
+        for uri in ('/workspace', '/api/credits', '/api/credits/ledger', '/_next/image',
+                    '/frontend-assets/web-1/app.html', '/frontend-assets/web-1/version.json',
+                    '/frontend-assets/web-1/assets/icon.svg', '/frontend-assets/web-1/assets/main.js.map',
+                    '/frontend-assets/web-1/assets/', '/frontend-assets/web-1/.release/manifest.json',
+                    '/frontend-assets/' + 'a' * 129 + '/main.js'):
+            self.assertTrue(blocked(True, True, 'GET', uri, frontend=True), uri)
+
+    def test_frontend_probe_checks_raw_uri_before_normalization_and_rejects_queries(self):
+        self.assertIn('map "$request_method:$request_uri" $zimage_frontend_probe', source('ingress-maintenance-maps.conf'))
+        for normalized, raw in (('/', '/?preview=1'), ('/', '/?_rsc=1'),
+                                ('/version.json', '/version.json?x=1'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1/assets/../main.js'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1/%2e%2e/main.js'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1/%6dain.js'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1//main.js'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1/main.js?x=1'),
+                                ('/frontend-assets/web-1/main.js', '/frontend-assets/web-1%2fmain.js')):
+            self.assertTrue(blocked(True, True, 'GET', normalized, frontend=True, request_uri=raw), raw)
+
+    def test_frontend_marker_does_not_change_existing_api_checking_or_open_rules(self):
+        for frontend in (False, True):
+            for method in ('GET', 'HEAD'):
+                for uri in ('/api/meta', '/api/public-config', '/login', '/_next/static/chunks/main.js'):
+                    self.assertFalse(blocked(True, True, method, uri, frontend=frontend))
+            for method in ('GET', 'POST', 'PATCH', 'DELETE'):
+                for uri in ('/', '/workspace', '/api/chat', '/frontend-assets/web-1/main.js'):
+                    self.assertFalse(blocked(False, False, method, uri, opened=True, frontend=frontend))
+
     def test_missing_or_contradictory_flags_fail_closed(self):
         for uri in ('/api/health/ready', '/api/account', '/_next/image', '/'):
             self.assertTrue(blocked(False, False, 'GET', uri))
@@ -99,6 +145,7 @@ class IngressMaintenance(unittest.TestCase):
         self.assertIn('open_file_cache off;', config)
         self.assertIn('if (-f /etc/zimage/ingress-maintenance.json)', config)
         self.assertIn('if (-f /etc/zimage/ingress-checking.json)', config)
+        self.assertIn('if (-f /etc/zimage/frontend-checking.json)', config)
         self.assertIn('if ($zimage_ingress_blocked) { return 503; }', config)
         self.assertIn('add_header Cache-Control "private, no-store" always;', config)
         self.assertIn('add_header Retry-After 30 always;', config)

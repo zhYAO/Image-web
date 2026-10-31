@@ -41,8 +41,9 @@ import {
 } from "./CommerceTaskCard";
 import type { CommerceWizardProps } from "./CommerceWizard";
 const CommerceWizard = lazy(() => import("./CommerceWizard").then(module => ({ default: module.CommerceWizard })));
-import { planOf, isExplicitImageRequest } from "./commerce-ui";
+import { planOf, isExplicitImageRequest, unsettledCommerceItem } from "./commerce-ui";
 import { useCommerceTasks } from "./use-commerce-tasks";
+import { notifyCreditsChanged } from '@/gateways/mock-credit-ledger';
 import { isLocalCommerceDraft, type CommerceView } from "@/features/workspace/workspace-route";
 import { loadCommerceDraft, clearCommerceDraft } from "./commerce-draft-storage";
 import styles from "./commerce.module.css";
@@ -102,7 +103,7 @@ export function CommerceWorkspace({
   onViewChange?: (sessionId: string, taskId: string, view?: CommerceView) => void;
   onExitDraft?: () => void;
   onModeChange?: (sessionId: string | undefined, active: boolean, scene?: CommerceScene) => void;
-  onTaskChanged?: () => void | Promise<unknown>;
+  onTaskChanged?: (sessionId: string) => void | Promise<unknown>;
   onReferencesAdopt: (
     references: UploadReference[],
     sessionId: string,
@@ -160,8 +161,28 @@ export function CommerceWorkspace({
   const apparel = useApparelTasks(gateway?.apparel, isLocalCommerceDraft(sessionId) ? undefined : sessionId, apparelPollTarget);
   const acceptAndRefresh = useCallback((task: CommerceTask) => {
     accept(task);
-    void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
+    void Promise.resolve(onTaskChanged?.(task.sessionId)).catch(() => undefined);
   }, [accept, onTaskChanged]);
+  const reconciledItems = useRef(new Set<string>());
+  useEffect(() => {
+    const changedSessions = new Set<string>();
+    for (const task of cachedTasks) {
+      for (const run of task.runs) {
+        for (const item of run.items) {
+          if (unsettledCommerceItem(item)) continue;
+          const key = `${ownerKey}:${task.id}:${run.id}:${item.generationId}:${item.status}`;
+          if (reconciledItems.current.has(key)) continue;
+          reconciledItems.current.add(key);
+          changedSessions.add(task.sessionId);
+        }
+      }
+    }
+    if (!changedSessions.size) return;
+    // Polling and manual reconciliation both arrive as task snapshots. Re-read
+    // authoritative balances after settlement; an unknown result stays frozen.
+    notifyCreditsChanged();
+    for (const id of changedSessions) void Promise.resolve(onTaskChanged?.(id)).catch(() => undefined);
+  }, [cachedTasks, ownerKey, onTaskChanged]);
   const [panels, setPanels] = useState<
     Record<string, "examples" | "plan" | "results">
   >({});
@@ -447,7 +468,7 @@ export function CommerceWorkspace({
     setDrafts(current => current.filter(draft => draft.sessionId !== source));
     setSelectedBySession(current => ({ ...current, [task.sessionId]: task.id }));
     onSavedSession?.(task, source);
-    void Promise.resolve(onTaskChanged?.()).catch(() => undefined);
+    void Promise.resolve(onTaskChanged?.(task.sessionId)).catch(() => undefined);
   };
   if (activeScene === 'apparel-catalog' && sessionId) return <section className={styles.commerceRoot}>
     <header className={styles.workbenchHeader}><Link href="/create"><ArrowLeft size={15}/>创作方式</Link><span>服装商品图片</span><button className={styles.refreshTask} type="button" onClick={() => void apparel.refresh()}>手动刷新任务</button>
@@ -458,7 +479,9 @@ export function CommerceWorkspace({
   </section>;
   return (
     <section className={hasCommerce ? styles.commerceRoot : undefined}>
-      {requestedTaskId && requestedTaskId !== "draft" && !selectedTask && !selectedApparel && !loading && !apparel.loading && <p role="alert">任务不存在或不属于此会话，请选择其他任务。</p>}
+      {gateway && sessionId && !isLocalCommerceDraft(sessionId) && requestedTaskId && requestedTaskId !== "draft"
+        && !selectedTask && !selectedApparel && !coordinatedLoading && !apparel.loading && !error && !apparel.error
+        && <p role="alert">任务不存在或不属于此会话，请选择其他任务。</p>}
       {error && (
         <p className={styles.notice} role="alert">
           电商任务加载失败：{error}

@@ -330,12 +330,14 @@ class Publisher:
             # This namespace is itself public same-origin content. Do not map
             # it merely because uploaded bytes passed integrity validation:
             # root approval, compatibility and baseline must authorize first.
+            self.checkpoint('before_mapping')
             self.asset_mapping(namespace)
             self.persist(record, 'switching')
             self.checkpoint('before_switch')
         else:
             # Resuming a sealed transaction also passed fresh approval/meta
             # above; a private retained directory never implies publication.
+            self.checkpoint('before_mapping')
             self.asset_mapping(namespace)
         actual = self.current()
         if actual == old:
@@ -482,6 +484,27 @@ def production_probe(namespace, backend):
     return True
 
 
+def production_bootstrap_probe(namespace, backend):
+    if namespace is not None: return production_probe(namespace, backend)
+    # Dedicated first-window caller proves current=None and sealed API writes.
+    # No F0 homepage exists after installing the reviewed split ingress.
+    body, headers = http_read(ORIGIN + '/api/meta')
+    value = m.validate_api_meta(m.parse(body))
+    return headers.get_content_type() == 'application/json' and value['backendRelease'] == backend
+
+
+def require_no_active_bootstrap():
+    path = ROOT / 'backend-operations/first-window-current.json'
+    marker = Path('/etc/zimage/frontend-checking.json')
+    if os.path.lexists(marker): raise ValueError('Dedicated first-window coordinator owns static checking')
+    if not os.path.lexists(path): return
+    for directory in [*reversed(path.parent.parents), path.parent]: owned(directory, directory=True)
+    owned(path)
+    record = m.parse(m.read_regular(path, m.MAX_JSON))
+    if record.get('phase') != 'committed' or record.get('writesOpened') is not True:
+        raise ValueError('Dedicated first-window coordinator owns unfinished bootstrap')
+
+
 def production_preflight():
     if os.geteuid() != 0: raise ValueError('Fixed helper requires root; local packaging must remain unprivileged')
     parent = Path(__file__).absolute().parent
@@ -508,6 +531,14 @@ def main():
     args = parser.parse_args()
     production_preflight()
     publisher = Publisher(ROOT, probe=production_probe, meta=production_meta, approval=production_approval)
+    if args.command in ('deploy', 'rollback'):
+        original_locked = publisher.locked
+        @contextmanager
+        def ordinary_locked():
+            with original_locked():
+                require_no_active_bootstrap()
+                yield
+        publisher.locked = ordinary_locked
     expected = None if getattr(args, 'expected_current', None) == 'none' else getattr(args, 'expected_current', None)
     if args.command == 'deploy': result = publisher.deploy(args.operation, args.namespace, args.archive_sha256, args.manifest_sha256, expected)
     elif args.command == 'rollback': result = publisher.rollback(args.operation, expected, args.target)

@@ -5,6 +5,7 @@ import {
   nextCommerceQuestion,
   parseCommerceEdit,
   validateCommercePlan,
+  commerceBriefSchema,
 } from "../src/commerce";
 const settings = {
   provider: "seedream",
@@ -22,6 +23,13 @@ const brief = {
   styleReferenceIds: [],
 };
 describe("commerce planning", () => {
+  it('keeps legacy module copy untouched and accepts an explicit mode independent of saved copy', () => {
+    const legacy = { ...brief, moduleCopy: { 品牌首屏: '', 核心卖点: '确认文案' } };
+    expect(commerceBriefSchema.parse(legacy)).toEqual(legacy);
+    const explicit = { ...legacy, moduleTextModes: { 核心卖点: 'auto', 品牌首屏: 'none' } };
+    expect(commerceBriefSchema.parse(explicit)).toEqual(explicit);
+    expect(() => commerceBriefSchema.parse({ ...legacy, moduleTextModes: { 品牌首屏: 'invalid' } })).toThrow();
+  });
   it('honors the selected artwork language while retaining exact copy and legacy defaults', () => {
     const slot = { ...buildCommerceSlots(brief, 'product-set', 1, settings)[0]!, textMode: 'exact' as const, exactText: 'Ceramic cup' };
     const english = compileCommerceSlot({ ...brief, region: 'us', language: 'en' }, slot, 'soft-studio');

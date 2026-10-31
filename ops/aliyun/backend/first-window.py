@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parent
 # Unit tests import the wrapper as a module; privileged execution uses __main__.
 if __name__ == '__main__':
     if os.geteuid() != 0 or not sys.flags.isolated: raise SystemExit('Requires root and isolated Python')
-    for target in (Path(__file__).absolute(), HERE / 'release.py', HERE / 'first_window.py', HERE / 'transaction.py'):
+    for target in (Path(__file__).absolute(), HERE / 'release.py', HERE / 'first_window.py', HERE / 'transaction.py', HERE / 'frontend_bootstrap.py'):
         for path in (target, *target.parents):
             info = path.lstat()
             if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
@@ -34,6 +34,7 @@ def local(name):
 
 r = local('release')
 f = local('first_window')
+b = local('frontend_bootstrap')
 POLICY = Path('/etc/zimage/first-window-policy.json')
 COMPLETION = Path('/etc/zimage/first-window-completion.json')
 FRONTEND = Path('/etc/zimage/legacy-frontend-identity.json')
@@ -41,7 +42,11 @@ AUDIT = Path('/etc/zimage/first-window-legacy-audit.json')
 INGRESS = Path('/etc/zimage/ingress-maintenance.json')
 CHECKING = Path('/etc/zimage/ingress-checking.json')
 OPEN = Path('/etc/zimage/ingress-open.json')
+FRONTEND_CHECKING = Path('/etc/zimage/frontend-checking.json')
+FRONTEND_INGRESS_RECEIPT = Path('/etc/zimage/frontend-bootstrap-ingress.json')
+FRONTEND_TOOLS = Path('/opt/zimage/frontend-tools')
 JOURNAL = r.ROOT / 'backend-operations/first-window-current.json'
+FRONTEND_COMMANDS = ('prepare-frontend', 'frontend-deploy', 'frontend-rollback', 'frontend-open')
 
 
 def unlink_synced(path):
@@ -62,6 +67,42 @@ class FirstOps(r.SystemOps):
     def ingress_open_exists(self): return os.path.lexists(OPEN)
     def ingress_checking(self): return r.bounded_json(CHECKING, 1024) if os.path.lexists(CHECKING) else None
     def frontend_current_exists(self): return os.path.lexists(r.ROOT / 'frontend/current')
+    def first_journal(self): return r.bounded_json(JOURNAL)
+    def frontend_checking(self): return r.bounded_json(FRONTEND_CHECKING, 1024) if os.path.lexists(FRONTEND_CHECKING) else None
+    def frontend_ingress_receipt(self): return r.bounded_json(FRONTEND_INGRESS_RECEIPT)
+    def frontend_mark(self, value):
+        expected = b.marker(self.first_policy())
+        if self.frontend_checking() not in (None, expected): raise ValueError('Foreign frontend checking marker')
+        if value is None: unlink_synced(FRONTEND_CHECKING)
+        elif value == expected: f.tx.atomic_json(FRONTEND_CHECKING, value, 0o644)
+        else: raise ValueError('Unexpected frontend checking marker')
+    def bootstrap_ingress_digests(self, policy):
+        result = {'splitIngressSha256': self.ingress_digest(policy)}
+        for key, name in (('maintenanceMapsSha256', 'maps'), ('maintenanceServerSha256', 'server')):
+            path = Path('/etc/nginx/zimage-ingress-maintenance-' + name + '.conf')
+            r.owned(path)
+            with path.open('rb') as stream: body = stream.read(1_048_577)
+            if len(body) > 1_048_576: raise ValueError('Ingress include exceeds bound')
+            result[key] = hashlib.sha256(body).hexdigest()
+        return result
+    def open_ingress(self, policy):
+        token = f.seal_token(policy)
+        if (self.ingress_state() != token or self.ingress_open_exists() or self.ingress_checking() is not None
+                or self.frontend_checking() is not None
+                or r.bounded_json(r.CONTROL, 1024) != {'schemaVersion': 2, 'operationId': policy['operationId'], 'mode': 'open'}):
+            raise ValueError('Exact drained bootstrap required for final ingress open')
+        # O+M is deliberately closed. Durably publish O before removing our M.
+        f.tx.atomic_json(OPEN, token, 0o644)
+        if self.ingress_state() != token: raise ValueError('Ingress seal drift before opening')
+        unlink_synced(INGRESS)
+    def seal_ingress(self, policy):
+        token = f.seal_token(policy)
+        for path in (INGRESS, CHECKING, OPEN):
+            if os.path.lexists(path) and r.bounded_json(path, 1024) != token:
+                raise ValueError('Foreign ingress marker; manual reconciliation required')
+        f.tx.atomic_json(INGRESS, token, 0o644)
+        unlink_synced(OPEN)
+        unlink_synced(CHECKING)
     def service_metadata(self):
         fields = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage.service', '--property=User,Group,WorkingDirectory,ExecStart,EnvironmentFiles,DropInPaths'], text=True)
         values = dict(line.split('=', 1) for line in fields.splitlines() if '=' in line)
@@ -243,6 +284,24 @@ def mutate_locked(args, ops, adapter, legacy):
     policy, _ = coordinator.approvals(args.expected_policy_sha256, args.expected_completion_sha256)
     approvals = {'expected_policy_sha256': args.expected_policy_sha256,
                  'expected_completion_sha256': args.expected_completion_sha256}
+    if args.command in FRONTEND_COMMANDS:
+        # Validate the complete cross-directory import closure before executing it.
+        r.owned(FRONTEND_TOOLS, directory=True)
+        for name in ('release.py', 'manifest.py', 'transport.py'): r.owned(FRONTEND_TOOLS / name)
+        frontend = r.load(FRONTEND_TOOLS / 'release.py', 'first_window_frontend')
+        frontend.production_preflight()
+        b.FrontendBootstrap(coordinator, None).approvals(args.operation_id, args.expected_policy_sha256,
+                                                        args.expected_completion_sha256)
+        publisher = frontend.Publisher(r.ROOT, probe=frontend.production_bootstrap_probe,
+                                       meta=frontend.production_meta, approval=frontend.production_approval)
+        bootstrap = b.FrontendBootstrap(coordinator, publisher)
+        parameters = (args.operation_id, args.expected_policy_sha256, args.expected_completion_sha256)
+        if args.command == 'prepare-frontend': result = bootstrap.prepare(*parameters)
+        elif args.command == 'frontend-deploy': result = bootstrap.deploy(*parameters, args.outer_sha256)
+        elif args.command == 'frontend-rollback': result = bootstrap.rollback(*parameters)
+        else: result = bootstrap.open(*parameters)
+        return {'schemaVersion': 1, 'bootstrapResult': result,
+                'productionReady': args.command == 'frontend-open' and result.get('phase') == 'committed'}
     if args.command == 'recover':
         return {'schemaVersion': 1, 'firstWindowJournal': coordinator.recover(args.operation_id, **approvals), 'productionReady': False}
     f.validate_policy(policy, args.operation_id, args.expected_current, args.sha, time.time())
@@ -262,13 +321,17 @@ def main():
     for key in ('sha', 'outer_sha256', 'manifest_sha256', 'run_number', 'expected_current', 'operation_id', 'expected_policy_sha256', 'expected_completion_sha256'): run.add_argument(key)
     recover = commands.add_parser('recover')
     for key in ('operation_id', 'expected_policy_sha256', 'expected_completion_sha256'): recover.add_argument(key)
+    for name in FRONTEND_COMMANDS:
+        command = commands.add_parser(name)
+        for key in ('operation_id', 'expected_policy_sha256', 'expected_completion_sha256'): command.add_argument(key)
+        if name == 'frontend-deploy': command.add_argument('outer_sha256')
     commands.add_parser('status'); commands.add_parser('verification-request')
     receipt = commands.add_parser('accept-receipt')
     for key in ('operation_id', 'sha'): receipt.add_argument(key)
     receipt.add_argument('pid', type=int); receipt.add_argument('expected_receipt_sha256')
     args = parser.parse_args()
     if os.geteuid() != 0 or not sys.flags.isolated: raise RuntimeError('Requires root and isolated Python')
-    for name in ('first-window.py', 'first_window.py', 'release.py', 'transaction.py', 'receipt.py', 'verify.py', 'http-admission.cjs', 'backend-lifecycle.conf', 'backend-legacy.conf'):
+    for name in ('first-window.py', 'first_window.py', 'frontend_bootstrap.py', 'release.py', 'transaction.py', 'receipt.py', 'verify.py', 'http-admission.cjs', 'backend-lifecycle.conf', 'backend-legacy.conf'):
         r.owned(HERE / name)
     r.owned(r.ROOT, directory=True); r.owned(JOURNAL.parent, directory=True)
     if os.path.lexists(r.SERVICE_DROPIN):
@@ -289,6 +352,21 @@ def main():
             coordinator = f.FirstWindow(ops, r.CONTROL, JOURNAL)
             policy = ops.first_policy()
             if args.command == 'status':
+                retained = r.bounded_json(JOURNAL) if JOURNAL.exists() else None
+                if retained is not None and retained.get('writesMayHaveOpened') is True:
+                    f.validate_record(retained, policy, policy['operationId'], f.digest(ops.completion()), allow_opened_status=True)
+                    print(json.dumps({'schemaVersion': 1, 'kind': 'first-window', 'current': ops.current(),
+                        'currentProcess': ops.process(), 'journal': retained, 'admission': r.bounded_json(r.CONTROL, 1024),
+                        'ingressOpen': ops.ingress_open_exists(), 'automaticLegacyRecoveryAllowed': False}, sort_keys=True))
+                    return
+                if retained is not None and retained.get('phase') == 'backend_ready' and 'frontendBootstrap' in policy:
+                    f.validate_record(retained, policy, policy['operationId'], f.digest(ops.completion()))
+                    print(json.dumps({'schemaVersion': 1, 'kind': 'first-window', 'current': ops.current(),
+                        'currentProcess': ops.process(), 'journal': retained, 'admission': r.bounded_json(r.CONTROL, 1024),
+                        'frontendChecking': ops.frontend_checking(), 'frontendCurrentExists': ops.frontend_current_exists(),
+                        'ingressOpen': ops.ingress_open_exists(), 'ingressConfigSha256': ops.ingress_digest(policy),
+                        'bootstrapStatusOnly': True, 'productionReady': False}, sort_keys=True))
+                    return
                 record = checked_journal(ops) if JOURNAL.exists() else None
                 coordinator.context(policy, completion_sha256=record['completionSha256'] if record else None,
                                     original=record is None, completion=record is None)

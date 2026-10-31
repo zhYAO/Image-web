@@ -4,6 +4,7 @@ import { readPending, persistPending, type PendingSubmission } from "./commerce-
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem } from "@zimage/domain";
 import { notifyCreditsChanged } from "@/gateways/mock-credit-ledger";
+import { clientRuntime } from '@/features/platform/client-runtime';
 import {
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
@@ -226,7 +227,7 @@ export function CommerceTaskCard({
       ? slot.referenceIds.filter(id => task.brief.styleReferenceIds.includes(id)) : [];
   }).join(',');
   const renewReference = (id: string, afterFailure = false) => {
-    if (!id || process.env.NEXT_PUBLIC_DATA_MODE === 'mock' ||
+    if (!id || clientRuntime.isMockDataMode() ||
       previewReferences?.some(reference => reference.id === id && reference.previewUrl)) return;
     if (afterFailure) {
       if (referenceRetried.current.has(id)) return;
@@ -244,7 +245,7 @@ export function CommerceTaskCard({
       const local = previewReferences?.find(reference => reference.id === id)?.previewUrl;
       if (local) return [id, local] as const;
       if (referenceUrls[id]) return [id, referenceUrls[id]] as const;
-      if (process.env.NEXT_PUBLIC_DATA_MODE === 'mock') return undefined;
+      if (clientRuntime.isMockDataMode()) return undefined;
       try { const url = await getReferenceUrl(id); return url ? [id, url] as const : undefined; } catch { return undefined; }
     })).then(entries => { if (!cancelled) setReferenceUrls(current => {
       const next = Object.fromEntries(entries.filter((item): item is readonly [string, string] => Boolean(item)));

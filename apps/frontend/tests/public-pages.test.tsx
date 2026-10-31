@@ -46,6 +46,7 @@ describe('frontend source boundary', () => {
     '/repo/apps/web/app/account/page.tsx', '/repo/node_modules/next/dist/index.js',
     '/repo/node_modules/@sentry/nextjs/index.js', '/repo/node_modules/sharp/lib/index.js',
     '/repo/fonts/NotoSansCJKsc-Regular.otf', '/repo/apps/web/gateways/mock-workspace-gateway.ts',
+    '/repo/apps/web/features/platform/client-runtime.ts',
   ])('rejects server/unmigrated module %s', id => expect(isAllowedClientModule(id)).toBe(false));
   it.each(['/repo/apps/frontend/src/main.tsx', '/repo/packages/domain/src/index.ts', '/repo/apps/web/features/brand/landing/LandingPage.tsx', '/repo/apps/web/features/workspace/workspace-route.ts'])('accepts reviewed client module %s', id => expect(isAllowedClientModule(id)).toBe(true));
   it('rejects old compile-time public flags and server imports before bundling', () => {

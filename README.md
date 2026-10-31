@@ -17,7 +17,7 @@ Phase 1 Web 统一图片工作台：在同一个可恢复时间线中流式聊�
 需要 Node.js 24.19+ 与 pnpm 11.19+。
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
@@ -26,6 +26,10 @@ pnpm dev
 开发服务默认使用 7788 端口（可用 `PORT=3100 pnpm run dev` 更改）；端口被占用时明确失败，不会悄悄切到另一个端口。此命令是前台服务，需保持终端运行；停止命令或关闭终端后，本地页面会不可用。启动日志会打印实际 Node 路径。Next 16.3 的开发磁盘缓存恢复曾触发 TaskGuard panic，因此开发缓存暂时关闭；首次页面编译会比热更新慢。
 
 默认仍使用版本化 localStorage mock（`zimage:mock:v1`），便于无密钥开发。将 `NEXT_PUBLIC_DATA_MODE` 设置为 `http` 后，Web 会切换到 Supabase 匿名身份、真实 SSE、持久队列和 private Storage；所需变量见 `apps/web/.env.example`，本地统一写入 `apps/web/.env.local`，不再维护 `.env`。生产服务端凭据独立保存在服务器环境文件；构建与发布不复制本地环境文件。
+
+验收独立前端使用 `pnpm dev:split`，打开日志中的 `http://127.0.0.1:5173`。此入口启动 Vite 前端与 7788 端口的 Next API，通过同源代理保留认证 Cookie 和 SSE，并在启动前检查真实后端版本、公开配置及锁定依赖。需要在 `apps/web/.env.local` 配置真实 Supabase；该模式使用正式邮箱认证，提交生成、聊天或文案优化会消费现有额度。后端凭据不会传给 Vite 子进程。
+
+可用 `--frontend-port`、`--backend-port` 调整端口。复用已运行的本地后端时，使用 `pnpm dev:split --backend-origin http://127.0.0.1:7788 --backend-sha <完整40位Git SHA>`，并在该后端配置对应前端地址的 `ZIMAGE_ALLOWED_ORIGINS`。退出分离启动器只停止自己启动的进程；端口被占用或身份不符时明确失败。
 
 数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Sentry、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
 
@@ -37,11 +41,16 @@ LangGraph 初始化入口为 `pnpm setup:langgraph`。真实环境验收需单�
 pnpm lint
 pnpm typecheck
 pnpm test:coverage
+pnpm --filter @zimage/frontend test:run
+pnpm test:dev-split
+pnpm test:credit-budget
 pnpm build
 pnpm --filter @zimage/web test:acceptance-budget
 ```
 
 已移除 Playwright / E2E 工具链和截图基线；保留单元测试、Worker 测试及数据库测试，当前不再提供浏览器自动回归覆盖。历史 E2E 结论仅作为当时的验收记录。
+
+`pnpm build` 生成旧 Next 完整应用；`pnpm build:frontend` 生成独立静态候选，需要明确的资源 namespace 和后端兼容描述，不能仅凭构建成功发布。分离发布的候选身份、真实组合验收与封包要求见 [前端发布说明](ops/aliyun/frontend/README.md) 和 [后端发布说明](ops/aliyun/backend/README.md)。Linux 服务器的后端包必须由匹配的 Linux 工具链构建，不能上传 Mac 原生依赖。
 
 ## 构建产物管理
 
