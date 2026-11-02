@@ -6,7 +6,7 @@ import { CommerceSelect } from "@/features/commerce/CommerceSelect";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import { ArrowUpRight, FolderOpen, Search } from "lucide-react";
+import { ArrowUpRight, FolderOpen, Grid2X2, Heart, Plus, Search } from "lucide-react";
 import type { Session, TimelineItem, WorkspaceGateway } from "@zimage/domain";
 import { VisibleAsset } from "@/features/workspace/WorkspaceTimeline";
 import { sessionHref } from "@/features/workspace/workspace-route";
@@ -77,21 +77,36 @@ export function SessionAssets({
   );
   return (
     <section className={styles.library} aria-label="资产库">
+      <div className={styles.content}>
       <header className={styles.hero}>
-        <span className={styles.eyebrow}>YOUR CREATIVE COLLECTION</span>
+        <div><span className={styles.eyebrow}>YOUR CREATIVE COLLECTION</span>
         <h1>
           让灵感，<span>有处可寻。</span>
         </h1>
-        <p>回看会话中的生成图片，让下一次创作从这里开始。</p>
+        <p>回看会话中的生成图片，让下一次创作从这里开始。</p></div>
+        <button className={`${styles.button} ${styles.buttonSecondary}`} disabled title="资产库暂不支持独立导入；请在创作会话中上传参考图。"><Plus />导入素材</button>
       </header>
-      <div className={styles.collections}>
-        <FolderOpen size={25} />
-        <div>
-          <h2>会话作品</h2>
-          <p>
-            按会话读取已有生成记录；电商任务的完整结果与下载请进入原会话查看。
-          </p>
+      <div className={styles.sectionEyebrow}><span>会话作品</span><span>YOUR COLLECTIONS</span></div>
+      <div className={styles.collectionGrid}>
+        {sessions.filter(item => item.status === 'active').slice(0, 3).map(item => (
+          <button type="button" className={styles.collection} key={item.id}
+            aria-pressed={sessionId === item.id} onClick={() => setSelected(item.id)}>
+            <span className={styles.collectionArt} aria-hidden><FolderOpen /></span>
+            <span className={styles.collectionCopy}>
+              <span className={styles.collectionTitle}>{item.title}<ArrowUpRight /></span>
+              <span>会话中成功生成的图片</span>
+              <span className={styles.collectionCount}>{sessionId === item.id && current?.items ? `${assets.length} 张作品` : '查看会话作品'}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <section className={styles.librarySection} aria-label="会话素材">
+      <div className={styles.libraryTop}>
+        <div className={styles.scopeTabs} role="group" aria-label="素材范围">
+          <button type="button" aria-pressed="true"><Grid2X2 />会话作品<span>{assets.length}</span></button>
+          <button type="button" disabled title="暂不支持收藏保存"><Heart />已收藏</button>
         </div>
+        <span className={styles.libraryLabel}>灵感，从这里延续</span>
       </div>
       <div className={styles.toolbar}>
         <label>
@@ -128,6 +143,7 @@ export function SessionAssets({
           </Link>
         )}
       </div>
+      <p className={styles.help}>按会话读取已有生成记录；电商任务的完整结果与下载请进入原会话查看。</p>
       {error ? (
         <div className={styles.empty} role="alert">
           <p>暂时无法读取会话列表。{error}</p>
@@ -192,6 +208,8 @@ export function SessionAssets({
           )}
         </>
       )}
+      <p className={styles.bottomNote}>每一个好想法，都值得被好好收藏。<span>ZImage</span></p>
+      </section></div>
     </section>
   );
 }

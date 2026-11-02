@@ -3,11 +3,9 @@ import type { Session } from "@zimage/domain";
 
 import Link from "next/link";
 import {
-  Check,
   Pencil,
   ArrowUpRight,
   Trash2,
-  X,
   MoreHorizontal,
 } from "lucide-react";
 import { SidebarTooltip } from "./SidebarTooltip";
@@ -75,7 +73,7 @@ export function SessionSidebar({
   };
 
   const finishRename = () => {
-    if (editingId && title.trim()) onRename(editingId, title);
+    if (editingId && title.trim()) onRename(editingId, title.trim());
     setEditingId(undefined);
   };
 
@@ -274,15 +272,6 @@ export function SessionSidebar({
                   </button>
                 </AnchoredPanel>
               </>
-            ) : editingId === session.id ? (
-              <TextField
-                aria-label="会话名称"
-                autoFocus
-                onChange={(event) => setTitle(event.target.value)}
-                onEnter={finishRename}
-                size="small"
-                value={title}
-              />
             ) : (
               <div className={filters.sessionContent}>
                 <div className={styles.sessionTitleRow}>
@@ -331,39 +320,14 @@ export function SessionSidebar({
             )}
             {!collapsed && (
               <div className={styles.sessionActions}>
-                {editingId === session.id ? (
-                  <>
-                    <SidebarTooltip enabled={collapsed} title="保存">
-                      <ActionButton
-                        aria-label="保存会话名称"
-                        icon={<Check size={13} />}
-                        onClick={finishRename}
-                        size="small"
-                        variant="text"
-                      />
-                    </SidebarTooltip>
-                    <SidebarTooltip enabled={collapsed} title="取消">
-                      <ActionButton
-                        aria-label="取消重命名"
-                        icon={<X size={13} />}
-                        onClick={() => setEditingId(undefined)}
-                        size="small"
-                        variant="text"
-                      />
-                    </SidebarTooltip>
-                  </>
-                ) : (
-                  <>
-                    <SidebarTooltip enabled={collapsed} title="重命名">
-                      <ActionButton
-                        disabled={deleting}
-                        aria-label={`重命名 ${session.title}`}
-                        icon={<Pencil size={13} />}
-                        onClick={() => beginRename(session)}
-                        size="small"
-                        variant="text"
-                      />
-                    </SidebarTooltip>
+                <>
+                  <AnchoredPanel label="重命名会话" content={(close) => <form className={filters.renameForm} onSubmit={(event) => { event.preventDefault(); if (!title.trim()) return; onRename(session.id, title.trim()); setEditingId(undefined); close(); }}>
+                    <h2>重命名</h2>
+                    <TextField aria-label="会话名称" value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
+                    <div><ActionButton aria-label="取消重命名" onClick={() => { setEditingId(undefined); close(); }}>取消</ActionButton><ActionButton aria-label="保存会话名称" type="submit" disabled={!title.trim()}>保存</ActionButton></div>
+                  </form>}>
+                    <ActionButton disabled={deleting} aria-label={`重命名 ${session.title}`} icon={<Pencil size={13} />} onClick={() => beginRename(session)} size="small" variant="text" />
+                  </AnchoredPanel>
                     <ConfirmAction
                       title="删除这个会话？"
                       description="会话及其中的创作记录将被删除。"
@@ -383,7 +347,6 @@ export function SessionSidebar({
                       />
                     </ConfirmAction>
                   </>
-                )}
               </div>
             )}
           </div>

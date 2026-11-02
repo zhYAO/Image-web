@@ -53,6 +53,7 @@ import { lastComposerSession } from '@/store/composer-storage';
 import { findModelCapability, normalizeGenerationSelection } from './GenerationConfig';
 import { GlideSelect } from '@/features/controls/GlideSelect';
 import { SessionSidebar } from './SessionSidebar';
+import { useWorkspaceSidebarBridge } from './WorkspaceSidebarBridge';
 import { downloadImages } from './download-images';
 import { chatRecoveryActions, reconcileChatTimeline, type FailedChatAttempt } from './chat-recovery';
 import { UnifiedComposer } from './UnifiedComposer';
@@ -1182,6 +1183,14 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
       onRetry={() => { setInitializationError(undefined); setInitializing(true); setInitializationAttempt(value => value + 1); }}
     />
   );
+  const sidebarBridge = useWorkspaceSidebarBridge();
+  const sidebarRender = useRef(sidebar);
+  useLayoutEffect(() => { sidebarRender.current = sidebar; });
+  const sidebarMessage = feedback?.message;
+  const sidebarVersion = JSON.stringify([ownerKey, activeSessionId, sessions, [...busySessionIds].sort(), [...commerceDraftIds].sort(), deletingSessionId, initializing, initializationError, feedback?.message]);
+  const sidebarSnapshot = useMemo(() => ({ ownerKey, version: sidebarVersion, feedback: sidebarMessage ? { message: sidebarMessage } : undefined, render: (collapsed: boolean) => sidebarRender.current(collapsed) }), [ownerKey, sidebarVersion, sidebarMessage]);
+  const publishSidebar = sidebarBridge?.publish;
+  useLayoutEffect(() => publishSidebar?.(sidebarSnapshot), [publishSidebar, sidebarSnapshot]);
   const activeSession = sessions.find((session) => session.id === activeSessionId);
   const mobileConfig = (
     <div className={styles.mobileConfig}>

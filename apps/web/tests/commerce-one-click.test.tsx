@@ -40,8 +40,8 @@ describe('commerce navigation and durable drafts', () => {
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'home' }} />);
     await screen.findByRole('textbox', { name: '创作输入' }, { timeout: 10000 });
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-main' }} />);
-    await screen.findByText('上传或拖放图片至此处，开始创作');
-    expect(screen.queryByRole('textbox', { name: '商品描述' })).toBeNull();
+    await screen.findByText('在左侧上传或拖放商品图片，开始创作。');
+    expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('');
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     await waitFor(() => expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('米白色棉质衬衫，宽松版型。'), { timeout: 10000 });
     expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');

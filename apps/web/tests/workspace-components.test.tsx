@@ -743,3 +743,18 @@ describe('workspace presentation components', () => {
     expect(screen.getByText('输入参数')).toBeInTheDocument();
   });
 });
+
+ it('renames through a dialog, trims the title and cancels without changing the session', () => {
+ const onRename = vi.fn();
+ render(<SessionSidebar sessions={[{ id: 'rename-1', status: 'active', title: '原始标题', createdAt: '2026', updatedAt: '2026' }]} onCreate={vi.fn()} onDelete={vi.fn()} onSelect={vi.fn()} onRename={onRename} />);
+ fireEvent.click(screen.getByRole('button', {name: '重命名 原始标题'}));
+ const dialog = screen.getByRole('dialog', {name: '重命名会话'});
+ expect(dialog).toBeInTheDocument();
+ fireEvent.change(screen.getByRole('textbox', {name: '会话名称'}), {target:{value:'  新的标题  '}});
+ fireEvent.click(screen.getByRole('button', {name:'保存会话名称'}));
+ expect(onRename).toHaveBeenCalledWith('rename-1', '新的标题');
+ expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button', {name: '重命名 原始标题'}));
+ fireEvent.click(screen.getByRole('button', {name: '取消重命名'}));
+ expect(onRename).toHaveBeenCalledTimes(1);
+ });

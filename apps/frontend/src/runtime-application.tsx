@@ -1,3 +1,4 @@
+import { WorkspaceSidebarProvider } from '../../web/features/workspace/WorkspaceSidebarBridge';
 import { lazy, Suspense, useEffect } from 'react';
 import { AuthStatusProvider, useAuthStatus } from './platform/auth-status';
 import { WorkspaceHost } from './platform/workspace-host';
@@ -48,10 +49,10 @@ function IdentityWorkspace() {
   const route = resolveRoute(navigation.href);
   useEffect(() => { if (identity.status === 'authorized') resetAuthRequiredNotification(); }, [identity.status]);
   const active = route.kind === 'page' && ['workspace', 'catalogue', 'assets'].includes(route.page);
-  return <WorkspaceHost active={active} ownerId={identity.ownerId ?? null} status={identity.status}
+  return <WorkspaceSidebarProvider ownerKey={identity.status === 'authorized' ? identity.ownerId : undefined}><WorkspaceHost active={active} warm={route.kind === 'page' && route.page === 'account'} ownerId={identity.ownerId ?? null} status={identity.status}
     renderWorkspace={() => <Suspense fallback={<WorkspaceLoading />}><Workspace /></Suspense>}>
     <Routes pages={pages} legalCreditBalance={<CreditBalance />} />
-  </WorkspaceHost>;
+  </WorkspaceHost></WorkspaceSidebarProvider>;
 }
 export function RuntimeApplication() {
   return <AuthStatusProvider onIdentityReset={resetIdentity}><CreditsProvider><IdentityWorkspace /></CreditsProvider></AuthStatusProvider>;

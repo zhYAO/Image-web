@@ -1,5 +1,6 @@
 "use client";
 
+import { Glass } from "@/features/brand/Glass";
 import { ContentDialog } from '@/features/controls/NativeControls';
 import {
   createContext,
@@ -318,77 +319,42 @@ export function CreditAccount() {
     review: "待核对",
   };
   return (
-    <section aria-label="积分账户" className="credit-account">
-      <h2>我的积分</h2>
-      <div className="credit-overview">
-        <span>
-          可用积分
-          <strong>
-            {state.wallet ? formatCredits(state.wallet.availableMinor) : "—"}
-          </strong>
-        </span>
-        <span>
-          冻结积分
-          <strong>
-            {state.wallet ? formatCredits(state.wallet.frozenMinor) : "—"}
-          </strong>
-        </span>
-        <span>
-          累计消费
-          <strong>
-            {state.wallet ? formatCredits(state.wallet.spentMinor) : "—"}
-          </strong>
-        </span>
-      </div>
-      <p>验证账号一次赠送 10.00 积分，不每日重置。</p>
-      {state.error && <p role="alert">{state.error}</p>}
-      <details>
-        <summary>模型价格与计费说明</summary>
-        <Prices />
-      </details>
-      <h3>积分流水</h3>
-      {error && (
-        <p role="alert">
-          {error}{" "}
-          <button type="button" onClick={() => void load()}>
-            重试
-          </button>
-        </p>
-      )}
-      <table className="credit-table">
-        <thead>
-          <tr>
-            <th>时间 / 用途</th>
-            <th>类型</th>
-            <th>积分</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ledger?.items.map((row) => (
-            <tr key={row.id}>
-              <td>
-                {new Date(row.createdAt).toLocaleString("zh-CN")}
-                <small>{row.model ?? row.reason ?? "账号赠送"}</small>
-              </td>
-              <td>
-                {labels[row.kind] ?? row.kind}
-                {row.status === "needs_review" ? " · 待核对" : ""}
-              </td>
-              <td>{formatCredits(row.amountMinor)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {ledger?.items.length === 0 && <p>暂无积分流水。</p>}
-      {ledger?.nextCursor && (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void load(ledger.nextCursor!)}
-        >
-          加载更多
-        </button>
-      )}
+    <section aria-label="积分账户" className="zi-credit-account">
+      <Glass as="section" className="zi-account-card" aria-labelledby="zi-credit-title">
+        <div className="zi-card-heading"><h2 id="zi-credit-title">我的积分</h2><span>创作消耗，一目了然</span></div>
+        <div className="zi-credit-overview">
+          <div><span>可用积分</span><strong>{state.wallet ? formatCredits(state.wallet.availableMinor) : "—"}<small>CREDITS</small></strong></div>
+          <div className="zi-credit-emblem" aria-hidden="true"><Coins /></div>
+        </div>
+        <div className="zi-balance-grid">
+          <div><span>冻结积分</span><strong>{state.wallet ? formatCredits(state.wallet.frozenMinor) : "—"}</strong></div>
+          <div><span>累计消费</span><strong>{state.wallet ? formatCredits(state.wallet.spentMinor) : "—"}</strong></div>
+        </div>
+        <details className="zi-details"><summary>模型价格与计费说明</summary><Prices /></details>
+        <p className="zi-local-note">验证账号一次性获赠 10.00 积分，非每日重置。</p>
+        {state.error && <p className="zi-feedback" role="alert">{state.error}</p>}
+      </Glass>
+      <Glass as="section" className="zi-account-card" aria-labelledby="zi-ledger-title">
+        <div className="zi-card-heading"><h2 id="zi-ledger-title">积分流水</h2><span>创作记录</span></div>
+        {error && <p className="zi-feedback" role="alert">{error} <button className="zi-text-button" type="button" onClick={() => void load()}>重试</button></p>}
+        <div className="zi-table-wrap">
+          <table className="zi-ledger">
+            <caption className="sr-only">积分流水</caption>
+            <thead><tr><th scope="col">时间 / 用途</th><th scope="col">类型</th><th scope="col">积分</th></tr></thead>
+            <tbody>
+              {ledger?.items.map((row) => (
+                <tr key={row.id}>
+                  <td><strong>{row.model ?? row.reason ?? "账号操作"}</strong><small>{new Date(row.createdAt).toLocaleString("zh-CN")}</small></td>
+                  <td><span className="zi-ledger-type">{labels[row.kind] ?? row.kind}{row.status === "needs_review" ? " · 待核对" : ""}</span></td>
+                  <td className={row.kind === "grant" || row.kind === "release" ? "zi-credit-return" : undefined}>{formatCredits(row.amountMinor)}</td>
+                </tr>
+              ))}
+              {ledger?.items.length === 0 && <tr><td colSpan={3}>暂无积分流水。</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {ledger?.nextCursor && <button className="zi-button zi-secondary" type="button" disabled={busy} onClick={() => void load(ledger.nextCursor!)}>加载更多</button>}
+      </Glass>
     </section>
   );
 }

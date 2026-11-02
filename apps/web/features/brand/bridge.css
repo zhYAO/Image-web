@@ -7,19 +7,51 @@
   --subtle: var(--z-placeholder);
   --primary: var(--z-primary);
   --primary-hover: var(--z-primary-hover);
-  --soft: var(--z-primary-soft);
+  --soft: #eee8f6;
   --border: var(--z-border);
   --control-border: var(--z-border-control);
-  --overlay-glass: var(--z-glass-overlay);
-  --rim: rgba(255, 255, 255, 0.85);
-  --shadow: var(--z-shadow-soft);
+  --nav-glass: var(--glass-surface);
+  --sidebar-glass: var(--glass-surface);
+  --overlay-glass: rgba(255, 255, 255, 0.95);
+  --bubble-glass: var(--glass-surface);
+  --bubble-sheen: var(--glass-sheen);
+  --bubble-border: var(--glass-border);
+  --bubble-shadow: var(--glass-shadow);
+  --liquid-shadow: var(--glass-shadow);
+  --rim: rgba(255, 255, 255, 0.95);
+  --shadow: 0 10px 40px rgba(40, 27, 62, 0.045), 0 2px 8px rgba(40, 27, 62, 0.025);
   --ease: var(--z-ease);
   --font:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
+  --sidebar-width: 244px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-z-theme="light"]) {
+    --soft: #392d49;
+    --overlay-glass: rgba(41, 35, 51, 0.97);
+    --rim: rgba(239, 222, 255, 0.15);
+    --shadow: 0 10px 40px #05020924, 0 2px 8px #05020914;
+  }
+}
+:root[data-z-theme="dark"] {
+  --soft: #392d49;
+  --overlay-glass: rgba(41, 35, 51, 0.97);
+  --rim: rgba(239, 222, 255, 0.15);
+  --shadow: 0 10px 40px #05020924, 0 2px 8px #05020914;
 }
 .zl-root {
   font-family: var(--font);
+}
+.zl-root svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .zl-root :is(button, input, select, textarea) {
   font: inherit;
@@ -73,33 +105,7 @@
 .zi-auth-scroll .auth-story {
   display: none;
 }
-.zi-account {
-  width: min(1120px, 100%);
-  margin: 48px auto;
-}
-.zi-account-main.glass-card,
-.zi-account-settings.glass-card {
-  padding: 28px;
-  min-width: 0;
-}
-.zi-account-settings form {
-  padding: 12px 0 24px;
-  border-bottom: 1px solid var(--z-border);
-}
-.zi-account-settings .glass-muted {
-  overflow-wrap: anywhere;
-}
 .glass-brand > svg {
   width: 24px;
   height: 24px;
 }
-
-.zi-account .credit-account { margin: 0; padding: 0; border: 0; }
-.zi-account .credit-account > h2 { font-size: 16px; font-weight: 550; }
-.zi-account .credit-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 24px 0; }
-.zi-account .credit-overview > span { padding: 14px 16px; border: 1px solid var(--z-border); border-radius: 14px; background: var(--z-bg); }
-.zi-account .credit-overview > span:first-child { grid-column: 1 / -1; padding: 0; border: 0; background: none; }
-.zi-account .credit-overview > span:first-child strong { font-size: 54px; line-height: 1.2; font-weight: 500; letter-spacing: -2px; margin-top: 7px; }
-.zi-account .credit-overview > span:not(:first-child) strong { font-size: 24px; font-weight: 500; margin-top: 5px; }
-.zi-account .credit-account > p { color: var(--z-muted); font-size: 12px; }
-.zi-account .credit-table { font-size: 12px; }

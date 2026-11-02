@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { PreviewImage, ImageGallery } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "@/features/commerce/CommerceSelect";
 
@@ -464,8 +466,11 @@ export function ApparelWorkspace({
     setError(undefined);
   };
   return (
+    <div className={styles.page}>
+      <nav className={styles.breadcrumb} aria-label="工具导航"><Link href="/create">工具目录</Link><span>/</span><h1>服装商品图片</h1></nav>
     <section className={styles.workspace}>
       <div className={styles.form}>
+        <div className={styles.formScroll}>
         <header>
           <h1>服装商品图片</h1>
           <p>固定版式 · 5 张主图 + 790px 详情页 · 不消耗模型积分</p>
@@ -539,6 +544,8 @@ export function ApparelWorkspace({
             )}
           </div>
         </fieldset>
+        </div>
+        <footer className={styles.actionBar}>
         {error && (
           <p role="alert" className={styles.error}>
             {error}
@@ -576,10 +583,11 @@ export function ApparelWorkspace({
             </button>
           )}
         </div>
+        </footer>
       </div>
-      <aside className={styles.preview}>
+      <aside className={`${styles.preview} ${!task?.runs.length ? styles.previewWithExamples : ""}`}>
         <header>
-          <h2>整套预览</h2>
+          <div><span className={styles.overline}>APPAREL STUDIO</span><h2>整套效果</h2></div>
           {task && (
             <span>
               方案 v{task.revision} · 版式 {APPAREL_LAYOUT_VERSION}
@@ -650,9 +658,6 @@ export function ApparelWorkspace({
           </>
         ) : (
           <section className={styles.examples} aria-label="服装排版效果示例">
-            <h3>排版效果示例</h3>
-            <p>原创 AI 示例 · 虚构商品，仅展示排版。成分、尺码和文案不作为商品事实，也不会填入你的方案。</p>
-            <p>5 张 750 × 1000 主图 + 790px 详情模块 · 点击查看原始 JPEG</p>
             <ImageGallery>
               <div className={styles.results}>
                 {examplePages.map((example) => (
@@ -663,15 +668,20 @@ export function ApparelWorkspace({
                       loading="lazy"
                       fullSource={publicAssetUrl(`/commerce/apparel-v2/${example.file}.jpg`)}
                     />
-                    <figcaption>{example.title}<br />{example.width} × {example.height}</figcaption>
+                    <figcaption>{example.title}<small>{example.width} × {example.height}</small></figcaption>
                   </figure>
                 ))}
               </div>
             </ImageGallery>
+            <details className={styles.exampleNotes}>
+              <summary>示例说明与成品保留规则</summary>
+            <p>原创 AI 示例 · 虚构商品，仅展示排版。成分、尺码和文案不作为商品事实，也不会填入你的方案。</p>
+            <p>5 张 750 × 1000 主图 + 790px 详情模块 · 点击查看原始 JPEG</p>
             <p>完整成品保存 90 天，修改后整套排版新版本。</p>
+            </details>
           </section>
         )}
       </aside>
-    </section>
+    </section></div>
   );
 }

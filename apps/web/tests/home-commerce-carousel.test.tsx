@@ -49,7 +49,7 @@ function media() {
     });
 }
 describe("home commerce carousel", () => {
-  it("keeps five unique links mounted and advances by a non-overlapping group of three", () => {
+  it("keeps five unique links mounted and advances by a bounded group of three without an empty tail", () => {
     const { container } = render(<HomeCommerceCarousel />);
     const links = [...container.querySelectorAll("a")];
     expect(links).toHaveLength(5);
@@ -57,29 +57,47 @@ describe("home commerce carousel", () => {
     expect(links[4]).toHaveAttribute("href", "/create/apparel-catalog");
     expect(visibleNames()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     fireEvent.keyDown(region(), { key: "ArrowRight" });
-    expect(visibleNames()).toEqual(["AI 商品图", "服装商品图片"]);
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(visibleNames()).toEqual(["爆款图复刻", "AI 商品图", "服装商品图片"]);
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
     expect([...container.querySelectorAll("a")]).toEqual(links);
     fireEvent.keyDown(region(), { key: "ArrowLeft" });
     expect(screen.getByText("1–3 / 5")).toBeInTheDocument();
   });
-  it("renders no navigation or playback buttons", () => {
+  it("navigates the real scene links with bounded previous and next controls", () => {
     render(<HomeCommerceCarousel />);
-    expect(region().querySelectorAll("button")).toHaveLength(0);
+    const previous = screen.getByRole("button", { name: "上一组创作场景" });
+    const next = screen.getByRole("button", { name: "下一组创作场景" });
+    expect(previous).toBeDisabled();
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+    expect(visibleNames()).toEqual(["爆款图复刻", "AI 商品图", "服装商品图片"]);
+    expect(next).toBeDisabled();
+    expect(previous).toBeEnabled();
+    fireEvent.click(previous);
+    expect(visibleNames()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
+    expect(previous).toBeDisabled();
   });
-  it("automatically cycles each complete group every six seconds including the two-card tail", () => {
+  it("automatically cycles each complete group every six seconds including the overlapping complete final group", () => {
     vi.useFakeTimers();
     const { unmount } = render(<HomeCommerceCarousel />);
     act(() => vi.advanceTimersByTime(5999));
     expect(screen.getByText("1–3 / 5")).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(1));
-    expect(visibleNames()).toEqual(["AI 商品图", "服装商品图片"]);
+    expect(visibleNames()).toEqual(["爆款图复刻", "AI 商品图", "服装商品图片"]);
     act(() => vi.advanceTimersByTime(6000));
     expect(visibleNames()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
     act(() => vi.advanceTimersByTime(6000));
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it("pauses automatic movement while a scene navigation control has keyboard focus", () => {
+    vi.useFakeTimers();
+    render(<HomeCommerceCarousel />);
+    act(() => screen.getByRole("button", { name: "下一组创作场景" }).focus());
+    act(() => vi.advanceTimersByTime(12000));
+    expect(visibleNames()).toEqual(["商品套图", "A+ 详情页", "爆款图复刻"]);
+    expect(screen.getByRole("button", { name: "下一组创作场景" })).toHaveFocus();
   });
   it("pauses on hover, card focus and hidden tabs, then resumes when each pause ends", () => {
     vi.useFakeTimers();
@@ -100,7 +118,7 @@ describe("home commerce carousel", () => {
     hidden.mockReturnValue(false);
     fireEvent(document, new Event("visibilitychange"));
     act(() => vi.advanceTimersByTime(6000));
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
   });
   it("keeps autoplay paused throughout a vertical pointer contact", () => {
     vi.useFakeTimers();
@@ -113,7 +131,7 @@ describe("home commerce carousel", () => {
     expect(pointer(viewport, "pointermove", 80, 150, "touch")).toBe(true);
     pointer(viewport, "pointerup", 80, 150, "touch");
     act(() => vi.advanceTimersByTime(6000));
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
   });
   it("disables autoplay for reduced motion while all groups remain keyboard accessible", () => {
     vi.useFakeTimers();
@@ -123,7 +141,7 @@ describe("home commerce carousel", () => {
     act(() => vi.advanceTimersByTime(18000));
     expect(screen.getByText("1–3 / 5")).toBeInTheDocument();
     fireEvent.keyDown(region(), { key: "End" });
-    expect(visibleNames()).toEqual(["AI 商品图", "服装商品图片"]);
+    expect(visibleNames()).toEqual(["爆款图复刻", "AI 商品图", "服装商品图片"]);
     fireEvent.keyDown(region(), { key: "Home" });
     expect(screen.getByText("1–3 / 5")).toBeInTheDocument();
   });
@@ -147,10 +165,10 @@ describe("home commerce carousel", () => {
     render(<HomeCommerceCarousel />);
     fireEvent.keyDown(region(), { key: "End" });
     change("(max-width: 767px)", true);
-    expect(visibleNames()).toEqual(["AI 商品图"]);
+    expect(visibleNames()).toEqual(["爆款图复刻"]);
     fireEvent.keyDown(region(), { key: "End" });
     change("(max-width: 767px)", false);
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
     act(() => vi.advanceTimersByTime(6000));
     expect(screen.getByText("1–3 / 5")).toBeInTheDocument();
   });
@@ -160,7 +178,7 @@ describe("home commerce carousel", () => {
     pointer(viewport, "pointerdown", 200);
     pointer(viewport, "pointermove", 80);
     pointer(viewport, "pointerup", 80);
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "AI 商品图" });
     expect(fireEvent.click(link, { detail: 1 })).toBe(false);
     let keyboardPrevented = true;
@@ -208,14 +226,14 @@ describe("home commerce carousel", () => {
     pointer(viewport, "pointerdown", 400);
     pointer(viewport, "pointermove", 280);
     pointer(viewport, "pointerup", 280);
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
   });
   it("uses horizontal wheel input to change a whole group without consuming vertical scrolling", () => {
     render(<HomeCommerceCarousel />);
     const viewport = screen.getByRole("link", { name: "商品套图" }).parentElement!.parentElement!;
     fireEvent.wheel(viewport, { deltaX: 80, deltaY: 0 });
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
     fireEvent.wheel(viewport, { deltaX: 0, deltaY: 100 });
-    expect(screen.getByText("4–5 / 5")).toBeInTheDocument();
+    expect(screen.getByText("3–5 / 5")).toBeInTheDocument();
   });
 });

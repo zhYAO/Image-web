@@ -6,14 +6,50 @@
 }
 
 /* WorkspaceShell navigation adapted to the real account without mock sessions. */
-.account-sidebar-nav { display:flex; flex-direction:column; gap:8px; }
-.account-sidebar-nav a, .account-home-link { display:flex; align-items:center; gap:10px; min-height:44px; padding:10px 12px; border-radius:13px; color:var(--z-text); text-decoration:none; }
-.account-sidebar-nav a:hover, .account-sidebar-nav a[aria-current="page"] { color:var(--z-primary); background:var(--z-primary-soft); }
-.account-sidebar-nav svg, .account-home-link svg { flex:none; }
-.account-sidebar-help { color:var(--z-muted); font-size:11px; line-height:1.7; padding:12px; }
-.account-home-link { margin-top:auto; font-size:12px; }
-.zi-account { width:min(1120px,calc(100% - 48px)); }
-@media(max-width:767px) { .zi-account { width:calc(100% - 32px); margin:28px auto; } }
+.account-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.account-sidebar-nav a,
+.account-home-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  color: var(--z-text);
+  text-decoration: none;
+}
+.account-sidebar-nav a:hover,
+.account-sidebar-nav a[aria-current="page"] {
+  color: var(--z-primary);
+  background: var(--z-primary-soft);
+}
+.account-sidebar-nav svg,
+.account-home-link svg {
+  flex: none;
+}
+.account-sidebar-help {
+  color: var(--z-muted);
+  font-size: 11px;
+  line-height: 1.7;
+  padding: 12px;
+}
+.account-home-link {
+  margin-top: auto;
+  font-size: 12px;
+}
+.zi-account {
+  width: min(1120px, calc(100% - 48px));
+}
+@media (max-width: 767px) {
+  .zi-account {
+    width: calc(100% - 32px);
+    margin: 28px auto;
+  }
+}
 .zi-identity * {
   box-sizing: border-box;
 }
@@ -1020,3 +1056,133 @@ body:has(.zi-auth-screen) {
 .zi-account-settings .zi-credential-fields > .zi-button {
   margin-top: 3px;
 }
+
+/* Runtime forms retain email/CAPTCHA and real account operations. */
+.zi-auth-tabs button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.zi-auth-tabs button[aria-pressed="true"] {
+  background: var(--panel);
+  color: var(--primary);
+  box-shadow: 0 2px 5px #251d3808;
+}
+.zi-auth-content > .zi-eyebrow {
+  display: block;
+  margin-bottom: 14px;
+}
+.zi-auth-content > .zi-auth-tabs {
+  margin-bottom: 20px;
+}
+.zi-auth-phone h1 {
+  font-size: 30px;
+  font-weight: 550;
+  margin-bottom: 14px;
+}
+.zi-auth-phone .zi-credential-fields > button {
+  width: 100%;
+  margin-bottom: 12px;
+}
+.zi-legal-consent {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+  margin-bottom: 14px;
+}
+.zi-legal-consent input {
+  margin-right: 6px;
+  accent-color: var(--primary);
+}
+.zi-legal-consent a {
+  color: var(--primary);
+}
+.zi-identity :is(a, button):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.zi-account-settings .zi-account-card form {
+  padding: 0;
+  border: 0;
+}
+.zi-account .zi-account-email {
+  overflow-wrap: anywhere;
+}
+.zi-account .zi-danger-zone h2 {
+  font-size: 14px;
+  font-weight: 550;
+}
+.zi-account .zi-danger-zone p {
+  margin: 12px 0 16px;
+}
+
+.zi-credit-account {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.zi-credit-account .zi-details .credit-table {
+  width: 100%;
+  font-size: 11px;
+}
+.zi-credit-account .zi-details p {
+  line-height: 1.8;
+  margin-top: 12px;
+}
+@media (max-width: 767px) {
+  .zi-credit-account {
+    gap: 17px;
+  }
+}
+
+/* Source FadeContent timing, with the shared reduced-motion escape below. */
+@keyframes zi-identity-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.zi-auth-story {
+  animation: zi-identity-reveal 700ms var(--ease) both;
+}
+.zi-auth-reveal,
+.zi-account-hero {
+  animation: zi-identity-reveal 600ms var(--ease) both;
+}
+.zi-account .zi-account-card {
+  animation: zi-identity-reveal 650ms var(--ease) both;
+}
+.zi-credit-account > :first-child {
+  animation-delay: 50ms;
+}
+.zi-credit-account > :nth-child(2),
+.zi-account-settings > :first-child {
+  animation-delay: 90ms;
+}
+.zi-account-settings > :nth-child(2) {
+  animation-delay: 120ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .zi-identity *,
+  .zi-identity *::before,
+  .zi-identity *::after {
+    animation: none !important;
+  }
+}
+
+.account-session-feedback { margin:12px 24px 0; padding:12px 16px; border:1px solid var(--z-border); border-radius:12px; background:var(--z-panel); color:var(--z-text); font-size:13px; }

@@ -1,7 +1,7 @@
 // Migrated from the existing AccountPanel; UI/actions preserved, HTTP refresh replaces SSR refresh.
 "use client";
 
-import { CreditAccount } from "@/features/credits/CreditsProvider";
+import { AccountPresentation } from "@/features/account/AccountPresentation";
 import { AccountFrame } from "../../../web/features/account/AccountFrame";
 import { ActionButton, ContentDialog } from "@/features/controls/NativeControls";
 
@@ -152,7 +152,7 @@ export function AccountPanel({ account }: { account: Account }) {
   }
 
   return (
-    <AccountFrame>
+    <AccountFrame ownerKey={account.id}>
       <section aria-busy={pending} className="zi-account zi-identity">
         <ContentDialog open={deleteOwner === account.id} title="确认注销账号" onClose={closeDelete} footer={<>
           <ActionButton disabled={pending} onClick={closeDelete}>取消</ActionButton>
@@ -160,19 +160,7 @@ export function AccountPanel({ account }: { account: Account }) {
         </>}>
           <p>注销将立即停止访问，后台将继续删除账号数据。确认后才会提交申请。</p>
         </ContentDialog>
-        <header className="zi-account-hero"><div className="zi-account-identity"><div><p className="glass-kicker">YOUR CREATIVE SPACE</p><h1>账号</h1><p>管理个人资料、安全与创作积分。</p></div></div><Link className="zi-button" href="/workspace">返回工作区</Link></header>
-        <div className="zi-account-grid"><div className="zi-account-main glass-card"><CreditAccount /></div><div className="zi-account-settings glass-form glass-card">
-        <p className="glass-muted">邮箱：{account.email}</p>
-        <form onSubmit={patch}><label>显示名称<input defaultValue={account.displayName ?? ''} name="displayName" /></label><button disabled={pending} type="submit">保存资料</button></form>
-        <form onSubmit={password}><label>新密码<input autoComplete="new-password" name="password" required type="password" /></label><button disabled={pending} type="submit">修改密码</button></form>
-        {message && (
-          <p className="glass-status" role="status">
-            {message}
-          </p>
-        )}
-        <button className="glass-primary" disabled={pending} onClick={logout} type="button">退出登录</button>
-        <form onSubmit={remove}><h2>注销账号</h2><p className="glass-muted">注销受理后，账号会立即停止访问；后台清理完成前状态为“删除中”。</p><label>重新输入密码<input autoComplete="current-password" name="password" required type="password" /></label><button className="glass-danger" disabled={pending} type="submit">永久注销账号</button></form>
-        </div></div>
+        <AccountPresentation account={account} pending={pending} message={message} patch={patch} password={password} remove={remove} logout={logout} />
       </section>
     </AccountFrame>
   );

@@ -970,3 +970,12 @@
 Default packaging/CI now prepare code, immutable versioned runtime and complete original resources, then obtain bounded fixed-root inventory and publish one missing-only transport. Explicit full packaging remains an operator-selected fallback. Schema 2 binds same-origin resources and exact Node/ABI/Linux/glibc/toolchain/config/actual trace identity; old schemas retain their original gates. The privileged adapter revalidates every omitted immutable object, complete closure and actual caches, supports a separate manual empty-install path, and validates exact retained layered rollback bindings. No release/layer/cache GC exists.
 
 The workflow requires a supplied measured target, a compatible trusted runner, reviewed installed six-file helper closure, enabled administrator target config and externally provisioned verified original fonts. Missing evidence stops; Ubuntu labels do not establish compatibility. Current external/service/credential policies remain. Portable Windows mocked/fixture evidence is recorded in task-3-report.md outside the repository; Linux/POSIX locking/symlink/assembly, runuser/systemd/SSH/Actions/ingress/external acceptance remain unexecuted. No build, install, service, server connection, deployment, Git submission or enablement occurred. One retired PATH-based shell fixture selected real SSH for a read-only hash request to reserved deploy.invalid; DNS failed before connection. Exact evidence is retained outside the repository, and the replacement uses readonly same-shell absolute fixture functions with unknown-call proofs. See ops/aliyun/THREE-LAYERS.md and MANUAL-THREE-LAYER-RELEASE.md for future commands and administrator prerequisites.
+
+
+## 2026-11-02 — Dot ZImage v18 复刻（已报 UI 缺陷验收完成）
+
+已将批准的 v18 外观、布局及相关交互适配到现有 React/Vite 和共享 features，保留正式 HTTP、单一工作区、鉴权/owner、引用图片、真实积分/任务/恢复/导出边界。GPT-6.1 Terra 已确认所有已报 UI 缺陷闭环：桌面 1461×734 服装 11 张例图完整四列三行，说明开关正常；手机 390×844 双列预览无横溢；轮播末组三张无白条，首页/侧栏目录导航及移动抽屉通过。该结论限定于已观察状态，不表示全站全部状态或真实业务已验。
+
+最终局部测试 16/16、此前 UI 59/59 与上传/模式 29/29、全量 Domain 209/209；三个项目 typecheck、lint、预算 5/5、Vite 全管线、既有 CI webpack 构建、源码守卫与独立复审通过。全量 Frontend 193/195；Web 全量原为 1230/1235，其中两项旧上传断言随后在 29/29 定向套件修复；余五项 Windows symlink 设置 EPERM 已在 853/853 Git-blob 一致的原始基线复现，尚未到达安全断言。不声称全套全绿，未为最后局部表现修改重复全套。47 个改动代码/测试文件与已验冻结候选零差异。
+
+真实鉴权、账户/会话写入及持久化、私有上传、付费生成/供应商/SSE 恢复、积分支付与真实导出未验；测试夹具只读并与正式代码隔离。完整缺陷矩阵、五项失败名称及边界见 [QA 验收记录](../docs/superpowers/reviews/2026-11-02-v18-qa-fix-matrix.md)。源码/静态参考未改，未修改 API 业务逻辑或削弱资源/安全门禁。本次用户另行授权提交并推送当前功能分支，使用 `[skip ci]`；不建 PR、不合 main、不部署。

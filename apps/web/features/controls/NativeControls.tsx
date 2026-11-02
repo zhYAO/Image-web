@@ -348,7 +348,7 @@ export function AnchoredPanel({
   label = "操作",
   placement = "rightTop",
 }: {
-  content: ReactNode;
+  content: ReactNode | ((close: () => void) => ReactNode);
   children: ReactElement;
   label?: string;
   placement?: string;
@@ -429,7 +429,8 @@ export function AnchoredPanel({
         "aria-haspopup": "dialog",
         onClick: (event) => {
           child.props.onClick?.(event);
-          setAnchor((old) => (old ? undefined : event.currentTarget));
+          const trigger = event.currentTarget;
+          setAnchor((old) => (old ? undefined : trigger));
         },
       })}
       {anchor &&
@@ -441,7 +442,7 @@ export function AnchoredPanel({
             className="zi-control-popover"
             style={position}
           >
-            <Glass>{content}</Glass>
+            <Glass>{typeof content === "function" ? content(() => { setAnchor(undefined); anchor.focus(); }) : content}</Glass>
           </div>,
           anchor.closest("dialog") ?? document.body,
         )}

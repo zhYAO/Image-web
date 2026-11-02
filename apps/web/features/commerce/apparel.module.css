@@ -291,3 +291,66 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* v18 apparel editor, backed by the existing fixed-layout task workflow. */
+.page { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; padding-top: 12px; }
+.breadcrumb { display: flex; align-items: center; gap: 12px; padding-inline: 4px; font-size: 11px; color: var(--z-muted); }
+.breadcrumb a { color: inherit; text-decoration: none; }
+.breadcrumb h1 { margin: 0; font-size: 11px; font-weight: 400; }
+.workspace { grid-template-columns: minmax(300px, 365px) minmax(0, 1fr); gap: 18px; overflow: hidden; }
+.form { display: flex; flex-direction: column; padding: 0; border-radius: 23px; overflow: hidden; box-shadow: var(--shadow); border-top-color: var(--rim); }
+.formScroll { flex: 1; min-height: 0; padding: 22px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.formScroll > header h1 { font-size: 12px; font-weight: 600; }
+.formScroll > header p { font-size: 10px; }
+.form fieldset { border: 0; padding: 16px 0 8px; }
+.form legend { font-size: 12px; font-weight: 600; }
+.form p, .preview p { font-size: 10px; line-height: 1.8; }
+.fields { gap: 15px 12px; }
+.fields label { font-size: 11px; gap: 8px; }
+.fields input, .fields textarea { background: var(--z-bg); border-color: var(--z-border); border-radius: 9px; padding: 10px 11px; font-size: 11px; line-height: 1.65; }
+.mains { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px 8px; }
+.mains .file { min-height: 82px; aspect-ratio: 3/4; }
+.mains .upload { min-width: 0; }
+.file { border-radius: 13px; background: color-mix(in srgb, var(--z-primary-soft) 48%, var(--z-panel)); }
+.actionBar { flex: none; padding: 14px 22px 12px; border-top: 1px solid var(--z-border); background: var(--z-panel); }
+.actions { position: static; display: grid; padding: 0; gap: 8px; }
+.actions button { width: 100%; background: var(--z-primary); color: #fff; border-color: transparent; border-radius: 10px; font-size: 11px; min-height: 38px; }
+.preview { padding: clamp(18px, 2vw, 30px); border-radius: 23px; border-color: var(--rim); }
+.preview h2 { font-size: 19px; font-weight: 550; letter-spacing: -.3px; }
+.preview header { margin-bottom: 18px; }
+.overline { display: block; font-size: 9px !important; letter-spacing: 1.6px; margin-bottom: 8px; }
+.results { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.results figure { display: flex; flex-direction: column; min-height: 0; padding: 0; border: 1px solid var(--z-border); border-radius: 11px; overflow: hidden; }
+.results img { height: auto; width: 100%; object-fit: contain; }
+.results figcaption { padding: 6px 8px; font-size: 9px; }
+.examples > h3 { font-size: 12px; }
+.download { font-size: 11px; border-radius: 10px; }
+@media (min-width: 1600px) { .workspace { grid-template-columns: minmax(340px, 400px) minmax(0, 1fr); gap: 24px; } }
+@media (max-width: 1100px) and (min-width: 768px) { .workspace { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); gap: 12px; } .formScroll, .preview { padding: 18px; } .results { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .page { height: auto; } .workspace { grid-template-columns: 1fr; overflow: visible; } .formScroll { overflow: visible; padding: 17px; } .form, .preview { height: auto; overflow: visible; } .preview { padding: 14px; } .results { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fields input, .fields textarea { font-size: 16px; } }
+
+@media(min-width:768px) and (max-width:1150px) { .workspace { grid-template-rows:minmax(0,1fr); grid-auto-rows:auto; align-content:stretch; min-height:0; } .preview { min-height:0; overflow-y:auto; overscroll-behavior:contain; } }
+
+/* Example thumbnails share the reference panel's remaining height on desktop.
+   Actual task results keep their existing scrollable, full-size presentation. */
+.previewWithExamples { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; }
+.previewWithExamples > header { flex:none; }
+.previewSubtitle { margin:5px 0 0; }
+.examples { display:flex; flex-direction:column; flex:1; min-height:0; gap:12px; }
+.examples .results { flex:1; min-height:0; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(3,minmax(0,1fr)); gap:12px; align-items:stretch; }
+.examples .results :global(.zi-control-image) { display:block; width:100%; flex:1 1 0; min-height:0; padding:0; overflow:hidden; background:none; }
+.examples .results img { display:block; width:100%; height:100%; max-height:none; min-height:0; object-fit:contain; }
+.examples .results figcaption { flex:none; line-height:1.5; }
+.examples .results figcaption small { display:none; }
+.exampleNotes { flex:none; font-size:10px; color:var(--z-muted); }
+.exampleNotes summary { cursor:pointer; }
+.exampleNotes p { margin:6px 0 0; }
+@media(min-width:768px) and (max-width:1100px) { .examples .results { grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(4,minmax(0,1fr)); } }
+@media(max-width:767px) {
+  .previewWithExamples { height:auto; overflow:visible; }
+  .examples { flex:none; }
+  .examples .results { flex:none; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:none; gap:12px; align-items:start; }
+  .examples .results :global(.zi-control-image) { flex:none; }
+  .examples .results img { height:auto; }
+  .examples .results figcaption small { display:block; margin-top:3px; font-size:8px; color:var(--z-muted); }
+}

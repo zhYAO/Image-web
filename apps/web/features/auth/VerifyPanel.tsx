@@ -58,16 +58,16 @@ export function VerifyPanel() {
     finally { setPending(false); resetCaptcha(); }
   }
 
-  return <AuthShell><section className="glass-card glass-form">
-    <p className="glass-kicker">账号验证</p><h1>验证邮箱</h1>
-    <p className="glass-muted">请手动输入邮件中的 6 位验证码继续。</p>
-    <form onSubmit={submit}>
-      <label>邮箱<input autoComplete="email" name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
-      <label>验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
-      {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
-      <button disabled={pending} type="submit">继续验证</button>
+  return <AuthShell><section className="zi-auth-content">
+    <p className="zi-eyebrow">账号验证</p><div className="zi-auth-heading"><h1 id="zi-auth-title">验证邮箱</h1>
+    <p>请手动输入邮件中的 6 位验证码继续。</p></div>
+    <form className="zi-auth-form" onSubmit={submit}>
+      <label className="zi-field">邮箱<input autoComplete="email" name="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
+      <label className="zi-field">验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
+      {message && <p className={failed ? 'zi-feedback' : 'zi-register-note'} role={failed ? 'alert' : 'status'}>{message}</p>}
+      <button className="zi-button zi-primary zi-auth-submit" disabled={pending} type="submit">继续验证</button>
       {captcha}
-      <button disabled={pending || cooldown > 0 || captchaPending || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
-    </form><a href="/login">返回登录</a>
+      <button className="zi-button zi-secondary zi-auth-submit" disabled={pending || cooldown > 0 || captchaPending || !email.trim()} onClick={resend} type="button">{cooldown > 0 ? `${cooldown} 秒后可重发` : '重新发送验证码'}</button>
+    </form><a className="zi-auth-return" href="/login">返回登录</a>
   </section></AuthShell>;
 }

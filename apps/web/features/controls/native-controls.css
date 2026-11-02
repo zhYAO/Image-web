@@ -218,3 +218,11 @@
     border: 1px solid ButtonText;
   }
 }
+
+/* Global native-dialog shell; kept out of CSS Modules pure-selector scope. */
+@media(max-width:767px) {
+.workspaceDrawer.zi-control-drawer[data-placement="left"] { margin:12px auto 12px 12px; width:268px; height:calc(100svh - 24px); max-height:calc(100svh - 24px); border-radius:22px; padding:0; overflow:hidden; }
+.workspaceDrawer[data-placement="left"] .zi-control-dialog-heading { position:absolute; z-index:2; right:12px; top:14px; padding:0; border:0; }
+.workspaceDrawer[data-placement="left"] .zi-control-dialog-heading h2 { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.workspaceDrawer[data-placement="left"] .zi-control-drawer-body { height:100%; }
+}

@@ -217,8 +217,8 @@ describe("commerce UI", () => {
     const submit = vi.spyOn(gateway.commerce, "submit");
     render(<UnifiedWorkspace gateway={gateway} />);
     const wizard = await screen.findByRole("region", { name: "AI 商品图向导" });
-    expect(within(wizard).getByText('上传或拖放图片至此处，开始创作')).toBeVisible();
-    expect(within(wizard).getAllByLabelText('上传电商参考图').some(input => !input.closest('fieldset'))).toBe(true);
+    expect(within(wizard).getByText('在左侧上传或拖放商品图片，开始创作。')).toBeVisible();
+    expect(within(wizard).getByLabelText('上传电商参考图')).toBeEnabled();
     expect(within(wizard).queryByRole('button', { name: /一键生成/ })).toBeNull();
     expect(gateway.lastImageRequest).toBeUndefined();
     expect(gateway.lastChatRequest).toBeUndefined();

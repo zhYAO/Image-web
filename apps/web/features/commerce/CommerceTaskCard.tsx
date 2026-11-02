@@ -525,6 +525,7 @@ export function CommerceTaskCard({
       data-testid="commerce-task"
       data-task-id={task.id}
       data-view={view}
+      data-scene={task.scene}
       id={`commerce-task-${task.id}`}
     >
       <header className={styles.heading}>

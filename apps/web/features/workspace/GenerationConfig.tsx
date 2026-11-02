@@ -16,6 +16,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { zhCN } from '@/i18n';
 
 import styles from './workspace.module.css';
+import { ProviderIcon } from './ProviderIcon';
 
 export type ModelCapability = ProviderCapability['models'][number];
 
@@ -225,7 +226,8 @@ export function ModelPopover({ capabilities, health, onOpenChange, onSelect, ope
     value={selectedProvider && selectedModel ? `${selectedProvider}::${selectedModel.id}` : undefined}
     options={capabilities.flatMap(capability => capability.models.map(model => {
       const status = health.find(item => item.provider === capability.provider)?.status;
-      return { value: `${capability.provider}::${model.id}`, textValue: model.label, label: model.label,
+      return { value: `${capability.provider}::${model.id}`, textValue: model.label,
+        label: <span className="model-selector-label"><ProviderIcon provider={capability.provider}/><span className="model-selector-name">{model.label}</span></span>,
         detail: <>{status === 'healthy' ? '服务正常' : status === 'unavailable' ? '服务不可用' : '服务降级'}<ModelCreditPrice operation="image" provider={capability.provider} model={model.id}/></> };
     }))}
     onChange={next => {
@@ -397,7 +399,8 @@ export function ChatModelPopover({ health, onOpenChange, onSelect, open, selecte
     className={styles.modelSelector} open={open} onOpenChange={onOpenChange} value={selectedModel}
     options={CHAT_PROVIDER_MODELS.map(model => {
       const status = health.find(item => item.provider === model.provider)?.status;
-      return { value:model.id, label:model.label, textValue:model.label,
+      return { value:model.id, textValue:model.label,
+        label:<span className="model-selector-label"><ProviderIcon provider={model.provider}/><span className="model-selector-name">{model.label}</span></span>,
         detail:<>{status === 'healthy' ? '服务正常' : status === 'unavailable' ? '服务不可用' : '服务降级'}<ModelCreditPrice operation="chat" provider={model.id} model={model.id}/></> };
     })}
     onChange={next => { if (CHAT_PROVIDER_MODELS.some(model => model.id === next)) onSelect(next); }}/>;

@@ -1,8 +1,12 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from "react";
+import { NavigationProvider } from "../src/platform/navigation";
+import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ApparelGateway, ApparelTask } from '@zimage/domain';
 import { ApparelWorkspace } from '../../web/features/commerce/ApparelWorkspace';
 import { APPAREL_DRAFT_PREFIX } from '../../web/features/commerce/apparel-draft-storage';
+
+const render = (ui: ReactNode) => renderUI(<NavigationProvider>{ui}</NavigationProvider>);
 
 const ids = Array.from({ length: 10 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`);
 const task: ApparelTask = { id: ids[8]!, sessionId: ids[9]!, engine: 'apparel-catalog', revision: 1, archived: false, createdAt: 'now', updatedAt: 'now', runs: [], plan: {

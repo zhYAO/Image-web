@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Application, prefetchWorkspace } from '../src/application';
 import { NavigationProvider } from '../src/platform/navigation';
@@ -98,3 +98,30 @@ describe('actual migrated business modules over HTTP fixtures', () => {
     expect(screen.queryByLabelText('创作输入')).toBeNull();
   }, 30000);
 });
+
+it.each(['/create/product-set', '/create/apparel-catalog'])('returns from %s to the catalogue through client navigation without business writes', async (route) => {
+ window.history.replaceState(null, '', route); const request=api(); vi.stubGlobal('fetch',request); mount();
+ const link=await screen.findByRole('link',{name:'工具目录'}, {timeout:20000});
+ expect(fireEvent.click(link)).toBe(false);
+ await waitFor(()=>expect(window.location.pathname).toBe('/create'));
+ expect(request.mock.calls.every(([,init])=>(init?.method??'GET')==='GET')).toBe(true);
+},30000);
+
+it.each(['/workspace','/account'])('uses the same real session sidebar on the account route entered from %s', async (initial) => {
+ const sessionId='33333333-3333-4333-8333-333333333333'; const original=api();
+ const request=vi.fn((path: RequestInfo | URL, init?: RequestInit)=>{ if((init?.method??'GET')!=='GET')throw new Error('Unexpected business write'); if(String(path)==='/api/sessions')return Promise.resolve(Response.json({sessions:[{id:sessionId,title:'真实共享会话',status:'active',createdAt:'2026-11-02T00:00:00.000Z',updatedAt:'2026-11-02T00:00:00.000Z',activityTypes:['chat']}]})); if(String(path).includes('/timeline?'))return Promise.resolve(Response.json({items:[]})); if(String(path).startsWith('/api/creative-tasks?')||String(path).startsWith('/api/apparel-tasks?'))return Promise.resolve(Response.json([]));return original(path,init); });
+ window.history.replaceState(null,'',initial); vi.stubGlobal('fetch',request); mount();
+ if(initial==='/workspace'){await screen.findByLabelText('创作输入',{}, {timeout:20000}); act(()=>{window.history.pushState(null,'','/account');window.dispatchEvent(new PopStateEvent('popstate'));});}
+ await screen.findByText('邮箱：owner@example.test',{}, {timeout:20000});
+ const sidebar=screen.getByRole('complementary',{name:'会话侧栏'}); const session=await within(sidebar).findByRole('button',{name:'真实共享会话'}, {timeout:20000});
+ fireEvent.click(session); await waitFor(()=>expect(window.location.pathname).toBe('/sessions/'+sessionId));
+ expect(request.mock.calls.every(([,init])=>(init?.method??'GET')==='GET')).toBe(true);
+},30000);
+
+it('surfaces failed account-sidebar mutations instead of hiding workspace feedback', async()=>{
+ const sessionId='33333333-3333-4333-8333-333333333333'; const original=api();const request=vi.fn((path:RequestInfo|URL,init?:RequestInit)=>{if(init?.method==='PATCH')return Promise.reject(new TypeError('Failed to fetch'));if(String(path)==='/api/sessions')return Promise.resolve(Response.json({sessions:[{id:sessionId,title:'可重试会话',status:'active',createdAt:'2026-11-02T00:00:00.000Z',updatedAt:'2026-11-02T00:00:00.000Z',activityTypes:['chat']}]}));return original(path,init);});
+ window.history.replaceState(null,'','/account');vi.stubGlobal('fetch',request);mount();
+ fireEvent.click(await screen.findByRole('button',{name:'重命名 可重试会话'},{timeout:20000}));fireEvent.change(screen.getByRole('textbox',{name:'会话名称'}),{target:{value:'新名称'}});fireEvent.click(screen.getByRole('button',{name:'保存会话名称'}));
+ expect((await screen.findByRole('alert',{name:'会话操作反馈'})).textContent).toContain('请稍后重试');
+ fireEvent.click(screen.getByRole('button',{name:'重命名 可重试会话'}));expect(screen.getByRole('dialog',{name:'重命名会话'})).not.toBeNull();
+},30000);

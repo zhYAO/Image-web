@@ -86,7 +86,7 @@ export function CategoryFilters({
         aria-hidden="true"
       />
       {categories.map(([key, label]) => (
-        <button key={key} type="button" onClick={() => onChange(key)} aria-pressed={value === key}>
+        <button className={styles.category} key={key} type="button" onClick={() => onChange(key)} aria-pressed={value === key}>
           {label}
         </button>
       ))}

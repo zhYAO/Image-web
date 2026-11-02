@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { ContentDialog } from '@/features/controls/NativeControls';
 import { PreviewImage } from '@/features/controls/PreviewImage';
 import { publicAssetUrl } from "@/lib/public-assets";
@@ -100,94 +102,45 @@ export interface CommerceEditorProps {
   resetModel?: () => void;
 }
 
+/** Static reviewed examples are never used as generated task results. */
 export function CommerceExample({ scene }: { scene: CommerceScene }) {
-  const image = (name: string, alt: string, className?: string) => (
-    <Image
-      key={name}
-      className={className}
+  const image = (name: string, alt: string) => (
+    <PreviewImage className={styles.exampleImage}
       src={publicAssetUrl(`/commerce/meitu-v1/${name}.webp`)}
-      width={720}
-      height={720}
-      sizes={scene === "product-set" && name !== "kit-product" ? "(max-width: 767px) 38vw, 180px" : "(max-width: 767px) 44vw, 320px"}
-      loading={name.endsWith("-product") || name === "clone-reference" ? "eager" : "lazy"}
-      alt={alt}
-    />
+      width={720} height={720} alt={alt} />
   );
-  if (scene === "detail")
-    return (
-      <div className={`${styles.exampleStage} ${styles.detailExample}`}>
-        <div className={styles.exampleOriginal}>
-          {image("detail-product", "蓝色耳机商品原图")}
-          <span>上传商品图</span>
-        </div>
-        <ArrowRight aria-hidden />
-        <div className={styles.exampleLong}>
-          {["hero", "selling", "scene", "angle", "atmosphere", "texture"].map(
-            (name) => image(`detail-${name}`, `详情模块示例 ${name}`),
-          )}
-          <span>生成电商长图</span>
-        </div>
-        <div className={styles.exampleModules}>
-          {["hero", "selling", "scene", "angle", "atmosphere", "texture"].map(
-            (name) => (
-              <div key={name}>
-                {image(`detail-${name}`, `详情页示例 ${name}`)}
-              </div>
-            ),
-          )}
-        </div>
-      </div>
-    );
-  if (scene === "clone")
-    return (
-      <div className={`${styles.exampleStage} ${styles.cloneExample}`}>
-        <div>
-          {image("clone-reference", "复刻构图参考")}
-          <span>参考风格</span>
-        </div>
-        <ArrowRight aria-hidden />
-        <div>
-          {image("clone-result", "原创商品复刻示意")}
-          <span>替换商品与配色</span>
-        </div>
-      </div>
-    );
-  if (scene === "product-main")
-    return (
-      <div className={`${styles.exampleStage} ${styles.shootExample}`}>
-        {["product", "studio", "botanical"].map((name, index) => (
-          <div key={name}>
-            {image(
-              `shoot-${name}`,
-              ["商品原图", "影棚场景示例", "自然光场景示例"][index]!,
-            )}
-            <span>{["商品原图", "影棚光影", "自然氛围"][index]}</span>
-          </div>
-        ))}
-      </div>
-    );
-  return (
-    <div className={`${styles.exampleStage} ${styles.kitExample}`}>
-      <div className={styles.exampleOriginal}>
-        {image("kit-product", "原创橙色耳机商品原图")}
-        <span>01 主图 · 白底展示</span>
-      </div>
-      <ArrowRight aria-hidden />
-      <div className={styles.exampleGrid}>
-        {["scene", "model", "detail", "selling"].map((name, i) => (
-          <div key={name}>
-            {image(
-              `kit-${name}`,
-              ["场景展示", "模特场景", "细节说明", "卖点详解"][i]!,
-            )}
-            <span>
-              0{i + 2} {["场景展示", "模特场景", "细节说明", "卖点详解"][i]}
-            </span>
-          </div>
-        ))}
-      </div>
+  const card = (name: string, caption: string, className?: string) => (
+    <figure key={name} className={className}>
+      {image(name, caption)}<figcaption>{caption}</figcaption>
+    </figure>
+  );
+  if (scene === 'clone') return <div className={styles.beforeAfter}>
+    {card('clone-reference', '01 · 参考风格')}
+    {card('clone-result', '02 · 替换商品与配色')}
+  </div>;
+  if (scene === 'product-main') return <div className={styles.mainArt}>
+    <div className={styles.exampleFit}>{card('shoot-botanical', '自然氛围 · 原创示例', styles.mainHero)}</div>
+    <div className={styles.exampleGallery}>
+      {card('shoot-product', '商品原图')}{card('shoot-studio', '影棚光影')}
     </div>
-  );
+  </div>;
+  if (scene === 'detail') return <div className={styles.detailArt}>
+    <div className={styles.exampleFit}><div className={styles.longPreview}>
+      {['hero', 'selling', 'scene', 'angle', 'atmosphere', 'texture'].map(name =>
+        <div key={name}>{image(`detail-${name}`, '详情页模块原创示例')}</div>)}
+    </div></div>
+    <div className={`${styles.detailTiles} ${styles.exampleGallery}`}>
+      {['hero', 'selling', 'scene', 'angle'].map((name, index) =>
+        card(`detail-${name}`, `0${index + 1} · ${DETAIL_MODULES[index]}`))}
+    </div>
+  </div>;
+  return <div className={styles.setArt}>
+    <div className={styles.exampleFit}>{card('kit-product', '01 · 主图 / 白底展示', styles.setMain)}</div>
+    <div className={styles.exampleGallery}>
+      {['scene', 'model', 'detail', 'selling'].map((name, index) =>
+        card(`kit-${name}`, `0${index + 2} · ${['场景展示', '模特场景', '细节说明', '卖点详解'][index]}`))}
+    </div>
+  </div>;
 }
 
 function Section({
@@ -789,6 +742,8 @@ export function CloneFlow({ p }: { p: CommerceEditorProps }) {
   );
 }
 
+const productSceneDescriptions: Record<string, string> = { "white-main": "干净背景，突出商品轮廓", "soft-studio": "柔和光影，呈现质感细节", "daily-scene": "自然氛围，让商品融入场景" };
+
 export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
   const mode = p.sceneTab;
   const setMode = p.setSceneTab;
@@ -832,7 +787,7 @@ export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
                   />
                 )}
                 <strong>{template.name}</strong>
-                <small>{template.guidance}</small>
+                <small>{productSceneDescriptions[template.id] ?? template.name}</small>
               </button>
             ))}
           </div>
@@ -875,12 +830,12 @@ export function CommerceEditor(p: CommerceEditorProps) {
   const isDetail = p.scene === "detail";
   const title =
     p.scene === "product-set"
-      ? "AI商品套图"
+      ? "商品套图"
       : isDetail
-        ? "A+/详情页"
+        ? "A+ 详情页"
         : p.scene === "clone"
           ? "爆款图复刻"
-          : "AI商品图";
+          : "AI 商品图";
   const product = p.references.find((ref) => p.roleOf(ref) === "product");
   const hasInput = p.references.some(
     (ref) => p.roleOf(ref) === (p.scene === "clone" ? "style" : "product"),
@@ -895,13 +850,20 @@ export function CommerceEditor(p: CommerceEditorProps) {
     p.total > (isDetail ? 32 : p.scene === "product-main" ? 4 : 20);
   const firstUpload = p.scene === "product-main" && !product;
   return (
+    <div className={`${styles.v18Root} ${styles.editorOutlet}`}>
+    <div className={styles.editorPage}>
+      <nav className={styles.editorNav} aria-label="工具导航">
+        <Link className={styles.back} href="/create">工具目录</Link>
+        <span className={styles.navDivider}>/</span><h1>{title}</h1>
+      </nav>
     <section
       className={`${styles.editor} ${isDetail ? styles.detailEditor : ""} ${firstUpload ? styles.firstUpload : ""}`}
       aria-label={`${p.scene === "product-set" ? "商品套图" : p.scene === "product-main" ? "AI 商品图" : title}向导`}
     >
-      <div className={styles.config} hidden={firstUpload}>
+      <div className={styles.config}>
         <div className={styles.configScroll}>
           <fieldset disabled={p.busy || p.recovering}>
+            <Section title="模型"><output className={styles.currentModel} aria-label="当前图片模型">{p.capabilities.flatMap(capability => capability.models).find(model => model.id === p.settings.model)?.label ?? p.settings.model}</output></Section>
             {p.scene === "product-set" ? (
               <ProductSetFlow p={p} />
             ) : isDetail ? (
@@ -969,24 +931,14 @@ export function CommerceEditor(p: CommerceEditorProps) {
         </footer>
       </div>
       <aside className={styles.preview} aria-label="电商方案预览">
+        <div className={styles.previewToolbar}><div>
+          <span className={styles.overline}>{isDetail ? 'A+ CONTENT' : 'CREATIVE STUDIO'}</span>
+          <h2>{title}</h2>
+        </div></div>
         {firstUpload ? (
-          <div className={styles.uploadWelcome}>
-            <div className={styles.welcomeArt}>
-              <Image
-                src={publicAssetUrl("/commerce/meitu-v1/shoot-product.webp")}
-                alt="原创商品摄影示例"
-                width={140}
-                height={140}
-              />
-            </div>
-            <h1>上传或拖放图片至此处，开始创作</h1>
-            <Uploader p={p} role="product" title="上传商品原图" />
-            <p>选一个场景，让商品自然融入画面。</p>
-            {p.error && (
-              <p role="alert" className={styles.error}>
-                {p.error}
-              </p>
-            )}
+          <div className={styles.emptyProductPreview}>
+            <CommerceExample scene="product-main" />
+            <p className={styles.uploadHint}>在左侧上传或拖放商品图片，开始创作。</p>
           </div>
         ) : (
           <>
@@ -1002,7 +954,7 @@ export function CommerceEditor(p: CommerceEditorProps) {
               </>
             ) : (
               <>
-                <div className={styles.previewIntro}>
+                <div className={styles.previewIntro} hidden>
                   <h1>{title}</h1>
                   <p>
                     {p.scene === "clone" ? (
@@ -1029,5 +981,6 @@ export function CommerceEditor(p: CommerceEditorProps) {
         )}
       </aside>
     </section>
+    </div></div>
   );
 }

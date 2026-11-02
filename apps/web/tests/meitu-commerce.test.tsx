@@ -125,6 +125,19 @@ async function wizard(scene: CommerceScene, references = [ref("product.png")]) {
 }
 
 describe("Meitu commerce workflow contracts", () => {
+  it('allows configuring product-main before upload and retains those settings on submission', async () => {
+    const view = await wizard('product-main', []);
+    expect(screen.getByLabelText('电商画面比例')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('电商画面比例'), { target: { value: '3:4' } });
+    const create = vi.spyOn(view.gateway.commerce, 'create');
+    expect(create).not.toHaveBeenCalled();
+    view.rerender(<CommerceWizard {...view.props} references={[ref('product.png')]} />);
+    fireEvent.change(screen.getByLabelText('商品描述'), { target: { value: '真实陶瓷杯' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]![0].plan.slots[0]).toMatchObject({ aspectRatio: '3:4' });
+  });
+
   it('persists explicit automatic, exact and no-text choices without stale copy taking precedence', async () => {
     const view = await wizard('detail');
     const create = vi.spyOn(view.gateway.commerce, 'create');
@@ -353,7 +366,10 @@ describe("Meitu commerce workflow contracts", () => {
   it("starts AI product images with upload and never submits the showcase image", async () => {
     const view = await wizard("product-main", []);
     const create = vi.spyOn(view.gateway.commerce, "create");
-    expect(screen.getByText("上传或拖放图片至此处，开始创作")).toBeVisible();
+    expect(screen.getByText("在左侧上传或拖放商品图片，开始创作。")).toBeVisible();
+    expect(screen.getByRole("img", { name: "自然氛围 · 原创示例" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "商品原图" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "影棚光影" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /一键生成/ })).toBeNull();
     view.rerender(
       <CommerceWizard {...view.props} references={[ref("real.png")]} />,

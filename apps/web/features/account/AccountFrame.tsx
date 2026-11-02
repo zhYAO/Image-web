@@ -7,6 +7,7 @@ import { BrandMark } from '@/features/brand/BrandMark';
 import { ActionButton, SideDrawer } from '@/features/controls/NativeControls';
 import { CreditBalance } from '@/features/credits/CreditsProvider';
 import { SidebarTooltip } from '@/features/workspace/SidebarTooltip';
+import { useAccountWorkspaceSidebar } from '@/features/workspace/WorkspaceSidebarBridge';
 import { WorkspaceFrame } from '@/features/workspace/WorkspaceFrame';
 import { useWorkspaceStore } from '@/store/workspace-store';
 import styles from '@/features/workspace/workspace.module.css';
@@ -19,12 +20,13 @@ const navigation = [
 ] as const;
 
 /** Reference shell geometry with real navigation, without another session store. */
-export function AccountFrame({ children }: { children: ReactNode }) {
+export function AccountFrame({ children, ownerKey }: { children: ReactNode; ownerKey?: string }) {
+  const sharedSidebar = useAccountWorkspaceSidebar(ownerKey);
   const { sidebarCollapsed, setSidebarCollapsed } = useWorkspaceStore();
   const [mobile, setMobile] = useState(false);
-  const sidebar = (collapsed: boolean) => <div className={styles.panelInner}>
+  const sidebar = (collapsed: boolean) => sharedSidebar ? sharedSidebar.render(collapsed) : <div className={styles.panelInner}>
     <div className={styles.brandRow}>
-      {!collapsed && <Link href="/" className={styles.sidebarHeading}><BrandMark /><span>ZImage<span className={styles.brandCaption}>灵感，让创作更自由</span></span></Link>}
+      {!collapsed && <Link href="/" className={styles.sidebarHeading}><BrandMark /><span>ZImage<span className={styles.brandCaption}>灵感，让创作发生</span></span></Link>}
       <SidebarTooltip enabled={collapsed} title={collapsed ? '展开导航' : '折叠导航'}>
         <ActionButton variant="text" aria-label={collapsed ? '展开导航' : '折叠导航'} icon={collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />} onClick={() => setSidebarCollapsed(!collapsed)} />
       </SidebarTooltip>
@@ -41,6 +43,7 @@ export function AccountFrame({ children }: { children: ReactNode }) {
     <div className={styles.headerStart}><ActionButton variant="text" className={styles.mobileControl} aria-label="打开导航" icon={<Menu size={18} />} onClick={() => setMobile(true)} /><span className={styles.headerTitle}>账号</span></div>
     <div className={styles.headerNav}><CreditBalance /><Link href="/workspace">返回工作台 <ArrowUpRight size={14} /></Link></div>
   </header>}>
+    {sharedSidebar?.feedback && <p role="alert" aria-label="会话操作反馈" className="account-session-feedback">{sharedSidebar.feedback.message}</p>}
     {children}
     <SideDrawer className="workspaceDrawer" open={mobile} title="创作空间导航" placement="left" width={268} onClose={() => setMobile(false)}>{sidebar(false)}</SideDrawer>
   </WorkspaceFrame>;

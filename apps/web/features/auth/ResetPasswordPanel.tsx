@@ -26,16 +26,16 @@ export function ResetPasswordPanel() {
     } catch { setFailed(true); setMessage('网络连接失败，请检查网络后重试。'); }
     finally { setPending(false); }
   }
-  return <AuthShell><section className="glass-card glass-form">
-    <p className="glass-kicker">账号恢复</p><h1>重置密码</h1>
-    <p className="glass-muted">打开此页面不会验证账号。请输入邮件中的 6 位验证码继续。</p>
-    <form onSubmit={submit}>
-      <label>邮箱<input autoComplete="email" name="email" required type="email" /></label>
-      <label>验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
-      <label>新密码<input autoComplete="new-password" name="password" required type="password" /></label>
-      <button disabled={pending} type="submit">设置新密码</button>
+  return <AuthShell><section className="zi-auth-content">
+    <p className="zi-eyebrow">账号恢复</p><div className="zi-auth-heading"><h1 id="zi-auth-title">重置密码</h1>
+    <p>打开此页面不会验证账号。请输入邮件中的 6 位验证码继续。</p></div>
+    <form className="zi-auth-form" onSubmit={submit}>
+      <label className="zi-field">邮箱<input autoComplete="email" name="email" required type="email" /></label>
+      <label className="zi-field">验证码<input autoComplete="one-time-code" inputMode="numeric" maxLength={6} name="token" pattern="[0-9]{6}" required /></label>
+      <label className="zi-field">新密码<input autoComplete="new-password" name="password" required type="password" /></label>
+      <button className="zi-button zi-primary zi-auth-submit" disabled={pending} type="submit">设置新密码</button>
     </form>
-    {message && <p className={failed ? 'glass-error' : 'glass-status'} role={failed ? 'alert' : 'status'}>{message}</p>}
-    <a href="/login">返回登录</a>
+    {message && <p className={failed ? 'zi-feedback' : 'zi-register-note'} role={failed ? 'alert' : 'status'}>{message}</p>}
+    <a className="zi-auth-return" href="/login">返回登录</a>
   </section></AuthShell>;
 }

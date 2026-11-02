@@ -4,7 +4,7 @@ import { publicAssetUrl } from "@/lib/public-assets";
 
 import { COMMERCE_SCENES, COMMERCE_PRIMARY_SCENE_IDS } from "@zimage/domain";
 import Image from "next/image";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ArrowLeft, ArrowRight } from "lucide-react";
 import { scenes } from "@/features/brand/scenes";
 import Link from "next/link";
 import {
@@ -36,9 +36,9 @@ export function HomeCommerceCarousel() {
   const compact = useMediaQuery("(max-width: 767px)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const size = compact ? 1 : 3;
-  const last = Math.floor((featured.length - 1) / size) * size;
+  const last = Math.max(0, featured.length - size);
   const [cursor, setCursor] = useState(0);
-  const index = Math.floor(Math.min(cursor, last) / size) * size;
+  const index = Math.min(cursor, last);
   const [drag, setDrag] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -127,7 +127,7 @@ export function HomeCommerceCarousel() {
           link ? Number(link.getAttribute("data-position")) : null,
         );
         setFocusRequest(null);
-        setFocused(event.target === event.currentTarget || Boolean(link));
+        setFocused(true);
       }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -154,6 +154,10 @@ export function HomeCommerceCarousel() {
     >
       <div className={styles.heading}>
         <h2>电商生图</h2>
+        <div className={styles.controls}>
+          <button type="button" className={styles.arrow} aria-label="上一组创作场景" disabled={index === 0} onClick={() => moveTo(index - size)}><ArrowLeft aria-hidden /></button>
+          <button type="button" className={styles.arrow} aria-label="下一组创作场景" disabled={index === last} onClick={() => moveTo(index + size)}><ArrowRight aria-hidden /></button>
+        </div>
           <span
             className={styles.counter}
             aria-live={playing ? "off" : "polite"}

@@ -5,6 +5,7 @@ import {
   screen,
   cleanup,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { ApparelWorkspace } from "@/features/commerce/ApparelWorkspace";
 import { apparelTaskSchema, type ApparelGateway } from "@zimage/domain";
@@ -101,6 +102,21 @@ describe("apparel form in the shared commerce workspace", () => {
     expect(screen.getByLabelText("商品名称")).toHaveValue("");
     expect(screen.getByLabelText("面料成分")).toHaveValue("");
     expect(screen.getByLabelText("上架尺码")).toHaveValue("");
+    expect(props.onReferenceAdd).not.toHaveBeenCalled();
+    expect(props.onTask).not.toHaveBeenCalled();
+  });
+  it("keeps eleven inspectable examples compact while retaining expandable business notes", () => {
+    render(<ApparelWorkspace {...props} />);
+    const examples = screen.getByRole("region", { name: "服装排版效果示例" });
+    const notes = within(examples).getByText("示例说明与成品保留规则").closest("details");
+    expect(notes).not.toHaveAttribute("open");
+    expect(within(examples).getAllByRole("button", { name: /^预览 原创 AI 服装示例/ })).toHaveLength(11);
+    expect(notes).toHaveTextContent("虚构商品，仅展示排版");
+    expect(notes).toHaveTextContent("90 天");
+    fireEvent.click(within(examples).getByRole("button", { name: "预览 原创 AI 服装示例 · 主图 1" }));
+    expect(screen.getByText("1 / 11")).toBeInTheDocument();
+    expect(screen.getByRole("dialog").querySelector("img")).toHaveAttribute("src", expect.stringContaining("main-1.jpg"));
+    expect(screen.getByLabelText("商品名称")).toHaveValue("");
     expect(props.onReferenceAdd).not.toHaveBeenCalled();
     expect(props.onTask).not.toHaveBeenCalled();
   });
