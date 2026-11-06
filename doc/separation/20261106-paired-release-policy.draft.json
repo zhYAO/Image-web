@@ -1,0 +1,67 @@
+{
+  "protocol": "zimage-paired-release-draft-v1",
+  "executable": false,
+  "productionProject": "image-web/klmiycyesxnpinxpeqep",
+  "operationProposal": "paired-7a811b3-20261106",
+  "identity": {
+    "oldBackend": "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7",
+    "newBackend": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+    "oldFrontendArtifactId": "463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06",
+    "oldFrontendNamespace": "release-fb4fb09f909c",
+    "newFrontendNamespace": "release-7a811b326aa4",
+    "backendManifestSha256": "282f0500d895f9beb97bfff81d9658708df61e754442297648591d20ad6cca37",
+    "frontendCandidateSha256": "78c970c3a53b6b188d323140546578159fee5605d72186dd42eb03ef88469f0d",
+    "frontendPayloadIndexSha256": "1af7f99d4fb807ff6bdb742da407c377a981ffb323c7ae45e48d5446a8afa67a",
+    "newFrontendArtifactId": null,
+    "migrationFile": "20261105190000_chat_usage_settlement.sql",
+    "migrationSha256": "e02af4ba32942e8718ed0a2de9b1598e1329fe62fd44f286f2992d437687b22f",
+    "migrationPayloadSha256": "dd7355c13a4384de2f5f0b863b02afd3bda46281564ed99501bd13ef575d23a5",
+    "migrationPayloadPath": "doc/separation/20261106-migration6-atomic-envelope.sql"
+  },
+  "database": {
+    "beforeRevision": "41 verified migrations through openai_models_disabled/20261106021932",
+    "afterRevision": "before + exact chat_usage_settlement; remote assigned version not yet known"
+  },
+  "fixedExistingPaths": {
+    "maintenance": "/etc/zimage/backend-maintenance.json",
+    "lifecycleSocket": "/run/zimage-lifecycle/control.sock",
+    "lock": "/opt/zimage/deploy.lock",
+    "ingressState": "/etc/zimage/ingress-maintenance.json",
+    "ingressChecking": "/etc/zimage/ingress-checking.json",
+    "ingressOpen": "/etc/zimage/ingress-open.json",
+    "backendCurrent": "/opt/zimage/current",
+    "frontendCurrent": "/opt/zimage/frontend/current"
+  },
+  "rootPreparationOnly": {
+    "pairedCoordinator": null,
+    "reviewedCoordinatorSha256": null,
+    "rootApprovalInstalled": false,
+    "normalBackendPolicyExists": false
+  },
+  "recovery": {
+    "beforeMigration": "restore-exact-old-pair-after-reverification",
+    "afterMigration": "sealed-forward-repair",
+    "afterOpenIntent": "fresh-seal-and-reconciliation",
+    "automaticDatabaseDowngrade": false,
+    "automaticHistoricalRefundOrRetry": false
+  },
+  "steps": [
+    "freeze-and-approve",
+    "verify-existing-identity",
+    "seal-and-drain-old",
+    "stop-old-and-prepare-pair",
+    "submit-migration6-once",
+    "reconcile-migration-result",
+    "select-pair-while-sealed",
+    "verify-pair-and-fresh-authentication",
+    "persist-open-intent",
+    "open-and-record"
+  ],
+  "mustRemainClosed": [
+    "new provider calls",
+    "new chat tariffs",
+    "package price activation",
+    "unapproved model smoke"
+  ],
+  "knownOperationalImpact": "Migration6 publishes zero new chat prices until approved tariff versions are enabled; new Doubao relay mappings/flags are separately required."
+}

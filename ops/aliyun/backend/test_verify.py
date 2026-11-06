@@ -136,6 +136,23 @@ class VerifierTests(unittest.TestCase):
             return status, headers, body
         with self.assertRaises(RuntimeError): verifier.verify(self.request, malformed, now=lambda: 1001)
 
+    def token_catalog(self):
+        c = self.catalog(); c['prices'] = [dict(c['prices'][0], operation='chat',provider='doubao',model='doubao',resolution='',rateVersion='fixture-token-v1',billingMode='usage_capped',tokenTariff={'inputPerMillionNano':'600000000','cachedInputPerMillionNano':'600000000','outputPerMillionNano':'3600000000','maxInputTokens':1024,'maxOutputTokens':512})]
+        return c
+
+    def test_token_catalog_from_current_domain_contract_is_accepted(self):
+        self.assertTrue(verifier.validate_body('/api/credits/pricing', self.token_catalog()))
+        def token_fetch(path):
+            status,headers,body=self.fetch(path)
+            return status,headers,self.token_catalog() if path=='/api/credits/pricing' else body
+        self.assertTrue(verifier.verify(self.request,token_fetch,now=lambda:1001)['catalogReady'])
+
+    def test_malformed_optional_token_fields_never_mint_a_receipt(self):
+        price=self.token_catalog()['prices'][0]
+        for key,value in [('rateVersion',''),('rateVersion','x'*101),('rateVersion',None),('billingMode','fixed'),('tokenTariff',{}),('tokenTariff',dict(price['tokenTariff'],maxInputTokens=True)),('tokenTariff',dict(price['tokenTariff'],maxOutputTokens=float('inf'))),('tokenTariff',dict(price['tokenTariff'],inputPerMillionNano=3)),('tokenTariff',dict(price['tokenTariff'],unknown='extra'))]:
+            catalog=dict(self.token_catalog(),prices=[dict(price,**{key:value})])
+            with self.subTest(key=key,value=value):self.assertFalse(verifier.validate_body('/api/credits/pricing',catalog))
+
     def test_stdio_reuses_one_fetch_session_across_candidate_and_recovery_nonces(self):
         recovery = dict(self.request, nonce='c' * 64, pid=102)
         source = io.StringIO(json.dumps(self.request) + '\n' + json.dumps(recovery) + '\n')

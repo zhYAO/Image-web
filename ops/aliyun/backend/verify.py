@@ -10,6 +10,7 @@ import importlib.util
 from http.cookies import SimpleCookie
 from http.cookiejar import Cookie, CookieJar
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -56,12 +57,25 @@ def validate_body(path, body):
         if (set(body) != {'version', 'enabled', 'prices'} or not isinstance(body['version'], str)
                 or type(body['enabled']) is not bool or type(body['prices']) is not list): return False
         for price in body['prices']:
-            if (type(price) is not dict or set(price) != {'operation', 'provider', 'model', 'resolution', 'unitMinor', 'label'}
+            if (type(price) is not dict or not {'operation', 'provider', 'model', 'resolution', 'unitMinor', 'label'}.issubset(price)
+                    or set(price) - {'operation', 'provider', 'model', 'resolution', 'unitMinor', 'label', 'rateVersion', 'billingMode', 'tokenTariff'}
                     or price['operation'] not in ('image', 'chat', 'optimize')
                     or not isinstance(price['provider'], str) or not price['provider']
                     or not isinstance(price['model'], str) or not price['model']
                     or not isinstance(price['resolution'], str) or not isinstance(price['label'], str)
                     or not integer(price['unitMinor']) or price['unitMinor'] < 1): return False
+            if 'rateVersion' in price and (not isinstance(price['rateVersion'], str) or not 1 <= len(price['rateVersion']) <= 100): return False
+            if 'billingMode' in price and price['billingMode'] != 'usage_capped': return False
+            if 'tokenTariff' in price:
+                tariff = price['tokenTariff']
+                rates = ('inputPerMillionNano', 'cachedInputPerMillionNano', 'outputPerMillionNano')
+                limits = ('maxInputTokens', 'maxOutputTokens')
+                if type(tariff) is not dict or set(tariff) != set(rates + limits) or any(not isinstance(tariff[key], str) for key in rates): return False
+                for key in limits:
+                    if type(tariff[key]) not in (int, float): return False
+                    try:
+                        if not math.isfinite(tariff[key]): return False
+                    except OverflowError: return False
         return True
     if path == '/api/sessions':
         if set(body) != {'sessions'} or type(body['sessions']) is not list: return False

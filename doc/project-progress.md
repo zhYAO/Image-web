@@ -1,5 +1,20 @@
 # ZImage 项目进度
 
+## 2026-11-06 配对策略、本机只读验证及M6原子载荷准备
+
+状态：**paired_policy_prepared；production_coordinator_not_implemented；no_production_activation**。完成不依赖登录态的策略、故障判定及本地SQL验证，没有安装root策略、执行生产M6、切网页、启用价格/模型或调用付费供应商。应用仍绑定7a811b326aa4b344cee08bc5a33c04e44a780fd4，后续仅是运维准备。
+
+- 新本机verify-session工具只由本人在zhao Mac Terminal隐藏输入既有测试登录态，Cookie不进入环境/argv/文件/SSH；固定网站7个只读GET、20分钟授权检查及最多8轮nonce，错误操作范围在提示凭据前拒绝。请求/回执0700/0600，拒绝链接/硬链接/并发漂移，重复nonce不重试。独立审查的GET期间到期及fsync发布边界均已用RED/GREEN修复；19项会话测试通过。已发出的GET无法撤回，网络timeout并非绝对总时限，未夸大物理终止保证。
+- 只读目录验证器对齐当前token报价可选字段，保留基本六键、未知字段拒绝、身份/nonce/marker和GET范围；合法新目录先RED后GREEN，原验证器14项通过。catalogReady不表示成本批准、费率合理或聊天已启用。
+- 最终后台发布工具完整目录回归**189/189**，最小无供应商配置环境；策略故障判定**10/10**。没有重跑不变的整个Web应用，也未把Mac平台旧运维失败改称成功。
+- 原生PG17.11仅私有Unix socket、合成Auth/Storage/队列shim，37项本地应用迁移（跳过4项cron部署）。M6后58张旧测试表hash不变、4旧函数正文保留；chat目录2→0、旧新聊天请求被chat_tariff_unavailable拒绝且无资金op；4个RPC仅service_role可执行，空新表约81920B。已核验测试实例停止，没有生产数据/备份。
+- 原M6 SHA e02af4ba32942e8718ed0a2de9b1598e1329fe62fd44f286f2992d437687b22f未变；准备单语句DO原子载荷SHA dd7355c13a4384de2f5f0b863b02afd3bda46281564ed99501bd13ef575d23a5，原文23714B/载荷23816B均独立绑定。无客户端事务实验在确认新表已可见后抛错，DDL回滚；成功路径一致。迁移历史/响应未知仍须核实，不因封装而自动重放。
+- 04:23:38UTC只读生产快照：数据库141790355B、41项迁移、M6表不存在；原Doubao开关true，MiniMax/OpenAI/两新聊天模型false。服务器仍fb4fb09、PID456496、准入open，采样七项计数0（不等于未来drain证据），原F0 artifact463f3941…不变。全组织Free用量在实际维护前仍须重查。
+- 配对draft明确executable=false，绑定旧/新后端、F1 candidate/payload及M6原文/载荷；正式F1 artifact与root协调器SHA仍null。现有普通发布器继续拒绝跨schema，新root配对协调器和准确安装审批尚未完成，不存在可直接执行的pair命令。
+- 恢复规则：M6提交前可在准确旧组合、实际旧DB与完整drain/新nonce认证通过后恢复；M6提交后默认保持封口并前向修复，opening或结果未知进入新维护核实，不自动降金融API、恢复数据库或处理历史unknown。用户不备份选择保持，不承诺整库恢复点。
+
+策略与边界：[配对发布准备](./separation/20261106-paired-release-policy.md)、[本人Mac验证交接](./separation/20261106-local-readonly-verifier.md)。用户暂不需要输入任何凭据；待协调器和维护准备完成后，由主会话统一安排本人Chrome登录及Terminal隐藏输入。聊天可用性/费率及独立模型配置也需在实际维护前解决。任务证据为verification/migration6-local-compatibility-v3.json、paired-preparation-backend-tests-final2.log及paired-release-policy.draft.json。
+
 ## 2026-11-06 正式本机构建与 Linux 候选封包通过，Web 尚未激活
 
 状态：**formal_build_and_linux_pack_verified；authenticated_paired_release_pending**。执行通道已恢复，原开发分支未切换。按最新授权仅做本地源码提交，应用固定为 `7a811b326aa4b344cee08bc5a33c04e44a780fd4`；未推送或运行CI。保留用户原始next-env改动与23项.env.local元数据，未读取密钥。
