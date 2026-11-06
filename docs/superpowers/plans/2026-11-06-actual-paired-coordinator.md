@@ -38,3 +38,13 @@ Project regression with existing offline fonts and normal repository-write appro
 Additional final fix: root ABI validation invokes node by name, so sanitize PATH/NODE_OPTIONS/NODE_PATH/LD_PRELOAD/LD_LIBRARY_PATH for every CLI command, including begin. Existing bridge guard originally covered stage/start only. Regression first missing guard RED; fixed environment inherited by an actual child process and restored afterward. No real secret environment or malicious child loaded.
 
 Final verification: 36 paired passed,3 Linux stage skipped; backend189/browser18; application270+195+1308 all passed. Independent Important findings fixed RED→GREEN in one pass; no deferred minors. Root installation/live auth remain unverified; no production mutation. Final source-only transfer payload254240 bytes / e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3 supersedes earlier candidate hashes; it has NOT been transferred.
+
+## Approved Linux verification continuation (2026-11-06)
+
+User message Sentinel_43d59c3ee3388191b69307d99a4748b4 explicitly approved the nonpublic254KB source upload and isolated run. Read the visible room evidence before retry. The previously denied SCP was retried exactly once and succeeded for the final254240-byte/e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3 archive; old denials above are historical, not current blockers.
+
+Linux unit a1 exited before test discovery because SSH expanded the unittest wildcard; retained raw failure, fixed argv quoting with shlex.join, did not change tests/guards. Unit a2:39/39 passed, including all3 Linux/glibc synthetic stage tests,5.723s wall/1.426s CPU. Independent same-configuration kernel witness verifiedUID998,NoNewPrivs1,CapEff0,AF_INET denied/AF_UNIX allowed,read-only input/production mounts,256MiB/no swap,cpu.max25000/100000,pids64. No application/production action; all units inactive.
+
+70 source hashes unchanged after execution;16 existing installed helper hashes exactly matched the reviewed closure. Root code/policy paths and audit directory still absent. Nonsecret service/ingress/five Edge function version fingerprints prepared; no credential values read or output. Production old pointers and artifact unchanged;ready/meta200. DB at05:40:38UTC141888659B/41migrations/M6absent. All-org Free usage still needs a fresh check before cutover.
+
+Task2 Linux-only verification: complete. Main-thread next approval is the exact four-file root installation,20-file digest manifest and empty audit parent; no active policy/service switch included. Actual DB metadata contracts,live authentication,F1 approval and chat availability remain separate gates. No new ruling or deferred minor; earlier conservative boundaries stand.

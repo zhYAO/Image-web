@@ -39,7 +39,8 @@
     "normalBackendPolicyExists": false,
     "reviewedCoordinatorClosureSha256": "58280d158aacc3a8056bbc7b3fbf72fc3a79713d518f9dc204555de94e483fcc",
     "implementationLocalTestsPassed": 36,
-    "linuxStageTestsPending": 3
+    "linuxStageTestsPending": 0,
+    "linuxPairedTestsPassed": 39
   },
   "recovery": {
     "beforeMigration": "restore-exact-old-pair-after-reverification",

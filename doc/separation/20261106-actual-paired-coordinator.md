@@ -1,3 +1,7 @@
+# Linux isolation update — 2026-11-06
+
+The source transfer gate was resolved by the user's explicit approval. The exact254240-byte/e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3 package was uploaded once after that new evidence. All39 Linux paired tests, including3 synthetic layer-preparation tests, passed with no skips. The source70-file closure remained unchanged; all test units exited. The new four-file root coordinator and active policy are still absent from production. See [exact root installation proposal](./20261106-paired-root-install-proposal.md), which is a separate unexecuted security approval gate.
+
 # Actual paired coordinator: installation and handoff gate
 
 Local implementation only. Nothing in this document installs root code, changes admission, applies M6, publishes a price, calls a paid model, or authorizes a security change. The application artifact remains7a811b326aa4b344cee08bc5a33c04e44a780fd4; later ops commits do not relabel it.

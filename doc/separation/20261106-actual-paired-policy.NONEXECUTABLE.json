@@ -1,9 +1,9 @@
 {
   "newFrontend": "release-7a811b326aa4",
-  "configurationSha256": null,
+  "configurationSha256": "a5deb714b51f1f291a1dbe02c44e1b7f2a27861e4b3ff0aa865c0c0388a952c2",
   "oldFrontendArtifact": "463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06",
-  "workerSha256": null,
-  "ingressSha256": null,
+  "workerSha256": "b09c6c7990df14835b06c2aa0fada30035d60730d5d2bf811394f43865d2ca28",
+  "ingressSha256": "890fc74aaeab5c1813166b83a3f5840348f592077c3a63cfb2054ba52d981009",
   "projectRef": "klmiycyesxnpinxpeqep",
   "frontendPayloadSha256": "1af7f99d4fb807ff6bdb742da407c377a981ffb323c7ae45e48d5446a8afa67a",
   "frontendCandidateSha256": "78c970c3a53b6b188d323140546578159fee5605d72186dd42eb03ef88469f0d",

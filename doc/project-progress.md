@@ -1,5 +1,18 @@
 # ZImage 项目进度
 
+## 2026-11-06 Linux配对协调器隔离验收通过，准确root安装待确认
+
+状态：**linux_paired_tests_verified；root_installation_not_performed；no_production_switch**。用户明确批准约254KB非公开测试包上传及隔离运行；读取实际对话证据后只重试一次上传并成功，先前自动审批阻塞已解决。包为254240字节，SHA e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3；临时归档0600，70项解压输入root只读，未安装到生产工具路径。
+
+- Linux **39/39通过、无跳过**，包括此前待验的3项合成stage测试：真实分层归档准备不激活/不写run计数、错误归档摘要拒绝、native失败不改变current/sequence。首轮SSH通配符提前展开导致未进入测试，保留a1日志；正确引用参数后a2通过，5.723秒/CPU1.426秒，未修改代码或放松守卫。
+- 相同配置的内核见证核实UID998/zimage、NoNewPrivs1/CapEff0、INET socket拒绝/Unix允许、输入和生产挂载只读、仅独立output可写；memory.max268435456、swap0、cpu.max25000/100000、pids64、180秒上限。所有测试单元退出，70个输入SHA未变，原服务/两个指针与基线一致。
+- 既有16项root辅助文件与候选依赖清单SHA逐项一致；四个新Python源文件、20项摘要清单及空审计目录的[准确安装提案](./separation/20261106-paired-root-install-proposal.md)已准备。新root工具、paired策略及审计目录目前均不存在；尚未执行安装、封口、M6或切换，不将测试上传批准解释为root安装批准。
+- 非敏感服务/ingress配置、旧F0 artifact和5个Edge函数版本指纹已只读准备。05:40:38UTC数据库141888659字节、41项迁移、M6仍不存在；旧fb4后端/旧F0、ready/meta200、新root策略不存在、无维护标记。未提取或显示密钥，没有付费调用、备份、生产配置/权限更改或旧数据处理。
+- 代码仍为本地cdf5991，应用身份仍7a811；后续仅文档记录。原next-env与.env.local元数据保留。之前Mac全量回归domain270/frontend195/Web1308、backend189/browser18的代码未变，没有重复不必要的应用构建。
+- 下一步由主会话确认准确root安装范围；不安装活动策略，不切线上。随后仍需实际DB before/after合约与封口后的资金/队列/租约证明、全组织Free余量复核、真实浏览器身份/F1批准及聊天可用性决定。正常Chrome登录和同源只读Snippet的安全操作已写明，不复制Cookie；若有self-XSS阻止必须停，用户暂不需要登录。
+
+证据：verification/paired-coordinator-linux-{tests-a1,tests-a2,sandbox-witness}.log、paired-coordinator-linux-final.json、paired-coordinator-existing-root-closure.json、paired-coordinator-production-policy-inputs.json。[操作与恢复边界](./separation/20261106-actual-paired-coordinator.md)。以下是此前仍未运行Linux测试时的历史检查点。
+
 ## 2026-11-06 实际配对协调器已实现，生产切换仍受控关闭
 
 状态：**paired_coordinator_implemented_locally；linux_stage_tests_blocked；root_not_installed；no_production_switch**。应用仍为7a811b326aa4b344cee08bc5a33c04e44a780fd4，生产仍是旧fb4组合。本次仅运维/测试/文档；原next-env内容及.env.local的23项元数据保持，未读取密钥。
