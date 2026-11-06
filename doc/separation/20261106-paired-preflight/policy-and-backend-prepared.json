@@ -1,0 +1,37 @@
+{
+  "recordedAt": "2026-11-06T08:05:36.687465+00:00",
+  "approvalMessageId": "Sentinel_f026e6547efc81918d15635bd90ca092",
+  "policyInstalled": true,
+  "policyInstalledAt": "2026-11-06T07:59:29.904360+00:00",
+  "policySha256": "d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe",
+  "policyExpiryUTC": "2026-11-06T10:57:45+00:00",
+  "backendStaged": {
+    "activated": false,
+    "backendRelease": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+    "manifestSha256": "282f0500d895f9beb97bfff81d9658708df61e754442297648591d20ad6cca37",
+    "productionReady": false,
+    "reused": false
+  },
+  "stagedAt": "2026-11-06T08:02:10.082869+00:00",
+  "productionSwitchPerformed": false,
+  "migration6Executed": false,
+  "operationBegun": false,
+  "maintenanceEntered": false,
+  "originalProductionHealth": {
+    "meta": 200,
+    "ready": 200
+  },
+  "healthCheckedAt": "2026-11-06T08:03:27.365147+00:00",
+  "originalPid": 456496,
+  "authenticationReady": false,
+  "authenticationBlocker": "Mac remains locked; no controlled zimage tab, real read-only receipt absent",
+  "browserWorkflow": "Normal Chrome login; public reviewed snippet and redacted receipt; no credential export or self-XSS override",
+  "modelsOrTariffsEnabled": false,
+  "historicalUnknownRecordsRetriedRefundedDeleted": false,
+  "paidCalls": 0,
+  "nextStep": "User manually unlocks Mac and completes normal zimage login; main thread coordinates browser verification before begin/seal",
+  "freeQuotaEvidence": "policy-install-free-quota.json",
+  "databaseBeforeEvidence": "policy-install-readiness.PRIVATE.json",
+  "sealedDatabaseProofReady": false,
+  "newPersistentRootToolInstalled": false
+}

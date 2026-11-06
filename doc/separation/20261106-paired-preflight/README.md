@@ -1,3 +1,7 @@
+# Approved policy and backend staging update
+
+User approval Sentinel_f026e6547efc81918d15635bd90ca092 is verified. Policy d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe was installed07:59:29UTC, root:root0600, unchanged expiry10:57:45UTC. Actual stage-backend completed08:02:10UTC; native/layer/closure gates passed, retained7a811 exists, no activation/pointer/run-count/service change. Independent08:03:27UTC readback verified policy/markers/oldPID456496/old pair/open admission/ready+meta200. No operation began, no seal/M6/switch. Mac remains locked, so normal user authentication is the pending handoff. New models/tariffs remain off, no paid calls or historical action. Earlier no-policy wording below describes the preparation phase, not current installation state. See policy-and-backend-prepared.json.
+
 # Review-only paired-release preparation
 
 No active policy, production seal/switch, M6, price/configuration change or paid request was performed. policy.PROPOSED.json is syntactically valid with a proposed four-hour expiry, but no maintenance window or root installation is approved by these bytes. It must not be silently extended or copied into /etc. See ../20261106-paired-release-preflight.md for exact process, impact and decisions.

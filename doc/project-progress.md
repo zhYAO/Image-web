@@ -1,5 +1,17 @@
 # ZImage 项目进度
 
+## 2026-11-06 限时策略已安装、真实后端准备通过，等待本人登录
+
+用户Sentinel_f026e6547efc81918d15635bd90ca092已批准创建并使用本次限时策略。07:59:29UTC仅新增/etc/zimage/paired-release-policy.json，root:root0600、1370B，SHA d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe，到10:57:45UTC失效；未延长、覆盖旧文件或增加root工具。20项工具闭包及实际只读status通过，原服务/入口/指针未变。
+
+- 08:02:10UTC在固定incoming放入已验证差量包，并真实运行受测stage-backend：分层归档/闭包、目标、资源与原生检查全部通过，新7a811保留目录已准备，manifest282f0500…，activated=false/productionReady=false。current/previous、部署计数及原服务未变，未创建发布operation。此结果不是已激活或完整业务验收。
+- 08:03:27UTC独立读取策略owner/mode/摘要及新保留版本标记均匹配；原fb4后端/F0、PID456496、入口和Node仍open，ready/meta200。审计目录空，M6未执行，尚未begin、seal、停旧服务或切换。
+- 07:57:50UTC生产单个只读快照仍41迁移/M6不存在；before及五个Worker指纹匹配，13任务屏障/九类租约均0，历史unknown3条保留，proofReady=false。Free最新全组织显示DB149.87MB、Storage0.03/1GB、Functions435/500000、两类出站各0/5GB，有舍入/1小时延迟，真正封口后需新取证明。
+- CUA在本轮开始及产物准备后均确认Mac仍锁屏，无受控Zimage登录标签。按主会话要求停在依赖认证的begin/challenge/seal之前，旧版继续服务；等待本人手动解锁、正常Chrome登录并完成已准备的浏览器只读交接。不读/导出Cookie，不绕过锁屏或self-XSS，不启动20分钟验证会话来消耗等待时间。策略批准已完成，不再重复询问。
+
+新模型和未验证费率继续关闭，没有付费调用、历史重试/退款/删除、生产数据库写入或新备份。原next-env及.env.local保留，应用仍7a811/工具cdf5991。[实际策略与准备结果](./separation/20261106-paired-preflight/policy-and-backend-prepared.json)。以下“活动策略尚未安装”均为此前历史状态。
+
+
 ## 2026-11-06 用户要求直接切换，实时复核完成、活动策略与本人登录待交接
 
 用户在得知新聊天暂不可用后要求直接切换新版，不再把恢复聊天作为切换前提。未验证模型和费率继续关闭；聊天修复尚未改业务代码，当前制品仍为已验证7a811、工具仍cdf5991。以下较早的A/B待选状态已由此次指示取代，不重复询问聊天停用决定。

@@ -1,0 +1,46 @@
+{
+  "auditDirectoryEmpty": true,
+  "backendStaged": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+  "checkedAt": "2026-11-06T08:03:27.365147+00:00",
+  "healthHttp": {
+    "meta": 200,
+    "ready": 200
+  },
+  "journalStillAbsent": true,
+  "live": {
+    "backend": "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7",
+    "configurationSha256": "a5deb714b51f1f291a1dbe02c44e1b7f2a27861e4b3ff0aa865c0c0388a952c2",
+    "fence": null,
+    "frontend": "release-fb4fb09f909c",
+    "frontendArtifact": "463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06",
+    "frontendSequence": 1,
+    "ingressMode": "open",
+    "ingressSha256": "890fc74aaeab5c1813166b83a3f5840348f592077c3a63cfb2054ba52d981009",
+    "markers": {
+      "checking": null,
+      "frontend_fence": null,
+      "maintenance": null,
+      "open": {
+        "ingressConfigSha256": "30140cabb433acc1ab86f9337e12459d73dba982b58e448ef034f3171ea9cc8b",
+        "operationId": "manual-fb4fb09-20261031",
+        "schemaVersion": 1
+      }
+    },
+    "nodeGate": {
+      "mode": "open",
+      "operationId": "manual-fb4fb09-20261031",
+      "schemaVersion": 2
+    },
+    "nodeMode": "open",
+    "process": {
+      "bootId": "6aa2f828-d198-435e-9dd7-232503b0f750",
+      "pid": 456496,
+      "startTicks": 379462108
+    }
+  },
+  "policyInstalled": true,
+  "policyOwnershipAndModeVerified": true,
+  "policySha256": "d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe",
+  "productionSwitchPerformed": false,
+  "retainedMarkersVerified": true
+}
