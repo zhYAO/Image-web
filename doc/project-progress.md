@@ -1,5 +1,9 @@
 # ZImage 项目进度
 
+## 2026-11-06 13:19UTC 两个OpenAI聊天模型实测成功，诊断已关闭
+
+在原有Edge/Supabase测试面板完成托管服务认证，关闭门预检503正确。用户批准的唯一15分钟活动中Astra、Sol各调用一次，均HTTP200并持久verified，每次13输入/4输出token、缓存读写0；活动complete、attempt总2、无重试，不扣网站用户积分。目录估值合计USD0.000396，示例汇率7.2约CNY0.0028512，供应商最终账单未核实。13:17:28UTC关闭诊断并核对SHA256(false)；13:19:33UTC正式聊天费率仍0、整套关闭、OpenAI/MiniMax关闭，现有豆包/Seedream开关未动。数据库142625939B，Free面板有余量且统计可能滞后。没有读取供应商key、导出凭据、重放迁移、发布价格或修改.env.local；原next-env改动保留。[完整生产证据和剩余门禁](provider-diagnostics-production-checkpoint-2026-11-06.md)。以下“未测试”等均为历史阶段，不能继续复用已完成活动的付费授权。
+
 ## 2026-11-06 诊断已部署并保持关闭；限次测试等待安全交互窗口
 
 已按用户明确批准应用isolated_provider_diagnostics（生产实际版本20261106123202）并部署provider-diagnostics v1；权限与远端返回源码核验通过，公开无凭据GET实测401。12:36:53UTC活动0、尝试0，真实模型调用0；没有创建活动/修改开关，正式聊天费率0、整套关闭。不要重复迁移。Free余量已查，本次DB增长57344B，未升级/扩容。Mac命令通道恢复，但浏览器调试未附着、原生UI与用户操作冲突；CLI没有已保存AccessToken或远程invoke能力，未新建凭据/绕过授权。由主会话协调短暂操作窗口后再接续已批准测试。Seedream0.002元/AFP基准已明确获批并记录精确配置字段换算，未发布正式价格。[生产回执及接续步骤](provider-diagnostics-production-checkpoint-2026-11-06.md)。下方“未部署”均为历史本地阶段。
