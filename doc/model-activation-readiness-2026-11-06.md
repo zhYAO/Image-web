@@ -1,5 +1,7 @@
 # 新模型与收费启用清单（2026-11-06，本地候选）
 
+> Latest13:46UTC: M7/APLUS release preparation and proposed pricing verified offline; production still disabled. See [reviewed release packet](separation/20261106-m7-readiness/README.md). Concrete rates/FX/caps are proposed, not approved. M7 not applied and no new paid calls.
+
 > 13:19UTC最新检查点：独立诊断已按批准范围完成，gpt-6-astra和gpt-6.1-sol各一次HTTP200及可信用量回执，活动1、attempt2且全部verified，活动complete；13:17:28UTC诊断开关已保存false并核对摘要。合计目录估值USD0.000396（示例汇率7.2约CNY0.0028512），不是最终实付。正式聊天费率0、整套及新OpenAI模型仍关闭。详情见[生产回执](provider-diagnostics-production-checkpoint-2026-11-06.md)。两次活动授权已用完，不再调用；下文较早“未部署/未调用”的准备阶段记录由本检查点取代，迁移不得重放。
 
 ## 已批准的Seedream成本基准（不发布售价）

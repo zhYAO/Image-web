@@ -1,0 +1,7 @@
+{
+  "injectedFailureRolledBackSixDefinitions": true,
+  "financialRowsUnchanged": true,
+  "normalEnvelopePassed": true,
+  "replayRejected": true,
+  "realSupplierCalls": 0
+}

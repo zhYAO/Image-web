@@ -1,0 +1,550 @@
+{
+  "cases": 36,
+  "realSupplierCalls": 0,
+  "realAuthenticationTested": false,
+  "actualHandlersAndActualDisposableRpc": true,
+  "oldEdgeSource": "Supabase openai-chat v5 source returned2026-11-06",
+  "newEdgeSource": "current original branch",
+  "results": [
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "supported"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "unsafe_new_profile_on_old_database"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "fresh",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "unsafe_new_profile_on_old_database"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "claimed",
+      "capMinor": 8,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "992",
+        "frozen_minor": "8",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "result",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "1000",
+        "frozen_minor": "0",
+        "spent_minor": "0"
+      },
+      "classification": "not_started_rejected_and_released"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "1000",
+        "frozen_minor": "0",
+        "spent_minor": "0"
+      },
+      "classification": "not_started_rejected_and_released"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "fresh",
+      "capMinor": 8,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "1000",
+        "frozen_minor": "0",
+        "spent_minor": "0"
+      },
+      "classification": "not_started_rejected_and_released"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "claimed",
+      "capMinor": 8,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "992",
+        "frozen_minor": "8",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m6",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "result",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "supported"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "legacy",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "fresh",
+      "capMinor": 864,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "136",
+        "frozen_minor": "864",
+        "spent_minor": "0"
+      },
+      "classification": "old_edge_receipt_held_for_profile_mismatch"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "claimed",
+      "capMinor": 864,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "136",
+        "frozen_minor": "864",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v2",
+      "lifecycle": "result",
+      "capMinor": 864,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "fresh",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "992",
+        "frozen_minor": "8",
+        "spent_minor": "0"
+      },
+      "classification": "old_edge_receipt_held_for_profile_mismatch"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "claimed",
+      "capMinor": 8,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "992",
+        "frozen_minor": "8",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "old",
+      "profile": "v3",
+      "lifecycle": "result",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "fresh",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "1000",
+        "frozen_minor": "0",
+        "spent_minor": "0"
+      },
+      "classification": "not_started_rejected_and_released"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "claimed",
+      "capMinor": 749,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "251",
+        "frozen_minor": "749",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "legacy",
+      "lifecycle": "result",
+      "capMinor": 749,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "fresh",
+      "capMinor": 864,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "supported"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "claimed",
+      "capMinor": 864,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "136",
+        "frozen_minor": "864",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v2",
+      "lifecycle": "result",
+      "capMinor": 864,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "fresh",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 1,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "supported"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "claimed",
+      "capMinor": 8,
+      "httpStatus": 503,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "992",
+        "frozen_minor": "8",
+        "spent_minor": "0"
+      },
+      "classification": "unknown_held_no_retry"
+    },
+    {
+      "database": "m7",
+      "edge": "new",
+      "profile": "v3",
+      "lifecycle": "result",
+      "capMinor": 8,
+      "httpStatus": 200,
+      "simulatedSupplierCalls": 0,
+      "wallet": {
+        "available_minor": "999",
+        "frozen_minor": "0",
+        "spent_minor": "1"
+      },
+      "classification": "saved_result_replayed_no_retry"
+    }
+  ]
+}

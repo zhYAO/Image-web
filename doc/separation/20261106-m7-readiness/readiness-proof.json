@@ -1,0 +1,68 @@
+{
+  "status": "PREPARED_NO_PRODUCTION_ACTIVATION",
+  "baseCommit": "37d41106e6965c718e45d9a48138eabb4f5a4905",
+  "runtimeSourceCommit": "bba2787e7d3e02ee6b01f6b00cb8ac2b633e76ab",
+  "productionReadOnly": {
+    "configCheckedAt": "2026-11-06T13:23:27.977379Z",
+    "activityCheckedAt": "2026-11-06T13:36:28.017562Z",
+    "m7Applied": false,
+    "chatRateVersions": 0,
+    "newProfileTariffs": 0,
+    "frozenChatProfiles": [],
+    "activeChatOperations": 0,
+    "relayAttempts": 0,
+    "historicalSucceededChatOperations": 4,
+    "packageCostVersions": 0,
+    "packageSaleVersions": 0,
+    "databaseBytes": 142625939,
+    "finalCheckedAt": "2026-11-06T13:45:58.926711Z",
+    "diagnosticCampaigns": 1,
+    "diagnosticAttempts": 2
+  },
+  "tests": {
+    "sqlAssertions": 267,
+    "twoConnectionGroups": 5,
+    "proposalDomainTests": 12,
+    "actualHandlerDatabaseMatrixCases": 36,
+    "matrixClassifications": {
+      "supported": 4,
+      "unknown_held_no_retry": 12,
+      "saved_result_replayed_no_retry": 12,
+      "unsafe_new_profile_on_old_database": 2,
+      "not_started_rejected_and_released": 4,
+      "old_edge_receipt_held_for_profile_mismatch": 2
+    },
+    "atomicFaultRollback": true,
+    "atomicReplayRejected": true,
+    "actualSupplierCalls": 0,
+    "actualSdkAuthenticationInMatrix": false
+  },
+  "productionWrites": 0,
+  "providerCallsThisTask": 0,
+  "independentReview": {
+    "completed": true,
+    "p1": "Blocked automatic M6 restore once any profile2/3 tariff or order exists",
+    "p2": [
+      "Added old-operation and relay state preflight; current counts zero",
+      "Executed actual old/new handler x DB x profile x lifecycle matrix",
+      "Added explicit OpenAI10.37credit freeze and5.184CNY directory estimate budget"
+    ]
+  },
+  "remaining": [
+    "formal publishable Linux artifact and fresh paired policy/contract",
+    "real Web service identity to Edge default matching",
+    "browser stale-client price disclosure/refresh acceptance",
+    "explicit sales rates, FX and mapping/cap approval",
+    "separate real wallet/supplier acceptance approval; completed diagnostic cannot be reused"
+  ],
+  "sourceHashes": {
+    "proposed-config.NOT-APPROVED.json": "be2bd387ad100a47547fe0342679c251b925506320b4a489164ce420d01a302a",
+    "migration7-atomic-envelope.DRAFT.sql": "82f6ba8e3a490c96b7abc82ef03e011b19a73365368b9fb368f1d81717415fc5",
+    "upgrade-proof.json": "85fe44505a5a26ad02df2efab02c58950eb83454c22878afbdf0b7135742760c",
+    "envelope-proof.json": "413aa72115ac75677a3dee3bdba1dbfc03512e8fe8948011e0b7bd1b4e385a77",
+    "edge-matrix-proof.json": "87a841437ff6824a2de94e1c55e7efe77f89451913e7163bebaf88e94f27ae78",
+    "README.md": "89791782885578f0613fd4d8f45cea63eb98c82e3abe6fe47ea833b7e7d7b96d",
+    "preflight.READ-ONLY.sql": "f92813403f252db00999a650dcc08a062498ea27aa999e31fbcbf4aaafa83650"
+  },
+  "testHarnessNote": "Initial matrix intentionally rejected RPC aborted shared transaction. Diagnosed exact claimed replay error and isolated each mock RPC withSAVEPOINT; actual code unchanged. Node24 emitted module-type warning for existing package.json; retained log, no product edits."
+}

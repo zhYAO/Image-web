@@ -1,0 +1,166 @@
+{
+  "status": "PROPOSED_NOT_APPROVED_FOR_ACTIVATION",
+  "productionEnabled": false,
+  "asOf": "2026-11-06",
+  "approvedPrinciples": {
+    "seedreamCnyPerAfp": "0.002",
+    "markupBps": 10000,
+    "packageMinimumMinor": 50,
+    "preImageCancellation": "full_refund",
+    "billing": "fixed_successful_image_count",
+    "unknown": "hold_for_reconciliation"
+  },
+  "requiresOwnerDecision": [
+    "OpenAI FX7.2 and listed sales rates",
+    "chat input32000/output4000 and wallet caps",
+    "Ark independent chat/vision/planner mappings and ordinary billed route",
+    "A+ vision32000/4000 planner32000/8000 caps",
+    "A+ fixed per-model/spec single image173minor,600-second quote TTL",
+    "plan image alias and actual resolved model identity from account test"
+  ],
+  "sources": {
+    "openai": "https://developers.openai.com/api/docs/pricing",
+    "arkRegular": "https://docs.volcengine.com/docs/ark/model-pricing?lang=zh",
+    "afp": "https://console.volcengine.com/ark/region:cn-beijing/docs/agent-plan-personal-afp-credits-billing-rules",
+    "models": "https://docs.volcengine.com/docs/ark/model-list?lang=en"
+  },
+  "fx": {
+    "cnyPerUsd": "7.2",
+    "approved": false
+  },
+  "chatTariffs": [
+    {
+      "markupBps": 10000,
+      "maxInputTokens": 32000,
+      "maxOutputTokens": 4000,
+      "serviceTier": "default",
+      "version": "PROPOSED-20261106-gpt-6-astra",
+      "model": "gpt-6-astra",
+      "requestModel": "gpt-6-astra",
+      "responseModels": [
+        "gpt-6-astra"
+      ],
+      "meteringVersion": 2,
+      "cacheTtl": "30m",
+      "inputPerMillionNano": "72000000000",
+      "cachedInputPerMillionNano": "7200000000",
+      "cacheWritePerMillionNano": "90000000000",
+      "outputPerMillionNano": "360000000000",
+      "evidence": "PROPOSED, not approved for production: OpenAI standard short directory 2026-11-06, FX 7.2 pending approval; markup100% already approved; requested30m cache."
+    },
+    {
+      "markupBps": 10000,
+      "maxInputTokens": 32000,
+      "maxOutputTokens": 4000,
+      "serviceTier": "default",
+      "version": "PROPOSED-20261106-gpt-6.1-sol",
+      "model": "gpt-6.1-sol",
+      "requestModel": "gpt-6.1-sol",
+      "responseModels": [
+        "gpt-6.1-sol"
+      ],
+      "meteringVersion": 2,
+      "cacheTtl": "30m",
+      "inputPerMillionNano": "14400000000",
+      "cachedInputPerMillionNano": "720000000",
+      "cacheWritePerMillionNano": "18000000000",
+      "outputPerMillionNano": "72000000000",
+      "evidence": "PROPOSED, not approved for production: OpenAI standard short directory 2026-11-06, FX 7.2 pending approval; markup100% already approved; requested30m cache."
+    },
+    {
+      "markupBps": 10000,
+      "maxInputTokens": 32000,
+      "maxOutputTokens": 4000,
+      "serviceTier": "default",
+      "version": "PROPOSED-20261106-ark-lite",
+      "model": "doubao",
+      "requestModel": "doubao-seed-2-1-lite-260915",
+      "responseModels": [
+        "doubao-seed-2-1-lite-260915"
+      ],
+      "meteringVersion": 3,
+      "inputPerMillionNano": "800000000",
+      "cachedInputPerMillionNano": "160000000",
+      "outputPerMillionNano": "2700000000",
+      "evidence": "PROPOSED, not approved for production: Ark V3 regular non-audio 2026-11-06; independent chat mapping/account access and limits pending; no explicit paid cache storage."
+    }
+  ],
+  "aplus": {
+    "costVersion": "PROPOSED-20261106-afp002-ark-lite",
+    "saleVersion": "PROPOSED-20261106-per-image-conservative",
+    "costs": {
+      "imageModel": "doubao-seedream-5.0-pro",
+      "imageResponseModels": [
+        "doubao-seedream-5.0-pro"
+      ],
+      "imageResolution": "2K",
+      "imageOutputNano": "600000000",
+      "imageOutputLowNano": "300000000",
+      "imagePixelThreshold": 2610000,
+      "extraReferenceNano": "20000000",
+      "visionModel": "doubao-seed-2-1-lite-260915",
+      "visionResponseModels": [
+        "doubao-seed-2-1-lite-260915"
+      ],
+      "plannerModel": "doubao-seed-2-1-lite-260915",
+      "plannerResponseModels": [
+        "doubao-seed-2-1-lite-260915"
+      ],
+      "visionInputPerMillionNano": "800000000",
+      "visionOutputPerMillionNano": "2700000000",
+      "plannerInputPerMillionNano": "800000000",
+      "plannerOutputPerMillionNano": "2700000000",
+      "visionMaxInputTokens": 32000,
+      "visionMaxOutputTokens": 4000,
+      "plannerMaxInputTokens": 32000,
+      "plannerMaxOutputTokens": 8000,
+      "evidence": "PROPOSED cost version: owner approved CNY0.002/AFP basis 2026-11-06; 150/300 output AFP,10 AFP per extra ref; Ark regular0.8/2.7; plan alias/account mapping and token budgets not verified; never supplier invoice."
+    },
+    "sale": {
+      "markupBps": 10000,
+      "minimumMinor": 50,
+      "quoteSeconds": 600,
+      "settlement": "fixed_images",
+      "refund": "successful_images",
+      "sharedCostPolicy": "include_once_if_any_success",
+      "minimumPolicy": "whole_order",
+      "priceEvidence": "PROPOSED ONLY, not a price approval: conservative one-delivered-image basis includes all bounded shared costs once plus ten input-reference maximum. No production publication.",
+      "imagePrices": [
+        {
+          "model": "doubao-seedream-5.0-pro",
+          "resolution": "2K",
+          "spec": "standard",
+          "estimatedUnitCostNano": "863600000"
+        },
+        {
+          "model": "doubao-seedream-5.0-pro",
+          "resolution": "2K",
+          "spec": "desktop",
+          "estimatedUnitCostNano": "863600000"
+        },
+        {
+          "model": "doubao-seedream-5.0-pro",
+          "resolution": "2K",
+          "spec": "mobile",
+          "estimatedUnitCostNano": "863600000"
+        }
+      ]
+    }
+  },
+  "costDerivation": {
+    "sharedMaxNano": "83600000",
+    "maxInputReferences": 10,
+    "proposedUnitBasisNano": "863600000",
+    "proposedUnitMinor": 173,
+    "cnyPerAfp": "0.002",
+    "imageBasis": "150/300 AFP per successful output according to actual pixels; first reference free then10AFP each",
+    "sharedAllocation": "All shared cost assigned to single-success conservative unit basis. Multiplying fixed units for larger sets is conservative; actual gross margin is not exactly50%.",
+    "cancellationLoss": "Analysis/planning incurred before cancellation or zero delivered images is borne by platform; quote cannot guarantee that loss is recovered.",
+    "separateMerchantRoute": "Ark regular CNY rates for analysis/planning; only Seedream plan route uses approved AFP basis. Do not apply0.002/AFP to other routes implicitly."
+  },
+  "migration": {
+    "file": "supabase/migrations/20261106101025_verified_openai_chat_metering.sql",
+    "sha256": "1f468ee10aad91a414eacd7fec3d3106fecd5919b3fae17697d0ef85eccc8d93",
+    "state": "NOT_APPLIED_TO_PRODUCTION"
+  }
+}

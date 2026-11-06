@@ -1,0 +1,64 @@
+{
+  "m6ProductionDefinitionsMatched": true,
+  "targets": 6,
+  "ownersAclSearchPathAndSecurityPreserved": true,
+  "priceBusinessWalletRowsUnchanged": true,
+  "legacySnapshotMathUnchanged": true,
+  "v2CapMinor": 864,
+  "v2CaptureMinor": 576,
+  "missingWriteEvidencePendingMinor": 864,
+  "unsafeM6DowngradeCaptureMinor": 461,
+  "rollbackProbeTransactionRestored": true,
+  "before": [
+    {
+      "name": "private.chat_usage_amount",
+      "md5": "e6a0c3c325a6dfc1acfb2351aaa28870"
+    },
+    {
+      "name": "private.chat_usage_cap",
+      "md5": "08ba940226366f6ef097dd1ebb1e60be"
+    },
+    {
+      "name": "private.chat_usage_config",
+      "md5": "1c410a8c793139efa822f75897c7a76b"
+    },
+    {
+      "name": "public.credit_dispatch",
+      "md5": "02b9beda8437aa7a55da0ffd47a8631d"
+    },
+    {
+      "name": "public.doubao_chat_relay",
+      "md5": "e71a2d667e87b5ed84452a4155b27ab7"
+    },
+    {
+      "name": "public.openai_chat_relay",
+      "md5": "c75c81ef375d739c20f24b38df7799bc"
+    }
+  ],
+  "after": [
+    {
+      "name": "private.chat_usage_amount",
+      "md5": "7deba763944841b3d4c3538a054f16f6"
+    },
+    {
+      "name": "private.chat_usage_cap",
+      "md5": "9ffa330fdeebaab36ca6c5c2b21c5f7f"
+    },
+    {
+      "name": "private.chat_usage_config",
+      "md5": "7c97148cd2ad23dc6fafd5e06d967b13"
+    },
+    {
+      "name": "public.credit_dispatch",
+      "md5": "ca24ad5e2b6537d3cdcb1f03a33e7b58"
+    },
+    {
+      "name": "public.doubao_chat_relay",
+      "md5": "a5d81503dfe932b37f46cbe2a14651a6"
+    },
+    {
+      "name": "public.openai_chat_relay",
+      "md5": "b436eea4e9174a8389bc9dc0e4c9ad3d"
+    }
+  ]
+}
