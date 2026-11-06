@@ -1,0 +1,98 @@
+{
+  "checkedAt": "2026-11-06T10:03:03.817543+00:00",
+  "frontendVersion": {
+    "frontendRelease": "release-7a811b326aa4",
+    "schemaVersion": 1
+  },
+  "meta": {
+    "api": {
+      "major": 1,
+      "minor": 0
+    },
+    "backendRelease": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+    "capabilities": [
+      "runtime.public-config.v1",
+      "runtime.meta.v1"
+    ],
+    "schemaVersion": 1
+  },
+  "paidCalls": 0,
+  "ready": {
+    "status": "ok",
+    "version": "7a811b326aa4b344cee08bc5a33c04e44a780fd4"
+  },
+  "responses": [
+    {
+      "bytes": 68,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "path": "/api/health/ready",
+      "sha256": "57b672fd37c6ef8241d3a3192ea187d09f3fb43658571b608e33d321103ae665",
+      "status": 200
+    },
+    {
+      "bytes": 169,
+      "cacheControl": "no-store",
+      "contentType": "application/json",
+      "path": "/api/meta",
+      "sha256": "81d89831aa44cb319df445c1c940e76f01bc21fbaeed0507f44b61df7b3580fe",
+      "status": 200
+    },
+    {
+      "bytes": 61,
+      "cacheControl": "no-store",
+      "contentType": "application/json",
+      "path": "/version.json",
+      "sha256": "87ec14f0098cb7c51a8a9503f05fcf83191d39d242cd633be127f4ef4ad61860",
+      "status": 200
+    },
+    {
+      "bytes": 28016,
+      "cacheControl": "no-store",
+      "contentType": "text/html",
+      "path": "/",
+      "sha256": "a2560093f6ddd7a80dfa304fa2156894cd9c52cebe71a5974ab33bdfe2e90f2d",
+      "status": 200
+    },
+    {
+      "bytes": 159,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "path": "/api/account",
+      "sha256": "9fbd861bb9d804143d1a31123cf1748125ac18202b6435e9ccb9ca19edc51586",
+      "status": 401
+    },
+    {
+      "bytes": 159,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "path": "/api/sessions",
+      "sha256": "a9cdea26e1ce67bc596231d868ba39e849b2bf95849939ef6d833cc2345e05d5",
+      "status": 401
+    },
+    {
+      "bytes": 159,
+      "cacheControl": "private, no-store",
+      "contentType": "application/json",
+      "path": "/api/credits/pricing",
+      "sha256": "20e2336b1c186b28c3026c95831ec4bf95d9f5f268c2f742e65bda67fdd59ff6",
+      "status": 401
+    },
+    {
+      "bytes": 368604,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "application/javascript",
+      "path": "/frontend-assets/release-7a811b326aa4/assets/index-1xg8ENcv.js",
+      "sha256": "fb6543448ba4b926db224f4f92a185e8944aab16b716106924629bcaf58993d1",
+      "status": 200
+    },
+    {
+      "bytes": 81957,
+      "cacheControl": "public, max-age=31536000, immutable",
+      "contentType": "text/css",
+      "path": "/frontend-assets/release-7a811b326aa4/assets/index-B_w-72i-.css",
+      "sha256": "bc4dd30b1d4feb7f8a8290f71426750a692cae66201bc04f85aa5dd8c97a238b",
+      "status": 200
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "verifierProtocol": "zimage-backend-readonly-v2",
+  "operationId": "paired-7a811b3-20261106",
+  "backendRelease": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+  "pid": 518981,
+  "nonce": "e3c068b96b806157f29250929c0f8f945a436baf9a64df336ddb4c7c385d7881",
+  "requestSha256": "0a29d58c98018bca3a538f5b971585aece812cf9bf8c699a4b7933c8f946b851",
+  "checkedAt": 1793959184.996,
+  "checks": [
+    {
+      "path": "/api/health/ready",
+      "status": 200,
+      "noStore": true,
+      "authenticated": false
+    },
+    {
+      "path": "/api/meta",
+      "status": 200,
+      "noStore": true,
+      "authenticated": false
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200,
+      "noStore": true,
+      "authenticated": true
+    },
+    {
+      "path": "/api/account",
+      "status": 200,
+      "noStore": true,
+      "authenticated": true
+    },
+    {
+      "path": "/api/sessions",
+      "status": 200,
+      "noStore": true,
+      "authenticated": true
+    },
+    {
+      "path": "/api/credits/pricing",
+      "status": 200,
+      "noStore": true,
+      "authenticated": true
+    }
+  ],
+  "authenticatedReadOnly": true,
+  "independentPublic": true,
+  "catalogReady": true
+}
