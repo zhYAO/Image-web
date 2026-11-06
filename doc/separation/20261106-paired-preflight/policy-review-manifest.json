@@ -11,7 +11,7 @@
   "beforeSnapshotCheckedAt": "2026-11-06T06:56:53.872211+00:00",
   "beforeMetadataHashRefreshedAndMatched": true,
   "afterMetadataIsOfflineReferenceOnly": true,
-  "chatAvailabilityDecisionPending": true,
+  "chatAvailabilityDecisionPending": false,
   "requiresNewApprovalAtActivePolicyInstallation": true,
   "noExpiryExtensionOrDigestSubstitutionWithoutReview": true,
   "financialObservationSqlSha256": "8d37ceec23c741e78349b74d4fe69c236469591fa1c59c4870d7b09ee7c12823",
@@ -31,5 +31,7 @@
     "activityRegressionTotal": 12
   },
   "runtimeOrApplicationCodeChanged": false,
-  "syntheticTestHarnessSha256": "e707e761b961a497beb2134f5faf788ee9a1ded2787b53c607afa6a813c094a9"
+  "syntheticTestHarnessSha256": "e707e761b961a497beb2134f5faf788ee9a1ded2787b53c607afa6a813c094a9",
+  "userAcceptedTemporaryNewChatUnavailable": true,
+  "latestSwitchHandoff": "verification/switch-handoff.json"
 }
