@@ -1,5 +1,20 @@
 # ZImage 项目进度
 
+## 2026-11-06 实际发布准备完成，聊天可用性仍待决定
+
+状态：**release_preflight_prepared_reviewed；active_policy_absent；no_production_switch**。本轮仅本地策略候选、只读生产核验、合成SQL及文档；没有安装活动策略、执行M6、封口/切换、改价格/Secret、付费调用或处理历史数据。
+
+- 候选策略1370B，SHA d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe，提出到2026-11-06 10:57:45UTC的4小时时窗，尚未获维护安排或安装批准。绑定当前旧/新组合、产物、M6原文/载荷及DB/Worker/配置/ingress/浏览器指纹。不得将候选视为活动策略或自行延长期限。
+- 06:56:53UTC真实before重取仍41迁移/M6不存在，V2 SHA仍872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801。准备可直接审阅的before/after单条SELECT；after须真实单次提交后取得，另验新表settings3、versions/operations/receipts0及严格历史规则，不能复制离线期望。
+- 资金查询仅导出12关系完整行的汇总SHA/行数，原始客户行留DB。完整实际摘要仅存本地0600，源码只留活动计数摘要。独立审阅Critical0/Important2/Minor1：补完整账户/引用清理、无claim的preview/promotion维护、耗尽租约状态更新及统一22分钟前瞻；活动回归修复前2/12、修复后12/12，全事务恢复，PG已停止且无备份。纠正了测试结果字段的夸大命名。
+- 07:10:02UTC扩展未封口观测：13项任务屏障、九类租约均0，历史unknown3条保留，两个cron仍active。proofReady=false；真正seal/drain后、M6后及开放前必须新取，禁止只换checkedAt或人为归零。07:05:23UTC安装20项摘要、配置/ingress及旧PID456496/两个指针一致，ready/meta200、活动policy不存在。
+- 本人浏览器公开Snippet已为准确operation/旧新release生成，20721B/SHA ecaa5700bf4e82ca20aeabbad49432cdf7dbe51613c8bc794432015954beec34，Node语法通过，未装载/登录。须主会话安排本人正常Chrome登录，旧版/新后端/最终组合至少3回合；20分钟/8nonce/120秒与self-XSS停止边界不变，不导出凭据。
+- 目标image-web/main生产Secrets完整名称清单已核实ARK_API_KEY和OPENAI_API_KEY存在，未读值/验证有效性；新Edge启用标记及豆包chat/vision/planner映射名称缺失。Web侧配置与账户模型权限仍待验证。当前旧豆包目录0.02积分/次不能当新token费率；套餐仍disabled。OpenAI官方价仅形成参考：档位、缓存写入和汇率未完成适用验证，当前relay未固定/回执未记录档位，不能宣称实际成本已核准。
+- 主会话需明确两条路线：A接受M6后暂不能发起新聊天，按默认关闭合同上线；B保持旧版在线，先完成模型/费率/可信用量和可用聊天放行门禁，再发布。当前协调器仅接受approved-disabled/no-new-paid-calls，默认after绑定3个关闭设置；不能在活动操作中暗改为启用。建议需要保留聊天时选B。之后仍有准确policy安全审批、真实身份/F1及付费测试具体预算门禁。
+
+详见[发布前操作与决策材料](./separation/20261106-paired-release-preflight.md)及其配套证据。应用7a811、工具cdf5991字节未改，原next-env与.env.local保留；未推送。以下为之前安装及验证历史。
+
+
 ## 2026-11-06 限定root工具安装完成，活动策略与生产切换仍关闭
 
 状态：**root_tools_installed_verified；active_policy_absent；no_production_switch**。必要性复核后，用户再次明确选择安装现有受测方案（Sentinel_ea3d4347be9081918efb5314791ba360）；此次仅执行既定四个root工具、20项摘要清单及空审计父目录的安装，没有重新执行旧迁移或启用发布操作。

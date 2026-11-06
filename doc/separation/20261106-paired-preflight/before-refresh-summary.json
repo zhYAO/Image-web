@@ -1,0 +1,9 @@
+{
+  "checkedAt": "2026-11-06T06:56:53.872211+00:00",
+  "m6Present": false,
+  "migrationCount": 41,
+  "metadataSchemaVersion": 2,
+  "canonicalSha256": "872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801",
+  "exactVectorMatches": "../20261106-m6-contract/before.json",
+  "actualAfterObserved": false
+}

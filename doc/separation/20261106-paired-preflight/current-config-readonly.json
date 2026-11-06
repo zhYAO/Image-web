@@ -1,0 +1,81 @@
+{
+  "checkedAt": "2026-11-06T06:48:59.067201+00:00",
+  "queueRows": 0,
+  "taskSchema": [
+    {
+      "table": "private.commerce_package_events",
+      "columns": [
+        "id",
+        "order_id",
+        "revision",
+        "kind",
+        "data",
+        "created_at"
+      ]
+    },
+    {
+      "table": "private.commerce_package_generations",
+      "columns": [
+        "order_id",
+        "stage_key",
+        "generation_id"
+      ]
+    }
+  ],
+  "cleanupLeases": 0,
+  "providerFlags": [
+    {
+      "enabled": true,
+      "provider": "doubao"
+    },
+    {
+      "enabled": false,
+      "provider": "gemini"
+    },
+    {
+      "enabled": false,
+      "provider": "gpt-6-astra"
+    },
+    {
+      "enabled": false,
+      "provider": "gpt-6.1-sol"
+    },
+    {
+      "enabled": false,
+      "provider": "minimax"
+    },
+    {
+      "enabled": false,
+      "provider": "openai"
+    },
+    {
+      "enabled": true,
+      "provider": "seedream"
+    }
+  ],
+  "creditSettings": {
+    "enabled": true,
+    "version": "2026-10-12.1",
+    "singleton": true
+  },
+  "packageEnabled": false,
+  "generationLeases": 0,
+  "currentChatPrices": [
+    {
+      "label": "豆包",
+      "model": "doubao",
+      "provider": "doubao",
+      "operation": "chat",
+      "unitMinor": 2,
+      "resolution": ""
+    },
+    {
+      "label": "MiniMax",
+      "model": "minimax",
+      "provider": "minimax",
+      "operation": "chat",
+      "unitMinor": 3,
+      "resolution": ""
+    }
+  ]
+}

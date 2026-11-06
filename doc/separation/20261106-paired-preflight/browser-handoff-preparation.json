@@ -1,0 +1,18 @@
+{
+  "publicOnly": true,
+  "operationId": "paired-7a811b3-20261106",
+  "allowedBackendReleases": [
+    "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7",
+    "7a811b326aa4b344cee08bc5a33c04e44a780fd4"
+  ],
+  "moduleSha256": "7d79eaf578241a8af49c32da551cc9ac3b295e3c6615db6f9509df781d02fff0",
+  "generatedSnippetSha256": "ecaa5700bf4e82ca20aeabbad49432cdf7dbe51613c8bc794432015954beec34",
+  "bytes": 20721,
+  "nodeSyntaxCheckPassed": true,
+  "mountedInBrowser": false,
+  "liveAuthenticationVerified": false,
+  "helperDeadlineBeginsAtMount": true,
+  "helperDeadlineMinutes": 20,
+  "helperAttempts": 8,
+  "credentialsReadOrExported": false
+}

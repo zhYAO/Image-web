@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-11-06T07:09:06.189616+00:00",
+  "syntheticOnly": true,
+  "tcpEnabled": false,
+  "sourceSqlSha256": "2c30f753183990ccbab8d96c63025462a680a38328a2c21ac0d13e1a739c0567",
+  "fullBeforeAndAfterSnapshotSqlParsed": true,
+  "beforeSnapshotFlagsM6AlreadyPresent": true,
+  "afterSelectedMetadataAndNewTableCountsMatch": true,
+  "sameCountBalanceMutationDetected": true,
+  "allProtectedRowsRestored": true,
+  "cronAndHistoryShimsRolledBack": true,
+  "proofReadyFalse": true,
+  "activityRegressionCases": {
+    "invisible_queue": true,
+    "generation_and_cleanup_lease": true,
+    "cleanup_retry_in_five_minutes": false,
+    "exhausted_cleanup_lease_expires_in_five_minutes": false,
+    "account_due_in_five_minutes": false,
+    "account_active_lease": false,
+    "exhausted_account_lease": false,
+    "reference_cleanup_lease": false,
+    "reference_write_lease": false,
+    "orphan_reference_due_in_five_minutes": false,
+    "preview_prune_thresholds_in_five_minutes": false,
+    "promotion_expiry_in_five_minutes": false
+  },
+  "passed": 2,
+  "total": 12,
+  "productionAccess": false
+}

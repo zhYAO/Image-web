@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "activityBarrierVersion": 2,
+  "checkedAt": "2026-11-06T07:10:02.996679+00:00",
+  "proofReady": false,
+  "scope": "paired-m6-protected-rows-v1",
+  "activity": {
+    "queueMessages": 0,
+    "dueCleanupJobs": 0,
+    "apparelRunLeases": 0,
+    "cleanupJobLeases": 0,
+    "generationLeases": 0,
+    "dueApparelIntents": 0,
+    "creativeBatchLeases": 0,
+    "runnableGenerations": 0,
+    "accountCleanupLeases": 0,
+    "apparelCleanupLeases": 0,
+    "referenceWriteLeases": 0,
+    "dueAccountCleanupJobs": 0,
+    "dueOrphanResultIntents": 0,
+    "referenceCleanupLeases": 0,
+    "generationCleanupLeases": 0,
+    "processingPackageStages": 0,
+    "dueOrphanReferenceIntents": 0,
+    "historicalUnknownGenerations": 3,
+    "expiringApparelWithin22Minutes": 0,
+    "expiringReferencesWithin22Minutes": 0,
+    "expiringGenerationsWithin22Minutes": 0,
+    "prunablePreviewRowsWithin22Minutes": 0,
+    "expiringPromotionRequestsWithin22Minutes": 0
+  },
+  "cron": [
+    {
+      "active": true,
+      "jobname": "zimage-cleanup-worker",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "active": true,
+      "jobname": "zimage-generation-worker",
+      "schedule": "* * * * *"
+    }
+  ],
+  "activeJobsDefinition": "queueMessages+runnableGenerations+processingPackageStages+dueCleanupJobs+dueAccountCleanupJobs+dueOrphanReferenceIntents+prunablePreviewRowsWithin22Minutes+expiringPromotionRequestsWithin22Minutes+expiringGenerationsWithin22Minutes+expiringReferencesWithin22Minutes+expiringApparelWithin22Minutes+dueOrphanResultIntents+dueApparelIntents; conservative barrier, overlaps allowed",
+  "activeLeasesDefinition": "accountCleanupLeases+referenceCleanupLeases+referenceWriteLeases+generationLeases+generationCleanupLeases+cleanupJobLeases+apparelCleanupLeases+creativeBatchLeases+apparelRunLeases",
+  "unsealedObservationOnly": true,
+  "activeJobs": 0,
+  "activeLeases": 0,
+  "privateProtectedRowEvidenceRetainedLocally0600": true,
+  "rawCustomerRowsExported": false
+}

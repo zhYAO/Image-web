@@ -1,3 +1,9 @@
+## 2026-11-06 实际发布准备完成，聊天可用性仍待决定
+
+状态：**release_preflight_prepared_reviewed；active_policy_absent；no_production_switch**。本轮仅本地策略候选、只读生产核验、合成SQL及文档；没有安装活动策略、执行M6、封口/切换、改价格/Secret、付费调用或处理历史数据。
+
+See [current review-only preparation and product decisions](./20261106-paired-release-preflight.md). Earlier implementation/install statements below are historical.
+
 # 当前实现状态补充
 
 实际协调器已在原分支实现并完成本地测试和独立审查修复，尚未安装root工具或策略、执行M6或切换生产。详见[实际协调器与交接门禁](./20261106-actual-paired-coordinator.md)。下文是此前策略准备的历史状态；其中“未实现”不代表当前代码状态。登录交接已改为浏览器同源只读验证，不再复制Cookie。
