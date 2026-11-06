@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
+from email.message import Message
 
 import core as c
 from test_core import policy
@@ -58,6 +60,80 @@ class SystemTests(unittest.TestCase):
     def select(self,release,expected):
         if self.current!=expected:raise ValueError('drift')
         self.current=release
+
+    def test_checking_readiness_uses_fixed_version_meta_and_unauthorized_routes(self):
+        seen = []
+        def get(url):
+            seen.append(url)
+            if url.endswith('/api/health/ready'): return 200, json.dumps({'status':'ok','version':self.p['newBackend']})
+            if url.endswith('/api/meta'): return 200, json.dumps({'schemaVersion':1,'backendRelease':self.p['newBackend'],'api':{'major':1,'minor':0},'capabilities':['runtime.public-config.v1','runtime.meta.v1']})
+            if url.endswith('/api/account') or url.endswith('/api/auth/session'): return 401, '{"code":"unauthorized"}'
+            raise AssertionError('Unexpected nonallowlisted probe')
+        self.ops.readiness_get = lambda url,timeout:(lambda r:(r[0],r[1].encode()))(get(url))
+        self.ops.checking_ready(self.p['newBackend'])
+        self.assertEqual(seen, [base + path for base in ['http://127.0.0.1:3100','https://www.zimage.store'] for path in ['/api/health/ready','/api/meta','/api/account','/api/auth/session']])
+
+    def test_checking_readiness_rejects_wrong_release_and_authentication_bypass(self):
+        for fault in ['release','auth']:
+            def get(url):
+                if url.endswith('/api/health/ready'): return 200, json.dumps({'status':'ok','version':'c'*40 if fault=='release' else self.p['newBackend']})
+                if url.endswith('/api/meta'): return 200, json.dumps({'schemaVersion':1,'backendRelease':self.p['newBackend'],'api':{'major':1,'minor':0},'capabilities':['runtime.public-config.v1','runtime.meta.v1']})
+                return 200, '{"code":"unauthorized"}'
+            self.ops.readiness_get = lambda url,timeout:(lambda r:(r[0],r[1].encode()))(get(url))
+            with self.subTest(fault=fault), self.assertRaises(ValueError): self.ops.checking_ready(self.p['newBackend'])
+
+    def test_readiness_transport_rejects_bad_mime_cache_and_oversized_body(self):
+        for fault in ['none','mime','cache','size']:
+            headers = Message(); headers['Content-Type'] = 'text/html' if fault=='mime' else 'application/json'
+            headers['Cache-Control'] = 'public' if fault=='cache' else 'private, no-store'
+            data = b'x'*65537 if fault=='size' else b'{}'
+            class Response:
+                status = 200
+                def __enter__(inner): return inner
+                def __exit__(inner,*args): return False
+                def read1(inner,n):
+                    block = inner.data[:n]; inner.data = inner.data[n:]; return block
+            response=Response();response.headers=headers;response.data=data
+            self.ops.m.legacy=types.SimpleNamespace(NoRedirect=lambda:object(),LocalIngressHTTPSHandler=lambda **kw:object())
+            with patch.object(s.urllib.request,'build_opener',return_value=types.SimpleNamespace(open=lambda request,timeout:response)):
+                if fault=='none': self.assertEqual(self.ops.readiness_get('http://127.0.0.1:3100/api/meta',3),(200,b'{}'))
+                else:
+                    with self.subTest(fault=fault),self.assertRaises(ValueError):self.ops.readiness_get('http://127.0.0.1:3100/api/meta',3)
+
+    def test_readiness_transport_handles_401_http_error_without_credentials(self):
+        import io
+        headers=Message();headers['Content-Type']='application/json';headers['Cache-Control']='no-store'
+        def opened(request,timeout):
+            self.assertNotIn('Cookie',request.headers)
+            self.assertNotIn('Authorization',request.headers)
+            self.assertLessEqual(timeout,3)
+            raise s.urllib.error.HTTPError(request.full_url,401,'unauthorized',headers,io.BytesIO(b'{"code":"unauthorized"}'))
+        self.ops.m.legacy=types.SimpleNamespace(NoRedirect=lambda:object(),LocalIngressHTTPSHandler=lambda **kw:object())
+        with patch.object(s.urllib.request,'build_opener',return_value=types.SimpleNamespace(open=opened)):
+            self.assertEqual(self.ops.readiness_get('https://www.zimage.store/api/account',3),(401,b'{"code":"unauthorized"}'))
+        with self.assertRaises(ValueError):self.ops.readiness_get('https://elsewhere.test/api/account',3)
+
+    def test_resume_checks_requires_exact_process_and_full_drained_barrier(self):
+        self.ops.seal(self.record);self.ops.node_gate('draining');self.current=self.p['newBackend']
+        self.record['phase']='candidate_reconcile_intent';self.ops.wait_checking_ready=lambda release:self.events.append('ready')
+        self.counter=1
+        with self.assertRaises(ValueError):self.ops.resume_checks(self.record,self.identity)
+        self.assertFalse(self.paths.checking.exists())
+        self.counter=0
+        with self.assertRaises(ValueError):self.ops.resume_checks(self.record,dict(self.identity,startTicks=222))
+        self.ops.resume_checks(self.record,self.identity)
+        self.assertEqual(self.ops.marker_mode(),'checking');self.assertEqual(self.node_mode,'checking')
+        self.assertNotIn('stop',self.events);self.assertIn('ready',self.events)
+
+    def test_hard_readiness_deadline_interrupts_blocked_header_or_body_work(self):
+        import signal, time
+        previous=signal.getsignal(signal.SIGALRM)
+        self.ops.checking_ready=lambda release,deadline:time.sleep(2)
+        started=time.monotonic()
+        with self.assertRaises(TimeoutError):self.ops.wait_checking_ready(self.p['newBackend'],timeout=0.05)
+        self.assertLess(time.monotonic()-started,1)
+        self.assertEqual(signal.getsignal(signal.SIGALRM),previous)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL),(0.0,0.0))
 
     def test_managed_reader_rejects_symlink_hardlink_weak_parent_and_duplicate_json(self):
         valid=self.paths.etc/'valid.json';self.atomic(valid,{'x':1})

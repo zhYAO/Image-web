@@ -32,6 +32,7 @@ def parser():
     sub=p.add_subparsers(dest='command',required=True)
     for command in ('begin','status','challenge','seal','start-candidate'):sub.add_parser(command)
     stage=sub.add_parser('stage-backend');stage.add_argument('outer_sha256')
+    reconcile=sub.add_parser('reconcile-candidate');reconcile.add_argument('database_sha256');reconcile.add_argument('snapshot_sha256')
     for command in ('accept-auth','authorize-migration','accept-database','select-frontend','cancel-before-migration'):
         item=sub.add_parser(command);item.add_argument('expected_sha256')
     for command in ('open','open-recovered'):
@@ -227,6 +228,9 @@ def main(argv=None):
                 proof=accepted_root_document(c,ETC/'paired-database-attestation.json',args.expected_sha256)
                 action={'authorize-migration':co.authorize_migration,'accept-database':co.accept_database,'cancel-before-migration':co.cancel}[args.command]
                 with modules.bridge.safe_node_environment():result=action(proof)
+            elif args.command=='reconcile-candidate':
+                proof=accepted_root_document(c,ETC/'paired-database-attestation.json',args.database_sha256)
+                result=co.reconcile_candidate(proof,args.snapshot_sha256)
             elif args.command=='select-frontend':
                 approval=accepted_root_document(c,ETC/'paired-frontend-approval.json',args.expected_sha256)
                 result=co.select_frontend(approval)

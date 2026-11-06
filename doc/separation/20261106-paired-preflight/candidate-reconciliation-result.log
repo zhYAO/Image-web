@@ -1,0 +1,1 @@
+{"phase": "candidate_auth_pending", "candidateProcess": {"bootId": "6aa2f828-d198-435e-9dd7-232503b0f750", "pid": 518981, "startTicks": 429543258}, "challengeCount": 2, "writesMayHaveOpened": false, "migrationNonceUnchanged": true}

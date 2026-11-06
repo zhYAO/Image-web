@@ -1,0 +1,124 @@
+{
+  "recordedAt": "2026-11-06T08:57:04.331241+00:00",
+  "applicationSource": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+  "branch": "codex/replicate-dot-zimage-ui-20261102",
+  "production": {
+    "challengeCount": 2,
+    "checkedAt": "2026-11-06T08:55:40.765529+00:00",
+    "closureFilesVerified": 20,
+    "installedManifestSha256": "881f8208e3e777ef99af9924d6ab7b905be0d6aabb65e4dcd26901b9406ee90e",
+    "live": {
+      "backend": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+      "configurationSha256": "a5deb714b51f1f291a1dbe02c44e1b7f2a27861e4b3ff0aa865c0c0388a952c2",
+      "fence": "paired-7a811b3-20261106",
+      "frontend": "release-fb4fb09f909c",
+      "frontendArtifact": "463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06",
+      "frontendSequence": 1,
+      "ingressMode": "checking",
+      "ingressSha256": "890fc74aaeab5c1813166b83a3f5840348f592077c3a63cfb2054ba52d981009",
+      "markers": {
+        "checking": {
+          "kind": "zimage-paired-release-v1",
+          "operationId": "paired-7a811b3-20261106",
+          "policySha256": "d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe",
+          "schemaVersion": 1
+        },
+        "frontend_fence": {
+          "kind": "zimage-paired-release-v1",
+          "operationId": "paired-7a811b3-20261106",
+          "policySha256": "d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe",
+          "schemaVersion": 1
+        },
+        "maintenance": {
+          "kind": "zimage-paired-release-v1",
+          "operationId": "paired-7a811b3-20261106",
+          "policySha256": "d1b8b6e709cb8f4c48ee26fdd94be7d0d53dddfb9d46bcccc1714b6718c30ffe",
+          "schemaVersion": 1
+        },
+        "open": null
+      },
+      "nodeGate": {
+        "mode": "checking",
+        "operationId": "paired-7a811b3-20261106",
+        "schemaVersion": 2
+      },
+      "nodeMode": "checking",
+      "process": {
+        "bootId": "6aa2f828-d198-435e-9dd7-232503b0f750",
+        "pid": 518981,
+        "startTicks": 429543258
+      }
+    },
+    "migrationNonceUnchanged": true,
+    "phase": "candidate_auth_pending",
+    "policyUnchanged": true,
+    "writesMayHaveOpened": false
+  },
+  "migration6": {
+    "executedExactlyOnce": true,
+    "actualVersion": "20261106083858",
+    "sourceSha256": "e02af4ba32942e8718ed0a2de9b1598e1329fe62fd44f286f2992d437687b22f",
+    "payloadSha256": "dd7355c13a4384de2f5f0b863b02afd3bda46281564ed99501bd13ef575d23a5",
+    "actualAfterContractSha256": "1759a1d3eade413b59ad827b238a3dea814fd2a2b8ee69821e7018edce6120f4",
+    "actualMigrationCount": 42
+  },
+  "latestDatabaseObservation": {
+    "checkedAt": "2026-11-06T08:55:44.360368Z",
+    "databaseBytes": 142298259,
+    "storageBytes": 33700018,
+    "enabledChatTariffs": 0,
+    "tariffVersions": 0
+  },
+  "latestSealedFinancialObservation": "2026-11-06T08:52:42Z",
+  "protectedRelationsUnchanged": 12,
+  "activityTermsZero": 13,
+  "leaseTermsZero": 9,
+  "historicalUnknownGenerationsUntouched": 3,
+  "oldBackendBrowserAuthVerified": true,
+  "newBackendBrowserAuthVerified": false,
+  "browserCookiePasswordStorageOrKeyRead": false,
+  "originalHelperExpired": true,
+  "helperResetOrBoundsBypassed": false,
+  "globalChallengeCount": 2,
+  "globalChallengeMaximum": 8,
+  "newVerifierWindowNotStarted": true,
+  "policyExpiry": "2026-11-06T10:57:45Z",
+  "policyExtended": false,
+  "frontendF1PackagedOrApproved": false,
+  "productionOpened": false,
+  "freeUsage": {
+    "plan": "Free",
+    "orgAllProjects": true,
+    "edgeInvocationsLastUI": 494,
+    "edgeIncluded": 500000,
+    "storageIncludedBytes": 1000000000,
+    "databaseIncludedBytes": 500000000,
+    "egressLastUIRoundedGB": 0,
+    "cachedEgressLastUIRoundedGB": 0,
+    "eachEgressIncludedGB": 5,
+    "metricsLagUpToOneHour": true,
+    "futureQuotaGuaranteed": false
+  },
+  "verification": {
+    "macTestsRun": 51,
+    "macPassed": 48,
+    "macLinuxOnlySkipped": 3,
+    "linuxTestsRun": 51,
+    "linuxPassed": 51,
+    "linuxSkipped": 0,
+    "reviewCritical": 0,
+    "reviewImportant": 0,
+    "reviewMinor": 0,
+    "independentSlowHeaderHardDeadlineSeconds": 0.051,
+    "gitDiffCheckPassed": true
+  },
+  "restrictionsPreserved": {
+    "newModelsAndUnverifiedTariffsDisabled": true,
+    "paidModelCalls": 0,
+    "oldUnknownRetriesRefundsDeletes": 0,
+    "newBackups": 0,
+    "pushed": false,
+    "originalNextEnvChangePreserved": true,
+    "envLocalMetadataUnchanged": true
+  }
+}

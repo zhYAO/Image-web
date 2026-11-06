@@ -205,8 +205,8 @@ class Coordinator:
         return self.write(r,'baseline_pending')
 
     def challenge(self):
-        r=self.state('baseline_pending','candidate_auth_pending','recovery_auth_pending','pair_auth_pending','candidate_verified','pair_verified','recovery_verified')
-        pending={'candidate_verified':'candidate_auth_pending','pair_verified':'pair_auth_pending','recovery_verified':'recovery_auth_pending'}.get(r['phase'],r['phase'])
+        r=self.state('baseline_pending','baseline_verified','candidate_auth_pending','recovery_auth_pending','pair_auth_pending','candidate_verified','pair_verified','recovery_verified')
+        pending={'baseline_verified':'baseline_pending','candidate_verified':'candidate_auth_pending','pair_verified':'pair_auth_pending','recovery_verified':'recovery_auth_pending'}.get(r['phase'],r['phase'])
         if r.get('challengeCount',0)>=8:raise ValueError('Authorized challenge rounds exhausted')
         r['phase']=pending
         baseline=r['phase']=='baseline_pending'
@@ -283,6 +283,22 @@ class Coordinator:
             if s['process'] is None or s['process']==r['initial']['process']:raise ValueError('Candidate is not a new exact process')
             self.snapshot(r,backend=self.p['newBackend'],frontend=self.p['oldFrontend'],process=s['process'])
             return self.write(r,'candidate_auth_pending',candidateProcess=s['process'])
+        return self.guarded(r,action)
+
+    def reconcile_candidate(self,proof,expected_snapshot_sha):
+        r=self.state('blocked');hexid(expected_snapshot_sha)
+        if (r.get('blockedFrom')!='candidate_start_intent' or r['writesMayHaveOpened'] is not False or
+            r['migrationNonce'] is None or not r.get('afterProofSha256') or r.get('candidateProcess') is not None):raise ValueError('Only an independently reconciled failed candidate start is permitted')
+        self.proof(r,proof,'after')
+        s=self.ops.snapshot()
+        if digest(s)!=expected_snapshot_sha or s['process'] is None or s['process']==r['initial']['process'] or s['nodeMode']!='draining' or s['ingressMode']!='sealed':raise ValueError('Reconciled exact candidate snapshot differs')
+        self.snapshot(r,backend=self.p['newBackend'],frontend=self.p['oldFrontend'],process=s['process'])
+        self.write(r,'candidate_reconcile_intent',candidateProcess=copy.deepcopy(s['process']),reconciliationSnapshotSha256=expected_snapshot_sha)
+        def action():
+            self.ops.resume_checks(r,r['candidateProcess'])
+            self.snapshot(r,backend=self.p['newBackend'],frontend=self.p['oldFrontend'],process=r['candidateProcess'])
+            self.proof(r,proof,'after')
+            return self.write(r,'candidate_auth_pending')
         return self.guarded(r,action)
 
     def select_frontend(self,approval):

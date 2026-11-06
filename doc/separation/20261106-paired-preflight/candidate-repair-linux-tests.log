@@ -1,0 +1,75 @@
+Running as unit: zimage-paired-reconcile-test-20261106.service
+test_help_does_not_import_or_touch_production_helpers (test_cli.CliTests) ... ok
+test_parser_has_only_fixed_steps_and_digest_inputs (test_cli.CliTests) ... usage: python3 -m unittest open [-h] database_sha256 acceptance_sha256
+python3 -m unittest open: error: the following arguments are required: acceptance_sha256
+usage: python3 -m unittest [-h]
+                           {begin,status,challenge,seal,start-candidate,stage-backend,reconcile-candidate,accept-auth,authorize-migration,accept-database,select-frontend,cancel-before-migration,open,open-recovered}
+                           ...
+python3 -m unittest: error: argument command: invalid choice: 'stage' (choose from 'begin', 'status', 'challenge', 'seal', 'start-candidate', 'stage-backend', 'reconcile-candidate', 'accept-auth', 'authorize-migration', 'accept-database', 'select-frontend', 'cancel-before-migration', 'open', 'open-recovered')
+usage: python3 -m unittest [-h]
+                           {begin,status,challenge,seal,start-candidate,stage-backend,reconcile-candidate,accept-auth,authorize-migration,accept-database,select-frontend,cancel-before-migration,open,open-recovered}
+                           ...
+python3 -m unittest: error: argument command: invalid choice: 'exec' (choose from 'begin', 'status', 'challenge', 'seal', 'start-candidate', 'stage-backend', 'reconcile-candidate', 'accept-auth', 'authorize-migration', 'accept-database', 'select-frontend', 'cancel-before-migration', 'open', 'open-recovered')
+usage: python3 -m unittest [-h]
+                           {begin,status,challenge,seal,start-candidate,stage-backend,reconcile-candidate,accept-auth,authorize-migration,accept-database,select-frontend,cancel-before-migration,open,open-recovered}
+                           ...
+python3 -m unittest: error: unrecognized arguments: --root /tmp
+ok
+test_review_nested_existing_loaders_execute_only_approved_source_bytes (test_cli.CliTests) ... ok
+test_review_valid_unchecked_pyc_cannot_replace_reviewed_source (test_cli.CliTests) ... ok
+test_root_artifact_checks_cannot_inherit_node_loader_environment (test_cli.CliTests) ... ok
+test_root_preflight_refuses_checkout_even_if_run_as_root (test_cli.CliTests) ... ok
+test_root_preflight_refuses_nonisolated_or_nonroot (test_cli.CliTests) ... ok
+test_unapproved_code_is_not_executed_before_hash_validation (test_cli.CliTests) ... ok
+test_auth_is_fresh_process_bound_and_nonce_not_reusable (test_core.CoordinatorTests) ... ok
+test_bad_final_approval_cannot_open (test_core.CoordinatorTests) ... ok
+test_begin_has_no_external_effect_and_binds_process_sequence (test_core.CoordinatorTests) ... ok
+test_challenge_rounds_are_bounded_even_when_no_requests_succeed (test_core.CoordinatorTests) ... ok
+test_expired_baseline_does_not_begin_maintenance (test_core.CoordinatorTests) ... ok
+test_expired_verified_baseline_can_renew_without_sealing_or_reusing_old_receipt (test_core.CoordinatorTests) ... ok
+test_failure_at_every_mutating_boundary_never_automatically_restores_or_reopens (test_core.CoordinatorTests) ... ok
+test_frontend_approval_cannot_claim_old_or_arbitrary_candidate (test_core.CoordinatorTests) ... ok
+test_frontend_selection_requires_a_new_fresh_auth_round_before_open (test_core.CoordinatorTests) ... ok
+test_happy_path_changes_two_pointers_only_behind_seal_and_records_open_intent (test_core.CoordinatorTests) ... ok
+test_interrupted_event_state_commit_does_not_replay (test_core.CoordinatorTests) ... ok
+test_journal_tamper_or_missing_event_is_detected (test_core.CoordinatorTests) ... ok
+test_migration_dispatch_never_repeats_even_if_database_still_before (test_core.CoordinatorTests) ... ok
+test_policy_rejects_same_schema_unknown_fields_and_nonfinite (test_core.CoordinatorTests) ... ok
+test_pre_dispatch_cancel_requires_fresh_old_database_and_auth_before_reopening (test_core.CoordinatorTests) ... ok
+test_process_aba_and_frontend_sequence_aba_reject_before_sealing (test_core.CoordinatorTests) ... ok
+test_real_drain_failure_keeps_process_running_and_does_not_stop (test_core.CoordinatorTests) ... ok
+test_reconcile_failure_after_intent_keeps_sealed_and_cannot_replay (test_core.CoordinatorTests) ... ok
+test_reconcile_started_candidate_rechecks_snapshot_and_database_without_restarting (test_core.CoordinatorTests) ... ok
+test_reconcile_started_candidate_rejects_stale_snapshot_and_changed_funds (test_core.CoordinatorTests) ... ok
+test_review_frontend_preparation_crash_is_not_replayable (test_core.CoordinatorTests) ... ok
+test_review_wrong_old_artifact_policy_cannot_begin_or_recover (test_core.CoordinatorTests) ... ok
+test_status_journal_read_does_not_create_directories (test_core.CoordinatorTests) ... ok
+test_unknown_migration_response_does_not_start_candidate (test_core.CoordinatorTests) ... ok
+test_verified_baseline_renewal_keeps_round_limit_and_rechecks_exact_live_pair (test_core.CoordinatorTests) ... ok
+test_verified_baseline_renewal_rejects_process_drift_without_journal_change (test_core.CoordinatorTests) ... ok
+test_wrong_database_contract_nonce_or_financial_hash_stays_sealed (test_core.CoordinatorTests) ... ok
+test_bad_archive_digest_cannot_create_retained_release (test_stage.StageTests) ... ok
+test_native_failure_leaves_current_and_sequence_unchanged (test_stage.StageTests) ... ok
+test_stage_validates_real_archive_without_activation_or_sequence_write (test_stage.StageTests) ... ok
+test_checking_readiness_rejects_wrong_release_and_authentication_bypass (test_system.SystemTests) ... ok
+test_checking_readiness_uses_fixed_version_meta_and_unauthorized_routes (test_system.SystemTests) ... ok
+test_drain_closes_checking_before_waiting_and_stop_rechecks_all_counters (test_system.SystemTests) ... ok
+test_foreign_marker_cannot_be_deleted_or_overwritten (test_system.SystemTests) ... ok
+test_hard_readiness_deadline_interrupts_blocked_header_or_body_work (test_system.SystemTests) ... ok
+test_hold_after_partial_open_closes_ingress_and_node_without_old_pair_switch (test_system.SystemTests) ... ok
+test_managed_reader_rejects_symlink_hardlink_weak_parent_and_duplicate_json (test_system.SystemTests) ... ok
+test_open_removes_maintenance_last_and_rejects_missing_open_intent (test_system.SystemTests) ... ok
+test_process_start_identity_drift_rejects_stop (test_system.SystemTests) ... ok
+test_readiness_transport_handles_401_http_error_without_credentials (test_system.SystemTests) ... ok
+test_readiness_transport_rejects_bad_mime_cache_and_oversized_body (test_system.SystemTests) ... ok
+test_resume_checks_requires_exact_process_and_full_drained_barrier (test_system.SystemTests) ... ok
+test_seal_preserves_old_open_token_only_until_maintenance_exists (test_system.SystemTests) ... ok
+
+----------------------------------------------------------------------
+Ran 51 tests in 6.009s
+
+OK
+Finished with result: success
+Main processes terminated with: code=exited/status=0
+Service runtime: 6.461s
+CPU time consumed: 1.583s

@@ -75,6 +75,11 @@ class World:
         self.effect('start')
         return self.snapshot()
 
+    def resume_checks(self, record, process):
+        if self.stopped or self.process != process or self.mode != 'draining' or self.ingress != 'sealed': raise ValueError('unsafe resume')
+        self.mode = 'checking'; self.ingress = 'checking'; self.effect('resume_checks')
+        return self.snapshot()
+
     def prepare_frontend(self, record, approval):
         if approval['artifactId'] != 'f'*64: raise ValueError('wrong formal artifact')
         self.effect('prepare_frontend')
@@ -206,11 +211,84 @@ class CoordinatorTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.co.seal()
         self.assertEqual(self.world.ingress,'open')
 
+    def test_expired_verified_baseline_can_renew_without_sealing_or_reusing_old_receipt(self):
+        self.co.begin(); old = self.co.challenge(); self.co.accept_auth({'valid': old['nonce']})
+        self.now += 121
+        with self.assertRaises(ValueError): self.co.seal()
+        renewed = self.co.challenge()
+        self.assertNotEqual(renewed['nonce'], old['nonce'])
+        self.assertEqual(self.j.load()['phase'], 'baseline_pending')
+        self.assertEqual(self.j.load()['challengeCount'], 2)
+        self.assertEqual(self.world.effects, [])
+        self.assertEqual(self.world.ingress, 'open')
+        with self.assertRaises(ValueError): self.co.accept_auth({'valid': old['nonce']})
+        with self.assertRaises(ValueError): self.co.seal()
+        self.co.accept_auth({'valid': renewed['nonce']}); self.co.seal()
+        self.assertEqual(self.j.load()['phase'], 'sealed')
+
+    def test_verified_baseline_renewal_keeps_round_limit_and_rechecks_exact_live_pair(self):
+        self.co.begin()
+        for _ in range(8): self.auth()
+        with self.assertRaises(ValueError): self.co.challenge()
+        self.assertEqual(self.j.load()['challengeCount'], 8)
+        self.assertEqual(self.world.effects, [])
+
+    def test_verified_baseline_renewal_rejects_process_drift_without_journal_change(self):
+        self.co.begin(); self.auth()
+        before = (self.j.root / 'state.json').read_bytes()
+        self.world.process['startTicks'] += 1
+        with self.assertRaises(ValueError): self.co.challenge()
+        self.assertEqual((self.j.root / 'state.json').read_bytes(), before)
+        self.assertEqual(self.world.effects, [])
+
     def test_pre_dispatch_cancel_requires_fresh_old_database_and_auth_before_reopening(self):
         self.sealed();r=self.co.cancel(self.proof('before'))
         self.assertEqual(r['phase'],'recovery_auth_pending');self.assertEqual(self.world.ingress,'checking')
         self.auth();r=self.co.open_recovered(self.proof('before'),self.final())
         self.assertEqual(r['phase'],'recovered');self.assertEqual(self.world.backend,self.p['oldBackend'])
+
+    def failed_started_candidate(self):
+        self.dispatched(); self.co.accept_database(self.proof('after'))
+        self.world.crash_at = 'start'
+        # Runtime/health failure, rather than abrupt process loss, invokes hold.
+        original = self.world.effect
+        def effect(name):
+            if name == 'start': raise RuntimeError('legacy readiness incompatible')
+            original(name)
+        self.world.effect = effect
+        with self.assertRaises(RuntimeError): self.co.start_candidate()
+        self.world.effect = original; self.world.crash_at = None
+
+    def test_reconcile_started_candidate_rechecks_snapshot_and_database_without_restarting(self):
+        self.failed_started_candidate()
+        before_starts = self.world.process['pid']
+        snap = c.digest(self.world.snapshot())
+        r = self.co.reconcile_candidate(self.proof('after'), snap)
+        self.assertEqual(r['phase'], 'candidate_auth_pending')
+        self.assertEqual(self.world.process['pid'], before_starts)
+        self.assertEqual(self.world.ingress, 'checking')
+        self.assertFalse(r['writesMayHaveOpened'])
+        with self.assertRaises(ValueError): self.co.select_frontend(self.approved())
+        self.auth()
+        self.assertEqual(self.j.load()['phase'], 'candidate_verified')
+        with self.assertRaises(ValueError): self.co.reconcile_candidate(self.proof('after'), snap)
+
+    def test_reconcile_started_candidate_rejects_stale_snapshot_and_changed_funds(self):
+        self.failed_started_candidate()
+        before = (self.j.root / 'state.json').read_bytes()
+        with self.assertRaises(ValueError): self.co.reconcile_candidate(self.proof('after'), 'f' * 64)
+        with self.assertRaises(ValueError): self.co.reconcile_candidate(dict(self.proof('after'), financialRowsSha256='f' * 64), c.digest(self.world.snapshot()))
+        self.assertEqual((self.j.root / 'state.json').read_bytes(), before)
+        self.assertEqual(self.world.ingress, 'sealed')
+
+    def test_reconcile_failure_after_intent_keeps_sealed_and_cannot_replay(self):
+        self.failed_started_candidate()
+        def fail(record,process): raise RuntimeError('readiness failure')
+        self.world.resume_checks=fail
+        with self.assertRaises(RuntimeError): self.co.reconcile_candidate(self.proof('after'),c.digest(self.world.snapshot()))
+        self.assertEqual(self.j.load()['blockedFrom'],'candidate_reconcile_intent')
+        self.assertEqual(self.world.ingress,'sealed')
+        with self.assertRaises(ValueError): self.co.reconcile_candidate(self.proof('after'),c.digest(self.world.snapshot()))
 
     def test_frontend_approval_cannot_claim_old_or_arbitrary_candidate(self):
         self.candidate()

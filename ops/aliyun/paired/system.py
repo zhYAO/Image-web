@@ -7,6 +7,9 @@ import hashlib
 import os
 from pathlib import Path
 import stat
+import ssl
+import signal
+import urllib.request
 import tempfile
 import time
 import urllib.error
@@ -167,13 +170,80 @@ class SystemOps:
         if self.first.process() is not None or record['phase']!='backend_select_intent':raise ValueError('Backend selection requires stopped service and intent')
         self.backend.select(self.p['newBackend'],self.p['oldBackend'])
 
+    def readiness_get(self,url,timeout):
+        allowed={base+path for base in ('http://127.0.0.1:3100','https://www.zimage.store') for path in ('/api/health/ready','/api/meta','/api/account','/api/auth/session')}
+        if url not in allowed or not 0<timeout<=3:raise ValueError('Unapproved readiness target')
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),self.m.legacy.NoRedirect(),
+            self.m.legacy.LocalIngressHTTPSHandler(context=ssl.create_default_context()))
+        request=urllib.request.Request(url,headers={'Host':'www.zimage.store','Accept':'application/json','Cache-Control':'no-cache'})
+        body_deadline=time.monotonic()+timeout
+        try:response=opener.open(request,timeout=timeout)
+        except urllib.error.HTTPError as error:response=error
+        with response:
+            body=bytearray()
+            while True:
+                if time.monotonic()>=body_deadline:raise ValueError('Readiness body deadline expired')
+                block=response.read1(65537-len(body))
+                if not block:break
+                body.extend(block)
+                if len(body)>65536:raise ValueError('Readiness body exceeds bound')
+            if time.monotonic()>body_deadline or response.headers.get_content_type()!='application/json' or 'no-store' not in response.headers.get('Cache-Control','').lower():raise ValueError('Readiness response deadline/MIME/cache failed')
+            return response.status,bytes(body)
+
+    def checking_ready(self,release,deadline=None):
+        deadline=time.monotonic()+40 if deadline is None else deadline
+        for base in ('http://127.0.0.1:3100','https://www.zimage.store'):
+            for path in ('/api/health/ready','/api/meta','/api/account','/api/auth/session'):
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise ValueError('Readiness deadline expired')
+                code,raw=self.readiness_get(base+path,min(3,remaining))
+                if time.monotonic()>deadline:raise ValueError('Readiness deadline expired')
+                body=self.c.parse(raw)
+                if path=='/api/health/ready':
+                    if code!=200 or type(body)is not dict or body.get('status')!='ok' or body.get('version')!=release:raise ValueError('Exact readiness version failed')
+                elif path=='/api/meta':
+                    self.c.exact(body,{'schemaVersion','backendRelease','api','capabilities'});self.c.exact(body['api'],{'major','minor'})
+                    caps=body['capabilities']
+                    if (code!=200 or type(body['schemaVersion'])is not int or body['schemaVersion']!=1 or body['backendRelease']!=release or
+                        type(body['api']['major'])is not int or body['api']['major']!=1 or type(body['api']['minor'])is not int or body['api']['minor']<0 or
+                        type(caps)is not list or len(caps)>256 or any(type(x)is not str or not x or len(x)>100 for x in caps) or len(set(caps))!=len(caps) or
+                        not {'runtime.public-config.v1','runtime.meta.v1'}.issubset(caps)):raise ValueError('Exact readiness metadata failed')
+                elif code!=401 or type(body)is not dict or body.get('code')!='unauthorized':raise ValueError('Unauthenticated readiness must remain unauthorized')
+
+    def wait_checking_ready(self,release,*,timeout=40):
+        if not 0<timeout<=40 or signal.getitimer(signal.ITIMER_REAL)!=(0.0,0.0):raise ValueError('Unoccupied bounded readiness deadline required')
+        previous=signal.getsignal(signal.SIGALRM)
+        def expired(signum,frame):raise TimeoutError('Hard readiness deadline reached')
+        signal.signal(signal.SIGALRM,expired)
+        deadline=time.monotonic()+timeout
+        try:
+            signal.setitimer(signal.ITIMER_REAL,timeout)
+            while True:
+                try:return self.checking_ready(release,deadline)
+                except (OSError,ValueError):
+                    if time.monotonic()+0.25>=deadline:raise
+                    time.sleep(0.25)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL,0)
+            signal.signal(signal.SIGALRM,previous)
+
+    def resume_checks(self,record,process):
+        if record['phase']!='candidate_reconcile_intent':raise ValueError('Durable reconciliation intent required')
+        self.require_ours(checking=False);self.exact_process(process)
+        observed=self.lifecycle.observed(self.p['newBackend'],record['operationId'],process['pid'])
+        if (observed['admissionMode']!='draining' or observed['activeHttpRequests'] or observed['activeFrameworkWork'] or
+            any(observed['counters'].values()) or observed['drained'] is not True):raise ValueError('Reconciliation requires full drained barrier')
+        self.node_gate('checking');self.put(self.paths.checking,self.token())
+        self.wait_checking_ready(self.p['newBackend'])
+        self.exact_process(process);self.require_ours(checking=True)
+
     def start(self,record,release):
         self.require_ours(checking=False)
         if release not in (self.p['oldBackend'],self.p['newBackend']) or self.backend.current()!=release or self.first.process() is not None:raise ValueError('Start exact retained stopped backend only')
         if release==self.p['oldBackend'] and record['migrationNonce'] is not None:raise ValueError('Old backend forbidden after migration dispatch')
         self.backend.native(release)
         self.node_gate('checking');self.put(self.paths.checking,self.token())
-        self.backend.start();self.m.legacy.wait_healthy(self.paths.root/'releases'/release)
+        self.backend.start();self.wait_checking_ready(release)
         result=self.snapshot()
         self.require_ours(checking=True)
         return result
