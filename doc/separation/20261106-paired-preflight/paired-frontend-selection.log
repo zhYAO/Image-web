@@ -1,0 +1,2 @@
+{"step": "accept-auth", "phase": "candidate_verified", "challengeCount": 4, "writesMayHaveOpened": false, "pairSequence": null, "checkedAt": "2026-11-06T09:13:26.191402+00:00"}
+{"step": "select-frontend", "phase": "pair_auth_pending", "challengeCount": 4, "writesMayHaveOpened": false, "pairSequence": 2, "checkedAt": "2026-11-06T09:13:34.712549+00:00"}
