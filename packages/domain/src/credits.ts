@@ -17,7 +17,7 @@ export const creditItemSchema = z
 export type CreditItem = z.infer<typeof creditItemSchema>;
 export const creditPriceSchema = creditItemSchema
   .omit({ count: true })
-  .extend({ unitMinor: minorSchema.min(1), label: z.string(), rateVersion:z.string().min(1).max(100).optional(),billingMode:z.literal('usage_capped').optional(), tokenTariff:z.object({inputPerMillionNano:z.string(),cachedInputPerMillionNano:z.string(),outputPerMillionNano:z.string(),maxInputTokens:z.number(),maxOutputTokens:z.number()}).optional() });
+  .extend({ unitMinor: minorSchema.min(1), label: z.string(), rateVersion:z.string().min(1).max(100).optional(),billingMode:z.literal('usage_capped').optional(), tokenTariff:z.object({inputPerMillionNano:z.string(),cachedInputPerMillionNano:z.string(),outputPerMillionNano:z.string(),cacheWritePerMillionNano:z.string().optional(),serviceTier:z.literal('default').optional(),cacheTtl:z.literal('30m').optional(),maxInputTokens:z.number(),maxOutputTokens:z.number()}).optional() });
 export const creditCatalogSchema = z.object({
   version: z.string(),
   enabled: z.boolean(),

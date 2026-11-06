@@ -186,7 +186,7 @@ export function CreditFee({ items }: { items: CreditItem[] }) {
 function priceLabel(p:CreditCatalog['prices'][number]){
   if(p.billingMode==='usage_capped'){
     const amount=(v:string)=>new Intl.NumberFormat('zh-CN',{maximumFractionDigits:6}).format(Number(v)/1000000000),t=p.tokenTariff;
-    return `最高冻结 ${formatCredits(p.unitMinor)} 积分${t?` · 每百万 token：输入 ${amount(t.inputPerMillionNano)} / 缓存输入 ${amount(t.cachedInputPerMillionNano)} / 输出 ${amount(t.outputPerMillionNano)} 积分`:''}`;
+    return `最高冻结 ${formatCredits(p.unitMinor)} 积分${t?` · 每百万 token：输入 ${amount(t.inputPerMillionNano)} / 缓存输入 ${amount(t.cachedInputPerMillionNano)}${t.cacheWritePerMillionNano?` / 缓存写入 ${amount(t.cacheWritePerMillionNano)}`:''} / 输出 ${amount(t.outputPerMillionNano)} 积分${t.serviceTier==='default'?` · 标准档${t.cacheTtl==='30m'?' · 缓存30分钟':''}`:''}`:''}`;
   }
   return `${p.resolution?`${p.resolution} · `:''}${formatCredits(p.unitMinor)} 积分/${p.operation==='image'?'张':'次'}`;
 }

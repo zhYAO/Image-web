@@ -5,13 +5,15 @@ export interface PackageImageMetering {
  source:'provider_response';model:string;resolvedModel:string;providerRequestId:string;generatedImages:number;inputReferences:number;outputWidth:number;outputHeight:number;
 }
 const proof=z.object({source:z.literal('provider_response'),model:z.string().min(1),resolvedModel:z.string().min(1),providerRequestId:z.string().min(1).max(200),generatedImages:z.literal(1),inputReferences:z.number().int().min(0).max(10),outputWidth:z.number().int().min(1).max(8192),outputHeight:z.number().int().min(1).max(8192)});
-const textReceipt=z.object({model:z.string().min(1),resolvedModel:z.string().min(1),providerRequestId:z.string().min(1).max(200),usage:z.object({cachedInputTokens:z.number().int().min(0).nullable().optional(),inputTokens:z.number().int().min(0).max(256000),outputTokens:z.number().int().min(0).max(256000)})});
+const textReceipt=z.object({model:z.string().min(1),serviceTier:z.string().nullable().optional(),resolvedModel:z.string().min(1),providerRequestId:z.string().min(1).max(200),usage:z.object({cachedInputTokens:z.number().int().min(0).nullable().optional(),inputTokens:z.number().int().min(0).max(256000),outputTokens:z.number().int().min(0).max(256000),totalTokens:z.number().int().min(0).max(512000).optional()})});
 const ceil=(n:bigint,d:bigint)=>(n+d-1n)/d;
 export interface PackageSettlement {captureMinor:number;releaseMinor:number;pendingMinor:number;reviewReason?:string}
 export function packageTextUsage(q:CommercePackageQuote,key:'analysis'|'planning',result:unknown):{costNano:bigint}|{reviewReason:string} {
  const r=textReceipt.safeParse(result),vision=key==='analysis',c=q.costs;
  if(c.visionMaxInputTokens>32000||c.plannerMaxInputTokens>32000)return{reviewReason:'price_tier_unverified'};
  if(!r.success || r.data.model!==(vision?c.visionModel:c.plannerModel) || !(vision?c.visionResponseModels:c.plannerResponseModels)?.includes(r.data.resolvedModel))return{reviewReason:'usage_unverified'};
+ if(r.data.serviceTier!==undefined&&r.data.serviceTier!=='default')return{reviewReason:'price_tier_unverified'};
+ if(r.data.usage.totalTokens!==undefined&&r.data.usage.inputTokens+r.data.usage.outputTokens!==r.data.usage.totalTokens)return{reviewReason:'usage_unverified'};
  if(r.data.usage.cachedInputTokens!==0)return{reviewReason:'cache_usage_unverified'};
  if(r.data.usage.inputTokens>(vision?c.visionMaxInputTokens:c.plannerMaxInputTokens)||r.data.usage.outputTokens>(vision?c.visionMaxOutputTokens:c.plannerMaxOutputTokens))return{reviewReason:'usage_budget_exceeded'};
  return{costNano:tokenCostNano(r.data.usage.inputTokens,r.data.usage.outputTokens,vision?c.visionInputPerMillionNano:c.plannerInputPerMillionNano,vision?c.visionOutputPerMillionNano:c.plannerOutputPerMillionNano)};

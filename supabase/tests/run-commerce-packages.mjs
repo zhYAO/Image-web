@@ -119,7 +119,7 @@ create function public.finish() returns text language sql as $$select 'finished'
 `);
   let count = 0;
   for (const file of [
-    "commerce_packages.test.sql", "chat_usage.test.sql",
+    "commerce_packages.test.sql", "chat_usage.test.sql", "chat_metering.test.sql",
     "durable_generation_rejections.test.sql", "free_worker_recovery.test.sql",
     "openai_models.test.sql",
     "openai_prices.test.sql", "openai_chat_relay.test.sql", "doubao_edge_relay.test.sql",
@@ -180,7 +180,7 @@ create function public.finish() returns text language sql as $$select 'finished'
     // Same funded chat may be submitted twice by the Web transport after a lost response.
     await client.query("insert into private.credit_price_versions select 'relay-race',prices||'[{\"operation\":\"chat\",\"provider\":\"gpt-6-astra\",\"model\":\"gpt-6-astra\",\"resolution\":\"\",\"unitMinor\":17,\"label\":\"Synthetic relay race\"}]',now()from private.credit_price_versions where version=(select version from private.credit_settings)");
     await client.query("update private.credit_settings set version='relay-race';update private.provider_runtime_config set enabled=true where provider='gpt-6-astra'");
-    await client.query("insert into private.chat_usage_versions(version,tariff)values('race-token',$1)",[{model:'gpt-6-astra',requestModel:'gpt-6-astra',responseModels:['gpt-6-astra'],inputPerMillionNano:'14400000000',cachedInputPerMillionNano:'720000000',outputPerMillionNano:'72000000000',markupBps:10000,maxInputTokens:32000,maxOutputTokens:4000,evidence:'Synthetic offline concurrency tariff, never production'}]);
+    await client.query("insert into private.chat_usage_versions(version,tariff)values('race-token',$1)",[{model:'gpt-6-astra',requestModel:'gpt-6-astra',responseModels:['gpt-6-astra'],meteringVersion:2,serviceTier:'default',cacheTtl:'30m',cacheWritePerMillionNano:'14400000000',inputPerMillionNano:'14400000000',cachedInputPerMillionNano:'720000000',outputPerMillionNano:'72000000000',markupBps:10000,maxInputTokens:32000,maxOutputTokens:4000,evidence:'Synthetic offline concurrency tariff, never production'}]);
     await client.query("update private.chat_usage_settings set enabled=true,version='race-token'where model='gpt-6-astra'");
     const relayRequest=crypto.randomUUID();
     const tokenStart={requestId:relayRequest,operation:'chat',model:'gpt-6-astra',billing:{version:'relay-race',rateVersion:'race-token',totalMinor:150},input:{message:'Offline funded relay race'}};
@@ -190,7 +190,7 @@ create function public.finish() returns text language sql as $$select 'finished'
     const relayClaims=await Promise.allSettled([client,second].map(c=>c.query("select public.openai_chat_relay($1,$2,'gpt-6-astra','claim')",[uid,relayRequest])));
     if(relayClaims.filter(r=>r.status==='fulfilled').length!==1||!relayClaims.some(r=>r.status==='rejected'&&r.reason.message==='relay_result_pending'))throw Error('Relay admitted duplicate provider attempts');
     console.log('RELAY_TWO_CONNECTION_PASS: exactly one funded provider attempt, competing replay stays pending');
-    await client.query("select public.openai_chat_relay($1,$2,'gpt-6-astra','usage_result',$3)",[uid,relayRequest,JSON.stringify({content:'Saved token reply',receipt:{providerRequestId:'race-usage',resolvedModel:'gpt-6-astra',finishReason:'stop',inputTokens:1000,outputTokens:500,cachedInputTokens:0,totalTokens:1500}})]);
+    await client.query("select public.openai_chat_relay($1,$2,'gpt-6-astra','usage_result',$3)",[uid,relayRequest,JSON.stringify({content:'Saved token reply',receipt:{providerRequestId:'race-usage',resolvedModel:'gpt-6-astra',finishReason:'stop',inputTokens:1000,outputTokens:500,cachedInputTokens:0,totalTokens:1500,meteringVersion:2,serviceTier:'default',cacheTtl:'30m',cacheWriteTokens:0}})]);
     await Promise.all([client,second].map(c=>c.query("select public.chat_usage_dispatch($1,'complete',$2)",[uid,{requestId:relayRequest}])));
     const tokenWallet=(await client.query("select available_minor,frozen_minor,spent_minor from private.credit_wallets where user_id=$1",[uid])).rows[0];
     if(tokenWallet.available_minor!=='989'||tokenWallet.frozen_minor!=='0'||tokenWallet.spent_minor!=='11')throw Error('Token settlement double charge or refund');

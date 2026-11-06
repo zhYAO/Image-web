@@ -5,7 +5,7 @@ export interface DoubaoStageInput {
  recoverOnly?:boolean;prompt?:string;input?:unknown;
  images?:Array<{id:string;role:string;dataUrl:string}>;
 }
-const receiptSchema=z.object({text:z.string().min(1).max(40000),model:z.string().min(1),resolvedModel:z.string().nullable().optional(),providerRequestId:z.string().nullable().optional(),usage:z.object({cachedInputTokens:z.number().int().min(0).nullable(),inputTokens:z.number().int().min(0),outputTokens:z.number().int().min(0)}).nullable()});
+const receiptSchema=z.object({text:z.string().min(1).max(40000),model:z.string().min(1),serviceTier:z.string().nullable().optional(),resolvedModel:z.string().nullable().optional(),providerRequestId:z.string().nullable().optional(),usage:z.object({cachedInputTokens:z.number().int().min(0).nullable(),inputTokens:z.number().int().min(0),outputTokens:z.number().int().min(0),totalTokens:z.number().int().min(0).optional()}).nullable()});
 export function doubaoEdgeConfiguration(requireEnabled=true){
  if(requireEnabled&&process.env.ZIMAGE_DOUBAO_EDGE_ENABLED!=='true')throw Error('package_provider_configuration_missing');
  const url=new URL(process.env.NEXT_PUBLIC_SUPABASE_URL??'');

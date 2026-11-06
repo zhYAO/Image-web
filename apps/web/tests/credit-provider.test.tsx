@@ -29,3 +29,10 @@ describe('credit confirmation UI', () => {
 });
 
 it('labels token spending as a versioned cap and shows actual input/output/cache tariffs',async()=>{mocks.wallet.mockResolvedValue({availableMinor:1000,frozenMinor:0,spentMinor:0});mocks.catalog.mockReturnValue({...TRIAL_CREDIT_CATALOG,prices:[{operation:'chat',provider:'doubao',model:'doubao',resolution:'',unitMinor:150,label:'豆包',billingMode:'usage_capped',rateVersion:'synthetic-rate',tokenTariff:{inputPerMillionNano:'28800000000',cachedInputPerMillionNano:'1440000000',outputPerMillionNano:'144000000000',maxInputTokens:32000,maxOutputTokens:4000}}]});render(<CreditsProvider><Probe/><ModelCreditPrice operation="chat" provider="doubao" model="doubao"/></CreditsProvider>);await screen.findByText(/每百万 token：输入 28.8/);expect(screen.queryByText(/1.50 积分\/次/)).toBeNull();fireEvent.click(screen.getByRole('button',{name:'恢复原请求'}));expect(mocks.confirm).toHaveBeenCalledWith({version:TRIAL_CREDIT_CATALOG.version,totalMinor:150,rateVersion:'synthetic-rate'});});
+
+it('shows cache-write tariff and the frozen Standard/30m profile before authorization',async()=>{
+ mocks.wallet.mockResolvedValue({availableMinor:1000,frozenMinor:0,spentMinor:0});
+ mocks.catalog.mockReturnValue({...TRIAL_CREDIT_CATALOG,prices:[{operation:'chat',provider:'gpt-6.1-sol',model:'gpt-6.1-sol',resolution:'',unitMinor:90,label:'Sol',billingMode:'usage_capped',rateVersion:'synthetic-2',tokenTariff:{inputPerMillionNano:'20000000000',cachedInputPerMillionNano:'2000000000',cacheWritePerMillionNano:'25000000000',outputPerMillionNano:'100000000000',maxInputTokens:32000,maxOutputTokens:1000,serviceTier:'default',cacheTtl:'30m'}}]});
+ render(<CreditsProvider><ModelCreditPrice operation="chat" provider="gpt-6.1-sol" model="gpt-6.1-sol"/></CreditsProvider>);
+ expect(await screen.findByText(/缓存写入 25/)).toHaveTextContent('标准档 · 缓存30分钟');
+});

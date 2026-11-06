@@ -1,5 +1,26 @@
 # ZImage 项目进度
 
+## 2026-11-06 可信token与模型配置候选已验证；生产仍稳定，启用待批准
+
+- 生产保持10:00UTC已开放7a811配套版本；10:44UTC正常HTTPS复核ready/meta/version/静态资源200、匿名私有接口401。10:42UTC数据库42迁移、M6一次、新M7零次、chat费率版本/启用数均0、package=false；没有生产DDL、价格/Secret修改、真实调用或发布。
+- OpenAI V2固定default/30m，回执保留实际档位/写入token并核对流身份；输入、缓存读、缓存写为互斥成本类别，最高冻结覆盖写入费率。豆包V3独立固定常规档位，仅输入/缓存读/输出，claim前后核对冻结物理模型与Edge映射。旧快照沿原数学；未知保留成果与冻结，不重买或自动全退。
+- Ark分析/策划固定常规档位，核对实际tier、total=input+output和缓存≤输入；缺失/不符时保留正文usage=null，记录actualtier/有效总量，后台不猜成本。独立审查发现的矛盾终止保留可收费回执P2已用三个RED→GREEN用例修复；完整可信用量后明确AbortError停止仍覆盖。
+- 新CLI生成本地迁移20261106101025_verified_openai_chat_metering.sql仅替换六个已有函数，保持owner/ACL，不新增GRANT、费率/启用数据或表；原已应用M6文件按字节未改。客户费用展示新增缓存写入费率与适用档位/TTL。
+- 最终全量：domain286、frontend195、Web165文件1313项；Worker148；临时PostgreSQL17.11及18.6均240断言及四组真实双连接；Deno五入口check及真实SDK四项禁网假凭据测试；lint/typecheck/预算5项；隔离前后端构建全部通过。源码指纹42df855c5c0855235f4468022e1f534ace4a6b78cf4dada26ab73bb8588a968c测试/构建前后相同。
+- 首轮全量曾有Markdown套件依赖解析失败，单独三项与最终全量均通过，未改其代码/依赖；隔离构建先遇缺Git元数据、随后Next worker解析失败。最终用仓库支持的明确不可发布无Git QA模式、既有可信且同锁文件的完整依赖视图通过，未安装/下载或改原依赖。QA构建无.env/真实凭据，临时Next产物检查后清理；不是正式Linux发布制品。
+- 原分支及next-env.d.ts两条dev/types导入保留；.env.local23项元数据完全不变，不读值/复制/转移密钥。本轮仅本地源码提交，不推送。密钥名称重新只读核实：OpenAI/ARK存在，但两个enable和三个豆包模型映射缺失，值有效性及服务身份未实测。
+- [模型/价格/具体授权清单](model-activation-readiness-2026-11-06.md)：四个OpenAI公开ID逐一核实，豆包候选为doubao-seed-2-1-lite-260915。标准目录费率、示例汇率7.2及32k/4k冻结额均为待批准候选；Seedream还缺人民币/AFP成本依据。建议首轮每OpenAI聊天模型一次、API预算0.50元；未经用户明确批准不调用。
+- 当前阶段为本地候选validated，付费能力activation_blocked，不标done。还需具体费率/汇率/物理模型确认、受控配置与配套发布、真实key/权限/usage及整套图验收。历史unknown未处理，未创建备份。非阻断minor及保守边界见上述清单。
+- 精确证据在执行工作区verification：metering-final-evidence.json、metering-final-source-guard.json、metering-full-final.log、metering-worker-v3.log、metering-pg17-final.log、metering-v3-build-results.json、metering-native-v3-run.log、metering-production-public-probe.json。以下早期维护/候选状态均为历史。
+
+
+
+## 2026-11-06 10:00 UTC 新版已开放；新聊天/分析/整套费率待配置
+
+已完成配套开放，实际phase=opened、序列2、Node及入口open，维护封口解除；后端7a811b3与前端release-7a811b326aa4，M6仅20261106083858一次。独立HTTPS及登录后A+页面/积分/会话读取通过。新聊天和图片分析、整套计费仍关闭；未发布新价或付费调用。数据库142,371,987B/Storage33,700,018B。当前正在按官方标准档位/30m缓存写入回执修复本地计费候选，保持生产稳定，详见[上线证据](separation/20261106-paired-window-checkpoint.md)。以下维护待续等段落均为历史状态。
+
+
+
 ## 2026-11-06 新前后端已配套选择，最终回执时效待续
 
 真实F1已封存/批准并选择，版本与静态/TLS探测通过；新版首页及A+空向导已加载。当前pair_auth_pending，累计6/8，检查围栏与写入关闭仍保留，尚未开放。最后两轮浏览器回执因工具/数据库等待超过120秒被拒，最终报告/批准尚未写到服务器，open未成功调用。第二个20分钟窗口已结束，需主协调器续开有界窗口，保留累计回合；无需用户再次登录或提供凭据。应先取完DB证明，再连续执行新回执与开放。原策略10:57:45UTC有效，M6不重放。[精确证据与接续步骤](./separation/20261106-paired-window-checkpoint.md)。此前candidate_auth_pending等为历史状态。

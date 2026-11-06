@@ -1,0 +1,6 @@
+import{expect,it}from'vitest';import{quoteChatTokens,settleChatTokens}from'../src/chat-token-pricing';
+const cfg={version:'synthetic-ark-3',model:'doubao',requestModel:'doubao-seed-2-1-lite-260915',responseModels:['doubao-seed-2-1-lite-260915'],inputPerMillionNano:'800000000',cachedInputPerMillionNano:'160000000',outputPerMillionNano:'2700000000',markupBps:10000,maxInputTokens:32000,maxOutputTokens:4000,evidence:'Synthetic test profile, not an approved sale tariff',meteringVersion:3,serviceTier:'default'};
+const receipt={meteringVersion:3,serviceTier:'default',providerRequestId:'synthetic-ark-1',resolvedModel:cfg.requestModel,finishReason:'stop',inputTokens:1000,outputTokens:500,cachedInputTokens:200,totalTokens:1500};
+it('quotes regular Ark token usage without an OpenAI write category',()=>expect(quoteChatTokens(cfg)).toEqual({totalMinor:8,rateVersion:'synthetic-ark-3'}));
+it('settles explicit regular Ark read/input/output usage once',()=>expect(settleChatTokens(cfg,8,receipt)).toEqual({captureMinor:1,releaseMinor:7,pendingMinor:0,costNano:'2022000'}));
+it.each([{serviceTier:'fast'},{serviceTier:undefined},{meteringVersion:undefined},{cacheTtl:'30m'}])('holds unverified/mixed Ark profile %#',patch=>expect(settleChatTokens(cfg,8,{...receipt,...patch}).pendingMinor).toBe(8));
