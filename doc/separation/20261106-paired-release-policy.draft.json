@@ -33,10 +33,13 @@
     "frontendCurrent": "/opt/zimage/frontend/current"
   },
   "rootPreparationOnly": {
-    "pairedCoordinator": null,
-    "reviewedCoordinatorSha256": null,
+    "pairedCoordinator": "ops/aliyun/paired/cli.py",
+    "reviewedCoordinatorSha256": "6389267c918dc2cfe35a058968b2b3bc7df78fdf248d1274444d2482f71c4855",
     "rootApprovalInstalled": false,
-    "normalBackendPolicyExists": false
+    "normalBackendPolicyExists": false,
+    "reviewedCoordinatorClosureSha256": "58280d158aacc3a8056bbc7b3fbf72fc3a79713d518f9dc204555de94e483fcc",
+    "implementationLocalTestsPassed": 36,
+    "linuxStageTestsPending": 3
   },
   "recovery": {
     "beforeMigration": "restore-exact-old-pair-after-reverification",

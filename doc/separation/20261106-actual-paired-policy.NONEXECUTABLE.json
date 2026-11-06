@@ -1,0 +1,22 @@
+{
+  "newFrontend": "release-7a811b326aa4",
+  "configurationSha256": null,
+  "oldFrontendArtifact": "463f3941ed68204bbbfc828407aaec8bb82dd8cc620d6a9efb0e6c09f16abf06",
+  "workerSha256": null,
+  "ingressSha256": null,
+  "projectRef": "klmiycyesxnpinxpeqep",
+  "frontendPayloadSha256": "1af7f99d4fb807ff6bdb742da407c377a981ffb323c7ae45e48d5446a8afa67a",
+  "frontendCandidateSha256": "78c970c3a53b6b188d323140546578159fee5605d72186dd42eb03ef88469f0d",
+  "migrationSha256": "e02af4ba32942e8718ed0a2de9b1598e1329fe62fd44f286f2992d437687b22f",
+  "schemaVersion": 1,
+  "newBackend": "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+  "operationId": "paired-7a811b3-20261106",
+  "backendManifestSha256": "282f0500d895f9beb97bfff81d9658708df61e754442297648591d20ad6cca37",
+  "migrationPayloadSha256": "dd7355c13a4384de2f5f0b863b02afd3bda46281564ed99501bd13ef575d23a5",
+  "browserVerifierSha256": "7d79eaf578241a8af49c32da551cc9ac3b295e3c6615db6f9509df781d02fff0",
+  "databaseBeforeSha256": null,
+  "oldBackend": "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7",
+  "databaseAfterSha256": null,
+  "oldFrontend": "release-fb4fb09f909c",
+  "expiresAt": null
+}

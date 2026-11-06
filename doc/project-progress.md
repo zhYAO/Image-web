@@ -1,5 +1,20 @@
 # ZImage 项目进度
 
+## 2026-11-06 实际配对协调器已实现，生产切换仍受控关闭
+
+状态：**paired_coordinator_implemented_locally；linux_stage_tests_blocked；root_not_installed；no_production_switch**。应用仍为7a811b326aa4b344cee08bc5a33c04e44a780fd4，生产仍是旧fb4组合。本次仅运维/测试/文档；原next-env内容及.env.local的23项元数据保持，未读取密钥。
+
+- 实现固定路径root CLI及持久状态机、哈希链日志、不激活的Linux后端准备、原生/索引/资源校验、双指针配对选择、封口后精确PID/startTicks/bootId及七计数drain、独立v2身份回执、真实F1 root批准、最终开放意图和安全封口。保持原普通发布/回滚兼容守卫不变，不伪造跨schema兼容，不调用旧opened操作。
+- M6提交意图先落盘；DB管理操作由可信操作者显式单次提交，协调器不持有DB凭据。未知结果不重放，提交后只封口/前向修复；提交前准确旧组合恢复仍需新nonce身份验证。开放前先记录writesMayHaveOpened=true，错误不自动回退数据库或资金API，不处理历史unknown/退款/重试。
+- 新浏览器验证器只在本人正常登录的HTTPS页面执行固定7个GET，输出无身份资料的v2回执及精确下载字节SHA；不读Cookie、storage或请求头，不要求复制会话。旧Terminal取Cookie交接已撤换。Sources若有self-XSS警告必须停止，未改变设置/配置/启动参数或安装扩展，真实Chrome是否允许仍未验。
+- 新协调器本地**36通过/3项Linux专用跳过**；原backend目录**189通过**；browser Node24**18通过**（含原Python receipt协议交叉验证）。独立fresh gpt-6-astra审查发现3项Important、无Critical/minor，已各自RED/GREEN修复：未校验pyc替代源码、前端准备先于持久意图、旧artifact未比对。补充只读status不创建目录和所有root命令的Node加载环境约束。嵌套既有加载器也强制执行摘要已校验的源码字节。
+- 全量应用离线回归：domain270、frontend195、Web1308均通过。首次普通沙箱写.vite-temp失败，按正常审批允许原仓库测试临时写入后通过；没有改缓存路径或绕过保护。最终运维改动有独立新测试，不把这些结果称为完整线上A+/真实模型验收。
+- **阻塞**：自动审批拒绝将非公开协调器/发布工具测试源码传到aliyun-lian隔离目录，理由为缺少具体载荷/目的地外部传输授权；已知未执行，读最新用户历史无新授权，未重试或改走内联传输。最后包为70文件、254240字节，SHA e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3，尚未上传；先前253687字节的包已不是最终候选。Linux/glibc3项stage测试因此仍未执行，不能安装或激活。
+- 新root工具及具体策略/批准文件尚未安装。真正DB before/after合约、Worker/配置与全组织Free余量需取证；正式F1批准、真实账号/旧标签验收和聊天可用性需解决。M6默认关闭新聊天费率，当前工具只能接受明确批准的关闭状态，未获这种产品影响批准时不可开放；不默默启用价格、模型映射或付费调用。
+- 05:12:51UTC只读生产DB：141847699字节、41迁移，M6表仍不存在；SSH确认service active、backend fb4fb09/f0 release-fb4fb09f909c、paired策略不存在、无维护标记；ready/meta均200。数据库大小不代表所有Free月度余量，也不保证未来不超额。无生产配置/权限/密钥/服务变更，无新备份或旧数据处理。
+
+[实际协调器与固定root边界](./separation/20261106-actual-paired-coordinator.md) · [不复制Cookie的浏览器交接](./separation/20261106-browser-readonly-verifier.md) · [实施计划及决策记录](../docs/superpowers/plans/2026-11-06-actual-paired-coordinator.md)。主会话先协调源码隔离传输的具体审批；用户目前不需要登录或提供任何凭据。任务证据：verification/paired-coordinator-final.json、paired-coordinator-{final-paired,final-backend,final-browser}.log、paired-coordinator-project-regression-approved.log及source-transfer-review.json。
+
 ## 2026-11-06 配对策略、本机只读验证及M6原子载荷准备
 
 状态：**paired_policy_prepared；production_coordinator_not_implemented；no_production_activation**。完成不依赖登录态的策略、故障判定及本地SQL验证，没有安装root策略、执行生产M6、切网页、启用价格/模型或调用付费供应商。应用仍绑定7a811b326aa4b344cee08bc5a33c04e44a780fd4，后续仅是运维准备。
