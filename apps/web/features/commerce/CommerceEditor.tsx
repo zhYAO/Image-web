@@ -42,6 +42,8 @@ type Settings = Pick<
 >;
 type Counts = Record<"white" | "selling" | "scene" | "other", number>;
 export interface CommerceEditorProps {
+  analysisPanel?: ReactNode;
+  packageFlow?:boolean;
   referenceSource: "files" | "url";
   setReferenceSource: (value: "files" | "url") => void;
   sceneTab: "templates" | "custom" | "reference";
@@ -314,7 +316,7 @@ function GenerationSettings({ p }: { p: CommerceEditorProps }) {
 function Description({ p }: { p: CommerceEditorProps }) {
   return (
     <Section title="商品卖点 & 要求">
-      <CreativeTextField
+      <CreativeTextField allowOptimization={!p.packageFlow}
         field="description"
         chatModel={p.chatModel}
         label="商品描述"
@@ -606,6 +608,8 @@ export function DetailFlow({ p }: { p: CommerceEditorProps }) {
   return (
     <>
       <Uploader p={p} role="product" title="商品原图" />
+      <Uploader p={p} role="style" title="风格参考图" optional />
+      {p.analysisPanel}
       <GenerationSettings p={p} />
       <Description p={p} />
       <Section
@@ -707,7 +711,7 @@ export function CloneFlow({ p }: { p: CommerceEditorProps }) {
           ))}
         </div>
       </Section>
-      <CreativeTextField
+      <CreativeTextField allowOptimization={!p.packageFlow}
         field="instruction"
         label="统一复刻要求（选填）"
         chatModel={p.chatModel}
@@ -793,7 +797,7 @@ export function ProductImageFlow({ p }: { p: CommerceEditorProps }) {
           </div>
         )}
         {mode === "custom" && (
-          <CreativeTextField
+          <CreativeTextField allowOptimization={!p.packageFlow}
             field="instruction"
             label="场景描述"
             chatModel={p.chatModel}

@@ -25,7 +25,7 @@ HANDOFF = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HANDOFF)
 FIXTURE_COMMIT = '1' * 40
 FIXTURE_TREE = '2' * 40
-REVIEWED_ADAPTER_SHA256 = '1a51ef9d00e17429cf1f821e1c878f3bc36b9f11967750c2913fe33b6d9e0222'
+REVIEWED_ADAPTER_SHA256 = '3633c92e6785ab6ae4a98133fe7ddbec3174a3a236471f51daebe49a3f2ebb7f'
 
 
 def credential_name(name):
@@ -187,6 +187,40 @@ class SourceGuards(HandoffFixture):
         with patch.object(HANDOFF, 'git', side_effect=self.git):
             with self.assertRaisesRegex(ValueError, 'regular files without symlink'):
                 HANDOFF.source_files(self.source)
+
+    def test_versioned_superpowers_plan_and_review_markdown_are_source(self):
+        for name in [
+            'docs/superpowers/plans/2026-11-05-commerce-analysis.md',
+            'docs/superpowers/reviews/2026-11-02-v18-continuation.md',
+        ]:
+            self.assertTrue(HANDOFF.allowed(name), name)
+
+    def test_superpowers_source_allowlist_remains_markdown_and_date_bounded(self):
+        for name in [
+            'docs/credentials.json', 'docs/superpowers/plans/.env.local',
+            'docs/superpowers/plans/subdir/2026-11-05-plan.md',
+            'docs/superpowers/plans/notes.md',
+            'docs/superpowers/other/2026-11-05-plan.md',
+            'docs/superpowers/reviews/2026-11-05-review.json',
+        ]:
+            self.assertFalse(HANDOFF.allowed(name), name)
+
+    def test_reviewed_sdk_auth_fixture_can_be_exported(self):
+        name = 'supabase/tests/edge/relay-auth.deno.ts'
+        body = (SCRIPT.parents[2] / name).read_bytes()
+        HANDOFF.scan(name, body)
+
+    def test_reviewed_sdk_auth_marker_cannot_be_copied_to_another_path(self):
+        name = 'supabase/tests/edge/relay-auth.deno.ts'
+        body = (SCRIPT.parents[2] / name).read_bytes()
+        with self.assertRaisesRegex(ValueError, 'high confidence scan'):
+            HANDOFF.scan('ops/copied-sdk-fixture.ts', body)
+
+    def test_sdk_fixture_byte_change_requires_another_review(self):
+        name = 'supabase/tests/edge/relay-auth.deno.ts'
+        body = (SCRIPT.parents[2] / name).read_bytes() + b'\n// changed\n'
+        with self.assertRaisesRegex(ValueError, 'high confidence scan'):
+            HANDOFF.scan(name, body)
 
     def test_high_confidence_scan_rejects_synthetic_server_markers(self):
         # Construct fake marker bytes so this test source is safe to snapshot.

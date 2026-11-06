@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({ user: vi.fn(), admin: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: mocks.user }));
 vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: mocks.admin }));
 vi.mock('@/server/observability', () => ({ reportServerError: vi.fn() }));
+// Synthetic adapter keeps lifecycle tests separate from the funded Edge admission tests.
+vi.mock('@/server/chat/chat-providers',async importOriginal=>{const real=await importOriginal<typeof import('@/server/chat/chat-providers')>();return{...real,resolveChatProvider:(model?:string)=>{if(model&&model!=='doubao')throw Error('retired');return{edgeRelay:false,apiKey:'synthetic',endpoint:'https://synthetic.invalid',model:'synthetic',provider:'doubao'};}};});
 import { POST } from '@/app/api/creative-text/optimize/route';
 const userId = '10000000-0000-4000-8000-000000000001';
 function request(body: unknown = { field: 'title', text: '旧标题' }, origin = 'https://app.test') {
@@ -39,13 +41,10 @@ describe('stateless field optimization route', () => {
     expect(operations.map(op => op.name)).toEqual(['assert_chat_provider_available', 'reserve_preview_usage', 'record_chat_provider_result', 'commit_preview_usage']);
     expect(operations[1]?.input).toMatchObject({ p_user_id: userId, p_operation: 'chat', p_creates_session: false });
   });
-  it('uses an explicitly selected minimax provider', async () => {
-    vi.stubEnv('MINIMAX_API_KEY', 'test'); vi.stubEnv('ZIMAGE_MINIMAX_CHAT_MODEL', 'minimax-test');
-    const response = await POST(request({ field: 'title', text: '旧标题', chatModel: 'minimax' }));
-    expect(response.status).toBe(200);
-    expect(operations[0]?.input).toEqual({ p_provider: 'minimax' });
-    expect(JSON.parse((vi.mocked(fetch).mock.calls[0]?.[1]?.body as string) ?? '{}').reasoning_split).toBe(true);
-    expect(fetch).toHaveBeenCalledWith('https://api.minimaxi.com/v1/chat/completions', expect.objectContaining({ body: expect.stringContaining('minimax-test') }));
+  it('rejects a retired provider before a reservation or model request', async () => {
+    const response=await POST(request({field:'title',text:'旧标题',chatModel:'minimax'}));
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(operations).toEqual([]); expect(fetch).not.toHaveBeenCalled();
   });
   it('releases reservation when already canceled before provider submission', async () => {
     const controller = transferableAbortController();
@@ -90,4 +89,8 @@ describe('stateless field optimization route', () => {
     expect((await POST(request())).status).toBe(429);
     expect(fetch).not.toHaveBeenCalled();
   });
+});
+
+it('rejects unsupported OpenAI optimization before admin or provider work',async()=>{
+ vi.stubEnv('ZIMAGE_CREDITS_ENABLED','true');const r=await POST(request({field:'title',text:'x',chatModel:'gpt-6-astra',requestId:crypto.randomUUID()}));expect(r.status).toBe(400);expect(mocks.admin).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
 });

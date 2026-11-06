@@ -7,8 +7,8 @@
       "path": "/api/chat",
       "source": "apps/web/app/api/chat/route.ts",
       "beforeSha256": "25d68df36cce9849a4189d803b23391609747f1b9083d04365f95d5020ee3dcb",
-      "afterSha256": "c4abb14059f091ad9c475616dddd1d0b8494e5cd129ac856fa7631d2ce3c4ef3",
-      "reason": "Track the existing detached chat graph through pending finalizers; preserve POST/SSE payloads and request identity."
+      "afterSha256": "91608088be49dbcabcf4405f31e91767302d21d3fa46cde0709a0c41b2c2b86d",
+      "reason": "2026-11-05 user-approved MiniMax retirement and OpenAI chat additions; preserve historical recovery and existing DTO methods, new providers disabled pending safe configuration. OpenAI relay requires a funded chat request; unsupported unfunded and optimization paths fail before new work. Doubao transport also requires a durable funded request; unpriced preview fails closed before session or quota mutation."
     },
     {
       "path": "/api/uploads",
@@ -16,6 +16,20 @@
       "beforeSha256": "66ad3c251ab5adc663ccd1ecd948d8ea1ce416d5ca05d97e07bf9793cdab0c66",
       "afterSha256": "488b9ace5a963671cc067cda87ab40ea6ef935f60bd6de1add35606566631b5b",
       "reason": "Bound upload ingestion before parsing and retain route-owned identity/cookie checks, GET/POST DTOs and durable reference intents."
+    },
+    {
+      "path": "/api/creative-text/optimize",
+      "source": "apps/web/app/api/creative-text/optimize/route.ts",
+      "beforeSha256": "d980214308fa1b2418062f3c3cb603427f2a6ecaed1ed03c9870a40c6f2ea4ec",
+      "afterSha256": "6ac3b5a3c3231a42378a905bc540dc4ed3e468a69674ce9edbabbb38decbebfd",
+      "reason": "2026-11-05 user-approved MiniMax retirement: prevent new retired provider calls while preserving historical recovery and existing method contracts. OpenAI relay requires a funded chat request; unsupported unfunded and optimization paths fail before new work. Doubao transport also requires a durable funded request; unpriced preview fails closed before session or quota mutation."
+    },
+    {
+      "path": "/api/health/providers",
+      "source": "apps/web/app/api/health/providers/route.ts",
+      "beforeSha256": "8008ff38d2ade0e0cf382f073102988694665d77dd907b605212c651c1b43fda",
+      "afterSha256": "18515f3c6928ea3bdfaf8bf54b16a72f1f91a42adb0ffdf64595f16df5880d37",
+      "reason": "2026-11-05 user-approved MiniMax retirement: prevent new retired provider calls while preserving historical recovery and existing method contracts."
     }
   ]
 }

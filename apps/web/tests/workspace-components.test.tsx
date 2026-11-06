@@ -178,8 +178,9 @@ describe('workspace presentation components', () => {
       />,
     );
     expect(screen.getByRole('listbox', { name: '聊天模型' })).toHaveTextContent('服务正常');
-    fireEvent.click(screen.getByRole('option', { name: /MiniMax/ }));
-    expect(onSelect).toHaveBeenCalledWith('minimax');
+    fireEvent.click(screen.getByRole('option', { name: /豆包/ }));
+    expect(screen.queryByRole('option', {name:/MiniMax/})).not.toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

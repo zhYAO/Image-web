@@ -201,8 +201,9 @@ describe('MockWorkspaceGateway', () => {
     expect(await gateway.getSkills()).toHaveLength(3);
     expect(await gateway.getProviderCapabilities()).toEqual([
       expect.objectContaining({ provider: 'seedream', models: [expect.objectContaining({ id: 'doubao-seedream-5.0-pro', resolutions: ['2K'] })] }),
+      expect.objectContaining({provider:'openai',models:expect.arrayContaining([expect.objectContaining({id:'gpt-image-2.6-flare'})])}),
     ]);
-    expect((await gateway.getProviderHealth()).map(({ provider }) => provider)).toEqual(['seedream', 'doubao', 'minimax']);
+    expect((await gateway.getProviderHealth()).map(({ provider }) => provider)).toEqual(['seedream', 'openai', 'doubao','gpt-6-astra','gpt-6.1-sol']);
     expect(await gateway.getQuota()).toMatchObject({ limit: 30 });
   });
 });

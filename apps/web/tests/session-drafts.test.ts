@@ -45,7 +45,7 @@ describe('session composer ownership', () => {
     const store = useWorkspaceStore.getState;
     store().activateComposer('reload');
     store().setDraft('unsent product prompt');
-    store().setSelectedChatModel('minimax');
+    store().setSelectedChatModel('doubao');
     store().setCount(3);
     store().setReferences([{ name: 'local.png', size: 2, mimeType: 'image/png', previewUrl: 'blob:old-document' }]);
     expect(lastComposerSession(['reload'])).toBe('reload');
@@ -54,7 +54,7 @@ describe('session composer ownership', () => {
     store().activateComposer('different-account-session');
     expect(store().draft).toBe('');
     store().activateComposer('reload');
-    expect(store()).toMatchObject({ draft: 'unsent product prompt', selectedChatModel: 'minimax', count: 1, references: [] });
+    expect(store()).toMatchObject({ draft: 'unsent product prompt', selectedChatModel: 'doubao', count: 1, references: [] });
   });
   it('clears saved drafts when an account resets or a session is forgotten', () => {
     const store = useWorkspaceStore.getState;

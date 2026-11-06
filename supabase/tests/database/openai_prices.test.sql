@@ -1,0 +1,13 @@
+begin;
+select no_plan();
+create temporary table openai_admin_fixture(input jsonb);
+insert into openai_admin_fixture select jsonb_build_object('action','price','reason','Synthetic offline test, never a production tariff','actor','offline-test','apply',true,'requestId',gen_random_uuid(),'version','openai-test-only','prices',v.prices||'[{"operation":"chat","provider":"gpt-6-astra","model":"gpt-6-astra","resolution":"","unitMinor":17,"label":"Synthetic Astra"},{"operation":"image","provider":"openai","model":"gpt-image-2.6-flare","resolution":"1K","unitMinor":31,"label":"Synthetic Flare"}]')from private.credit_price_versions v join private.credit_settings s on s.version=v.version;
+select lives_ok($$select public.credit_admin(input)from openai_admin_fixture$$,'explicit audited price version admits approved OpenAI identities');
+select is((select(public.credit_admin(input)->>'replayed')::boolean from openai_admin_fixture),true,'price-version replay is idempotent');
+select throws_ok($$select public.credit_admin(input||jsonb_build_object('requestId',gen_random_uuid(),'version','bad-price','prices',(input->'prices')||'[{"operation":"image","provider":"openai","model":"guessed-model","resolution":"1K","unitMinor":1,"label":"Bad"}]'))from openai_admin_fixture$$,'P0001','invalid_credit_prices','unknown model cannot acquire a price');
+select throws_ok($$select public.credit_admin(input||jsonb_build_object('requestId',gen_random_uuid(),'version','removed-price','prices','[]'::jsonb))from openai_admin_fixture$$,'P0001','invalid_credit_prices','new version preserves every existing identity');
+select throws_ok($$select public.credit_admin(input||jsonb_build_object('requestId',gen_random_uuid(),'version','duplicate-price','prices',(input->'prices')||jsonb_build_array(input#>'{prices,0}')))from openai_admin_fixture$$,'P0001','invalid_credit_prices','duplicate identity is rejected');
+select throws_ok($$select public.credit_admin(jsonb_set(input||jsonb_build_object('requestId',gen_random_uuid(),'version','large-price'),'{prices,0,unitMinor}','1000001'))from openai_admin_fixture$$,'P0001','invalid_credit_prices','out-of-range price is rejected');
+select throws_ok($$select public.credit_admin(jsonb_set(input||jsonb_build_object('requestId',gen_random_uuid(),'version','string-price'),'{prices,0,unitMinor}','"100"'))from openai_admin_fixture$$,'P0001','invalid_credit_prices','string amount cannot corrupt numeric catalog');
+select is(public.assert_chat_provider_available('openai'),false,'price publication never enables provider execution');
+select finish();rollback;

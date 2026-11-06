@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CreativeTextOptimizeRequest } from '@zimage/domain';
 
-const provider = vi.hoisted(() => ({ output: '', calls: 0, fail: false }));
+const provider = vi.hoisted(() => ({ output: '', calls: 0, fail: false,loseOnce:false,receipt:undefined as string|undefined }));
 vi.mock('@/server/chat/chat-providers', () => ({
   resolveChatProvider: () => ({}),
   ChatProviderFailure: class extends Error {},
@@ -11,6 +11,10 @@ vi.mock('@/server/chat/chat-providers', () => ({
     if (provider.fail) throw new Error('unknown upstream result');
     yield JSON.stringify({ text: provider.output });
   },
+}));
+vi.mock('@/server/commerce-package/package-providers',()=>({
+ doubaoEdgeConfiguration:()=>({}),
+ requestDoubaoStage:async(input:{recoverOnly?:boolean})=>{if(input.recoverOnly){if(!provider.receipt)throw Error('receipt_pending');return{text:provider.receipt};}provider.calls++;if(provider.fail)throw Error('unknown upstream result');provider.receipt=JSON.stringify({text:provider.output});if(provider.loseOnce){provider.loseOnce=false;throw Error('lost response after durable save');}return{text:provider.receipt};},
 }));
 vi.mock('@/server/preview/preview-usage-guard', () => ({
   createPreviewUsageGuard: () => ({}),
@@ -41,7 +45,7 @@ function fixture() {
   return { rpc, input, operation: () => operation, run: () => billedOptimize(admin, user, input, new Request('http://localhost/api/creative-text/optimize')) };
 }
 
-beforeEach(() => { provider.calls = 0; provider.fail = false; });
+beforeEach(() => { provider.calls = 0; provider.fail = false;provider.loseOnce=false;provider.receipt=undefined; });
 describe('commerce copy settles only usable model output', () => {
   it.each([
     { strategy: '简洁留白' },
@@ -74,4 +78,10 @@ describe('commerce copy settles only usable model output', () => {
     await expect(f.run()).rejects.toMatchObject({ code: 'billing_pending' });
     expect(provider.calls).toBe(1);
   });
+});
+
+it('recovers a lost durable optimization receipt without buying another completion',async()=>{
+ provider.output=JSON.stringify({strategy:'留白',modules:[{name:'品牌首屏',copy:'A100 陶瓷杯'},{name:'核心卖点',copy:'500毫升'}]});
+ provider.loseOnce=true;const f=fixture();await expect(f.run()).rejects.toMatchObject({code:'billing_pending'});
+ expect((await f.run()).text).toBe(provider.output);expect(f.operation()?.status).toBe('succeeded');expect(provider.calls).toBe(1);
 });

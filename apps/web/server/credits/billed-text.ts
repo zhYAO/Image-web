@@ -1,3 +1,5 @@
+import {requestDoubaoStage,doubaoEdgeConfiguration}from'@/server/commerce-package/package-providers';
+import { recoverRetiredText } from './retired-text';
 import { trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import {
   chatEventSchema,
@@ -24,6 +26,7 @@ import {
 } from "@/server/preview/preview-usage-guard";
 import { chatRequestSchema } from "@zimage/domain";
 import {
+  completeChatUsage,
   creditCall,
   creditFailure,
   startText,
@@ -181,7 +184,11 @@ export async function billedChat(
     );
     return imageEventsResponse(raw);
   }
-  const model = input.chatModel === "minimax" ? "minimax" : "doubao";
+  const model = input.chatModel ?? 'doubao';
+  if (model === 'minimax') {
+    const previous = await recoverRetiredText(admin,user,{requestId,operation:'chat',model,input:{...input,billing:undefined}});
+    return eventsResponse(finalEvents(previous));
+  }
 
   let op = await reserve(admin, user, {
     requestId,
@@ -190,8 +197,9 @@ export async function billedChat(
     billing: input.billing,
     input: { ...input, billing: undefined },
   });
+  if((model==='doubao'||model==='gpt-6-astra'||model==='gpt-6.1-sol')&&op.status==='needs_review'&&op.result)op=await textStep(admin,user,requestId,'result',{result:op.result});
   if (op.status === "result")
-    op = await textStep(admin, user, requestId, "complete");
+    op = await completeChatUsage(admin, user, requestId);
   if (op.status === "succeeded") return eventsResponse(finalEvents(op));
   if (op.status === "refunded")
     throw new ApiRouteError({
@@ -244,6 +252,7 @@ export async function billedChat(
         try {
           for await (const delta of streamOpenAiCompatibleChat({
             ...provider,
+            billingAuthorization:{userId:user,requestId},
             message: input.message,
             messages: history,
             correlationId,
@@ -267,7 +276,7 @@ export async function billedChat(
           await textStep(admin, user, requestId, "result", {
             result: { content },
           });
-          const complete = await textStep(admin, user, requestId, "complete");
+          const complete = await completeChatUsage(admin, user, requestId);
           emit(finalEvents(complete).at(-1)!);
           void trackFinalizer(() => store.recordProviderResult(model, false)).catch(() => undefined);
         } catch (error) {
@@ -308,10 +317,15 @@ export async function billedOptimize(
   input: CreativeTextOptimizeRequest,
   request: Request,
 ) {
+  if(input.chatModel?.startsWith('gpt-6'))throw new ApiRouteError({code:'bad_request',status:400,retryable:false,message:"\u6b64\u6587\u5b57\u4f18\u5316\u6682\u4e0d\u652f\u6301\u6240\u9009\u6a21\u578b\uff0c\u8bf7\u9009\u62e9\u8c46\u5305\u3002"});
   if (!input.requestId)
     throw creditFailure({ message: "credit_request_id_required" });
   const requestId = z.uuid().parse(input.requestId);
   const model = input.chatModel ?? "doubao";
+  if (model === 'minimax') {
+    const previous = await recoverRetiredText(admin,user,{requestId,operation:'optimize',model,input:{...input,billing:undefined}});
+    return creativeTextOptimizeResponseSchema.parse(previous.result);
+  }
   const health = new SupabaseChatStore(admin);
   let op = await reserve(admin, user, {
     requestId,
@@ -331,15 +345,12 @@ export async function billedOptimize(
       message: "此次优化已失败并退回积分，请重新优化。",
       retryable: false,
     });
-  if (op.status !== "reserved") throw pendingCreditError();
-  let provider: ReturnType<typeof resolveChatProvider>;
-  try {
-    provider = resolveChatProvider(model);
+  const recovering=op.status==='processing'||op.status==='needs_review';
+  if (op.status !== 'reserved'&&!recovering) throw pendingCreditError();
+  if(!recovering)try {
+    doubaoEdgeConfiguration();
     await health.assertProviderAvailable(model);
-  } catch (error) {
-    await cancelUnclaimed(admin, user, requestId);
-    throw error;
-  }
+  }catch(error){await cancelUnclaimed(admin,user,requestId);throw error;}
   if (request.signal.aborted) {
     await cancelUnclaimed(admin, user, requestId);
     throw new ApiRouteError({
@@ -349,17 +360,13 @@ export async function billedOptimize(
       retryable: false,
     });
   }
-  await claim(admin, user, requestId);
+  if(!recovering)await claim(admin, user, requestId);
   let upstreamDone = false;
   let outputValidated = false;
   try {
     const result = await optimizeCreativeText(input, async function* (message) {
-      yield* streamOpenAiCompatibleChat({
-        ...provider,
-        reasoningSplit: model === 'minimax',
-        message,
-        signal: AbortSignal.any([request.signal, AbortSignal.timeout(45000)]),
-      });
+      const receipt=await requestDoubaoStage({userId:user,requestId,operation:'optimize',...(recovering?{recoverOnly:true}:{prompt:message,input:{...input,billing:undefined}})});
+      yield receipt.text;
       upstreamDone = true;
     });
     outputValidated = true;

@@ -39,6 +39,7 @@ export const commerceBriefSchema = z.object({
   sourceUrl: z.url().max(2048).optional(),
   listingCopy: z.object({ title: z.string().max(300), highlights: z.string().max(2000), description: z.string().max(4000), keywords: z.string().max(1000) }).optional(),
   visualStrategy: z.string().max(2000).optional(),
+  analysisReview: z.object({referenceSignature:z.string().max(12000),facts:z.string().max(4000),styleSummary:z.string().max(2000)}).strict().optional(),
   moduleCopy: z.record(z.string(), z.string().max(1000)).optional(),
   // Absence preserves the legacy undefined/empty/nonempty moduleCopy meaning.
   moduleTextModes: z.record(z.string(), z.enum(['auto', 'exact', 'none'])).optional(),
@@ -99,6 +100,7 @@ export const commerceSelectionSchema = z.object({
 });
 export const commerceTaskSchema = commercePlanSchema.safeExtend({
   id: z.uuid(),
+  packageOrderId:z.uuid().optional(),
   sessionId: z.string().min(1),
   revision: z.number().int().positive(),
   createdAt: z.string(),
@@ -347,7 +349,7 @@ export function compileCommerceSlot(
     `画面任务与布局：${commerceArtDirection(slot.role)}。所选模板：${template.name}（${template.version}）`,
     `系列风格：${template.guidance}。统一配色、光影品质和字体气质，但每张必须执行自己的图片角色；角色的场景和布局优先于通用风格，不可把整套都画成同一棚拍主图。调整要求：${slot.instruction || "无"}`,
     ...(slot.layout ? [`卖点版式：${slot.layout}。`] : []),
-    ...(slot.module ? [`详情模块：${slot.module}。`] : []),
+    ...(slot.module ? [`详情模块：${slot.module}。每张独立明确商品外观、场景、氛围、光线、主体位置、构图留白、字级及输出比例。品牌首屏突出主视觉；卖点模块用可见细节支持已确认特点；场景必须符合实际用途；细节不虚构内部结构。规格与尺寸仅使用已确认数据，无数据省略参数区；包装、配件、变体、对比、品牌故事缺少依据时不生成对应事实，可留白，不补造。系列统一视觉但不要重复同一画面。`] : []),
     ...(brief.visualStrategy ? [`经用户确认的视觉策略：${brief.visualStrategy}。`] : []),
     ...(brief.cloneMode ? [`复刻模式：${brief.cloneMode === 'faithful' ? '高度复刻参考图的构图和氛围，但保留替换商品真实外观' : '参考风格，自由调整构图'}。`] : []),
     `文字：${textMode === 'auto' ? '仅从用户商品描述及已确认事实中提炼适合本张角色的简短标题与要点，不杜撰卖点、数字或承诺。信息不足时减少文字，不补造内容。' : textMode === 'exact' && slot.exactText ? `仅绘制以下确认文案：${slot.exactText}` : "不添加营销文字"}`,

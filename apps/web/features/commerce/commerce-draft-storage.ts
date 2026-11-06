@@ -1,3 +1,4 @@
+import {packageRecoverySchema}from'@/gateways/commerce-package-gateway';
 import { commerceBriefSchema, commercePlanSchema, commerceSettingsSchema, commerceSceneSchema, SELLING_LAYOUTS } from '@zimage/domain';
 import { z } from 'zod';
 
@@ -5,6 +6,7 @@ const prefix = 'zimage:commerce-draft:v2:';
 const maxAge = 24 * 60 * 60 * 1000;
 export const commerceDraftSchema = z.object({
   scene: commerceSceneSchema,
+  packageRecovery:packageRecoverySchema.optional(),
   editorStage: z.enum(['configure', 'review']).optional(),
   sellingLayouts: z.array(z.enum(SELLING_LAYOUTS)).max(20).optional(),
   referenceInstructions: z.record(z.string(), z.string().max(2000)).optional(),

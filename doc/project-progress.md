@@ -1,5 +1,98 @@
 # ZImage 项目进度
 
+## 2026-11-06 第5项生产迁移完成，剩余Web配对发布
+
+状态：**5/6 migrations deployed；paired_web_release_gated**。用户已明确批准第5项的既有service_role管理能力扩展；代理读取最新用户历史，复核未执行状态及原SQL SHA后，仅重试一次成功。此前第5项安全审批阻塞已解决，无再次拒绝或结果不明写入。
+
+- 第5项openai_models_disabled的实际远端版本20261106021932；生产41项迁移。新credit_admin及既有private.submit_image_generation均postgres所有、SECURITY DEFINER、空search_path；只有postgres及既有service_role EXECUTE，无grant option，PUBLIC/anon/authenticated无执行权限。旧credit_admin_before_openai仅postgres可直接执行，旧函数正文摘要保留；新函数正文与批准候选一致。
+- openai、gpt-6-astra、gpt-6.1-sol三项默认false；MiniMax继续false，既有其他供应商不变。价格版本仍2026-10-12.1、共3版，package enabled=false。没有启用模型、发布价格或读/改密钥。
+- 02:19:52UTC快照：数据库141659283B，队列0/有效lease0，session67、generation57、credit operation46、ledger94、unknown7均与迁移前一致。未备份或处理旧数据。02:21:52UTC最近15分钟既有cron HTTP200共15、5xx0。
+- SSH连接和生产HTTPS正常，ready/meta200仍为fb4fb09f909c0ae5dce98ebd0d9540386685ddb7，受保护providers无认证401。current/previous未变；Worker v27、OpenAI relay v2、豆包两relay v1 ACTIVE，cleanup v20不变。
+- Free看板已换06Nov–06Dec周期：DB0.157/0.5GB、Edge61/500000、Storage0.014/1GB、两类出站显示0/各5GB。统计最多延迟1小时，不能保证未来永不超额；无扩容购买或新cron。
+- 第6项未尝试：聊天rateVersion协议要求匹配Web和配对维护，不在旧Web仍开放时孤立应用。当前Mac无Docker/Colima/Lima/OrbStack/Podman/QEMU等Linux环境（存在Homebrew、约65.85GB磁盘空闲），尚未安装或启动新运行环境；候选仍未提交，保留此前no-commit/no-push/no-CI限制。需要先协调可信Linux构建与正式源码身份。
+- /etc/zimage/backend-release-policy.json仍不存在，未改root策略、旧发布operation或版本指针；认证verifier环境仍缺失，仅查存在性，不提取浏览器cookie。形成真实匹配产物后再具体准备/审核配对策略与安全本地认证入口，不伪造版本/回执。
+- 候选源码指纹仍dc686f04a88c87ab1e43a73210b6abbd0fdd5ae308813a38d52dd43eb0e52722、HEAD0610a6e及原开发分支不变，用户next-env和23项.env元数据保留。沿用同一源码昨日最终全量回归和构建证据，本轮没有为不变源码重复全套测试，也未进行付费模型调用。
+
+证据：任务verification/production-migration5-20261106.json。以下11月5日“第5项被拒未执行”记录为已解决的历史检查点。
+
+## 2026-11-05 15:00 UTC 生产检查点：四项迁移完成，余项待精确授权与配对发布
+
+状态：**partially_deployed；migration5_specific_security_approval_and_paired_release_blocked**。本节替代下方同日旧检查点。已依用户对六个service_role-only RPC的具体批准完成前四项迁移；不再创建旧数据备份，历史数据保持原样。
+
+- 远端迁移：retire_minimax_preserve_history 20261105141736、openai_chat_edge_relay 20261105141857、doubao_edge_relay 20261105141958、commerce_package_orders 20261105142116，生产共40项。MCP生成版本与本地时间戳不同，CLI前须核对映射，不能重放。5个新RPC均SECURITY DEFINER、空search_path，仅既有service_role可执行，anon/authenticated不可执行。
+- generation-worker v27健康；openai-chat v2、doubao-chat v1、doubao-text v1已部署ACTIVE，远端运行源码和deno.json与最终候选一致，未授权请求均401。打包省略lock及纯类型文件，运行源码无差异。cleanup-worker v20不变。
+- 豆包中转首次审批指出关闭开关不能阻止RPC副作用；已用7项RED→GREEN测试、提前开关判断修复，独立审查和12项额外禁网探针通过；新源码仅重试一次成功。两个新relay启用开关均未配置，新调用继续关闭。仅核对Secret名称存在性，未读取值或验证真实密钥。
+- 第5项openai_models_disabled被自动审批拒绝且核实未执行：除六个已批准RPC，还扩展既有private.submit_image_generation、替换credit_admin定价入口、增加三个disabled供应商标识，需对这些持久准入/管理权限扩展具体批准。未重试或拆分SQL绕过。第6项chat_usage_settlement未尝试，须配合匹配Web和维护窗口，不能在旧Web接收新chat时孤立切换rateVersion协议。
+- 14:56:17UTC快照：数据库140872851B，队列0、有效work lease0；session67/generation57/credit operation46/ledger94/unknown7数量不变；最近15分钟既有cron HTTP200共15、5xx0。package enabled=false，无报价/订单/事件。MiniMax=false，其余既有供应商开关未改；没有历史重试、退款、删除或改写。
+- HTTPS ready/meta200，原Web仍fb4fb09f909c0ae5dce98ebd0d9540386685ddb7；受保护providers无认证401属预期。新版Web/前端尚未部署。余下可信Linux构建通道、不可变提交身份、root配对策略和安全认证verifier入口仍需具体协调；未提交/推送/触发CI、未在生产机构建或修改root策略。
+- Free最新页面：DB0.156/0.5GB、Edge43647/500000、Storage0.032/1GB、未缓存出站0.067/5GB、缓存0.003/5GB、log query65.524/100GB。当前在限额内，统计可延迟1小时，不能保证未来永不超额。未购买、扩容或新增cron。
+- 最终候选指纹dc686f04a88c87ab1e43a73210b6abbd0fdd5ae308813a38d52dd43eb0e52722。全量Domain270/前端195/Web1308，Worker139，SQL224+四组并发，Deno五入口及四项SDK假凭据禁网测试通过；lint/type/预算/两端构建全通过，源码在测试期间不变。QA目录清理，原分支/HEAD0610a6e、用户next-env和23项.env元数据保留。
+- Security advisor：26项private RLS无policy为INFO；既有public vector、两个authenticated definer辅助函数及泄露密码保护关闭为WARN，未自动改权限。付费模型、认证浏览器、真实密钥有效性及生图托管CPU/内存路径未验收。
+
+详证：任务verification/production-partial-final-20261105.json、production-additional-scope-and-release-gates.md、production-final-source-guard.json、closed-relay-gates-summary.log。没有真实数据导出或备份，不承诺可逆降库；代码恢复保留新增结构并优先前向修复。以下同日记录为历史检查点。
+
+## 2026-11-05 生产分步部署：Worker完成，权限迁移待具体批准
+
+状态：**partially_deployed；specific_security_approval_blocked**。用户明确撤回旧数据备份要求，不再创建桌面映像或备份，不以缺少备份继续阻塞已授权部署；该选择不授权删除、重写或重试历史数据。旧数据没有恢复副本的限制已记录。
+
+- 已生产部署generation-worker **v27**（原v26），bundleSHA`b836106f50c829b54c8f21ab8d75113c0abfa8e97ba64d6bd1169c9c91eefa8a`；5个非lock源文件读回一致，原SDK及secret/x-worker-secret鉴权不变。未授权请求401；截至14:01:53UTC现有cron已有5次idle200、0次5xx。只证明非付费空队列路径，不证明真实生图CPU/内存或模型验收。
+- MiniMax新调用已通过**既有运行开关**设为false；未新增权限、函数或密钥，其他供应商开关未动。历史会话67、图片57、账务操作46、ledger94及7条unknown前后数量一致；未退款、删除、改写或重试旧记录，队列0。
+- **六项新迁移均未执行**，生产仍36项。首项retire_minimax_preserve_history被自动审批拒绝：除已获授权的停用外，还创建service_role-only恢复函数并授予特权EXECUTE，缺少对接收者、权限和范围的具体授权。已核验函数不存在、迁移历史0；未重试或以其他DDL绕过。既有运行开关是单独可行的已授权操作，不代替被拒的函数授权。
+- 后续需要6个新RPC向既有service_role授予EXECUTE，PUBLIC/anon/authenticated均撤销；既有credit_dispatch/admin/worker-step包装也维持受限角色。精确签名、用途、风险与拒绝原文已写入任务verification/production-rpc-permission-review.md。批准前不执行任何相关特权迁移。
+- 新Web/前端尚未发布，服务器仍fb4fb09，previous9c5c3ea；ready/meta200，私有providers接口401属未带认证。迁移6会切换聊天新请求费率协议，不能在旧Web继续公开接收新chat时孤立应用；需要配对维护与匹配客户端。新费率、OpenAI/豆包新relay与真实调用均未开放。
+- Free只读页面：数据库0.155/0.5GB、Edge43647/500000、Storage0.032/1GB、未缓存出站0.067/5GB、缓存0.003/独立5GB。当前未超额，统计可延迟1小时；未购买、升级或增加cron。
+- Worker原v26的5个源文件与既有GitHEAD0610a6e完全一致，可按实际故障/队列确认后重发旧源码恢复代码，不需还原用户数据；未发生或执行回滚。应用迁移后无数据备份不能假定可逆降库，优先前向修复。
+- 余下发布门禁：当前Mac未发现可用且匹配的Linux构建通道（历史/Users/zzz工具路径不存在），不在生产机做高内存构建、不冒用MacQA产物；原分支候选仍未提交。root配对发布策略文件缺失，旧已开放一次性recover不能重用；受信认证verifier的已有cookie环境缺失，不读取浏览器cookie或通过聊天传递。准备具体构建/维护策略后再协调对应安全操作。
+
+本轮两项生产操作成功（Worker部署及现有MiniMax开关），零数据库迁移/新增grant/密钥/真实模型付费/历史清理；本地代码指纹f51257bd642006317e49777c4b9aefff89b9d3b5baf072954468f5391f837b45、原分支/HEAD、用户next-env和23项.env元数据不变。详证在任务verification/production-partial-deployment-20261105.json及production-next-release-plan.md。以下备份准备记录为已撤回要求的历史状态。
+
+## 2026-11-05 桌面加密备份准备
+
+状态：**encryption_owner_handoff_pending**。用户已同意备份保存zhao Mac桌面，任务完成后希望删除；不重复确认保存位置。当前尚无真实备份、生产数据导出、新密钥或删除操作；结束时删除确切备份文件仍须当时逐次确认。
+
+- 桌面文件系统测量约38.1GB空闲，原生磁盘工具显示32.62GB可用；口径不同，均足够预留2GiB。已实际打开原生磁盘工具，只读主窗口，未创建映像或改磁盘。CLI DiskManagement接口不可用、FileVault状态未验证，不能把桌面普通文件当作已加密。
+- 具体建议：桌面`Zimage-production-backup-20261105.dmg`，2GiB、APFS读写、AES-256。新恢复密码需用户单独同意并在原生界面本人输入、确认、提交和私下保管；代理不读取、记录或保存到Keychain。创建及关盘后重开验证前不导出真实备份。
+- 已从官方SHA256校验源码独立构建PG17.11（含TLS、pg_dump/restore/psql及临时服务端），仅/tmp前缀；系统14.5、全局PATH和服务均未替换。真实PG17本地合成库224SQL断言及四组并发通过；实际dump/restore到另一数据库后62表数据、RLS策略、函数和授权一致，临时实例确认已停止。这不是生产/Vault/Storage恢复证明。
+- 生产只读新快照：59对象均有size/ETag，总33,700,018字节；数据库140,307,603字节，活动lease0。提出同一PG只读快照与对象manifest，REST条件GET、逐对象size/strongETag/SHA256一致性验证；目标部署If-Match行为未测，不完整即停，不静默改用最新对象或变更cron/历史异常。
+- 原分支、HEAD、next-env、23项.env元数据与代码指纹f51257bd642006317e49777c4b9aefff89b9d3b5baf072954468f5391f837b45不变。未做生产迁移、模型调用、权限/Secret配置或购买。缺失发布策略及迁移配对回退门禁仍独立存在。
+
+证据：任务verification/desktop-backup-final-preparation.json、desktop-backup-plan.md、desktop-pg17-synthetic-restore.json、desktop-pg17-native-sql-restore.log；生产加密导出及实际恢复仍待后续授权和验证。
+
+## 2026-11-05 Supabase Free Worker 恢复与生产门禁复核
+
+状态：**local_recovery_verified；release_gated**。用户已授权直接生产部署并要求遵守Free限额；本轮根据部署准备指令只读生产、修改本地，没有迁移、发布、购买扩容或真实模型调用。
+
+- 已把9分钟本地执行期限改为：队列控制RPC10秒、准备20秒、供应商90秒、单次处理120秒。持久结果不足20秒余量时让出，每次上传重试均在续租返回后重新检查时间。继续使用原队列和token fencing，没有新迁移或额外cron。
+- 准备超时仅在未提交阶段按既有次数上限重试；供应商未知结果保留冻结待核对。结果/上传/明确拒绝回执只恢复持久化及结算，不重新购买。已经发出的SDK请求可能晚完成，安全性依赖SQL token/租约/期限与已登记路径，不能说网络写入已全部撤销。
+- 独立审查两项缺口（慢续租/重试耗尽上传余量、deadline跨越backoff产生未处理拒绝）均通过故障测试RED→GREEN修复。Worker/cleanup132项、隔离PG18+队列shim224断言及四组双连接并发通过；Deno五入口检查与四项真实SDK禁网假凭据测试通过。最终完整回归Domain270/前端195/Web1308、lint/typecheck/预算5项及前后端构建均通过；QA目录安全清理、用户原始next-env与23项.env元数据保留。
+- Free150秒是复用Worker生命周期，不保证每个新请求有完整150秒。256MB/2秒CPU/部署bundle及真实网关仍未实测，不能把本地时间预算视为托管环境验收。
+- 已只读确认生产Free用量仍有余量（前轮页面数据库0.155/0.5GB、Edge43530/500000、Storage0.032/1GB；会延迟），不增加轮询频率、未删cron日志腾空间。7条历史未知请求及0.60积分待结算授权保持原样。
+- 既有服务器配置归档20,480字节、root0600/父目录0700存在；未打开或复制其中秘密。没有验证数据库/Storage恢复备份。Mac旧libpq客户端14.5不能dump生产PG17，服务器无客户端；未安装或重置数据库密码。准备清单提出受保护加密目录和Mac加密副本，目的地/接收者及兼容工具仍需具体协调后才能导出。
+- 历史发布operation仍opened/writesMayHaveOpened=true，禁止旧自动recover或只改current指针。正常root发布策略文件缺失，且本次schema/Worker/catalog变化不能伪装成相同版本；需审核迁移维护、前后端配对回退和数据库前向修复。未更改安全设置或绕过门禁。
+
+最终代码指纹`f51257bd642006317e49777c4b9aefff89b9d3b5baf072954468f5391f837b45`，完整回归及构建前后源码不变。既有Pages目录和Sentry全局错误处理提示未升级为失败，未为消除提示修改生产。详证为任务目录verification/free-runtime-final-acceptance.json、free-runtime-*.log、free-runtime-backup-readonly.json及production-recovery-preparation.md；实施计划见[Free Worker恢复计划](../docs/superpowers/plans/2026-11-05-free-worker-recovery.md)。当前仍未提交，保留原分支与用户next-env和剩余23项.env配置；下节为Free修复前完整候选的验收基线。
+
+## 2026-11-05 A+、集中供应商密钥及新计费本地验收
+
+状态：**local_verified；real_acceptance_blocked**。原分支 `codex/replicate-dot-zimage-ui-20261102`、HEAD `0610a6e762db1a48775a10e8907e9a8efcec4164` 未切换、未提交、未推送或发布。用户原有 `apps/web/next-env.d.ts` 已按原字节保留，剩余23项 `.env.local` 的权限、大小和修改时间在本轮验收前后不变；未再删除其他配置。
+
+- 已实现真实商品图/可选风格图分析→用户核实编辑→策划→整套出图，增强事实/推断/缺失项、来源绑定和逐模块提示词。MiniMax本地停止新调用，历史草稿、结果、账务和恢复保留。
+- OpenAI两聊天/两图片模型接入已在本地完成；OpenAI与豆包供应商 Secret 仅由 Supabase Edge 读取，不返回Web/浏览器。新调用需完整鉴权、资金授权及启用配置。
+- 最新生图政策为按模型/规格/成功图片的冻结单价收费；整套包含分析策划，出图前取消或无成功全退，有成功整单最低0.5积分，未知结果保持待核对。支持桌面/移动不同价格；后台使用回执与版本费率估成本，不能称最终实付账单。
+- 聊天按可信输入/缓存/输出token、冻结模型费率版本及加价参数结算，多余预算退回；先合并高精度组件再按钱包0.01积分处理。停止按可核实用量结算，缺失/不一致/超上限或未知结果保留成果与冻结，不重复调用/扣费。新旧入口均不能绕过关闭的token费率创建固定价聊天；旧订单可恢复。
+- 图片用量在Worker清理大图片checkpoint前写入独立私有审计，排除图片字节、提示词和未知根字段。账户删除级联清除；删除图片保留成本审计。
+- 独立只读审查发现并修复旧text_start绕过、供应商claim后才做预算预检、UI误将上限写成按次售价；最终复核未报告具体未修缺陷。
+
+最终自动验证：Domain **270**、前端 **195**、Web **1308** 全部通过；Worker **122**、预算 **5**、隔离SQL **145** 断言及四组双连接竞争通过。lint、typecheck、前端构建、Web隔离webpack构建均退出0，QA目录确认闲置后清理。首次全量发现8项旧聊天RPC模拟失败，更新并增加用量待核对恢复测试后，最终全量重跑通过；首次失败证据未删除。
+
+代码指纹 `7aaf33f656aebe11545fc52ba80fb71fe5ed31f3b301e2b43f7996098ede7f8f`，最终全量期间源码无变化。原生Deno2.9.8五入口检查及真实@supabase/server SDK四项假凭据/禁网/禁文件访问测试通过；验收副本与最终函数源码一致，没有复制真实环境文件。
+
+真实验收仍阻塞：本机没有完整容器/Supabase Edge网关环境；端口7793曾EPERM，Edge又因URL策略拒绝file协议隔离页面，明确未绕过，**没有浏览器截图/响应式通过证据**。本机PG18的Auth/Storage/队列shim测试不等于目标PG17/真实网关、私有Storage、SSE及支付账单验收。
+
+只读确认目标 `image-web / klmiycyesxnpinxpeqep`（ap-northeast-2）。远端仅generation-worker v26、cleanup-worker v20；六项Nov5迁移与三个新relay函数未部署，OpenAI/Ark/Seedream Plan Secret名称存在但值、有效性及模型权限未读取或验证；新启用/模型映射Secret名称尚缺；Free容量已另行只读复核且当前未超额，见本轮上节。生产MiniMax开关仍true，不能将本地退休声明当成线上已关闭。
+
+未发布任何新图片售价或聊天token费率，未付费调用、部署、执行生产迁移或修改生产权限/数据。用户已授权直接生产部署；仍需解决具体备份与发布安全门禁，Secret配置、模型/规格价格、聊天费率/上限及有限预算真实调用按各自范围协调。详见[操作说明](commerce-package-operations.md)、[价格估算](openai-price-estimates-2026-11-05.md)。
+
 ## 2026-10-31 main 源码推送续接
 
 - 用户在本地合并完成后独立授权推送代码。推送前 fetch 确认远端 main 无新增提交，本地领先17个提交且工作区干净。
@@ -979,3 +1072,109 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 最终局部测试 16/16、此前 UI 59/59 与上传/模式 29/29、全量 Domain 209/209；三个项目 typecheck、lint、预算 5/5、Vite 全管线、既有 CI webpack 构建、源码守卫与独立复审通过。全量 Frontend 193/195；Web 全量原为 1230/1235，其中两项旧上传断言随后在 29/29 定向套件修复；余五项 Windows symlink 设置 EPERM 已在 853/853 Git-blob 一致的原始基线复现，尚未到达安全断言。不声称全套全绿，未为最后局部表现修改重复全套。47 个改动代码/测试文件与已验冻结候选零差异。
 
 真实鉴权、账户/会话写入及持久化、私有上传、付费生成/供应商/SSE 恢复、积分支付与真实导出未验；测试夹具只读并与正式代码隔离。完整缺陷矩阵、五项失败名称及边界见 [QA 验收记录](../docs/superpowers/reviews/2026-11-02-v18-qa-fix-matrix.md)。源码/静态参考未改，未修改 API 业务逻辑或削弱资源/安全门禁。本次用户另行授权提交并推送当前功能分支，使用 `[skip ci]`；不建 PR、不合 main、不部署。
+
+
+## 2026-11-05 图片分析与 MiniMax 停用（本地候选，未验收完成）
+
+用户确认原分支开发、全项目停用 MiniMax 新调用，保留旧数据/账务/兼容恢复；流程为上传→分析→人工确认资料→策划。活跃选择和 Provider 已停用 MiniMax，旧请求恢复使用新增只读 RPC；增量迁移未执行，真实历史恢复需数据库升级后验证。既有 next-env.d.ts 未覆盖，未修改密钥、生产配置或线上数据。
+
+独立豆包视觉配置、来源结构化结果、私有素材校验与缩图核心、资料确认组件及逐模块事实约束已作为候选加入。真实分析路由固定关闭：定价、按量结算、持久幂等与真实接入尚未完成，不得称图片分析已可使用。现有账本最小单位0.01积分，按预设单价而非 token 用量结算；未批准任何分析价格。本轮仅离线测试，完整验证记录待填，不声明真实模型或浏览器验收通过。未提交、推送、迁移或发布。
+
+### 2026-11-05 离线验证检查点
+
+- 项目 Node24.19 下 Domain208、Frontend195通过；MiniMax相关12文件122项通过，最终新增/安全/恢复/接口定向8文件48项通过；API精确门禁16项已登记本轮明确源变更，原冻结baseline未改。
+- 三项目 typecheck、lint、独立前端完整构建、隔离Next webpack构建及预算5项通过。首轮未提供前端namespace而失败，随后使用明确qa-analysis-20261105与实际原后端SHA的候选描述完成；QA候选为dirty，不能发布。隔离构建的next-env路径恢复为用户原有.next/dev改动。
+- 完整Web运行152文件：1198通过、15失败。另有 apparel-font-files.test.ts 在套件初始化时因同一外部字体缺失失败；13项测试为服装渲染缺外部校验字体（apparel-renderer5/apparel-service8）；本机旧资源及仓库许可摘要均不符合资源固定摘要，未放宽校验、改字体或下载。另2项API清单测试在本轮登记变更前执行失败，随后完整16项定向通过。记录完整轮与定向轮，不合并宣称全绿。此前Node25实验storage不兼容和旧双模型期望失败分别以Node24与更新后的测试复验。
+- 独立审查发现取消预占竞态误报释放、确认失效入口不足、生成策略覆盖摘要三项P2；已修复并由同一独立审查复验，无剩余关键问题。取消竞态单独经历失败到通过。
+- 真实分析固定503，离线核心与审核界面尚未连成可用真实分析链路；按量报价/账本精度、持久幂等与未知结果恢复仍须在批准定价后接入并验证。不声称当前已支持真实图片分析。新迁移未执行，真实历史恢复尚待升级数据库后验收。无真实模型、上传、计费、生产或浏览器验收。
+
+### 2026-11-05 字体环境阻塞关闭（仅离线测试配置）
+
+确认本轮未改变字体resolver、renderer、相关测试或CI。根因是测试进程缺外部资源配置；许可/来源在Git保存LF，而原资源固定摘要对应CRLF。仓库CI已在.github/workflows/ci.yml明确重建CRLF。本轮从已有本机OTF及仓库许可/来源在/private/tmp重建完全匹配固定摘要的资源，无下载、安装、改摘要或改原文件；正式资源准备工具严格校验通过，fonts-only明确productionReady=false。
+
+首次配置后63/65通过，剩余2项是Mac /var与/private/var路径别名断言。仅将测试进程TMPDIR设为已有临时目录的realpath后，字体文件/渲染器/服务3文件65项单轮全部通过，exit0，35.40秒。原13项渲染失败及字体套件初始化失败均已复验关闭；此前完整Web失败记录保留，不把定向结果拼成全量全绿。本轮未再重复完整套件，后续最终代码应使用同一外部资源环境完整验证。用户.env和现有开发服务配置未变，生产未操作。
+
+### 2026-11-05 完整 Web 离线回归通过
+
+使用已校验的本机外置字体、Node24.19和规范TMPDIR运行完整Web套件：154/154文件、1250/1250测试通过，exit0，397.66秒。测试期间tracked diff与启动时完全一致；此前失败及定向复验记录保留，本节为最新完整单轮结果。只修改测试子进程环境，未改.env、现有开发服务或生产数据，没有下载/安装/付费调用。完整日志位于本次任务verification/web-full-with-fonts.log。该结果不替代仍未完成的真实分析、按量计费、数据库迁移及真实环境验收。
+
+## 2026-11-05 整套套餐计费检查点（未完成，真实入口关闭）
+- 原分支和HEAD不变。新增成本与销售加价分离、整数nano元报价、最低50Minor、普通/双端张数及快照校验；领域45项通过。最新按实计量在usage缺失、超预算或无分摊策略时不自动扣款。
+- 父订单迁移仅在临时127.0.0.1 PostgreSQL18.6验证。旧固定价候选33项SQL断言通过，一次冻结、子图不重复扣费、取消全退、未知结果保留及部分成功一次结算；9个旧内容/队列/配额表保持，没有历史追扣。这不是最新按实SQL验收，最终结算函数仍待更新；配置空且禁用，未生产迁移。
+- 领域独立审查P2两项（JSONB键序回放、金额快照校验）已RED→GREEN修复。新服务6项与传输7项模拟通过；路由/UI尚未连接，Worker尚未持久化实际图片计量，完整套餐不可用。
+- 测试工具仅安装于/private/tmp/zimage-package-db-tooling-20261105，固定embedded-postgres18.6.0-beta.19且禁用安装脚本；没有项目依赖或锁文件改动。兼容数据库shim不能代替真实Supabase验收。日志位于当前任务verification目录。
+- lint初步通过（既有Pages路径提示）；首次类型检查发现测试数组可空标注，修正后复核中。本轮尚未重跑完整测试与构建，不能沿用前轮1250/1250声称本轮通过。
+- Seedream仅核查变量名：新Plan在Supabase Worker读取ZIMAGE_SEEDREAM_PLAN_API_KEY，本机apps/web/.env.local没有此变量，仅发现ARK_API_KEY等；没有输出、复制或传输值，不能独立列云端Secrets名称。OpenAI两个聊天/两个图片候选已只读核对官方文档，尚未接入代码。
+
+- 后续政策已统一为include_once_if_any_success + whole_order，不再是产品规则阻塞；仍需更新实际计量SQL、Worker回执、前端连接及全量回归。供应商成本版本尚无已批准生产配置。
+
+## 2026-11-05 最终本地候选检查点：A+整套与OpenAI（未发布、真实调用关闭）
+本节取代上方同日“路由/UI尚未连接、OpenAI尚未接入、SQL待更新”的早期检查点。
+
+- 原目录 /Users/zhaoyao/Desktop/work_space/Image-web、原分支 codex/replicate-dot-zimage-ui-20261102、HEAD 0610a6e 保持。原有 next-env.d.ts 改动保留；无提交、推送、发布或生产迁移。
+- 已接通商品/风格图分析→用户检查编辑确认→分模块策划→整套出图；事实、推断、缺失资料和风格来源隔离。MiniMax新调用停止，历史结果/账务/草稿恢复保留。
+- 父订单冻结最高预算，按供应商可验证实际用量与冻结加价结算，多退；有成功图时共享全部分析/策划成本且整单最低50Minor；出图前取消全退。缺回执、缓存未知/命中、跨未支持计价档位、返回模型不符、结果未知或超授权上限停止自动结算。成本及销售版本不重算旧订单；没有预置生产成本。
+- 已补向导、任务卡结算恢复、积分账户未结算订单发现及出图前取消。接受响应丢失或已知orderId读取失败时不能覆盖旧恢复身份；不依赖24小时浏览器草稿才能找回资金订单。账号入口只读发现和明确取消，不自动调用模型。
+- OpenAI聊天gpt-6-astra/gpt-6.1-sol，以及Images API图片gpt-image-2.6-sunburst/gpt-image-2.6-flare已接入。普通图片初始支持1K方图/medium/PNG，私有参考图以multipart字节发送。A+套餐当前仍限定Seedream Plan成本/尺寸适配。新Provider默认禁用，无默认价格；Web/Worker独立服务端OPENAI_API_KEY，由用户安全配置，未读取或写入实际密钥。
+- 最终自动验证：领域18文件257项、前端22文件195项、Web162文件1287项全量通过，exit0；随后最后一项“已知orderId读失败”保护及新增测试的套餐专项6文件24项通过，exit0（不混入前述全量总数）。Worker8文件92项通过；隔离PostgreSQL18.6为67项断言及双连接并发/钱包与账本守恒通过，9个旧内容/队列/配额表保持，无历史追扣。
+- pnpm lint、pnpm typecheck、Web验收预算、前端完整构建、Web隔离Webpack构建通过。前端使用CI要求的显式资源namespace/compatibility；Web的QA目录经空闲检查使用并在结束后清除，原next-env恢复。未改原开发服务。完整测试复用已验证本机外置字体，没有下载字体。
+- 新上下文只读审查的重要问题已修复并回归：接受丢响应覆盖恢复身份、浏览器草稿丢失后资金订单发现、显示冻结加价/最低费用、单价档位、价格unitMinor字符串类型拒绝；此前JSONB键序、生命周期删除与Worker回执保留也已覆盖。未添加浏览器/E2E自动化。
+- 尚未验证/激活：真实Supabase迁移与扩展、Storage/队列、真实视觉/OpenAI/Seedream调用、实际账户模型资格及费用、生产退款账单。实际成本版本、新模型售价和服务端密钥/运行时开关尚待安全配置；保持真实套餐与OpenAI新调用关闭。不可将本机兼容shim或模拟usage称为真实环境验收。
+- 交接说明：doc/commerce-package-openai-handoff.md。日志：本次任务verification/final-full-tests.log、final-package-ui.log、combined-worker-tests.log、final-database.log、final-check-results.json、final-web-build.log、final-frontend-build.log。
+
+## 2026-11-05 交付前最终复核（最终代码版本）
+- 此记录取代同日1287项及分批专项的计数：最终完整执行 pnpm test:run，领域257、前端195、Web162文件1289项全部通过，exit0。代码指纹前后完全一致，候选SHA256为3908e6091f602e6aefec99853654beee6b0eff684b9c9fd12d7303d3933b144d；HEAD仍为0610a6e762db1a48775a10e8907e9a8efcec4164。
+- 最后补齐的实际界面缺口：电商向导及逐图编辑不再展示普通方图专用OpenAI模型，普通生图保留两模型。展开自定义选择器的回归已确认旧行为出现两个不支持选项，修复后相关31项通过；随后执行上述最终全量。
+- 同一最终代码的lint、typecheck、预算、Worker92项、临时本地SQL67项及双连接守恒、前端构建、隔离Web构建全部通过。QA目录已清理；originalNextEnvPreserved=true，原有未提交的两条dev/types导入保留。
+- 最终证据：verification/final-candidate-evidence.json、final-candidate-full.log、delivery-gates.json、delivery-worker.log、delivery-database.log、delivery-frontend-build.log、delivery-web-build.log。
+- 四模型ID、安全配置步骤、关闭条件、成本/迁移待办见doc/commerce-package-openai-handoff.md的“交付前逐项核对与用户安全配置步骤”。聊天key填本机apps/web/.env.local的OPENAI_API_KEY；图片key填确认后的Supabase目标项目Edge Functions→Secrets的OPENAI_API_KEY；两边ZIMAGE_OPENAI_ENABLED先保持false。未查看或输出密钥值，也未修改凭据。
+- 尚未执行真实浏览器人工体验/E2E、真实供应商调用、云端迁移或价格发布。目标云项目连接及其实际开关未核实；不能把代码默认关闭与本机模拟验收说成生产验收。没有提交、推送或发布。
+
+## 2026-11-05 OpenAI Edge代理候选（最终验证进行中）
+本轮取代早期Web直接读取OpenAI key的方案，见openai-edge-relay-handoff.md。Web/Edge专项38/6、本地SQL82及两个连接一次授权通过；独立审查的历史副本清理和非计费路径问题已修复。完整回归、类型及构建正在重跑，不能沿用旧3908e609验证。真实Edge/Deno/供应商及浏览器A+体验未验证；无实际密钥或生产操作。
+
+## 2026-11-05 OpenAI Edge代理最终本地验证
+本节取代此前Web直接读取OpenAI key的实现及旧3908e609验证结论。
+- 原分支 codex/replicate-dot-zimage-ui-20261102、HEAD 0610a6e762db1a48775a10e8907e9a8efcec4164未变；原next-env.d.ts两条dev/types导入按字节核对保留，originalNextEnvPreserved=true。
+- Web不再读取OpenAI provider key，只携带已认证且已计费的userId/requestId/model调用Supabase secret专用Edge函数；任意提示词不从该接口接收。Edge独立核对资金、归属、原模型、单次claim和原消息截止，先保存结果再发送SSE完成标记。未知保持待核对，无自动重买。
+- 独立审查的重要历史副本保留缺陷已RED→GREEN修复；完成/会话关闭/删除/账户删除均覆盖。无积分OpenAI聊天及不支持的OpenAI优化在工作或冻结前拒绝。82项SQL断言通过，并有真实两连接的套餐守恒与聊天单次claim竞争验证。
+- 最终完整回归：领域257、前端195、Web163文件1295项，exit0；Worker9文件98项，本地SQL82项及双连接通过；lint/typecheck/预算/前端构建/Web隔离构建均exit0，QA目录已清理。
+- 最终代码SHA256为06908d339bf5b0c5b901b835cf80d478faac8cb0f349ccbb5bb74ad1a783e1f3，测试前后相同，changedDuringTests为空。证据：verification/final-candidate-evidence.json、final-candidate-full.log、delivery-gates.json、delivery-worker.log、delivery-database.log及delivery-*-build.log。
+- 新迁移20261105082353_openai_chat_edge_relay.sql由CLI创建；函数openai-chat及其本地secret认证配置尚未生产应用。没有读取、移动或删除实际key，也没有删除.env.local任何项目，没有部署、付费调用、提交或推送。
+- 本机没有Deno，未执行Deno check；真实Edge鉴权/打包、目标项目和default Supabase服务凭据匹配、实际模型权限与费用尚未验收。浏览器仅检查公开首页，隔离监听受EPERM阻止且未绕过，A+与恢复/响应式体验未验证。
+- 交接：doc/openai-edge-relay-handoff.md。此前“Web本地添加OPENAI_API_KEY”步骤已被新架构取代，但本地旧条目仍须保留至迁移部署验证及另行清理授权；ARK与Supabase服务端凭据仍有现有用途。
+
+### 2026-11-05 豆包调用集中 Supabase：本地候选验证通过
+
+- 原分支 `codex/replicate-dot-zimage-ui-20261102`；HEAD `0610a6e762db1a48775a10e8907e9a8efcec4164` 保持，未提交/推送/部署。原有 `apps/web/next-env.d.ts` 改动逐字节保留。
+- 豆包聊天、字段优化、商品图/风格图分析和 A+ 策划的 Web 运行时代码均不再读取 ARK_API_KEY，新增 `doubao-chat` / `doubao-text` Secret 认证 Edge 入口。供应商模型映射留在 Edge；Web 保留原 Supabase 认证/账务能力与私图授权、Sharp 处理。没有读取/移动/更改真实供应商密钥或清理 .env.local。
+- 新本地迁移 `20261105090233_doubao_edge_relay.sql` 由 CLI 生成：资金/原始输入 hash/用户/会话/阶段 claim/私图角色与冻结模型预算校验，唯一 attempt、持久回执与只读恢复。旧 processing/unknown 订单不会重买模型，也不会因新 attempt 表为空自动退款。
+- 独立审查发现并修复两项 P2：优化 session_id=null 导致 raw 回执残留；模型映射在 attempt 之后检查。现在终态清重复正文、未知保留；inspect→映射校验→claim；只有原子确认未创建任何 attempt 的新聊天/优化配置失败才释放冻结，其他错误保持未知。双连接证明退款和模型声明互斥。
+- 最终验证：domain **257**、frontend **195**、Web **1306 / 165 文件**、Worker **113 / 10 文件** 全通过；本地 disposable PostgreSQL **112 断言**通过，并通过套餐、聊天代理、豆包阶段的双连接并发/资金守恒检查。lint、typecheck、acceptance-budget、Web webpack 构建、frontend 构建通过；隔离 QA 目录检查后清理。
+- 全量回归源码指纹：`37f5a19a043553a1aa449bc9183a1ab72baa100e673640b0fc877181802d633c`；测试前后完全一致。构建后只修正一条旧生命周期测试的依赖模拟，运行时代码未变化；最终 lint/typecheck 再次通过。首次全量该旧测试失败已保留证据，最终全量全部通过。
+- 证据在执行工作区 `/Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/`：`final-candidate-evidence.json`、`final-candidate-full.log`、`delivery-gates.json`、`delivery-runtime-identity.json`、`delivery-worker.log`、`delivery-database.log`、两份 build 日志。
+- 交接见 [豆包 Edge 说明](doubao-edge-relay-handoff.md)。默认仍不允许新真实调用；生产费率、模型账号能力、Supabase 实际 Secrets、迁移及部署未验证/执行。未计费旧聊天/优化预览缺少持久供应商声明，实际 Edge 模式在任何业务写入前关闭；独立分析入口也保持关闭，使用有授权预算的 A+ 套餐。
+- 真实验收仍待办：本机没有 Deno/容器运行时，未执行真实 SDK/Edge 验收；浏览器隔离监听 localhost:7793 此前 EPERM，未绕过，未执行真实登录/私图/付费业务验证。只读 `ps -p 9297,9312,9337 -o pid=,comm=` 亦被本机策略以 operation not permitted 拒绝，未重试；没有停止或修改这些现有服务。SQL 使用本地认证/Storage/pgmq shim，不能代替 Supabase 线上权限与网关验收。
+
+### 2026-11-05 用户授权的本地 MiniMax 环境条目删除
+
+- 已仅从 apps/web/.env.local 删除 MINIMAX_API_KEY、ZIMAGE_MINIMAX_CHAT_MODEL 各一项；未创建含密钥备份，不输出/复制/持久保存密钥值。
+- 原位字节对照验证：其余28项及其他字节保持不变，词法语法完整；文件权限、UID/GID、inode、flags、ACL保持。删除脚本先用合成CRLF/多行/同名字串样本验证；首次缺失扩展属性接口在写入前停止，改用ACL后成功。
+- 剩余28项仅只读评估，未再删除或转移；未改生产、部署、远端Secret或运行进程，未进行真实模型调用。项目分支、HEAD及应用源码保持此前候选版本。
+- 证据位于 /Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/minimax-env-removal-proof.json；逐项依赖、清理条件与成本边界见同目录 env-local-minimization-audit.md。
+- 现有Next加载器已用纯合成环境验证可在loadedEnvFiles=0时接收三项必要进程变量（envless-loader-synthetic-proof.json），仅是加载器证明；整个应用无文件启动/认证/计费/旧单恢复仍待后续授权与验收。.env.local当前保留28项，不可据此直接删除整文件。
+
+### 2026-11-05 用户授权的本地 Sentry 配置删除
+
+- 已仅从 apps/web/.env.local 删除 SENTRY_DSN、NEXT_PUBLIC_SENTRY_DSN、SENTRY_TRACES_SAMPLE_RATE、NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE 四项，赋值项由28减至24；未创建含值备份或输出值。
+- 原位字节对照、完整记录语法及元数据校验通过：其他字节不变，权限、UID/GID、inode、flags及ACL保持；GEMINI_API_KEY、ZIMAGE_GEMINI_IMAGE_MODEL明确保留。
+- 未更改应用源码、生产配置、云端Secret或SDK依赖，未执行服务重启、部署或付费调用。已有进程/构建产物及独立前端/云Worker的观测配置不据此宣称关闭。
+- 证明：/Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/sentry-env-removal-proof.json；执行脚本的合成CRLF、多行、其他字段含同名字串及缺项停止测试通过。
+- Gemini仅被说明当前未使用，未取得其永久删除授权，本轮保留；其副本及历史队列状态仍未核实。
+
+### 2026-11-05 用户后续明确授权删除本地 GEMINI_API_KEY
+
+- 用户已知悉副本和旧任务边界未核实后，明确确认永久删除指定文件中的 GEMINI_API_KEY；已仅删除这一项，.env.local赋值项由24减至23。
+- ZIMAGE_GEMINI_IMAGE_MODEL及所有其他条目字节保持；权限、UID/GID、inode、flags和ACL不变，完整记录语法校验通过。未输出/复制密钥值或创建含值备份。
+- 前一步Sentry四项删除已完成并验证，本轮不改SDK、生产配置或云端Secret，不执行服务重启、部署或付费调用。当前状态取代前一条“Gemini保留待确认”的待办状态。
+- 证据：/Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/gemini-env-removal-proof.json；Sentry证据为同目录sentry-env-removal-proof.json。两次原位修改都仅删除各自授权记录，应用源码和原分支/HEAD保持。

@@ -9,7 +9,6 @@ import type {
   CreativeTextFieldName,
 } from "@zimage/domain";
 import { requestCreativeTextOptimization } from '@/gateways/creative-text-gateway';
-import { useWorkspaceStore } from "@/store/workspace-store";
 import styles from "./creative-text-field.module.css";
 
 export interface CreativeTextFieldProps {
@@ -28,6 +27,7 @@ export interface CreativeTextFieldProps {
   id?: string;
   placeholder?: string;
   disabled?: boolean;
+  allowOptimization?:boolean;
 }
 
 export function CreativeTextField(props: CreativeTextFieldProps) {
@@ -51,6 +51,7 @@ function CreativeTextFieldEditor({
   id,
   placeholder,
   disabled,
+  allowOptimization=true,
   "aria-label": ariaLabel,
 }: CreativeTextFieldProps) {
   const credits = useCredits();
@@ -59,10 +60,7 @@ function CreativeTextFieldEditor({
   const lastRequest = useRef<
     { key: string; input: CreativeTextOptimizeRequest } | undefined
   >(undefined);
-  const selectedChatModel = useWorkspaceStore(
-    (state) => state.selectedChatModel,
-  );
-  const optimizationModel = chatModel ?? (selectedChatModel === 'minimax' ? 'minimax' : 'doubao');
+  const optimizationModel = chatModel ?? ('doubao');
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const current = useRef(value);
@@ -96,7 +94,7 @@ function CreativeTextFieldEditor({
     setSuggestion(undefined);
   }
   async function optimize() {
-    if (active.current || disabled || !value.trim()) return;
+    if (!allowOptimization || active.current || disabled || !value.trim()) return;
     const controller = new AbortController();
     active.current = controller;
     const submitted = value;
@@ -192,9 +190,9 @@ function CreativeTextFieldEditor({
       {label && <label htmlFor={inputId}>{label}</label>}
       <div className={styles.editor}>
       {multiline ? <textarea {...props} rows={rows} /> : <input {...props} />}
-      <button className={styles.sparkle} type="button" title={actionLabel} aria-label={actionLabel} disabled={disabled || pending || !value.trim()} onClick={() => void optimize()}><Sparkles size={16} aria-hidden="true" /></button>
+      {allowOptimization&&<button className={styles.sparkle} type="button" title={actionLabel} aria-label={actionLabel} disabled={disabled || pending || !value.trim()} onClick={() => void optimize()}><Sparkles size={16} aria-hidden="true" /></button>}
     </div>
-      <CreditFee
+      {allowOptimization&&<CreditFee
         items={[
           {
             operation: "optimize",
@@ -204,7 +202,7 @@ function CreativeTextFieldEditor({
             count: 1,
           },
         ]}
-      />
+      />}
       {(status || undo || pending) && (
         <div className={styles.feedback}>
           <span role={failed ? "alert" : "status"}>{status}</span>

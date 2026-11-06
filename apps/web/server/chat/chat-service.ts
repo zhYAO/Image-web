@@ -1,4 +1,4 @@
-import { hasExplicitImageIntent, type ChatEvent, type Session } from '@zimage/domain';
+import { hasExplicitImageIntent, isActiveChatModel, type ChatEvent, type Session } from '@zimage/domain';
 
 import { ChatProviderFailure } from './chat-providers';
 
@@ -71,6 +71,7 @@ function streamError(error: unknown): ChatEvent {
 
 export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
   return async function* run(input: ChatTurnInput): AsyncIterable<ChatEvent> {
+    if(input.chatModel && !isActiveChatModel(input.chatModel)) throw new ChatProviderFailure('provider_error',false,'rejected');
     const started = await dependencies.start({
       message: input.message,
       sessionId: input.sessionId,
@@ -107,7 +108,7 @@ export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
       return;
     }
 
-    const provider = input.chatModel === 'minimax' ? 'minimax' : 'doubao';
+    const provider = input.chatModel ?? 'doubao';
     const recordResult = async (isError: boolean) => {
       try {
         await dependencies.recordProviderResult(provider, isError);
@@ -128,7 +129,7 @@ export function createChatTurnRunner(dependencies: ChatTurnDependencies) {
         if (!content) throw new ChatProviderFailure('stream_interrupted', false);
       } catch (error: unknown) {
         const retryable = error instanceof ChatProviderFailure && error.retryable;
-        if (attempt === 0 && !emittedThisAttempt && retryable) continue;
+        if (provider==='doubao' && attempt === 0 && !emittedThisAttempt && retryable) continue;
         console.warn('[chat] provider failed', { correlationId: input.correlationId, provider, code: error instanceof ChatProviderFailure ? error.code : 'unexpected_error' });
         await recordResult(true);
         yield streamError(error);

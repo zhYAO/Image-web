@@ -43,6 +43,15 @@ FONTS = {
 }
 REVIEWED_TEST_MARKER = {'path': 'ops/aliyun/frontend/test_frontend_release.py',
     'sha256': 'acd3997bde7799ca72bcc7cbf1b906d0c26e9b36362b872c36bd169078305858'}
+REVIEWED_SDK_AUTH_TEST = {
+    'path': 'supabase/tests/edge/relay-auth.deno.ts',
+    'sha256': '834257526ea8adb3efd4a105b653d29d597a6ac0e8ca5936d629e9619908152c',
+    'markerSha256': {
+        '2a2dc9e209f41f1aeef5d7374b2c697f85a59e58fa6c3c5653b52a6281cdfca0',
+        '2fcfe9765533313cb1ce79e9ff32724dd265389abe2571676561859c7ba02c3e',
+    },
+}
+
 TARGET = {'schema': 1, 'runtime': {'node': '24.19.0', 'abi': '137', 'platform': 'linux',
           'arch': 'x64', 'libc': 'glibc-2.35'}, 'toolchain': {'packageManager': 'pnpm@11.19.0'},
           'assemblyCacheRoot': '/opt/zimage/layer-cache'}
@@ -81,6 +90,10 @@ def allowed(name):
     if p.name.lower() in {'credentials', 'credentials.json', 'secrets.json', 'secrets.yaml',
                           'id_rsa', 'id_ed25519', 'authorized_keys', 'known_hosts'}:
         return False
+    if (len(p.parts) == 4 and p.parts[:2] == ('docs', 'superpowers')
+            and p.parts[2] in {'plans', 'reviews'}
+            and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md', p.name)):
+        return True
     return (len(p.parts) == 1 and name in ROOT_FILES) or p.parts[0] in ROOT_DIRS
 
 
@@ -98,6 +111,13 @@ def scan(name, data):
             if (kind == 'supabase-secret' and name == REVIEWED_TEST_MARKER['path']
                     and digest(data) == REVIEWED_TEST_MARKER['sha256']
                     and all(m.group() == b'sb_secret_'+b'x'*32 for m in re.finditer(pattern, data))):
+                continue
+            # SDK auth tests intentionally use two synthetic secret-key-shaped
+            # strings. Only these reviewed whole-file bytes may carry them.
+            if (kind == 'supabase-secret' and name == REVIEWED_SDK_AUTH_TEST['path']
+                    and digest(data) == REVIEWED_SDK_AUTH_TEST['sha256']
+                    and all(digest(m.group()) in REVIEWED_SDK_AUTH_TEST['markerSha256']
+                            for m in re.finditer(pattern, data))):
                 continue
             raise ValueError('Source blocked by high confidence scan: '+name+' ('+kind+')')
     for match in re.finditer(rb'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', data):

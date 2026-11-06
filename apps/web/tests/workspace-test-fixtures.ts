@@ -60,6 +60,7 @@ export class SeedreamOnlyGateway extends CapturingGateway {
   override async getProviderHealth() {
     return [
       { checkedAt: '2026-08-28', provider: 'gemini', status: 'unavailable' as const },
+      { checkedAt: '2026-08-28', provider: 'openai', status: 'unavailable' as const },
       { checkedAt: '2026-08-28', provider: 'seedream', status: 'degraded' as const },
       { checkedAt: '2026-08-28', provider: 'doubao', status: 'healthy' as const },
       { checkedAt: '2026-08-28', provider: 'minimax', status: 'healthy' as const },

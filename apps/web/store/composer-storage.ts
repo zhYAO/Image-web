@@ -1,3 +1,4 @@
+import { isActiveChatModel } from '@zimage/domain';
 import type { ComposerState } from './workspace-store';
 
 const PREFIX = 'zimage:composer:v1:';
@@ -33,12 +34,12 @@ export function loadComposer(sessionId: string): Partial<ComposerState> | undefi
       || !['1:1', '3:4', '4:3', '9:16', '16:9'].includes(draft.aspectRatio)
       || !['1K', '2K'].includes(draft.resolution)
       || !Number.isInteger(draft.count) || draft.count < 1 || draft.count > 4
-      || !['doubao', 'minimax'].includes(draft.selectedChatModel)) return;
+      || !(draft.selectedChatModel==='minimax'||isActiveChatModel(draft.selectedChatModel))) return;
     // Whitelist fields: stored data cannot introduce actions or attachment URLs.
     return {
       draft: draft.draft, explicitImageToolEnabled: draft.explicitImageToolEnabled,
       aspectRatio: draft.aspectRatio, resolution: draft.resolution, count: 1,
-      selectedChatModel: draft.selectedChatModel,
+      selectedChatModel: isActiveChatModel(draft.selectedChatModel)?draft.selectedChatModel:'doubao',
       selectedProvider: typeof draft.selectedProvider === 'string' ? draft.selectedProvider : undefined,
       selectedModelId: typeof draft.selectedModelId === 'string' ? draft.selectedModelId : undefined,
     };

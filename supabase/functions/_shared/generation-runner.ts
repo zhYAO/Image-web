@@ -1,5 +1,6 @@
 import {
   generateGeminiImage,
+  generateOpenAiImage,
   generateSeedreamImage,
   ImageProviderError,
   SEEDREAM_PLAN_IMAGE_ENDPOINT,
@@ -41,7 +42,7 @@ export interface ClaimedGeneration {
   model: string;
   params: { aspectRatio: ImageAspectRatio; referenceIds?: string[]; resolution: ImageResolution; targetWidth?: number; targetHeight?: number };
   prompt: string;
-  provider: 'gemini' | 'seedream';
+  provider: 'gemini' | 'seedream' | 'openai';
   readCount: number;
   references: QueueReference[];
   sessionId: string;
@@ -93,7 +94,7 @@ export function parseClaim(value: unknown): ClaimedGeneration | QueueAction | nu
     || !Number.isSafeInteger(claim.readCount)
     || !isUuid(claim.sessionId)
     || !isUuid(claim.userId)
-    || (claim.provider !== 'gemini' && claim.provider !== 'seedream')
+    || (claim.provider !== 'gemini' && claim.provider !== 'seedream' && claim.provider !== 'openai')
     || typeof claim.model !== 'string'
     || typeof claim.prompt !== 'string'
     || !params
@@ -178,7 +179,8 @@ function preparationDiagnostic(stage: PreparationStage, error: unknown) {
   // Only fixed categories and a bounded numeric status may reach logs. In
   // particular, never return exception text, Storage URLs or configuration values.
   const reason = error instanceof ReferenceDownloadFailure ? 'storage_download_failed'
-    : error instanceof TypeError ? 'runtime_type_error'
+    : error instanceof StageDeadline ? 'preparation_deadline'
+      : error instanceof TypeError ? 'runtime_type_error'
       : error instanceof Error && error.message === 'invalid_seedream_plan_endpoint' ? 'invalid_endpoint'
         : error instanceof Error && error.message.startsWith('missing_env:') ? 'missing_environment'
           : error instanceof Error && error.message === 'reference_count_mismatch' ? 'reference_count_mismatch'
@@ -192,12 +194,15 @@ function preparationDiagnostic(stage: PreparationStage, error: unknown) {
   };
 }
 
-async function downloadReferences(admin: AdminClient, references: QueueReference[]) {
+async function downloadReferences(admin: AdminClient, references: QueueReference[], signal: AbortSignal) {
   const downloaded: ProviderReference[] = [];
   for (const reference of references) {
+    signal.throwIfAborted();
     const { data, error } = await admin.storage.from(reference.bucket).download(reference.path);
+    signal.throwIfAborted();
     if (error || !data) throw new ReferenceDownloadFailure(error ?? undefined);
     const bytes = new Uint8Array(await data.arrayBuffer());
+    signal.throwIfAborted();
     if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024) throw new Error('reference_download_invalid');
     downloaded.push({ bytesBase64: bytesToBase64(bytes), mimeType: reference.mimeType });
   }
@@ -205,6 +210,10 @@ async function downloadReferences(admin: AdminClient, references: QueueReference
 }
 
 export function providerConfiguration(provider: ClaimedGeneration['provider'], model: string) {
+  if(provider==='openai'){
+    if(Deno.env.get('ZIMAGE_OPENAI_ENABLED')!=='true'||!['gpt-image-2.6-sunburst','gpt-image-2.6-flare'].includes(model))throw new Error('provider_unavailable');
+    return {apiKey:env('OPENAI_API_KEY'),model};
+  }
   // This persisted ID distinguishes new Plan jobs from already queued Pro jobs.
   // Never reuse the shared Ark credential or reroute an old model to Plan.
   if (provider === 'seedream' && model === 'doubao-seedream-5.0-pro') {
@@ -238,6 +247,7 @@ async function callProvider(claim: ClaimedGeneration, references: ProviderRefere
       targetHeight: claim.params.targetHeight,
       resolution: claim.params.resolution,
     };
+    if(claim.provider==='openai')return await generateOpenAiImage(input,configuration.apiKey,fetch,signal?AbortSignal.any([signal,controller.signal]):controller.signal);
     return claim.provider === 'gemini'
       ? await generateGeminiImage(input, configuration.apiKey, fetch, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal)
       : await generateSeedreamImage(input, configuration.apiKey, fetch, signal ? AbortSignal.any([signal, controller.signal]) : controller.signal, configuration.endpoint);
@@ -258,6 +268,49 @@ function parseCheckpoint(value: unknown): ResultCheckpoint {
 }
 
 class LeaseLost extends Error {}
+class CheckpointYield extends LeaseLost {}
+class StageDeadline extends Error {}
+
+// Free workers live for at most 150 seconds, possibly across multiple requests.
+// These request budgets leave startup/control headroom; durable SQL state remains
+// authoritative if the platform terminates an older worker earlier than this.
+const EXECUTION_MS = 120_000;
+const PREPARATION_MS = 20_000;
+const PROVIDER_MS = 90_000;
+const UPLOAD_RESERVE_MS = 20_000;
+
+async function withinStage<T>(operation: (signal: AbortSignal) => Promise<T>, milliseconds: number, parent: AbortSignal): Promise<T> {
+  if (parent.aborted) throw new LeaseLost('generation_deadline');
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: () => void = () => {};
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new StageDeadline('generation_stage_deadline'));
+    }, milliseconds);
+  });
+  const cancelled = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new LeaseLost('generation_deadline'));
+    parent.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const work = Promise.resolve().then(() => {
+      if (parent.aborted) throw new LeaseLost('generation_deadline');
+      return operation(AbortSignal.any([parent, controller.signal]));
+    });
+    return await Promise.race([work, expired, cancelled]);
+  } finally {
+    clearTimeout(timer);
+    parent.removeEventListener('abort', onAbort);
+  }
+}
+
+// A late claim response may have acquired a lease, but is never processed by this
+// invocation. The queue can reclaim it under the same token-fenced state machine.
+export async function generationQueueRpc<T>(admin: AdminClient, name: 'claim_image_generation' | 'archive_image_message', input?: Record<string, unknown>): Promise<T> {
+  return withinStage(() => rpc<T>(admin, name, input), 10_000, new AbortController().signal);
+}
 
 export interface GenerationDependencies {
   callProvider(claim: ClaimedGeneration, references: ProviderReference[], signal?: AbortSignal): Promise<ProviderImageResult>;
@@ -270,6 +323,7 @@ export async function processClaim(
   admin: AdminClient, claim: ClaimedGeneration, dependencies: GenerationDependencies = { callProvider },
 ) {
   const controller = new AbortController();
+  const startedAt = performance.now();
   let stopped = false;
   let renewal: Promise<void> | undefined;
   const step = async (operation: string, payload: Record<string, unknown> = {}) => {
@@ -288,20 +342,26 @@ export async function processClaim(
     }).finally(() => { renewal = undefined; });
   }, 25_000);
   // Bounds downloads, provider work and uploads together, including hung SDK calls.
-  const deadline = setTimeout(() => { stopped = true; controller.abort(); }, 9 * 60_000);
-  const bounded = async <T>(operation: Promise<T>): Promise<T> => {
+  const deadline = setTimeout(() => { stopped = true; controller.abort(); }, EXECUTION_MS);
+  const bounded = async <T>(operation: () => Promise<T>): Promise<T> => {
     if (controller.signal.aborted) throw new LeaseLost('generation_deadline');
     let abort: () => void = () => {};
     const cancelled = new Promise<never>((_, reject) => {
       abort = () => reject(new LeaseLost('generation_deadline'));
       controller.signal.addEventListener('abort', abort, { once: true });
     });
-    try { return await Promise.race([operation, cancelled]); }
+    try {
+      const work = Promise.resolve().then(() => {
+        if (controller.signal.aborted) throw new LeaseLost('generation_deadline');
+        return operation();
+      });
+      return await Promise.race([work, cancelled]);
+    }
     finally { controller.signal.removeEventListener('abort', abort); }
   };
   const retry = async (operation: () => Promise<void>) => {
     for (let attempt = 0; ; attempt++) {
-      try { await bounded(operation()); return; }
+      try { await bounded(operation); return; }
       catch (error) {
         if (error instanceof LeaseLost || attempt >= 2) throw error;
         await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
@@ -309,7 +369,7 @@ export async function processClaim(
     }
   };
   try {
-    await bounded(step('renew'));
+    await bounded(() => step('renew'));
     if (claim.action === 'recover_rejection') {
       if (!isRejectionCode(claim.rejectionCode)) throw new Error('invalid_rejection_checkpoint');
       await retry(() => step('fail', { code: claim.rejectionCode, messageId: claim.messageId, outcome: 'rejected' }));
@@ -320,25 +380,28 @@ export async function processClaim(
       let references: ProviderReference[];
       let preparationStage: PreparationStage = 'provider_availability';
       try {
-        const available = await bounded(rpc<boolean>(admin, 'assert_chat_provider_available', { p_provider: claim.provider }));
-        if (!available) throw new Error('provider_unavailable');
-        preparationStage = 'provider_configuration';
-        if (dependencies.callProvider === callProvider) providerConfiguration(claim.provider, claim.model);
-        preparationStage = 'reference_validation';
-        if ((claim.params.referenceIds?.length ?? 0) !== claim.references.length) throw new Error('reference_count_mismatch');
-        preparationStage = 'reference_download';
-        references = await bounded(downloadReferences(admin, claim.references));
+        references = await bounded(() => withinStage(async (signal) => {
+          const available = await rpc<boolean>(admin, 'assert_chat_provider_available', { p_provider: claim.provider });
+          signal.throwIfAborted();
+          if (!available) throw new Error('provider_unavailable');
+          preparationStage = 'provider_configuration';
+          if (dependencies.callProvider === callProvider) providerConfiguration(claim.provider, claim.model);
+          preparationStage = 'reference_validation';
+          if ((claim.params.referenceIds?.length ?? 0) !== claim.references.length) throw new Error('reference_count_mismatch');
+          preparationStage = 'reference_download';
+          return downloadReferences(admin, claim.references, signal);
+        }, PREPARATION_MS, controller.signal));
       } catch (error) {
         if (error instanceof LeaseLost) throw error;
         const code = error instanceof Error && (error.message.startsWith('missing_env:')
           || error.message.includes('provider')) ? 'provider_unavailable' : 'reference_download_failed';
-        await bounded(step(claim.readCount < 5 ? 'retry' : 'fail', { code, messageId: claim.messageId }));
+        await bounded(() => step(claim.readCount < 5 ? 'retry' : 'fail', { code, messageId: claim.messageId }));
         return { action: claim.readCount < 5 ? 'retry' : 'failed', code,
           preparation: preparationDiagnostic(preparationStage, error) };
       }
-      await bounded(step('submitted'));
+      await bounded(() => step('submitted'));
       let result: ProviderImageResult;
-      try { result = await bounded(dependencies.callProvider(claim, references, controller.signal)); }
+      try { result = await bounded(() => withinStage(signal => dependencies.callProvider(claim, references, signal), PROVIDER_MS, controller.signal)); }
       catch (error) {
         if (error instanceof LeaseLost) throw error;
         const known = error instanceof ImageProviderError && error.outcome === 'rejected';
@@ -349,7 +412,7 @@ export async function processClaim(
           await retry(() => step('fail', { code: error.code, messageId: claim.messageId, outcome: 'rejected' }));
           return { action: 'failed', code: error.code };
         }
-        await bounded(step('unknown', {
+        await bounded(() => step('unknown', {
           code: 'provider_reconciliation_required', messageId: claim.messageId,
           outcome: 'unknown',
         }));
@@ -357,7 +420,7 @@ export async function processClaim(
       }
       const bytes = base64ToBytes(result.bytesBase64);
       if (bytes.length === 0 || bytes.length > 30 * 1024 * 1024) {
-        await bounded(step('unknown', { messageId: claim.messageId }));
+        await bounded(() => step('unknown', { messageId: claim.messageId }));
         return { action: 'reconcile', code: 'provider_image_size_invalid' };
       }
       const extension = result.mimeType === 'image/jpeg' ? 'jpg' : result.mimeType.split('/')[1];
@@ -366,10 +429,14 @@ export async function processClaim(
     }
     if (!checkpoint) throw new Error('missing_result_checkpoint');
     const saved = checkpoint;
+    if (performance.now() - startedAt > EXECUTION_MS - UPLOAD_RESERVE_MS) {
+      return { action: 'deferred', code: 'generation_checkpoint_saved' };
+    }
     await retry(async () => {
       // Validate the token immediately before each upload. If deletion races
       // after this check, the durable path/tombstone sweep still compensates it.
       await step('renew');
+      if (performance.now() - startedAt > EXECUTION_MS - UPLOAD_RESERVE_MS) throw new CheckpointYield();
       const { error } = await admin.storage.from('generated').upload(saved.storagePath, base64ToBytes(saved.bytesBase64), {
         cacheControl: '31536000', contentType: saved.mimeType, upsert: true,
       });
@@ -379,6 +446,7 @@ export async function processClaim(
     await retry(() => step('complete', { messageId: claim.messageId }));
     return { action: 'completed' };
   } catch (error) {
+    if (error instanceof CheckpointYield) return { action: 'deferred', code: 'generation_checkpoint_saved' };
     if (error instanceof LeaseLost) return { action: 'deferred', code: 'generation_lease_lost' };
     // Never turn a checkpoint/Storage/completion transport failure into failed.
     // The visible queue message reclaims its durable checkpoint after lease expiry.

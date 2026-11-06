@@ -32,6 +32,7 @@ function fixture() {
     messageId = crypto.randomUUID();
   let op: Record<string, unknown> | undefined;
   let checkpointFailure = false;
+  let usageHeld=false;
   const rpc = vi.fn(
     async (
       _name: string,
@@ -46,7 +47,7 @@ function fixture() {
       }
       if (_name === "record_chat_provider_result")
         return { data: null, error: null };
-      const action = args.p_action;
+      const action = _name==='chat_usage_dispatch'?({start:'text_start',complete:'text_complete'}as Record<string,string>)[String(args.p_action)]:args.p_action;
       const input = args.p_input as Record<string, unknown>;
       if (action === "text_start") {
         op ??= {
@@ -78,6 +79,7 @@ function fixture() {
           checkpointFailure = false;
           return { data: null, error: { message: "storage unavailable" } };
         }
+        if(usageHeld){op!.status="needs_review";return{data:structuredClone(op),error:null};}
         op!.status = "succeeded";
         op!.result = { ...(op!.result as object), messageId };
       } else if (action === "text_unknown" && op!.status !== "result")
@@ -112,10 +114,11 @@ function fixture() {
       sessionId,
       message: "hello",
       chatModel: "doubao" as const,
-      billing: { version: "2026-10-12.1", totalMinor: 2 },
+      billing: { version: "2026-10-12.1", rateVersion:"synthetic-rate", totalMinor: 2 },
     },
     user: crypto.randomUUID(),
     op: () => op,
+    holdUsage:()=>{usageHeld=true;},
     failComplete: () => {
       checkpointFailure = true;
     },
@@ -214,3 +217,5 @@ describe("billed text recovery", () => {
     expect(f.rpc.mock.calls.some(([, args]) => args.p_action === "text_claim")).toBe(false);
   });
 });
+
+it('uses the token reservation/settlement RPC and retains the request while usage is being reviewed',async()=>{const f=fixture();f.holdUsage();expect(await run(f)).toContain('stream.failed');expect(f.op()?.status).toBe('needs_review');expect(f.op()?.result).toMatchObject({content:'saved reply'});await expect(run(f)).rejects.toMatchObject({code:'billing_pending'});expect(spies.calls).toBe(1);expect(f.rpc.mock.calls.some(([name,args])=>name==='chat_usage_dispatch'&&args.p_action==='start')).toBe(true);expect(f.rpc.mock.calls.some(([name,args])=>name==='chat_usage_dispatch'&&args.p_action==='complete')).toBe(true);expect(f.rpc.mock.calls.some(([name,args])=>name==='credit_dispatch'&&args.p_action==='text_complete')).toBe(false);});

@@ -71,6 +71,7 @@ function schemas(): Record<string, Schema> {
     CreditWallet: domain.creditWalletSchema, CreditLedger: domain.creditLedgerSchema, CreditCatalog: domain.creditCatalogSchema, CreditQuote: domain.creditQuoteSchema, CreditConfirmation: domain.creditConfirmationSchema,
     CreditQuoteRequest: z.union([z.strictObject({ items: z.array(domain.creditItemSchema).min(1).max(8) }), z.strictObject({ action: z.enum(['image', 'recreate', 'commerce']), input: z.record(z.string(), z.unknown()) })]),
     OptimizeRequest: domain.creativeTextOptimizeRequestSchema, OptimizeResult: domain.creativeTextOptimizeResponseSchema,
+    PackageRequest:domain.packageRequestSchema,PackageOrder:domain.packageOrderViewSchema,PackageQuote:domain.packageQuoteResponseSchema,PackageAvailability:z.object({enabled:z.boolean()}),PackageOrders:z.object({orders:z.array(z.object({id:z.uuid()})).max(100)}),
     CommerceTask: domain.commerceTaskSchema, ApparelTask: domain.apparelTaskSchema,
     CommerceCreate: domain.commerceCreateSchema, ApparelCreate: domain.apparelCreateSchema,
     CommerceSave: domain.commerceSaveSchema, ApparelSave: domain.apparelSaveSchema,
@@ -138,6 +139,11 @@ export function buildOpenApiDocument() {
     '/api/image/{id}': { get: operation('getImageBatch', 'Owner generation batch in an active business session.', { content: json(ref('ImageBatch')), errors: readErrors }) },
     '/api/generations/{id}/asset-url': { get: operation('signGenerationAsset', 'Owner/active-session checks before signing a private asset for 60 seconds; expiry is 410. Handler does not explicitly set Cache-Control.', { content: json(ref('GenerationAssetUrl')), errors: [400, 401, 404, 410, 500, 503] }) },
     '/api/references/{id}/asset-url': { get: operation('signReferenceAsset', 'Owner/active-session reference lookup; active unexpired upload signed for one hour.', { cache: 'no-store', content: json(ref('SignedReference')), errors: [400, 401, 404, 410, 500, 503] }) },
+    '/api/commerce-packages':{
+      get:operation('getCommercePackage','Read availability or recover the original owned order. Existing recovery remains available when new paid calls are disabled.',{cache:'private, no-store',content:json(union('PackageAvailability','PackageOrder','PackageOrders')),parameters:[query('active',{type:'string',enum:['1']}),query('orderId',{type:'string',format:'uuid'}),query('quoteId',{type:'string',format:'uuid'})],errors:[400,401,404,409,500,503]}),
+      post:operation('manageCommercePackage','Confirm a frozen maximum, analyze, review facts, plan and submit one whole A+ package. Settle only verified actual usage; missing evidence or cap overruns require review. Cancellation before image submission refunds all. Cost configuration and both feature switches start disabled.',{cache:'private, no-store',body:ref('PackageRequest'),content:json(union('PackageQuote','PackageOrder')),errors:[400,401,402,403,404,409,410,413,429,500,503]}),
+    },
+    '/api/commerce-analysis': { post: operation('analyzeCommerceImages', 'Verified-user analysis admission is closed pending approved metered pricing and durable recovery. Always returns service_not_ready; never uploads, reserves credit or calls a provider.', { success: '503', errors: [401, 403, 503] }) },
     '/api/health/providers': { get: operation('getProviderHealth', 'Verified user only. Stored provider health and registry capabilities; this read does not call providers.', { content: json(ref('ProviderStatus')), errors: [401, 500, 503] }) },
     '/api/quotas': { get: operation('getQuota', 'Verified owner independent daily image quota.', { content: json(ref('Quota')), errors: [401, 500, 503] }) },
     '/api/sessions': {

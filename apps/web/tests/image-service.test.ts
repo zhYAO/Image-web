@@ -39,7 +39,7 @@ describe('image submission service', () => {
 
     expect(submit).toHaveBeenCalledTimes(2);
     expect(submit.mock.calls[0]?.[0]).toMatchObject({
-      config: { aspectRatio: '16:9', count: 2, resolution: '2K', registryVersion: '2026-10-12.1' },
+      config: { aspectRatio: '16:9', count: 2, resolution: '2K', registryVersion: '2026-11-05.1' },
       model: 'doubao-seedream-5.0-pro',
       prompt: '极简商品图',
       provider: 'seedream',

@@ -10,7 +10,7 @@ import {
 describe('versioned Phase 1 model and skill registry', () => {
   it('exposes the distinct Plan Pro logical ID for new images', () => {
     expect(MODEL_REGISTRY_VERSION).toMatch(/^2026-/);
-    expect(IMAGE_PROVIDER_CAPABILITIES.map((capability) => capability.provider)).toEqual(['seedream']);
+    expect(IMAGE_PROVIDER_CAPABILITIES.map((capability) => capability.provider)).toEqual(['seedream', 'openai']);
     expect(resolveImageModel({ model: 'doubao-seedream-5.0-pro', provider: 'seedream' })).toMatchObject({
       model: 'doubao-seedream-5.0-pro',
       provider: 'seedream',

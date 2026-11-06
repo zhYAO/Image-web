@@ -57,13 +57,13 @@ function routeFiles(directory: string): string[] {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('explicit API inventory (source evidence, not HTTP acceptance)', () => {
-  it('preserves the frozen routes and methods with only the two reviewed stage 2 source amendments', () => {
+  it('preserves the frozen routes and methods with reviewed source amendments including retired model admission', () => {
     expect(baseline.counts).toEqual({ routeFiles: 49, explicitMethods: 58 });
     expect(baseline.routes).toHaveLength(49);
     expect(baseline.routes.flatMap(route => route.methods)).toHaveLength(58);
     expect(amendments.schemaVersion).toBe(1);
     expect(amendments.baselineSourceSha).toBe(baseline.sourceSha);
-    expect(amendments.routes.map(route => route.path).sort()).toEqual(['/api/chat', '/api/uploads']);
+    expect(amendments.routes.map(route => route.path).sort()).toEqual(['/api/chat', '/api/creative-text/optimize', '/api/health/providers', '/api/uploads']);
     for (const route of baseline.routes) {
       const source = readFileSync(`${root}/${route.source}`, 'utf8');
       const amendment = amendments.routes.find(entry => entry.path === route.path);
@@ -78,14 +78,14 @@ describe('explicit API inventory (source evidence, not HTTP acceptance)', () => 
     }
   });
 
-  it('documents precisely the frozen methods plus two runtime GETs, excluding implicit HEAD/OPTIONS', () => {
+  it('documents precisely the frozen methods plus runtime GETs and the closed analysis endpoint, excluding implicit HEAD/OPTIONS', () => {
     const expected = baseline.routes.flatMap(route => route.methods.map(method => `${method} ${normalize(route.path)}`))
-      .concat(additions.map(path => `GET ${path}`)).sort();
+      .concat(additions.map(path => `GET ${path}`), ['POST /api/commerce-analysis','GET /api/commerce-packages','POST /api/commerce-packages']).sort();
     const actual = Object.entries(wire.paths).flatMap(([path, methods]) =>
       Object.keys(methods as object).map(method => `${method.toUpperCase()} ${path}`)).sort();
     expect(actual).toEqual(expected);
-    expect(Object.keys(wire.paths)).toHaveLength(51);
-    expect(actual).toHaveLength(60);
+    expect(Object.keys(wire.paths)).toHaveLength(53);
+    expect(actual).toHaveLength(63);
   });
 
   it('detects source additions and method drift independently of the OpenAPI inventory', () => {
@@ -93,8 +93,8 @@ describe('explicit API inventory (source evidence, not HTTP acceptance)', () => 
     const actual = files.flatMap(file => explicitMethods(readFileSync(file, 'utf8')).map(method =>
       `${method} ${normalize(file.slice(`${root}/apps/web/app`.length).replace(/\/route\.ts$/, ''))}`));
     const expected = baseline.routes.flatMap(route => route.methods.map(method => `${method} ${normalize(route.path)}`))
-      .concat(additions.map(path => `GET ${path}`));
-    expect(files).toHaveLength(51);
+      .concat(additions.map(path => `GET ${path}`), ['POST /api/commerce-analysis','GET /api/commerce-packages','POST /api/commerce-packages']);
+    expect(files).toHaveLength(53);
     expect(actual.sort()).toEqual(expected.sort());
   });
 

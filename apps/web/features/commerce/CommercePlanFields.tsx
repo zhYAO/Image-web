@@ -1,3 +1,4 @@
+import {commerceProviderCapabilities}from'./commerce-presets';
 import { ModelCreditPrice } from "@/features/credits/CreditsProvider";
 import { CreativeTextField } from "./CreativeTextField";
 import { CommerceSelect } from "./CommerceSelect";
@@ -13,7 +14,7 @@ import styles from "./commerce.module.css";
 
 export function CommercePlanFields({
   plan,
-  capabilities,
+  capabilities:providedCapabilities,
   onChange,
   numbers,
   disabled = false,
@@ -30,6 +31,7 @@ export function CommercePlanFields({
   capabilities: ProviderCapability[];
   onChange: (plan: CommercePlan) => void;
 }) {
+  const capabilities=commerceProviderCapabilities(providedCapabilities);
   const update = (id: string, patch: Partial<CommerceSlot>) =>
     onChange({
       ...plan,

@@ -46,7 +46,7 @@ describe('workspace failure recovery', () => {
     const gateway = createTestGateway(RecoveringGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await sendChat();
-    act(() => useWorkspaceStore.getState().setSelectedChatModel('minimax'));
+    act(() => useWorkspaceStore.getState().setSelectedChatModel('doubao'));
     fireEvent.change(screen.getByRole('textbox', { name: '创作输入' }), { target: { value: '新的未发送内容' } });
     const retry = screen.getByRole('button', { name: /^重\s*试$/ });
     fireEvent.click(retry);

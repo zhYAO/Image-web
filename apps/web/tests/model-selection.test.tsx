@@ -6,20 +6,20 @@ import { CapturingGateway, createTestGateway, setupWorkspaceTest } from './works
 
 describe('real chat model selector', () => {
   setupWorkspaceTest();
-  it('selects the registered MiniMax provider with keyboard and sends its ID through the existing chat request', async () => {
+  it('selects the registered remaining provider with keyboard and sends its ID through the existing chat request', async () => {
     const gateway = createTestGateway(CapturingGateway);
     render(<UnifiedWorkspace gateway={gateway} />);
     await screen.findByText('你好，想创作什么？');
     const trigger = screen.getByRole('combobox', { name: '聊天模型 豆包' });
     fireEvent.keyDown(trigger, { key:'ArrowDown' });
     const list = screen.getByRole('listbox', { name:'聊天模型' });
-    fireEvent.keyDown(list, { key:'End' });
+    fireEvent.keyDown(list, { key:'Home' });
     fireEvent.keyDown(list, { key:'Enter' });
-    expect(screen.getByRole('combobox', { name:'聊天模型 MiniMax' })).toHaveFocus();
+    expect(screen.getByRole('combobox', { name:'聊天模型 豆包' })).toHaveFocus();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name:'创作输入' }), { target:{ value:'解释构图' } });
     fireEvent.click(screen.getByRole('button', { name:'发送创作请求' }));
-    await waitFor(() => expect(gateway.lastChatRequest?.chatModel).toBe('minimax'));
+    await waitFor(() => expect(gateway.lastChatRequest?.chatModel).toBe('doubao'));
     let body: Record<string, unknown> = {};
     const http = new HttpWorkspaceGateway({ fetcher: async (_url, init) => {
       body = JSON.parse(String(init?.body));
@@ -27,7 +27,7 @@ describe('real chat model selector', () => {
     } });
     const events = [];
     for await (const event of http.streamChat(gateway.lastChatRequest!)) events.push(event);
-    expect(body.chatModel).toBe('minimax');
+    expect(body.chatModel).toBe('doubao');
     expect(body.tools).toBeUndefined();
     expect(events[0]?.type).toBe('message.completed');
   });

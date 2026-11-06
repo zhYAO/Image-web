@@ -1,13 +1,16 @@
 import { OFFICIAL_SKILLS } from './official-skills';
 import type { ProviderCapability } from './types';
 
-export const MODEL_REGISTRY_VERSION = '2026-10-12.1';
+export const MODEL_REGISTRY_VERSION = '2026-11-05.1';
 export const IMAGE_MODEL_UPGRADE_MESSAGE = '所选图片模型已停止新生成，请主动更新为 Seedream 5.0 Pro 并保存新版本。';
 
 export const CHAT_PROVIDER_MODELS = [
   { id: 'doubao', label: '豆包', provider: 'doubao' },
-  { id: 'minimax', label: 'MiniMax', provider: 'minimax' },
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra', provider: 'gpt-6-astra' },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', provider: 'gpt-6.1-sol' },
 ] as const;
+
+export function isActiveChatModel(value:string):boolean {return CHAT_PROVIDER_MODELS.some(m=>m.id===value);}
 
 export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
   {
@@ -21,6 +24,7 @@ export const IMAGE_PROVIDER_CAPABILITIES: ProviderCapability[] = [
     }],
     provider: 'seedream',
   },
+  {provider:'openai',models:['gpt-image-2.6-sunburst','gpt-image-2.6-flare'].map(id=>({id,label:id==='gpt-image-2.6-sunburst'?'GPT Image 2.6 Sunburst':'GPT Image 2.6 Flare',aspectRatios:['1:1'],resolutions:['1K'],maxImages:4,maxReferences:4}))},
 ];
 
 // Compatibility name retained for existing mock fixtures; content is the Phase 2 registry.

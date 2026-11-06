@@ -5,10 +5,11 @@ describe('Plan Pro new image admissions', () => {
   it('advertises and defaults to the distinct Plan identity while retaining chat providers', () => {
     expect(IMAGE_PROVIDER_CAPABILITIES.map(p => ({ provider: p.provider, models: p.models.map(m => m.id) }))).toEqual([
       { provider: 'seedream', models: ['doubao-seedream-5.0-pro'] },
+      { provider: 'openai', models: ['gpt-image-2.6-sunburst','gpt-image-2.6-flare'] },
     ]);
     expect(resolveImageModel({}).model).toBe('doubao-seedream-5.0-pro');
-    expect(MODEL_REGISTRY_VERSION).toBe('2026-10-12.1');
-    expect(CHAT_PROVIDER_MODELS.map(p => p.id)).toEqual(['doubao', 'minimax']);
+    expect(MODEL_REGISTRY_VERSION).toBe('2026-11-05.1');
+    expect(CHAT_PROVIDER_MODELS.map(p => p.id)).toEqual(['doubao','gpt-6-astra','gpt-6.1-sol']);
   });
 
   it.each(['seedream-4.5', 'seedream-5.0-flash', 'seedream-5.0-pro', 'gemini-3-pro-image'])('rejects %s for new generation', model => {

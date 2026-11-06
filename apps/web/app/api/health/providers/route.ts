@@ -25,7 +25,7 @@ export async function GET() {
     }
     return NextResponse.json(providerStatusResponseSchema.parse({
       capabilities: IMAGE_PROVIDER_CAPABILITIES,
-      health: data,
+      health: (data as Array<{provider:string}>).filter(item => item.provider !== 'minimax'),
       registryVersion: MODEL_REGISTRY_VERSION,
     }));
   });

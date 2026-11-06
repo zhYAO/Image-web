@@ -1,3 +1,4 @@
+import {ApiRouteError}from'@/server/api-error';
 import { creditsEnabled } from "@/server/credits/credit-service";
 import { billedOptimize } from "@/server/credits/billed-text";
 import { creativeTextOptimizeRequestSchema } from "@zimage/domain";
@@ -22,7 +23,7 @@ import {
 } from "@/server/route-context";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   return executeRoute(async (correlationId) => {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     const input = creativeTextOptimizeRequestSchema.parse(
       await readJson(request),
     );
+    if(input.chatModel?.startsWith('gpt-6'))throw new ApiRouteError({code:'bad_request',status:400,retryable:false,message:"\u6b64\u6587\u5b57\u4f18\u5316\u6682\u4e0d\u652f\u6301\u6240\u9009\u6a21\u578b\uff0c\u8bf7\u9009\u62e9\u8c46\u5305\u3002"});
     if (creditsEnabled())
       return Response.json(
         await billedOptimize(
@@ -44,6 +46,7 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "no-store" } },
       );
     const provider = resolveChatProvider(input.chatModel);
+    if(provider.edgeRelay)throw new ApiRouteError({code:'service_not_ready',status:503,retryable:false,message:'文字优化需要先开启积分授权。'});
     const admin = createSupabaseAdminClient();
     const health = new SupabaseChatStore(admin);
     await health.assertProviderAvailable(provider.provider);
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
               providerStarted = true;
               yield* streamOpenAiCompatibleChat({
                 ...provider,
-                reasoningSplit: input.chatModel === 'minimax',
+                reasoningSplit: false,
                 message,
                 signal,
               });

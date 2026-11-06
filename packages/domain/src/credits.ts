@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const minorSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 export const creditConfirmationSchema = z
-  .object({ version: z.string().min(1).max(100), totalMinor: minorSchema })
+  .object({ version: z.string().min(1).max(100), totalMinor: minorSchema, rateVersion:z.string().min(1).max(100).optional() })
   .strict();
 export type CreditConfirmation = z.infer<typeof creditConfirmationSchema>;
 export const creditItemSchema = z
@@ -17,7 +17,7 @@ export const creditItemSchema = z
 export type CreditItem = z.infer<typeof creditItemSchema>;
 export const creditPriceSchema = creditItemSchema
   .omit({ count: true })
-  .extend({ unitMinor: minorSchema.min(1), label: z.string() });
+  .extend({ unitMinor: minorSchema.min(1), label: z.string(), rateVersion:z.string().min(1).max(100).optional(),billingMode:z.literal('usage_capped').optional(), tokenTariff:z.object({inputPerMillionNano:z.string(),cachedInputPerMillionNano:z.string(),outputPerMillionNano:z.string(),maxInputTokens:z.number(),maxOutputTokens:z.number()}).optional() });
 export const creditCatalogSchema = z.object({
   version: z.string(),
   enabled: z.boolean(),
@@ -76,28 +76,12 @@ export const TRIAL_CREDIT_CATALOG: CreditCatalog = {
       label: "豆包",
     },
     {
-      operation: "chat",
-      provider: "minimax",
-      model: "minimax",
-      resolution: "",
-      unitMinor: 3,
-      label: "MiniMax",
-    },
-    {
       operation: "optimize",
       provider: "doubao",
       model: "doubao",
       resolution: "",
       unitMinor: 5,
       label: "豆包文字优化",
-    },
-    {
-      operation: "optimize",
-      provider: "minimax",
-      model: "minimax",
-      resolution: "",
-      unitMinor: 10,
-      label: "MiniMax 文字优化",
     },
   ],
 };
@@ -127,6 +111,7 @@ export function quoteCredits(
   });
   return creditQuoteSchema.parse({
     version: catalog.version,
+    ...(items.length===1&&items[0]?.operation==='chat'?{rateVersion:catalog.prices.find(p=>p.operation==='chat'&&p.model===items[0]?.model)?.rateVersion}:{}),
     totalMinor: lines.reduce((sum, i) => sum + i.totalMinor, 0),
     items: lines,
   });

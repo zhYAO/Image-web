@@ -1,17 +1,11 @@
 import { withSupabase } from '@supabase/server';
 import { captureWorkerException } from '../_shared/sentry.ts';
-import { parseClaim, processClaim, type AdminClient } from '../_shared/generation-runner.ts';
+import { generationQueueRpc, parseClaim, processClaim, type AdminClient } from '../_shared/generation-runner.ts';
 
 function env(name: string) {
   const value = Deno.env.get(name)?.trim();
   if (!value) throw new Error(`missing_env:${name}`);
   return value;
-}
-
-async function rpc<T>(admin: AdminClient, name: string, input?: Record<string, unknown>) {
-  const { data, error } = await admin.rpc(name, input);
-  if (error) throw new Error(`rpc_failed:${name}`);
-  return data as T;
 }
 
 export default {
@@ -24,11 +18,11 @@ export default {
     let correlationId: string | undefined;
     let generationId: string | undefined;
     try {
-      const claim = parseClaim(await rpc<unknown>(admin, 'claim_image_generation'));
+      const claim = parseClaim(await generationQueueRpc<unknown>(admin, 'claim_image_generation'));
       if (!claim) return Response.json({ status: 'idle' });
 
       if (claim.action === 'archive') {
-        await rpc(admin, 'archive_image_message', { p_message_id: claim.messageId });
+        await generationQueueRpc(admin, 'archive_image_message', { p_message_id: claim.messageId });
         return Response.json({ action: 'archived', reason: claim.reason });
       }
       if (claim.action !== 'process' && claim.action !== 'recover' && claim.action !== 'recover_rejection') throw new Error('invalid_queue_action');

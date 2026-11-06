@@ -119,7 +119,7 @@ export async function optimizeCreativeText(
   value: CreativeTextOptimizeRequest,
   stream: (prompt: string) => AsyncIterable<string> = (message) => {
     const provider = resolveChatProvider(value.chatModel);
-    return streamOpenAiCompatibleChat({ ...provider, message, reasoningSplit: value.chatModel === 'minimax' });
+    return streamOpenAiCompatibleChat({ ...provider, message, reasoningSplit: false, });
   },
 ) {
   const input = creativeTextOptimizeRequestSchema.parse(value);
@@ -134,6 +134,7 @@ export async function optimizeCreativeText(
     "若 data.expectedModules 存在，modules 必须包含其中每个模块且恰好一次，不得增减或改名。strategy 最多 2000 字符，每个 copy 最多 1000 字符。",
     "listingCopy：data.text 是商品资料。返回的 text 必须是 JSON 字符串，内部格式为 {\"title\":\"标题\",\"highlights\":\"核心卖点\",\"description\":\"详情描述\",\"keywords\":\"关键词\"}。只使用已确认的商品事实，建议性修辞不得冒充事实。",
     "示例：原文‘棉质衬衫，宽松，米白，通勤’可润色为‘米白色棉质衬衫，宽松版型呈现简洁的日常通勤风格。’；不能加入‘纯棉、抗皱、显瘦’等未提供的属性。",
+    "策划按模块区分主视觉、卖点、场景、细节、参数与包装；缺少参数、配件、变体时省略对应内容，保留所选模块名但 copy 可为空。区分商品事实与视觉建议，不能把推断、风格图品牌和装饰道具当作商品资料。每模块文案简洁且不重复整份卖点。",
     "确实无需调整时返回原文，不强行制造变化。只返回当前字段，不把整份商品资料或格式标题堆入短字段。",
     "productContext.region 是目标销售地区。对于 strategy、listingCopy、exactText，productContext.language 指定成品文案语言并优先于输入语言；模块 name 必须保留请求中的原模块名，strategy 的策划说明保持中文。language=none 时不生成画面文字，但可给出中文策划说明。其他字段保留用户原语言。地区和语言不能作为补造认证、承诺或规格的依据。",
     `输出最多 ${Math.min(input.maxLength ?? 6000, creativeTextFieldLimits[input.field])} 字符。`,

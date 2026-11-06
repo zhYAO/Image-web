@@ -14,6 +14,8 @@ export class ChatProviderFailure extends Error {
 }
 
 interface OpenAiCompatibleChatInput {
+  edgeRelay?:boolean;
+  billingAuthorization?:{userId:string;requestId:string};
   apiKey: string;
   correlationId?: string;
   endpoint: string;
@@ -57,10 +59,11 @@ function contentDelta(value: unknown) {
 export async function* streamOpenAiCompatibleChat(
   input: OpenAiCompatibleChatInput,
 ) {
+  if(input.edgeRelay&&!input.billingAuthorization)throw new ChatProviderFailure('provider_error',false,'rejected');
   let response: Response;
   try {
     response = await (input.fetcher ?? fetch)(input.endpoint, {
-      body: JSON.stringify({
+      body: JSON.stringify(input.edgeRelay?{...input.billingAuthorization,model:input.model}:{
         messages: input.messages ?? [{ content: input.message, role: 'user' }],
         model: input.model,
         stream: true,
@@ -68,7 +71,7 @@ export async function* streamOpenAiCompatibleChat(
         ...(input.reasoningSplit ? { reasoning_split: true } : {}),
       }),
       headers: {
-        authorization: `Bearer ${input.apiKey}`,
+        ...(input.edgeRelay?{apikey:input.apiKey}:{authorization:`Bearer ${input.apiKey}`}),
         "content-type": "application/json",
       },
       method: "POST",
@@ -88,6 +91,14 @@ export async function* streamOpenAiCompatibleChat(
     throw new ChatProviderFailure('provider_unavailable', true);
   }
 
+  if(input.edgeRelay&&!response.ok&&response.body){
+    const r=response.body.getReader(),dec=new TextDecoder();let body='',bytes=0;
+    try{for(;;){const p=await r.read();if(p.done)break;bytes+=p.value.byteLength;if(bytes>1024)break;body+=dec.decode(p.value,{stream:true});}
+      if(bytes<=1024&&JSON.parse(body).error==='relay_not_started')throw new ChatProviderFailure('provider_unavailable',false,'rejected');
+    }catch(error){if(error instanceof ChatProviderFailure)throw error;}
+    finally{await r.cancel().catch(()=>undefined);r.releaseLock();}
+  }
+  if(input.edgeRelay&&(!response.ok||!response.body))throw new ChatProviderFailure('provider_unavailable',false,'unknown');
   if (!response.ok || !response.body) {
     console.error('[chat-providers] non-ok response', {
       correlationId: input.correlationId,
@@ -244,25 +255,17 @@ function requiredEnvironment(name: string) {
   return value;
 }
 
-export type ChatProviderId = "doubao" | "minimax";
-
+export type ChatProviderId = "doubao" | "gpt-6-astra" | "gpt-6.1-sol";
 export function resolveChatProvider(chatModel?: string) {
-  const provider: ChatProviderId = chatModel === 'minimax' ? 'minimax' : 'doubao';
-  if (chatModel && chatModel !== provider) throw new ChatProviderFailure('provider_error', false);
-  if (provider === 'doubao') {
-    return {
-      apiKey: requiredEnvironment('ARK_API_KEY'),
-      endpoint: process.env.ZIMAGE_DOUBAO_CHAT_ENDPOINT?.trim()
-        || 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-      model: requiredEnvironment('ZIMAGE_DOUBAO_CHAT_MODEL'),
-      provider,
-    };
+  if(chatModel==='gpt-6-astra'||chatModel==='gpt-6.1-sol') {
+    if(process.env.ZIMAGE_OPENAI_ENABLED!=='true')throw new ChatProviderFailure('provider_unavailable',false,'rejected');
+    const url=new URL(requiredEnvironment('NEXT_PUBLIC_SUPABASE_URL'));
+    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw new ChatProviderFailure('provider_unavailable',false,'rejected');
+    return {apiKey:requiredEnvironment('SUPABASE_SECRET_KEY'),endpoint:url.origin+'/functions/v1/openai-chat',model:chatModel,provider:chatModel,edgeRelay:true};
   }
-  return {
-    apiKey: requiredEnvironment('MINIMAX_API_KEY'),
-    endpoint: process.env.ZIMAGE_MINIMAX_CHAT_ENDPOINT?.trim()
-      || 'https://api.minimaxi.com/v1/chat/completions',
-    model: requiredEnvironment('ZIMAGE_MINIMAX_CHAT_MODEL'),
-    provider,
-  };
+  if (chatModel && chatModel !== 'doubao') throw new ChatProviderFailure('provider_error', false, 'rejected');
+  if(process.env.ZIMAGE_DOUBAO_EDGE_ENABLED!=='true')throw new ChatProviderFailure('provider_unavailable',false,'rejected');
+  const url=new URL(requiredEnvironment('NEXT_PUBLIC_SUPABASE_URL'));
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw new ChatProviderFailure('provider_unavailable',false,'rejected');
+  return {apiKey:requiredEnvironment('SUPABASE_SECRET_KEY'),endpoint:url.origin+'/functions/v1/doubao-chat',model:'doubao',provider:'doubao' as const,edgeRelay:true};
 }

@@ -1,5 +1,7 @@
 import { expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ graph: vi.fn() }));
+// Isolate lifecycle behavior from the separately tested funded Edge admission.
+vi.mock('@/server/chat/chat-providers',()=>({resolveChatProvider:()=>({edgeRelay:false}),streamOpenAiCompatibleChat:vi.fn()}));
 vi.mock('@/server/chat/chat-graph', () => ({ executeChatGraph: mocks.graph }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => ({}) }));
 vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => ({}) }));

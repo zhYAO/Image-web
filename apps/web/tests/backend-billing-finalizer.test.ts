@@ -5,6 +5,7 @@ vi.mock('@/server/chat/supabase-chat-store', () => ({ SupabaseChatStore: class {
   assertProviderAvailable = async () => true;
   recordProviderResult = mocks.record;
 } }));
+vi.mock('@/server/commerce-package/package-providers',()=>({doubaoEdgeConfiguration:()=>({}),requestDoubaoStage:vi.fn()}));
 vi.mock('@/server/chat/chat-providers', () => ({ resolveChatProvider: () => ({}), ChatProviderFailure: class extends Error {}, streamOpenAiCompatibleChat: vi.fn() }));
 vi.mock('@/server/credits/credit-service', () => ({
   creditCall: async () => ({ claimed: true }), startText: async () => ({ status: 'reserved' }), textStep: async () => ({}),

@@ -1,3 +1,4 @@
+import { ApiRouteError } from '../api-error';
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { creditItemSchema } from "@zimage/domain";
@@ -44,6 +45,9 @@ export function creditRoute(
       z.string()
         .regex(/^\d{1,18}$/)
         .parse(cursor);
+    const quoteBody = action === 'quote' ? quoteRequest.parse(await readJson(request)) : undefined;
+    if (quoteBody && 'items' in quoteBody && quoteBody.items.some(item => item.model === 'minimax' || item.provider === 'minimax'))
+      throw new ApiRouteError({code:'bad_request',status:400,retryable:false,message:'MiniMax 已停止新报价，请选择豆包。'});
     const result =
       action === "wallet"
         ? await readCredits(admin, user)
@@ -54,9 +58,9 @@ export function creditRoute(
             : await readQuote(
                 admin,
                 user,
-                quoteRequest.parse(await readJson(request)),
+                quoteBody!,
               );
-    return Response.json(result, { headers: {
+    return Response.json(action === "catalog" ? { ...result, prices: (result as { prices: Array<{model:string}> }).prices.filter(p => p.model !== "minimax") } : result, { headers: {
       "cache-control": "no-store",
       ...(catalogProbe ? { "x-zimage-readonly-probe": "catalog-v1" } : {}),
     } });

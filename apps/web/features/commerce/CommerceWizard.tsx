@@ -1,11 +1,16 @@
+import {CommercePackagePanel}from'./CommercePackagePanel';
+import {defaultPackageClient,type PackageRecovery}from'@/gateways/commerce-package-gateway';
+import {packageOrderViewSchema,formatCredits,type PackageOrderView}from'@zimage/domain';
+import { CommerceAnalysisPanel } from './CommerceAnalysisPanel';
 import { PreviewImage } from '@/features/controls/PreviewImage';
 import { useCredits, CreditFee } from "@/features/credits/CreditsProvider";
 import { imageCreditItem, IMAGE_MODEL_UPGRADE_MESSAGE } from "@zimage/domain";
 import { CommerceEditor } from "./CommerceEditor";
-import { commerceGenerationPreset, hasCommerceModel } from "./commerce-presets";
+import { commerceGenerationPreset, hasCommerceModel, commerceProviderCapabilities } from "./commerce-presets";
 import { CommerceSelect } from "./CommerceSelect";
 import {
   buildCommerceSlots,
+  assertAnalysisReviewCurrent,
   COMMERCE_PLATFORMS,
   COMMERCE_SCENES,
   COMMERCE_TEMPLATES,
@@ -33,7 +38,7 @@ import {
 } from "@zimage/domain";
 
 import { Layers3 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CommercePlanFields } from "./CommercePlanFields";
 import { defaultTemplate } from "./commerce-ui";
 import styles from "./commerce.module.css";
@@ -98,7 +103,7 @@ export function CommerceWizard({
   gateway,
   references,
   referencesPreparing = false,
-  capabilities,
+  capabilities:providedCapabilities,
   settings,
   onReferenceAdd,
   onReferenceRemove,
@@ -106,20 +111,22 @@ export function CommerceWizard({
   onSaved,
   onClose,
 }: CommerceWizardProps) {
+  const capabilities=useMemo(()=>commerceProviderCapabilities(providedCapabilities),[providedCapabilities]);
   const definition = COMMERCE_SCENES.find((item) => item.id === scene)!;
   const isPoster = scene === "xhs-poster";
   const credits = useCredits();
-  const sharedChatModel = useWorkspaceStore(state => state.selectedChatModel);
   const simplified = ["product-set", "detail", "clone", "product-main"].includes(scene);
-  const selectedChatModel = simplified ? "doubao" : sharedChatModel;
   const setSelectedChatModel = useWorkspaceStore(state => state.setSelectedChatModel);
   const storageKey = draftKey ?? sessionId;
   const [restored] = useState(() => loadCommerceDraft(storageKey));
+  const [packagesAvailable,setPackagesAvailable]=useState(false);
+  const packageFlow=scene==='detail'&&(packagesAvailable||Boolean(restored?.packageRecovery));
+  useEffect(()=>{if(scene!=='detail')return;let live=true;void defaultPackageClient.available().then(value=>{if(live)setPackagesAvailable(value);});return()=>{live=false;};},[scene]);
   const remoteSession = useRef(restored?.sessionId);
   const [generationSettings, setGenerationSettings] = useState(() => {
     const previous = restored?.plan?.slots[0] ?? seedPlan?.slots[0];
     const prior = restored?.settings ?? (previous ? { provider: previous.provider, model: previous.model, aspectRatio: previous.aspectRatio, resolution: previous.resolution } : undefined);
-    return prior ?? (simplified ? commerceGenerationPreset(capabilities) : settings);
+    return prior ?? (simplified || !hasCommerceModel(capabilities,settings) ? commerceGenerationPreset(capabilities) : settings);
   });
   const defaultsReady = useRef(Boolean(restored || seedPlan) || capabilities.length > 0);
   useEffect(() => {
@@ -186,7 +193,7 @@ export function CommerceWizard({
     name: brief.name, facts: brief.facts, description: brief.description,
     sellingPoints: brief.sellingPoints, platform: brief.platform, scene,
     region: brief.region ?? PLATFORM_PRESETS[brief.platform]?.region, language: brief.language ?? PLATFORM_PRESETS[brief.platform]?.language,
-    designStyle: COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.guidance,
+    designStyle: [brief.analysisReview?.styleSummary, brief.visualStrategy, COMMERCE_TEMPLATES.find(item => item.id === templateId)?.visual.guidance].filter(Boolean).join('\n').slice(0,2000),
   };
   const [instruction, setInstruction] = useState(
     restored?.instruction ?? (prompt || seedPlan?.slots[0]?.instruction || ""),
@@ -219,12 +226,16 @@ export function CommerceWizard({
   const createRequest = useRef<{ key: string; requestId: string } | undefined>(
     undefined,
   );
+  const [packageOrder,setPackageOrder]=useState<PackageOrderView>();
+  const packageOrderRef=useRef<PackageOrderView|undefined>(undefined);
+  const [packageRecovery,setPackageRecovery]=useState<PackageRecovery|undefined>(restored?.packageRecovery);
+  const packageRecoveryRef=useRef(packageRecovery);
   const locked = useRef(false);
   const creation = useRef(restored?.creation);
   const [recoveringCreate, setRecoveringCreate] = useState(Boolean(restored?.creation));
   const sessionRequest = useRef<string>(restored?.sessionId ?? crypto.randomUUID());
   const draftSnapshot = (): CommerceDraftState => ({ scene, editorStage, sellingLayouts, referenceInstructions, referenceSource, sceneTab, brief, count, categoryCounts, detailModules, advancedAplus, touchedPresets, templateId, instruction, lastBuiltInstruction, roles,
-    settings: generationSettings, plan, sessionId: remoteSession.current, creation: creation.current });
+    settings: generationSettings, plan, sessionId: remoteSession.current, creation: creation.current,packageRecovery:packageRecoveryRef.current });
   useEffect(() => {
     if (!active) return;
     try { saveCommerceDraft(storageKey, draftSnapshot()); } catch { /* Remote actions fail closed if recovery cannot be saved. */ }
@@ -245,6 +256,60 @@ export function CommerceWizard({
   const referenceSignature = JSON.stringify(
     references.map((reference) => [referenceKey(reference), roleOf(reference)]),
   );
+  const packageKey=(modules=detailModules,advanced=advancedAplus,model=generationSettings.model,platform=brief.platform,region=brief.region,language=brief.language)=>JSON.stringify({references:referenceSignature,modules,advanced,model,platform,region:region??'',language:language??''});
+  const packageFingerprint=packageKey();
+  const latestPackageFingerprint=useRef(packageFingerprint);useEffect(()=>{latestPackageFingerprint.current=packageFingerprint;},[packageFingerprint]);
+  const writePackageRecovery=(value:PackageRecovery)=>{packageRecoveryRef.current=value;saveCommerceDraft(storageKey,{...draftSnapshot(),packageRecovery:value});setPackageRecovery(value);};
+  const receivePackageOrder=(value:PackageOrderView|undefined)=>{
+    const previous=packageOrderRef.current;
+    if(value&&previous?.id===value.id&&previous.revision>value.revision)return;
+    packageOrderRef.current=value;setPackageOrder(value);
+    if(value?.review)setBrief(current=>current.analysisReview?current:{...current,name:value.review!.name,facts:value.review!.facts,visualStrategy:value.review!.styleSummary,analysisReview:{referenceSignature,facts:value.review!.facts,styleSummary:value.review!.styleSummary}});
+  };
+  const assertPackageCurrent=()=>{
+    const order=packageOrderRef.current,r=packageRecoveryRef.current;
+    if(!order||!r)throw Error('请先确认整套预算。');
+    if((r.resumeFingerprint??r.fingerprint)!==latestPackageFingerprint.current)throw Error('图片或设置已变化，请恢复原订单，或取消后重新报价。');
+    if(!order.review||order.review.facts!==brief.facts||order.review.name!==brief.name)throw Error('请先核对并确认原订单商品资料。');
+    if(order.billingReviewReason)throw Error('供应商用量待核对，暂不继续付费操作。');
+    return order;
+  };
+  const resumePackage=(order:PackageOrderView)=>{
+    const r=packageRecoveryRef.current;if(!r)return;
+    const review=order.review;
+    const platformValue=(review?.platform??brief.platform)as CommerceBrief['platform'];
+    const regionValue=(review?.region??brief.region)as CommerceBrief['region'];
+    const languageValue=(review?.language??brief.language)as CommerceBrief['language'];
+    setDetailModules(order.quote.selection.modules);setAdvancedAplus(order.quote.selection.advanced);
+    setGenerationSettings(current=>({...current,provider:'seedream',model:order.quote.imageModel,resolution:'2K'}));
+    remoteSession.current=order.sessionId;
+    setBrief(current=>({...current,...(review?{name:review.name,facts:review.facts,visualStrategy:review.styleSummary,analysisReview:{referenceSignature,facts:review.facts,styleSummary:review.styleSummary}}:{}),platform:platformValue,region:regionValue,language:languageValue,productReferenceIds:order.references.filter(r=>r.role==='product').map(r=>r.id),styleReferenceIds:order.references.filter(r=>r.role==='style').map(r=>r.id)}));
+    writePackageRecovery({...r,resumeFingerprint:packageKey(order.quote.selection.modules,order.quote.selection.advanced,order.quote.imageModel,platformValue,regionValue,languageValue)});
+  };
+  const preparePackageInput=async()=>{
+    if(!gateway)throw Error('商品图片服务暂不可用。');
+    if(references.length<1||references.length>10||!references.some(r=>roleOf(r)==='product'))throw Error('请上传1–10张图片，至少包含一张商品实拍图。');
+    const signature=packageFingerprint;
+    let target=remoteSession.current??sessionId;
+    if(isLocalCommerceDraft(target)){
+      if(!ensureSession)throw Error('会话服务暂时不可用，请保留原草稿。');
+      remoteSession.current=sessionRequest.current;saveCommerceDraft(storageKey,draftSnapshot());
+      target=await ensureSession(brief.name.trim()||'商品图片分析',sessionRequest.current);remoteSession.current=target;
+    }
+    const frozen:Array<{id:string;role:'product'|'style'}>=[];
+    for(const reference of references){
+      if(reference.status!=='ready')throw Error('请等待所有图片上传完成。');
+      const key=referenceKey(reference);
+      const stale=isLocalCommerceDraft(sessionId)&&reference.file&&reference.id&&![...brief.productReferenceIds,...brief.styleReferenceIds].includes(reference.id);
+      let id=uploadIds.current.get(key)??(stale?undefined:reference.id);
+      if(!id){const{previewUrl:_preview,id:_id,...upload}=reference;void _preview;void _id;id=await gateway.upload(target,upload);uploadIds.current.set(key,id);onReferenceUploaded(reference,id,sessionId);}
+      frozen.push({id,role:roleOf(reference)});
+    }
+    if(latestPackageFingerprint.current!==signature)throw Error('准备报价时图片或设置已变化，请重新核对。');
+    const complete={...brief,productReferenceIds:frozen.filter(r=>r.role==='product').map(r=>r.id),styleReferenceIds:frozen.filter(r=>r.role==='style').map(r=>r.id)};
+    setBrief(complete);setPreparedSignature(referenceSignature);saveCommerceDraft(storageKey,{...draftSnapshot(),brief:complete});
+    return{sessionId:target,imageModel:generationSettings.model,selection:{modules:detailModules,advanced:advancedAplus,referenceCount:frozen.length},references:frozen};
+  };
   // File identity survives upload completion and restored object URLs.
   if (
     active &&
@@ -296,8 +361,9 @@ export function CommerceWizard({
         // A lost create response must replay the original body even after reload.
         return creation.current.plan;
       }
+      assertAnalysisReviewCurrent(brief.analysisReview,referenceSignature,brief.facts);
       if (unavailableModel) throw new Error(IMAGE_MODEL_UPGRADE_MESSAGE);
-      if (!contentOnly && scene !== 'clone' && !references.some(reference => roleOf(reference) === 'product'))
+      if (!(packageFlow&&packageRecoveryRef.current?.resumeFingerprint) && !contentOnly && scene !== 'clone' && !references.some(reference => roleOf(reference) === 'product'))
         throw new Error("请上传至少一张清晰的真实商品图。");
       const description = brief.description?.trim() || [brief.name, brief.facts, brief.sellingPoints].filter(Boolean).join('\n');
       const name = brief.name.trim() || description.split(/[\n。！？]/).find(line => line.trim())?.trim().slice(0, 160) || (scene === 'clone' ? '参考图复刻' : '');
@@ -318,7 +384,8 @@ export function CommerceWizard({
       }
       const productReferenceIds: string[] = [];
       const styleReferenceIds: string[] = [];
-      for (const reference of references) {
+      const frozenPackage=packageFlow&&packageRecoveryRef.current?.resumeFingerprint?assertPackageCurrent():undefined;
+      for (const reference of frozenPackage?[]:references) {
         if (reference.status !== 'ready') throw new Error('请等待参考图上传完成，或移除失败图片后重试。');
         const referenceIdentity = referenceKey(reference);
         // A fresh local draft can retain File bytes from a just-saved session.
@@ -337,6 +404,7 @@ export function CommerceWizard({
         }
         (roleOf(reference) === 'style' ? styleReferenceIds : productReferenceIds).push(id);
       }
+      if(frozenPackage)for(const r of frozenPackage.references)(r.role==='style'?styleReferenceIds:productReferenceIds).push(r.id);
       const complete = { ...brief, name, ...(contentOnly ? {} : { description }), productReferenceIds, styleReferenceIds };
       const question = nextCommerceQuestion(complete, scene);
       if (question) throw new Error(question);
@@ -449,6 +517,21 @@ export function CommerceWizard({
       nextPlan.slots,
       nextPlan.templateId,
     );
+    if(packageFlow&&packageOrderRef.current){
+      const order=packageOrderRef.current;
+      if(order.taskId){const task=await gateway.get(order.taskId);clearCommerceDraft(storageKey);onSaved(task,false);return;}
+      if(!generate)throw Error('整套订单已保存，请在这里继续，或取消原订单后另存草稿。');
+      assertPackageCurrent();
+      if(!order.planning)throw Error('请先生成并检查原订单的策划。');
+      const key=JSON.stringify(nextPlan);
+      if(createRequest.current?.key!==key)createRequest.current={key,requestId:crypto.randomUUID()};
+      creation.current??={requestId:createRequest.current.requestId,plan:nextPlan};setRecoveringCreate(true);
+      saveCommerceDraft(storageKey,{...draftSnapshot(),creation:creation.current});
+      const task=await gateway.create({sessionId:order.sessionId,...creation.current});
+      const updated=packageOrderViewSchema.parse(await defaultPackageClient.post({action:'submit',orderId:order.id,references:order.references,taskId:task.id,revision:task.revision}));receivePackageOrder(updated);notifyCreditsChanged();
+      const committed=await gateway.get(task.id);clearCommerceDraft(storageKey);onSaved(committed,false);return;
+    }
+    if(packageFlow&&generate)throw Error('请先确认整套预算及商品资料。');
     const billing = generate
       ? credits.confirm(
           nextPlan.slots.map((slot) => imageCreditItem({ ...slot, count: 1 })),
@@ -479,12 +562,30 @@ export function CommerceWizard({
     const nextPlan = await preparePlan();
     await savePlan(nextPlan, generate);
   });
-  const textBilling = () => credits.confirm([{ operation: 'optimize', provider: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', model: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', resolution: '', count: 1 }]);
+  const textBilling = () => credits.confirm([{ operation: 'optimize', provider: 'doubao', model: 'doubao', resolution: '', count: 1 }]);
+  const analyzeImages = async () => {
+    if (!gateway) throw new Error('电商服务暂未连接。');
+    if (!references.some(ref => roleOf(ref) === 'product')) throw new Error('请先上传真实商品图。');
+    if (references.length > 10) throw new Error('请将分析图片减少到 10 张以内。');
+    // Pricing is not approved: fail before creating sessions or uploading files.
+    const response = await fetch('/api/commerce-analysis', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:crypto.randomUUID()})});
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.message || '图片分析暂不可用。');
+    throw new Error('图片分析服务尚未开放。');
+  };
   const generateStrategy = () => act(async () => {
+    assertAnalysisReviewCurrent(brief.analysisReview,referenceSignature,brief.facts);
     if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
-    const response = await requestCreativeTextOptimization({ field: 'strategy', text: `为这些模块制定视觉策略与简短文案。\n模块：${detailModules.join('、')}`, expectedModules: detailModules, productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 4000 });
+    const output=packageFlow?await(async()=>{
+      const order=assertPackageCurrent();const fingerprint=latestPackageFingerprint.current;
+      const updated=packageOrderViewSchema.parse(await defaultPackageClient.post({action:'plan',orderId:order.id,references:order.references}));receivePackageOrder(updated);notifyCreditsChanged();
+      if(latestPackageFingerprint.current!==fingerprint)throw Error('策划已保存在原订单，当前资料已变化，请恢复原设置。');
+      if(!updated.planning)throw Error('原订单策划待核对，请勿重复购买。');return updated.planning;
+    })():await(async()=>{
+    const response = await requestCreativeTextOptimization({ field: 'strategy', text: `为这些模块制定视觉策略与简短文案。\n模块：${detailModules.join('、')}`, expectedModules: detailModules, productContext, chatModel: 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 4000 });
     notifyCreditsChanged();
-    const output = parseCreativeStrategy(JSON.parse(response.text), detailModules);
+    return parseCreativeStrategy(JSON.parse(response.text), detailModules);
+    })();
     const moduleCopy = { ...brief.moduleCopy };
     const moduleTextModes = { ...brief.moduleTextModes };
     for (const item of output.modules) {
@@ -495,14 +596,18 @@ export function CommerceWizard({
     patch({ visualStrategy: output.strategy, moduleCopy, moduleTextModes });
   });
   const generateListingCopy = () => act(async () => {
+    if(packageFlow&&packageOrderRef.current)throw Error('整套预算已包含 A+ 策划，请先完成或取消原订单，再单独生成其他文案。');
+    assertAnalysisReviewCurrent(brief.analysisReview,referenceSignature,brief.facts);
     if (!brief.name.trim() && !brief.description?.trim()) throw new Error('请先填写商品资料。');
-    const response = await requestCreativeTextOptimization({ field: 'listingCopy', text: '依据 productContext 中已确认的商品资料生成上架文案。', productContext, chatModel: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 6000 });
+    const response = await requestCreativeTextOptimization({ field: 'listingCopy', text: '依据 productContext 中已确认的商品资料生成上架文案。', productContext, chatModel: 'doubao', requestId: crypto.randomUUID(), billing: textBilling(), maxLength: 6000 });
     notifyCreditsChanged();
     patch({ listingCopy: creativeListingCopySchema.parse(JSON.parse(response.text)) });
   });
   const plannedCount = scene === 'product-set' ? Object.values(categoryCounts).reduce((sum, value) => sum + value, 0) : scene === 'detail' ? detailModules.length * (advancedAplus ? 2 : 1) : scene === 'clone' ? references.filter(reference => roleOf(reference) === 'style').length : count;
   const feeSlots = Array.from({ length: plannedCount }, (_, index) => plan?.slots[index] ?? generationSettings);
   if (['product-set', 'detail', 'clone', 'product-main'].includes(scene)) return <CommerceEditor
+    packageFlow={packageFlow}
+    analysisPanel={packageFlow?<CommercePackagePanel fingerprint={packageFingerprint} recovery={packageRecovery} order={packageOrder} reviewMatches={!packageOrder?.review||(brief.facts===packageOrder.review.facts&&brief.name===packageOrder.review.name)} initialName={brief.name} prepare={preparePackageInput} onRecovery={writePackageRecovery} onOrder={receivePackageOrder} context={{platform:brief.platform,region:brief.region,language:brief.language}} onResume={resumePackage} onConfirmed={(facts,style,name)=>patch({name,facts,visualStrategy:style,analysisReview:{referenceSignature,facts,styleSummary:style}})}/>:scene==='detail'?<CommerceAnalysisPanel onManual={()=>patch({analysisReview:undefined})} signature={referenceSignature} onAnalyze={analyzeImages} onConfirm={(facts,style,signature)=>{if(signature===referenceSignature)patch({facts,visualStrategy:style,analysisReview:{referenceSignature:signature,facts,styleSummary:style}});}}/>:undefined}
     referenceSource={referenceSource} setReferenceSource={setReferenceSource} sceneTab={sceneTab} setSceneTab={setSceneTab}
     referenceInstruction={ref => referenceInstructions[referenceKey(ref)] ?? ''} setReferenceInstruction={(ref, value) => { invalidatePreview(); setReferenceInstructions(current => ({ ...current, [referenceKey(ref)]: value })); }}
     scene={scene} brief={brief} patch={patch} references={references} roleOf={roleOf}
@@ -533,9 +638,9 @@ export function CommerceWizard({
     stage={editorStage} setStage={setEditorStage} instruction={instruction} setInstruction={value => { invalidatePreview(); setInstruction(value); }}
     plan={plan} setPlan={setPlan} showPlan={Boolean(showPlan)} selectedSlotId={selectedSlotId} selectSlot={setSelectedSlotId}
     prepare={prepare} save={save} close={onClose} importUrl={importReferenceUrl} generateStrategy={generateStrategy} generateListing={generateListingCopy}
-    textFee={<CreditFee items={[{ operation: 'optimize', provider: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', model: selectedChatModel === 'minimax' ? 'minimax' : 'doubao', resolution: '', count: 1 }]} />}
-    fee={<CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} />}
-    productContext={productContext} chatModel={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} setChatModel={setSelectedChatModel}
+    textFee={packageFlow?<span>已包含在整套预算中</span>:<CreditFee items={[{ operation: 'optimize', provider: 'doubao', model: 'doubao', resolution: '', count: 1 }]} />}
+    fee={packageFlow?<span>{packageOrder?'最高冻结 '+formatCredits(packageOrder.quote.totalMinor)+' 积分':'请先确认整套预算'}</span>:<CreditFee items={feeSlots.map(slot => imageCreditItem({ ...slot, count: 1 }))} />}
+    productContext={productContext} chatModel={'doubao'} setChatModel={setSelectedChatModel}
     busy={busy} recovering={recoveringCreate} active={active} error={error} total={plannedCount}
     unavailableModel={unavailableModel}
     resetModel={resetModel}
@@ -651,8 +756,8 @@ export function CommerceWizard({
                   <details className={styles.advancedOptions} open={contentOnly || undefined}>
                     <summary>高级设置 · 平台、风格、数量与分图</summary>
                   <label>文字优化模型<CommerceSelect aria-label="文字优化模型" disabled={busy || recoveringCreate}
-                    value={selectedChatModel === 'minimax' ? 'minimax' : 'doubao'} onChange={setSelectedChatModel}>
-                    <option value="doubao">豆包</option><option value="minimax">MiniMax</option>
+                    value={'doubao'} onChange={setSelectedChatModel}>
+                    <option value="doubao">豆包</option>
                   </CommerceSelect></label>
                   <CreativeTextField productContext={productContext} field={contentOnly ? "title" : "name"} label={contentOnly ? "海报标题" : "商品名称"} maxLength={160} value={brief.name} onChange={(name) => patch({ name })} />
                   <div className={styles.twoColumns}>

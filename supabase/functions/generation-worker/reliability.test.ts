@@ -1,6 +1,6 @@
 import { ImageProviderError } from '../_shared/image-providers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseClaim, processClaim, type ClaimedGeneration, type ResultCheckpoint } from '../_shared/generation-runner';
+import { generationQueueRpc, parseClaim, processClaim, type ClaimedGeneration, type ResultCheckpoint } from '../_shared/generation-runner';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const claim: ClaimedGeneration = { action: 'process', generationId: id, batchId: id, sessionId: id, userId: id,
@@ -83,13 +83,13 @@ describe('generation worker reliability', () => {
     expect(await processClaim(f.admin, claim, { callProvider: f.provider })).toMatchObject({ action: 'completed' });
     expect(f.assets.size).toBe(1); expect(f.provider).toHaveBeenCalledTimes(1);
   });
-  it('renews during work exceeding the old 120 second visibility', async () => {
+  it('renews while the provider runs within the Free execution budget', async () => {
     vi.useFakeTimers(); const f = fixture();
-    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 150_000)); return result; });
+    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 80_000)); return result; });
     const running = processClaim(f.admin, claim, { callProvider: f.provider });
-    await vi.advanceTimersByTimeAsync(151_000);
+    await vi.advanceTimersByTimeAsync(81_000);
     expect(await running).toMatchObject({ action: 'completed' });
-    expect(f.renewals).toBeGreaterThanOrEqual(5); expect(f.provider).toHaveBeenCalledTimes(1);
+    expect(f.renewals).toBeGreaterThanOrEqual(4); expect(f.provider).toHaveBeenCalledTimes(1);
   });
   it('prevents an upload when deletion happens while provider work is in flight', async () => {
     const f = fixture(); f.provider.mockImplementation(async () => { f.delete(); return result; });
@@ -135,12 +135,125 @@ describe('generation worker reliability', () => {
     await vi.advanceTimersByTimeAsync(90_000);
     expect(f.objects.size).toBe(0); expect(f.assets.size).toBe(0);
   });
-  it('bounds a hung provider by the overall execution deadline', async () => {
+  it('clears the provider stage timer as soon as lease renewal fails', async () => {
+    vi.useFakeTimers(); const f = fixture(); f.failRenew();
+    // Initial renewal must succeed; fail only the interval while provider waits.
+    const originalRpc = f.admin.rpc; let renewals = 0;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'renew' && ++renewals === 1) return { data: { accepted: true }, error: null };
+      return originalRpc(name, args);
+    };
+    f.provider.mockImplementation(() => new Promise(() => {}));
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(26_000);
+    expect(await running).toMatchObject({ action: 'deferred' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('journals an unresponsive provider as unknown before the Free execution deadline', async () => {
     vi.useFakeTimers(); const f = fixture(); f.provider.mockImplementation(() => new Promise(() => {}));
     const running = processClaim(f.admin, claim, { callProvider: f.provider });
-    await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(await running).toMatchObject({ action: 'deferred' });
+    await vi.advanceTimersByTimeAsync(91_000);
+    expect(await Promise.race([running, Promise.resolve({ action: 'still_running' })])).toMatchObject({ action: 'reconcile' });
+    expect(f.events).toContain('unknown'); expect(f.events).not.toContain('fail');
     expect(f.objects.size).toBe(0); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('never uploads a provider result that arrives after its deadline', async () => {
+    vi.useFakeTimers(); const f = fixture();
+    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 95_000)); return result; });
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(91_000);
+    expect(await Promise.race([running, Promise.resolve({ action: 'still_running' })])).toMatchObject({ action: 'reconcile' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(f.checkpoint).toBeNull(); expect(f.objects.size).toBe(0); expect(f.assets.size).toBe(0);
+    expect(f.events).not.toContain('fail'); expect(f.provider).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not submit after preparation times out or download the next reference late', async () => {
+    vi.useFakeTimers(); const f = fixture(); let downloads = 0;
+    f.admin.storage.from = () => ({
+      download: async () => { downloads++; await new Promise(r => setTimeout(r, 30_000)); return { data: new Blob(['image']), error: null }; },
+      upload: async () => ({ error: null }),
+    });
+    const reference = { id, bucket: 'uploads', path: 'synthetic', mimeType: 'image/png' } as const;
+    const running = processClaim(f.admin, { ...claim, params: { ...claim.params, referenceIds: [id, id] }, references: [reference, reference] }, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(21_000);
+    expect(await Promise.race([running, Promise.resolve({ action: 'still_running' })])).toMatchObject({ action: 'retry' });
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(downloads).toBe(1); expect(f.events).not.toContain('submitted'); expect(f.provider).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('yields a late durable checkpoint and recovers it without another provider attempt', async () => {
+    vi.useFakeTimers(); const f = fixture(); const originalRpc = f.admin.rpc;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'checkpoint') await new Promise(r => setTimeout(r, 30_000));
+      return originalRpc(name, args);
+    };
+    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 80_000)); return result; });
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(111_000);
+    expect(await running).toMatchObject({ action: 'deferred', code: 'generation_checkpoint_saved' });
+    expect(f.phase).toBe('result'); expect(f.objects.size).toBe(0);
+    expect(await processClaim(f.admin, { ...claim, action: 'recover', checkpoint: f.checkpoint ?? undefined }, { callProvider: f.provider })).toMatchObject({ action: 'completed' });
+    expect(f.provider).toHaveBeenCalledTimes(1); expect(f.assets.size).toBe(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('yields before uploading when the preceding renewal consumes its reserved time', async () => {
+    vi.useFakeTimers(); const f = fixture(); const originalRpc = f.admin.rpc;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'renew' && f.phase === 'result') await new Promise(r => setTimeout(r, 30_000));
+      return originalRpc(name, args);
+    };
+    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 80_000)); return result; });
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(111_000);
+    expect(await running).toMatchObject({ action: 'deferred', code: 'generation_checkpoint_saved' });
+    expect(f.phase).toBe('result'); expect(f.events).not.toContain('upload'); expect(f.assets.size).toBe(0);
+  });
+
+  it('does not retry an upload when the first failure has consumed the reserved time', async () => {
+    vi.useFakeTimers(); const f = fixture(); let uploads = 0; const originalStorage = f.admin.storage.from;
+    f.admin.storage.from = () => ({ download: async () => ({ data: null, error: null }), upload: async () => {
+      uploads++; await new Promise(r => setTimeout(r, 35_000)); return { error: { message: 'synthetic outage' } };
+    } });
+    f.provider.mockImplementation(async () => { await new Promise(r => setTimeout(r, 70_000)); return result; });
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(await running).toMatchObject({ action: 'deferred', code: 'generation_checkpoint_saved' });
+    expect(uploads).toBe(1); expect(f.phase).toBe('result'); expect(f.assets.size).toBe(0);
+    f.admin.storage.from = originalStorage;
+    expect(await processClaim(f.admin, { ...claim, action: 'recover', checkpoint: f.checkpoint ?? undefined }, { callProvider: f.provider })).toMatchObject({ action: 'completed' });
+    expect(f.provider).toHaveBeenCalledTimes(1); expect(f.assets.size).toBe(1); expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not leave an unhandled rejection when the deadline expires during completion backoff', async () => {
+    vi.useFakeTimers(); const f = fixture(); const originalRpc = f.admin.rpc; let completion = true;
+    f.admin.rpc = async (name, args) => {
+      if (name === 'generation_worker_step' && args?.p_operation === 'complete' && completion) {
+        completion = false; await new Promise(r => setTimeout(r, 119_900));
+        return { data: null, error: { message: 'synthetic timeout' } };
+      }
+      return originalRpc(name, args);
+    };
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(await running).toMatchObject({ action: 'deferred' });
+    expect(f.phase).toBe('uploaded'); expect(f.assets.size).toBe(0); expect(vi.getTimerCount()).toBe(0);
+    // Vitest also fails this test run on any unhandled rejected step promise.
+  });
+
+  it('bounds a hung Storage upload and recovers its checkpoint', async () => {
+    vi.useFakeTimers(); const f = fixture(); const storage = f.admin.storage.from;
+    f.admin.storage.from = () => ({ download: async () => ({ data: null, error: null }), upload: async () => new Promise(() => {}) });
+    const running = processClaim(f.admin, claim, { callProvider: f.provider });
+    await vi.advanceTimersByTimeAsync(121_000);
+    expect(await Promise.race([running, Promise.resolve({ action: 'still_running' })])).toMatchObject({ action: 'deferred' });
+    expect(f.phase).toBe('result'); expect(f.assets.size).toBe(0);
+    f.admin.storage.from = storage;
+    expect(await processClaim(f.admin, { ...claim, action: 'recover', checkpoint: f.checkpoint ?? undefined }, { callProvider: f.provider })).toMatchObject({ action: 'completed' });
+    expect(f.provider).toHaveBeenCalledTimes(1); expect(f.assets.size).toBe(1); expect(vi.getTimerCount()).toBe(0);
   });
 
   it('reconciles ambiguous typed provider errors instead of making them ordinary failures', async () => {
@@ -294,4 +407,23 @@ describe('generation worker reliability', () => {
     expect(() => parseClaim({ ...claim, action: 'recover_rejection', rejectionCode: code })).toThrow('invalid_queue_claim');
   });
 
+});
+
+
+describe('bounded generation queue control', () => {
+  it('returns the queue response without leaking a timer', async () => {
+    vi.useFakeTimers(); const f = fixture();
+    f.admin.rpc = async () => ({ data: { action: 'archive', messageId: 1, reason: 'terminal' }, error: null });
+    expect(await generationQueueRpc(f.admin, 'claim_image_generation')).toMatchObject({ action: 'archive' });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('stops waiting for a claim after ten seconds and never returns the late lease', async () => {
+    vi.useFakeTimers(); const f = fixture();
+    f.admin.rpc = async () => { await new Promise(r => setTimeout(r, 30_000)); return { data: claim, error: null }; };
+    const outcome = generationQueueRpc(f.admin, 'claim_image_generation').then(() => 'claimed', () => 'deferred');
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(await Promise.race([outcome, Promise.resolve('still_running')])).toBe('deferred');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(await outcome).toBe('deferred'); expect(vi.getTimerCount()).toBe(0);
+  });
 });

@@ -1,5 +1,7 @@
 "use client";
 
+import { CommercePackageRecoveryList } from '@/features/commerce/CommercePackageRecoveryList';
+import { clientRuntime } from '@/features/platform/client-runtime';
 import { Glass } from "@/features/brand/Glass";
 import { ContentDialog } from '@/features/controls/NativeControls';
 import {
@@ -126,7 +128,7 @@ function OwnerCreditsProvider({ children }: { children: ReactNode }) {
       const quote = quoteCredits(catalog, items);
       // The server checks new spending atomically. A retry may already own a
       // reservation, so low available balance must not prevent its recovery.
-      return { version: quote.version, totalMinor: quote.totalMinor };
+      return { version: quote.version, totalMinor: quote.totalMinor, ...(quote.rateVersion?{rateVersion:quote.rateVersion}:{}) };
     },
     [catalog, wallet, error],
   );
@@ -170,7 +172,8 @@ export function CreditFee({ items }: { items: CreditItem[] }) {
   if (!quote) return <small className="credit-fee">所选模型报价暂不可用</small>;
   return (
     <small className="credit-fee">
-      本次 {formatCredits(quote.totalMinor)} 积分
+      {items[0]?.operation==='chat'&&quote.rateVersion?'最高冻结':'本次'} {formatCredits(quote.totalMinor)} 积分
+      {items[0]?.operation==='chat'&&quote.rateVersion&&<span> · 按实际输入/输出 token 结算，多余退回；停止后可核实用量照常结算，未知用量待核对。</span>}
       {quote.totalMinor > state.wallet.availableMinor && (
         <>
           {" "}
@@ -179,6 +182,13 @@ export function CreditFee({ items }: { items: CreditItem[] }) {
       )}
     </small>
   );
+}
+function priceLabel(p:CreditCatalog['prices'][number]){
+  if(p.billingMode==='usage_capped'){
+    const amount=(v:string)=>new Intl.NumberFormat('zh-CN',{maximumFractionDigits:6}).format(Number(v)/1000000000),t=p.tokenTariff;
+    return `最高冻结 ${formatCredits(p.unitMinor)} 积分${t?` · 每百万 token：输入 ${amount(t.inputPerMillionNano)} / 缓存输入 ${amount(t.cachedInputPerMillionNano)} / 输出 ${amount(t.outputPerMillionNano)} 积分`:''}`;
+  }
+  return `${p.resolution?`${p.resolution} · `:''}${formatCredits(p.unitMinor)} 积分/${p.operation==='image'?'张':'次'}`;
 }
 export function ModelCreditPrice({
   operation,
@@ -206,7 +216,7 @@ export function ModelCreditPrice({
         ? prices
             .map(
               (p) =>
-                `${p.resolution ? `${p.resolution} · ` : ""}${formatCredits(p.unitMinor)} 积分/${operation === "image" ? "张" : "次"}`,
+                priceLabel(p),
             )
             .join(" / ")
         : "暂无报价"}
@@ -233,8 +243,7 @@ function Prices() {
                 {p.resolution || (p.operation === "chat" ? "聊天" : "文字优化")}
               </td>
               <td>
-                {formatCredits(p.unitMinor)} /{" "}
-                {p.operation === "image" ? "张" : "次"}
+                {priceLabel(p)}
               </td>
             </tr>
           ))}
@@ -320,6 +329,7 @@ export function CreditAccount() {
   };
   return (
     <section aria-label="积分账户" className="zi-credit-account">
+      {!clientRuntime.isMockDataMode()&&<CommercePackageRecoveryList/>}
       <Glass as="section" className="zi-account-card" aria-labelledby="zi-credit-title">
         <div className="zi-card-heading"><h2 id="zi-credit-title">我的积分</h2><span>创作消耗，一目了然</span></div>
         <div className="zi-credit-overview">

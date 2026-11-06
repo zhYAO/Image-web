@@ -15,36 +15,20 @@ async function collect(stream: AsyncIterable<string>) {
 describe('chat provider SSE adapter', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('separates MiniMax reasoning from structured field output when requested', async () => {
+  it('separates compatible reasoning from structured field output when requested', async () => {
     const frames = [
       { choices: [{ delta: { reasoning_details: [{ text: 'internal analysis' }] } }] },
       { choices: [{ delta: { content: '{"text":"清晰标题"}' }, finish_reason: 'stop' }] },
     ];
     const fetcher = vi.fn().mockResolvedValue(new Response(frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join('')));
-    const result = await collect(streamOpenAiCompatibleChat({ apiKey: 'test', endpoint: 'https://provider.example', fetcher, message: 'title', model: 'minimax', reasoningSplit: true }));
+    const result = await collect(streamOpenAiCompatibleChat({ apiKey: 'test', endpoint: 'https://provider.example', fetcher, message: 'title', model: 'chat-model', reasoningSplit: true }));
     expect(result.join('')).toBe('{"text":"清晰标题"}');
     expect(JSON.parse(fetcher.mock.calls[0]?.[1]?.body ?? '{}').reasoning_split).toBe(true);
   });
 
-  it('resolves MiniMax with the configured model and official OpenAI-compatible endpoint', () => {
-    vi.stubEnv('MINIMAX_API_KEY', 'minimax-test-key');
-    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_MODEL', 'MiniMax-M2.7');
-    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_ENDPOINT', '');
-
-    expect(resolveChatProvider('minimax')).toEqual({
-      apiKey: 'minimax-test-key',
-      endpoint: 'https://api.minimaxi.com/v1/chat/completions',
-      model: 'MiniMax-M2.7',
-      provider: 'minimax',
-    });
-  });
-
-  it('fails closed when the MiniMax model mapping is still an example placeholder', () => {
-    vi.stubEnv('MINIMAX_API_KEY', 'minimax-test-key');
-    vi.stubEnv('ZIMAGE_MINIMAX_CHAT_MODEL', 'replace_with_minimax_model_id');
-
-    expect(() => resolveChatProvider('minimax')).toThrow(ChatProviderFailure);
-    expect(() => resolveChatProvider('minimax')).toThrow('provider_unavailable');
+  it('rejects retired MiniMax even when credentials remain configured', () => {
+    vi.stubEnv('MINIMAX_API_KEY','retained-test-key');
+    expect(()=>resolveChatProvider('minimax')).toThrow(ChatProviderFailure);
   });
 
   it('parses fragmented OpenAI-compatible SSE and ignores terminal usage chunks', async () => {

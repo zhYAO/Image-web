@@ -1,3 +1,4 @@
+import { CommercePackageStatus } from './CommercePackageStatus';
 import { PreviewImage } from '@/features/controls/PreviewImage';
 import { CommerceSelect } from "./CommerceSelect";
 import { readPending, persistPending, type PendingSubmission } from "./commerce-submission";
@@ -335,6 +336,7 @@ export function CommerceTaskCard({
   };
   const confirm = (confirmedPrice?:CreditConfirmation) =>
     perform(async () => {
+      if(task.packageOrderId)throw new Error('整套订单不可另行按张扣费，请恢复原订单。');
       if (edit) throw new Error("请先保存或取消当前修改，再确认生成。");
       const payload = {
         billing:
@@ -386,7 +388,7 @@ export function CommerceTaskCard({
   useEffect(() => {
     // A direct-generate click authorizes exactly this saved task once. A restored
     // pending submission keeps its original recovery path and idempotency key.
-    if (!autoStart || autoStarted.current) return;
+    if (task.packageOrderId || !autoStart || autoStarted.current) return;
     autoStarted.current = true;
     if (!task.runs.length && !pendingRequest) void confirm(credits.recalled(task.id));
   });
@@ -394,6 +396,7 @@ export function CommerceTaskCard({
     perform(async () => {
       const current = await gateway.get(task.id);
       onTask(current);
+      if(current.packageOrderId)return;
       const request = submitRequest.current;
       if (!request) return;
       if (current.runs.some((run) => run.requestId === request.requestId)) {
@@ -518,7 +521,7 @@ export function CommerceTaskCard({
   const available = task.slots.filter((slot) =>
     task.selections.some((item) => item.slotId === slot.id),
   );
-  const canEdit = !busy && !unknown && !task.archived;
+  const canEdit = !task.packageOrderId && !busy && !unknown && !task.archived;
   return (
     <article
       className={styles.taskCard}
@@ -842,12 +845,12 @@ export function CommerceTaskCard({
         {task.scene === 'detail' && available.some(slot => slot.outputSpec === 'mobile') && <button disabled={busy} onClick={() => void perform(async () => setMessage(await downloadCommerceFile(gateway, task, available.filter(slot => slot.outputSpec === 'mobile').map(slot => slot.id), 'long', exportFormat, exportFocus)))}>导出移动长图</button>}
       </div>
       {edit && <p role="status">请先保存或取消当前修改，再确认生成。</p>}
-      <CreditFee
+      {!task.packageOrderId && <CreditFee
         items={task.slots
           .filter((slot) => selected.includes(slot.id))
           .map((slot) => imageCreditItem({ ...slot, count: 1 }))}
-      />
-      <div className={styles.confirm}>
+      />}
+      {!task.packageOrderId && <div className={styles.confirm}>
         <span>
           本次选中 {selected.length} 张，将消耗 {selected.length} 张图片额度
           {selected.some((id) =>
@@ -874,7 +877,8 @@ export function CommerceTaskCard({
         >
           {busy ? "正在处理…" : `确认生成 ${selected.length} 张`}
         </button>
-      </div>
+      </div>}
+      {task.packageOrderId && <CommercePackageStatus orderId={task.packageOrderId} />}
       {edit && (
         <div
           className={styles.editPanel}

@@ -989,3 +989,12 @@ describe("commerce UI", () => {
     expect(create.mock.calls[0]?.[0].plan.brief.description).toBe("陶瓷杯，暖色背景。");
   });
 });
+
+ it('never auto-starts or separately bills a task funded by a package order',async()=>{
+ const gateway=createTestGateway();const task={...await createPlan(gateway),packageOrderId:crypto.randomUUID()};
+ const submit=vi.spyOn(gateway.commerce,'submit');
+ render(<CommerceTaskCard task={task} gateway={gateway.commerce} capabilities={IMAGE_PROVIDER_CAPABILITIES} onTask={vi.fn()} autoStart/>);
+ expect(screen.queryByRole('button',{name:/确认生成/})).not.toBeInTheDocument();
+ expect(await screen.findByRole('region',{name:'整套订单结算'})).toBeInTheDocument();
+ expect(submit).not.toHaveBeenCalled();
+ });

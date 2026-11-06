@@ -39,7 +39,7 @@ describe('current-field AI editing', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     const [url, options] = fetcher.mock.calls[0]!;
     expect(url).toBe('/api/creative-text/optimize');
-    expect(JSON.parse(options.body)).toMatchObject({ chatModel: 'minimax', field: 'title', text: '旧文案' });
+    expect(JSON.parse(options.body)).toMatchObject({ chatModel: 'doubao', field: 'title', text: '旧文案' });
   });
   it.each([
     ['旧文案', '原文已保留', false],

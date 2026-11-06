@@ -1,0 +1,155 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select no_plan();
+create function pg_temp.k(t text)returns uuid language sql immutable as $$select md5('package-test:'||t)::uuid$$;
+create temporary table package_test_state(key text primary key,value jsonb);
+create function pg_temp.keep(k text,v jsonb)returns void language sql as $$insert into package_test_state values(k,v)on conflict(key)do update set value=excluded.value$$;
+create function pg_temp.v(k text)returns jsonb language sql as $$select value from package_test_state where key=k$$;
+create function pg_temp.call(a text,i jsonb default '{}',u uuid default pg_temp.k('owner'))returns jsonb language sql as $$select public.commerce_package_dispatch(u,a,i)$$;
+select has_function('public','commerce_package_dispatch',array['uuid','text','jsonb'],'service-only package dispatcher exists');
+select ok(not has_function_privilege('authenticated','public.commerce_package_dispatch(uuid,text,jsonb)','execute'),'browser cannot spoof owner or cost');
+select ok(not has_table_privilege('service_role','private.commerce_package_orders','select'),'orders only readable through checked RPC');
+select is((select enabled from private.commerce_package_settings),false,'packages initially disabled with no cost defaults');
+insert into auth.users(id,email,email_confirmed_at,is_anonymous)values(pg_temp.k('owner'),'package@example.com',now(),false),(pg_temp.k('other'),'package-other@example.com',now(),false);
+insert into public.sessions(id,user_id,title)values(pg_temp.k('session'),pg_temp.k('owner'),'Package test');
+insert into public.reference_uploads(id,user_id,session_id,storage_path,original_filename,mime_type,size_bytes,width,height)values(pg_temp.k('ref'),pg_temp.k('owner'),pg_temp.k('session'),pg_temp.k('owner')||'/'||pg_temp.k('session')||'/references/test.png','test.png','image/png',10,1,1);
+select throws_ok($$select pg_temp.call('quote','{}')$$,'P0001','package_configuration_missing','missing costs never authorize charges');
+insert into private.commerce_package_cost_versions values('test-cost', '{"imageModel":"doubao-seedream-5.0-pro","imageResolution":"2K","imageOutputNano":"600000000","extraReferenceNano":"20000000","imageOutputLowNano":"300000000","imagePixelThreshold":2610000,"imageResponseModels":["doubao-seedream-5.0-pro"],"visionResponseModels":["test-vision"],"plannerResponseModels":["test-planner"],"visionModel":"test-vision","visionInputPerMillionNano":"600000000","visionOutputPerMillionNano":"3600000000","plannerModel":"test-planner","plannerInputPerMillionNano":"600000000","plannerOutputPerMillionNano":"3600000000","visionMaxInputTokens":20000,"visionMaxOutputTokens":4000,"plannerMaxInputTokens":10000,"plannerMaxOutputTokens":4000,"evidence":"Synthetic offline fixture, never a production cost"}');
+insert into private.commerce_package_sale_versions values('test-sale','{"markupBps":10000,"minimumMinor":50,"quoteSeconds":900,"settlement":"fixed_images","priceEvidence":"Synthetic offline price approval; never production","imagePrices":[{"model":"doubao-seedream-5.0-pro","resolution":"2K","spec":"standard","estimatedUnitCostNano":"625000000"}],"sharedCostPolicy":"include_once_if_any_success","minimumPolicy":"whole_order","refund":"successful_images"}');
+update private.commerce_package_settings set enabled=true,cost_version='test-cost',sale_version='test-sale';
+insert into private.commerce_package_cost_versions select 'unsupported-tier',jsonb_set(costs,'{visionMaxInputTokens}','40000')from private.commerce_package_cost_versions where version='test-cost';
+update private.commerce_package_settings set cost_version='unsupported-tier';
+select throws_ok($$select private.commerce_package_price(private.commerce_package_config(),'{"modules":[],"advanced":false,"referenceCount":1}')$$,'P0001','price_tier_unverified','unpriced text input tier cannot enable a package');
+update private.commerce_package_settings set cost_version='test-cost';
+update private.credit_settings set enabled=true;
+select public.credit_dispatch(pg_temp.k('owner'),'wallet');
+create function pg_temp.quote_input(label text)returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.k('quote-'||label),'sessionId',pg_temp.k('session'),'selection',jsonb_build_object('modules',jsonb_build_array('品牌首屏','核心卖点'),'advanced',false,'referenceCount',1),'references',jsonb_build_array(jsonb_build_object('id',pg_temp.k('ref'),'role','product')))$$;
+create function pg_temp.new_order(label text)returns jsonb language plpgsql as $$declare q jsonb;begin q:=pg_temp.call('quote',pg_temp.quote_input(label));return pg_temp.call('accept',jsonb_build_object('requestId',pg_temp.k('accept-'||label),'quoteId',q->>'id','totalMinor',q#>'{snapshot,totalMinor}'));end$$;
+select pg_temp.keep('quote',pg_temp.call('quote',pg_temp.quote_input('first')));
+select is(pg_temp.v('quote')#>>'{snapshot,totalMinor}','250','database calculates exact full-package quote');
+select is(pg_temp.v('quote')#>>'{snapshot,estimatedCostNano}','1246800000','database preserves sub-cent shared cost precision');
+select is(pg_temp.call('quote',pg_temp.quote_input('first')),pg_temp.v('quote'),'quote request is idempotent');
+select throws_ok($$select pg_temp.call('quote',pg_temp.quote_input('first')||'{"selection":{"modules":["品牌首屏"],"advanced":false,"referenceCount":1}}')$$,'P0001','idempotency_conflict','same request cannot change selected count');
+select throws_ok($$update private.commerce_package_cost_versions set costs='{}'where version='test-cost'$$,'P0001','package_version_is_immutable','published supplier costs immutable');
+select pg_temp.keep('order',pg_temp.new_order('first'));
+select is(pg_temp.new_order('first'),pg_temp.v('order'),'accept replay returns same order');
+select is(pg_temp.call('list'),jsonb_build_array(jsonb_build_object('id',pg_temp.v('order')#>>'{state,id}')),'unfinished order discoverable without a browser identity');
+select is(pg_temp.call('list','{}',pg_temp.k('other')),'[]'::jsonb,'discovery never lists another owner');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),250,'exactly one whole reservation');
+select is((select count(*)::int from private.credit_operations where user_id=pg_temp.k('owner')),1,'one parent billing operation');
+select throws_ok($$select pg_temp.call('get',jsonb_build_object('orderId',pg_temp.v('order')#>>'{state,id}'),pg_temp.k('other'))$$,'P0001','package_not_found','other owner cannot recover order');
+select throws_ok($$select private.credit_settle((select operation_id from private.commerce_package_orders limit 1),'succeeded')$$,'P0001','use_package_settlement','legacy full-capture path cannot charge a package');
+-- A provider claim changes only one revision; repeated stale writes cannot create a second claim.
+select pg_temp.keep('claimed',pg_temp.call('save',jsonb_build_object('orderId',pg_temp.v('order')#>>'{state,id}','expectedRevision',1,'state',jsonb_set(pg_temp.v('order')->'state','{stages,0}',(pg_temp.v('order')#>'{state,stages,0}')||'{"status":"processing","claimId":"claim-analysis"}'))));
+select throws_ok($$select pg_temp.call('save',jsonb_build_object('orderId',pg_temp.v('order')#>>'{state,id}','expectedRevision',1,'state',pg_temp.v('order')->'state'))$$,'P0001','revision_conflict','stale provider claim rejected');
+
+-- The Edge transport can act only on this exact funded, owned stage claim.
+create function pg_temp.package_relay(a text,p jsonb,u uuid default pg_temp.k('owner'))returns jsonb language sql as $$select public.doubao_text_relay(u,(pg_temp.v('order')#>>'{state,id}')::uuid,'analysis',a,p)$$;
+create temporary table package_relay_payload as select jsonb_build_object('claimId','claim-analysis','payloadHash',repeat('a',64),'references',jsonb_build_array(jsonb_build_object('id',pg_temp.k('ref'),'role','product')))v;
+select throws_ok($$select pg_temp.package_relay('claim',(select v from package_relay_payload),pg_temp.k('other'))$$,'P0001','relay_not_authorized','Edge cannot act for another owner');
+select throws_ok($$select pg_temp.package_relay('claim',(select v||'{"claimId":"changed"}'from package_relay_payload))$$,'P0001','relay_not_authorized','Edge claim must match frozen stage');
+select throws_ok($$select pg_temp.package_relay('claim',(select v||'{"references":[]}'from package_relay_payload))$$,'P0001','reference_forbidden','Edge cannot replace private reference roles');
+select is(pg_temp.package_relay('claim',(select v from package_relay_payload))->>'model','test-vision','Edge model comes from frozen quote');
+select throws_ok($$select pg_temp.package_relay('claim',(select v from package_relay_payload))$$,'P0001','relay_result_pending','Edge attempt cannot be bought twice');
+select throws_ok($$select pg_temp.package_relay('read',(select v from package_relay_payload))$$,'P0001','relay_result_pending','unknown Edge receipt never auto retries');
+select pg_temp.package_relay('result',(select v||jsonb_build_object('receipt',jsonb_build_object('text','{}','model','test-vision'))from package_relay_payload));
+select is(pg_temp.package_relay('read',(select v from package_relay_payload))#>>'{receipt,model}','test-vision','lost Edge receipt can be replayed');
+
+select pg_temp.keep('cancel',pg_temp.call('cancel',jsonb_build_object('orderId',pg_temp.v('order')#>>'{state,id}')));
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),0,'pre-image cancellation releases entire reservation');
+select is((select available_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),1000,'analysis running does not create a stage fee');
+select is(pg_temp.call('cancel',jsonb_build_object('orderId',pg_temp.v('order')#>>'{state,id}')),pg_temp.v('cancel'),'cancellation replay does not refund twice');
+
+create function pg_temp.planned(label text)returns jsonb language plpgsql as $$declare o jsonb;s jsonb;begin
+ o:=pg_temp.new_order(label);s:=o->'state';s:=jsonb_set(s,'{stages,0}',(s#>'{stages,0}')||'{"status":"succeeded","claimId":"analysis","result":{"observations":[],"model":"test-vision","resolvedModel":"test-vision","providerRequestId":"analysis-receipt","usage":{"cachedInputTokens":0,"inputTokens":20000,"outputTokens":4000}}}');s:=jsonb_set(s,'{stages,1}',(s#>'{stages,1}')||'{"status":"succeeded","claimId":"planning","result":{"strategy":"synthetic","model":"test-planner","resolvedModel":"test-planner","providerRequestId":"plan-receipt","usage":{"cachedInputTokens":0,"inputTokens":10000,"outputTokens":4000}}}');
+ s:=s||jsonb_build_object('review',jsonb_build_object('name','Test product','facts','White body','styleSummary','','referenceSignature',s->>'referenceSignature'));
+ return pg_temp.call('save',jsonb_build_object('orderId',s->>'id','expectedRevision',1,'state',s));end$$;
+create function pg_temp.plan()returns jsonb language sql as $$select jsonb_build_object('scene','detail','templateId','detail-clean','brief',jsonb_build_object('name','Test product','facts','White body','sellingPoints','','platform','amazon','placement','A+','productReferenceIds',jsonb_build_array(pg_temp.k('ref')),'styleReferenceIds','[]'::jsonb),'slots',(select jsonb_agg(jsonb_build_object('id',pg_temp.k('slot-'||i),'role',m,'module',m,'outputSpec','standard','targetWidth',970,'targetHeight',600,'instruction','','exactText','','referenceIds',jsonb_build_array(pg_temp.k('ref')),'provider','seedream','model','doubao-seedream-5.0-pro','aspectRatio','16:9','resolution','2K')order by i)from unnest(array['品牌首屏','核心卖点'])with ordinality x(m,i)))$$;
+create function pg_temp.compiled()returns jsonb language sql as $$select jsonb_agg(jsonb_build_object('slotId',s->>'id','prompt','Synthetic compiled '||(s->>'role'),'hash',md5(s::text),'provider',s->>'provider','model',s->>'model','templateVersion','1.0.0','compilerVersion','commerce-5','config',jsonb_build_object('aspectRatio',s->>'aspectRatio','resolution','2K','targetWidth',970,'targetHeight',600,'count',1,'referenceIds',s->'referenceIds','registryVersion','2026-10-12.1')))from jsonb_array_elements(pg_temp.plan()->'slots')s$$;
+update private.runtime_flags set enabled=true where flag='generation_enabled';update private.provider_runtime_config set enabled=true where provider='seedream';delete from private.provider_health_windows where provider='seedream';
+select pg_temp.keep('planned',pg_temp.planned('images'));
+select pg_temp.keep('task',public.commerce_dispatch(pg_temp.k('owner'),'create',null,jsonb_build_object('sessionId',pg_temp.k('session'),'requestId',pg_temp.k('create-task'),'plan',pg_temp.plan()),'package-task-create',pg_temp.compiled(),gen_random_uuid()));
+select pg_temp.keep('submitted',pg_temp.call('submit',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}','taskId',pg_temp.v('task')->>'id','revision',1)));
+select is((select count(*)::int from private.commerce_package_generations),2,'both outputs funded by parent');
+select is((select count(*)::int from private.credit_operations where original_generation_id is not null),0,'image trigger creates no duplicate child charges');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),250,'outputs do not reserve beyond fixed package amount');
+select is(pg_temp.call('submit',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}','taskId',pg_temp.v('task')->>'id','revision',1)),pg_temp.v('submitted'),'image submission replay preserves exact run');
+insert into private.generation_work(generation_id,user_id,session_id,lease_until,deadline,phase,result)values((pg_temp.v('submitted')#>>'{state,stages,2,generationId}')::uuid,pg_temp.k('owner'),pg_temp.k('session'),now(),now(),'result',jsonb_build_object('metering',jsonb_build_object('source','provider_response','model','doubao-seedream-5.0-pro','resolvedModel','doubao-seedream-5.0-pro','providerRequestId','image-receipt','generatedImages',1,'inputReferences',1,'outputWidth',2048,'outputHeight',2048)))on conflict(generation_id)do update set result=excluded.result;
+update public.generations set status='succeeded',provider_submission_state='submitted' where id=(pg_temp.v('submitted')#>>'{state,stages,2,generationId}')::uuid;
+update public.generations set status='failed',provider_submission_state='unknown',error_code='provider_reconciliation_required' where id=(pg_temp.v('submitted')#>>'{state,stages,3,generationId}')::uuid;
+select is(pg_temp.call('get',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}'))#>>'{state,status}','needs_review','one unknown output prevents settlement');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),250,'unknown retains reservation, no automatic refund');
+select throws_ok($$select pg_temp.call('cancel',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}'))$$,'P0001','image_result_pending','cancel does not treat submitted unknown as ungenerated');
+-- Simulated evidence-based rejection, no provider calls. Existing worker reconciliation is authoritative.
+update private.generation_work set phase='cancelled',provider_outcome='rejected' where generation_id=(pg_temp.v('submitted')#>>'{state,stages,3,generationId}')::uuid;
+update public.generations set status='failed',provider_submission_state='not_submitted',error_code='provider_rejected' where id=(pg_temp.v('submitted')#>>'{state,stages,3,generationId}')::uuid;
+select pg_temp.keep('finished',pg_temp.call('get',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}')));
+select is(pg_temp.v('finished')#>>'{state,status}','partial','partial success is explicit');
+select is((select spent_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),125,'successful image charged at frozen per-image price');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),0,'confirmed failure releases remaining half');
+select is((select available_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),875,'wallet conserves grant less frozen image price');
+select is(pg_temp.call('get',jsonb_build_object('orderId',pg_temp.v('planned')#>>'{state,id}')),pg_temp.v('finished'),'finished order replay is stable');
+select is((select count(*)::int from private.credit_ledger where operation_id=(select operation_id from private.commerce_package_orders where id=(pg_temp.v('planned')#>>'{state,id}')::uuid)and kind='capture'),1,'one final capture for entire order');
+select is((select available_minor+spent_minor+frozen_minor from private.credit_wallets where user_id=pg_temp.k('owner')),1000::bigint,'wallet amount invariant holds');
+-- Trusted dispatch must reject unverified prior usage before buying output images.
+savepoint text_proof_case;
+select pg_temp.keep('bad-text',pg_temp.planned('bad-text'));
+select pg_temp.keep('bad-text-task',public.commerce_dispatch(pg_temp.k('owner'),'create',null,jsonb_build_object('sessionId',pg_temp.k('session'),'requestId',pg_temp.k('bad-text-task'),'plan',pg_temp.plan()),'bad-text-task',pg_temp.compiled(),gen_random_uuid()));
+update private.commerce_package_orders set state=jsonb_set(state,'{stages,0,result,providerRequestId}','""')where id=(pg_temp.v('bad-text')#>>'{state,id}')::uuid;
+update private.commerce_package_orders set state=jsonb_set(state,'{quote,sale,settlement}','"actual_capped"')where id=(pg_temp.v('bad-text')#>>'{state,id}')::uuid;
+select throws_ok($$select pg_temp.call('submit',jsonb_build_object('orderId',pg_temp.v('bad-text')#>>'{state,id}','taskId',pg_temp.v('bad-text-task')->>'id','revision',1))$$,'P0001','package_usage_unverified','unknown text usage cannot purchase output images');
+rollback to text_proof_case;
+select throws_ok($$insert into public.commerce_runs(task_id,revision,request_id)values((pg_temp.v('task')->>'id')::uuid,1,gen_random_uuid())$$,'P0001','package_order_required','legacy submit cannot charge packaged tasks per image');
+-- Failed-image finalization must observe the journal update without any GET.
+savepoint journal_case;
+select pg_temp.keep('journal',pg_temp.planned('journal'));
+select pg_temp.keep('journal-task',public.commerce_dispatch(pg_temp.k('owner'),'create',null,jsonb_build_object('sessionId',pg_temp.k('session'),'requestId',pg_temp.k('journal-task'),'plan',pg_temp.plan()),'journal-task',pg_temp.compiled(),gen_random_uuid()));
+select pg_temp.keep('journal-submit',pg_temp.call('submit',jsonb_build_object('orderId',pg_temp.v('journal')#>>'{state,id}','taskId',pg_temp.v('journal-task')->>'id','revision',1)));
+insert into private.generation_work(generation_id,user_id,session_id,lease_until,deadline,phase,result)values((pg_temp.v('journal-submit')#>>'{state,stages,2,generationId}')::uuid,pg_temp.k('owner'),pg_temp.k('session'),now()+interval '2 minutes',now()+interval '10 minutes','result',jsonb_build_object('metering',jsonb_build_object('source','provider_response','model','doubao-seedream-5.0-pro','resolvedModel','doubao-seedream-5.0-pro','providerRequestId','journal-image','generatedImages',1,'inputReferences',1,'outputWidth',2048,'outputHeight',2048)));
+update public.generations set status='succeeded',provider_submission_state='submitted'where id=(pg_temp.v('journal-submit')#>>'{state,stages,2,generationId}')::uuid;
+insert into private.generation_work(generation_id,user_id,session_id,claim_token,lease_until,deadline,phase)values((pg_temp.v('journal-submit')#>>'{state,stages,3,generationId}')::uuid,pg_temp.k('owner'),pg_temp.k('session'),pg_temp.k('journal-claim'),now()+interval '2 minutes',now()+interval '10 minutes','submitted');
+update public.generations set status='processing',provider_submission_state='submitted'where id=(pg_temp.v('journal-submit')#>>'{state,stages,3,generationId}')::uuid;
+select public.generation_worker_step((pg_temp.v('journal-submit')#>>'{state,stages,3,generationId}')::uuid,pg_temp.k('journal-claim'),'fail',jsonb_build_object('code','provider_error','outcome','rejected','messageId',(select msg_id from pgmq.q_image_generation where message->>'generationId'=pg_temp.v('journal-submit')#>>'{state,stages,3,generationId}')));
+select is((select settled from private.commerce_package_orders where id=(pg_temp.v('journal')#>>'{state,id}')::uuid),true,'last explicit rejection settles without reading the order');
+rollback to journal_case;
+-- Deleting a delivered image while another is unknown preserves the metering receipt.
+savepoint pending_delete_case;
+select pg_temp.keep('pending-delete',pg_temp.planned('pending-delete'));
+select pg_temp.keep('pending-task',public.commerce_dispatch(pg_temp.k('owner'),'create',null,jsonb_build_object('sessionId',pg_temp.k('session'),'requestId',pg_temp.k('pending-task'),'plan',pg_temp.plan()),'pending-task',pg_temp.compiled(),gen_random_uuid()));
+select pg_temp.keep('pending-submit',pg_temp.call('submit',jsonb_build_object('orderId',pg_temp.v('pending-delete')#>>'{state,id}','taskId',pg_temp.v('pending-task')->>'id','revision',1)));
+insert into private.generation_work(generation_id,user_id,session_id,lease_until,deadline,phase,result)values((pg_temp.v('pending-submit')#>>'{state,stages,2,generationId}')::uuid,pg_temp.k('owner'),pg_temp.k('session'),now(),now(),'result',jsonb_build_object('metering',jsonb_build_object('source','provider_response','model','doubao-seedream-5.0-pro','resolvedModel','doubao-seedream-5.0-pro','providerRequestId','pending-image','generatedImages',1,'inputReferences',1,'outputWidth',2048,'outputHeight',2048)));
+update public.generations set status='succeeded',provider_submission_state='submitted'where id=(pg_temp.v('pending-submit')#>>'{state,stages,2,generationId}')::uuid;
+update public.generations set status='failed',provider_submission_state='unknown',error_code='provider_reconciliation_required'where id=(pg_temp.v('pending-submit')#>>'{state,stages,3,generationId}')::uuid;
+select lives_ok($$delete from public.generations where id=(pg_temp.v('pending-submit')#>>'{state,stages,2,generationId}')::uuid$$,'deleting delivered image does not conflict with preserved terminal evidence');
+select is((select state#>>'{stages,2,metering,providerRequestId}'from private.commerce_package_orders where id=(pg_temp.v('pending-delete')#>>'{state,id}')::uuid),'pending-image','delivered image usage survives deletion');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),250,'remaining unknown image still freezes reservation');
+rollback to pending_delete_case;
+select is(private.commerce_package_actual_amount(jsonb_set(jsonb_set(pg_temp.v('finished')->'state','{quote,sale,settlement}','"actual_capped"'),'{stages,2}',(pg_temp.v('finished')#>'{state,stages,2}')-'metering'))->>'pendingMinor','250','missing usage never falls back to an estimated quote');
+select is(private.commerce_package_actual_amount(jsonb_set(jsonb_set(pg_temp.v('finished')->'state','{quote,sale,settlement}','"actual_capped"'),'{stages,0,result,usage,inputTokens}','20001'))->>'reviewReason','usage_budget_exceeded','usage above budget stops automatic deduction');
+-- Durable cost metadata survives the worker clearing image bytes.
+savepoint usage_audit;
+update private.generation_work set result=jsonb_build_object('bytesBase64','synthetic-private-pixels','providerUsage',jsonb_build_object('source','provider_response','provider','seedream','requestedModel','doubao-seedream-5.0-pro','usage',jsonb_build_object('input_tokens',123),'untrustedPrompt','must not persist'))where generation_id=(pg_temp.v('submitted')#>>'{state,stages,2,generationId}')::uuid;
+update private.generation_work set phase='completed',result=null where generation_id=(pg_temp.v('submitted')#>>'{state,stages,2,generationId}')::uuid;
+select is((select receipt#>>'{usage,input_tokens}'from private.image_usage_receipts where generation_id=(pg_temp.v('submitted')#>>'{state,stages,2,generationId}')::uuid),'123','bounded image usage survives clearing the large checkpoint');
+select ok(not exists(select 1 from private.image_usage_receipts where receipt::text like '%synthetic-private-pixels%'or receipt::text like '%must not persist%'),'image usage audit excludes image bytes and unrecognized root fields');
+rollback to usage_audit;
+-- Session deletion must not strand a pre-image reservation.
+select pg_temp.keep('predelete',pg_temp.planned('predelete'));
+update public.sessions set status='deleting',deleted_at=now()where id=pg_temp.k('session');
+select is((select frozen_minor::int from private.credit_wallets where user_id=pg_temp.k('owner')),0,'session deletion refunds an order before any image submission');
+select is(pg_temp.call('get',jsonb_build_object('orderId',pg_temp.v('predelete')#>>'{state,id}'))#>>'{state,status}','cancelled','financial history remains recoverable after session deletion');
+select lives_ok($$delete from public.sessions where id=pg_temp.k('session')$$,'known terminal image deletion does not block cleanup');
+select is(private.commerce_package_actual_amount(jsonb_set(jsonb_set(pg_temp.v('finished')->'state','{quote,sale,settlement}','"actual_capped"'),'{stages,0,result,usage,cachedInputTokens}','1'))->>'reviewReason','cache_usage_unverified','cache hits cannot be charged at unverified full input rates');
+-- Fixed image prices remain independent of supplier estimate receipts.
+select is(private.commerce_package_actual_amount(jsonb_set(pg_temp.v('finished')->'state','{stages,2}',(pg_temp.v('finished')#>'{state,stages,2}')-'metering'))->>'captureMinor','125','fixed successful price does not guess missing provider cost');
+select is(private.commerce_package_actual_amount(jsonb_set(jsonb_set(pg_temp.v('finished')->'state','{quote,sale,minimumMinor}','200'),'{quote,totalMinor}','250'))->>'captureMinor','200','whole-order minimum is applied once on partial success');
+select is(private.commerce_package_actual_amount(jsonb_set(pg_temp.v('finished')->'state','{stages,2,status}','"failed"'))->>'releaseMinor','250','no success refunds entire fixed quote');
+select throws_ok($$select private.commerce_package_price(private.commerce_package_config(),'{"modules":["品牌首屏"],"advanced":true,"referenceCount":1}')$$,'P0001','package_image_price_unpublished','unpublished advanced specs cannot receive a quote');
+select throws_ok($$select private.commerce_package_price(jsonb_set(private.commerce_package_config(),'{sale,imagePrices}',(private.commerce_package_config()#>'{sale,imagePrices}')||(private.commerce_package_config()#>'{sale,imagePrices}')),'{"modules":["品牌首屏"],"advanced":false,"referenceCount":1}')$$,'P0001','invalid_package_image_price','duplicate price entries are rejected');
+-- Different advanced prices stay aligned with desktop-first/mobile-second slot order.
+create temporary table advanced_quote as select private.commerce_package_price(jsonb_set(private.commerce_package_config(),'{sale,imagePrices}','[{"model":"doubao-seedream-5.0-pro","resolution":"2K","spec":"desktop","estimatedUnitCostNano":"350000000"},{"model":"doubao-seedream-5.0-pro","resolution":"2K","spec":"mobile","estimatedUnitCostNano":"600000000"}]'),'{"modules":["品牌首屏","核心卖点"],"advanced":true,"referenceCount":1}')q;
+select is((select q->>'totalMinor'from advanced_quote),'380','advanced quote sums distinct desktop and mobile prices');
+select is((select q#>>'{stages,2,amountMinor}'from advanced_quote),'70','first desktop module freezes desktop price');
+select is((select q#>>'{stages,4,amountMinor}'from advanced_quote),'120','first mobile module freezes mobile price');
+select is(private.commerce_package_actual_amount((select jsonb_build_object('quote',q,'stages',jsonb_build_array(jsonb_build_object('kind','image','status','succeeded','amountMinor',70),jsonb_build_object('kind','image','status','failed','amountMinor',70),jsonb_build_object('kind','image','status','failed','amountMinor',120),jsonb_build_object('kind','image','status','succeeded','amountMinor',120)))from advanced_quote))->>'captureMinor','190','partial success captures the corresponding specs without shared stage fees');
+select finish();rollback;

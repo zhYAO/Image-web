@@ -1,3 +1,4 @@
+import { isActiveChatModel } from '@zimage/domain';
 import type { AspectRatio, ImageResolution, MockScenario, UploadReference } from '@zimage/domain';
 import { create } from 'zustand';
 import { clearComposer, loadComposer, saveComposer } from './composer-storage';
@@ -123,7 +124,7 @@ export const useWorkspaceStore = create<WorkspaceUiState>((set) => ({
   setCount: (count) => set({ count }),
   setSelectedProvider: (selectedProvider) => set({ selectedProvider }),
   setSelectedModelId: (selectedModelId) => set({ selectedModelId }),
-  setSelectedChatModel: (selectedChatModel) => set({ selectedChatModel }),
+  setSelectedChatModel: (value) => set({ selectedChatModel: isActiveChatModel(value)?value:'doubao' }),
   setSkillPromptOverride: (skillPromptOverride) => set({ skillPromptOverride }),
   setReferences: (value) => set((state) => ({ references: typeof value === 'function' ? value(state.references) : value })),
   selectSkill: (selectedSkillId) =>

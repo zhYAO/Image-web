@@ -181,6 +181,9 @@ export async function startText(
 ) {
   if (!input.requestId)
     throw creditFailure({ message: "credit_request_id_required" });
+  if(input.operation==='chat'){
+    const r=await c.rpc('chat_usage_dispatch',{p_user_id:u,p_action:'start',p_input:input});if(r.error||!r.data)throw creditFailure(r.error);return textOperationSchema.parse(r.data);
+  }
   return textOperationSchema.parse(await creditCall(c, u, "text_start", input));
 }
 export async function textStep(
@@ -202,3 +205,5 @@ export function pendingCreditError() {
     retryable: false,
   });
 }
+
+export async function completeChatUsage(c:CreditRpc,u:string,requestId:string){const r=await c.rpc('chat_usage_dispatch',{p_user_id:u,p_action:'complete',p_input:{requestId}});if(r.error||!r.data)throw creditFailure(r.error);const op=textOperationSchema.parse(r.data);if(op.status!=='succeeded')throw pendingCreditError();return op;}

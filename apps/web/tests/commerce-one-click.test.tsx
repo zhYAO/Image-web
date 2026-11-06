@@ -30,7 +30,7 @@ describe('commerce navigation and durable drafts', () => {
     const props = { gateway, onNavigate: vi.fn(), ownerKey: 'owner' };
     const view = render(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     fireEvent.change(await screen.findByLabelText('商品描述', {}, { timeout: 10000 }), { target: { value: '米白色棉质衬衫，宽松版型。' } });
-    act(() => useWorkspaceStore.getState().setSelectedChatModel('minimax'));
+    act(() => useWorkspaceStore.getState().setSelectedChatModel('doubao'));
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'catalogue' }} />);
     await screen.findByRole('heading', { name: '电商生图' });
     expect(screen.queryByRole('textbox', { name: '创作输入' })).toBeNull();
@@ -44,7 +44,7 @@ describe('commerce navigation and durable drafts', () => {
     expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('');
     view.rerender(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);
     await waitFor(() => expect(screen.getByRole('textbox', { name: '商品描述' })).toHaveValue('米白色棉质衬衫，宽松版型。'), { timeout: 10000 });
-    expect(useWorkspaceStore.getState().selectedChatModel).toBe('minimax');
+    expect(useWorkspaceStore.getState().selectedChatModel).toBe('doubao');
     expect(create).not.toHaveBeenCalled();
     view.unmount();
     render(<UnifiedWorkspace {...props} route={{ kind: 'commerce', scene: 'product-set' }} />);

@@ -1,3 +1,5 @@
+import { isActiveChatModel } from '@zimage/domain';
+import { ApiRouteError } from '@/server/api-error';
 import { trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import { creditsEnabled } from "@/server/credits/credit-service";
 import { billedChat } from "@/server/credits/billed-text";
@@ -81,9 +83,12 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     if (creditsEnabled())
       return billedChat(admin, userId, input, request, correlationId);
+    if(input.chatModel && !isActiveChatModel(input.chatModel)) throw new ApiRouteError({code:'bad_request',status:400,retryable:false,message:'MiniMax 已停止新调用，请选择豆包。'});
+    if(input.chatModel?.startsWith('gpt-6'))throw new ApiRouteError({code:'service_not_ready',status:503,retryable:false,message:"OpenAI \u804a\u5929\u6682\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002"});
+    if(resolveChatProvider(input.chatModel).edgeRelay)throw new ApiRouteError({code:'service_not_ready',status:503,retryable:false,message:'聊天服务需要先开启积分授权。'});
     const store = new SupabaseChatStore(admin);
     await store.assertProviderAvailable(
-      input.chatModel === "minimax" ? "minimax" : "doubao",
+      input.chatModel ?? "doubao",
     );
     const prepared = await withPreviewUsageReservation(
       createPreviewUsageGuard(admin),

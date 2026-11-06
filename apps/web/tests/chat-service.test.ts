@@ -24,21 +24,21 @@ describe('chat service', () => {
     const recordProviderResult = vi.fn().mockRejectedValue(new Error('stats unavailable'));
     const streamProvider = vi.fn(async function* () { yield '完整回复'; });
     const runner = createChatTurnRunner({ complete, recordProviderResult, start: vi.fn().mockResolvedValue({ created: false, session }), streamProvider, submitImage: vi.fn() });
-    const events = await collect(runner({ chatModel: 'minimax', message: '你好', tools: [], userId: crypto.randomUUID() }));
+    const events = await collect(runner({ chatModel: 'doubao', message: '你好', tools: [], userId: crypto.randomUUID() }));
     expect(events.map((event) => event.type)).toEqual(['message.delta', 'message.completed']);
     expect(complete).toHaveBeenCalledOnce();
     expect(streamProvider).toHaveBeenCalledOnce();
-    expect(recordProviderResult).toHaveBeenCalledExactlyOnceWith('minimax', false);
+    expect(recordProviderResult).toHaveBeenCalledExactlyOnceWith('doubao', false);
   });
 
   it('reports persistence failure separately without retrying or marking the provider unhealthy', async () => {
     const recordProviderResult = vi.fn();
     const streamProvider = vi.fn(async function* () { yield '完整回复'; });
     const runner = createChatTurnRunner({ complete: vi.fn().mockRejectedValue(new Error('save unavailable')), recordProviderResult, start: vi.fn().mockResolvedValue({ created: false, session }), streamProvider, submitImage: vi.fn() });
-    const events = await collect(runner({ chatModel: 'minimax', message: '你好', tools: [], userId: crypto.randomUUID() }));
+    const events = await collect(runner({ chatModel: 'doubao', message: '你好', tools: [], userId: crypto.randomUUID() }));
     expect(events.at(-1)).toMatchObject({ type: 'stream.failed', error: { code: 'NETWORK', message: '聊天记录保存失败，已保留收到的回复。', retryable: false } });
     expect(streamProvider).toHaveBeenCalledOnce();
-    expect(recordProviderResult).not.toHaveBeenCalledWith('minimax', true);
+    expect(recordProviderResult).not.toHaveBeenCalledWith('doubao', true);
   });
 
   it('preserves the original interruption when error statistics also fail', async () => {

@@ -11,3 +11,6 @@ export function commerceGenerationPreset(capabilities: ProviderCapability[]): Co
 export function hasCommerceModel(capabilities: ProviderCapability[], settings: CommerceGenerationSettings) {
   return capabilities.some(item => item.provider === settings.provider && item.models.some(model => model.id === settings.model));
 }
+
+// OpenAI's current adapter serves ordinary square images, not commerce output geometry.
+export function commerceProviderCapabilities(capabilities:ProviderCapability[]){return capabilities.filter(p=>p.provider!=='openai');}
