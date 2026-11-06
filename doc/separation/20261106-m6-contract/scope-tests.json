@@ -1,0 +1,13 @@
+{
+  "syntheticOnly": true,
+  "productionAccess": false,
+  "unknownOverloadDetected": true,
+  "likeWildcardUnexpectedNameDetected": true,
+  "columnGrantDetected": true,
+  "extraUserTriggerDetected": true,
+  "selectedReferenceMetadataRestoredAfterRollback": true,
+  "defaultAfterRevokeScope": 9,
+  "unreviewedSignaturesInReference": 0,
+  "nullColumnAclHandled": true,
+  "activePolicyCreated": false
+}

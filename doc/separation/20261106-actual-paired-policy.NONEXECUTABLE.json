@@ -14,9 +14,9 @@
   "backendManifestSha256": "282f0500d895f9beb97bfff81d9658708df61e754442297648591d20ad6cca37",
   "migrationPayloadSha256": "dd7355c13a4384de2f5f0b863b02afd3bda46281564ed99501bd13ef575d23a5",
   "browserVerifierSha256": "7d79eaf578241a8af49c32da551cc9ac3b295e3c6615db6f9509df781d02fff0",
-  "databaseBeforeSha256": null,
+  "databaseBeforeSha256": "872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801",
   "oldBackend": "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7",
-  "databaseAfterSha256": null,
+  "databaseAfterSha256": "1759a1d3eade413b59ad827b238a3dea814fd2a2b8ee69821e7018edce6120f4",
   "oldFrontend": "release-fb4fb09f909c",
   "expiresAt": null
 }

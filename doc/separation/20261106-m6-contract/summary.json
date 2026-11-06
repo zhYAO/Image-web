@@ -1,0 +1,21 @@
+{
+  "metadataSchemaVersion": 2,
+  "beforeCheckedAt": "2026-11-06 06:31:06.56192+00",
+  "beforeContractSha256": "872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801",
+  "expectedAfterContractSha256": "1759a1d3eade413b59ad827b238a3dea814fd2a2b8ee69821e7018edce6120f4",
+  "expectedAfterIsOfflineReferenceOnly": true,
+  "independentReviewGapAddressed": "Exact dynamic M6 revoke selector including SQL-LIKE wildcard names and all overloads; table/column ACL and effective access; all user triggers on five touched relations.",
+  "productionRevokeScopeBefore": 1,
+  "expectedRevokeScopeAfter": 9,
+  "productionAffectedNamesBefore": 4,
+  "expectedAffectedNamesAfter": 14,
+  "unexpectedProductionMatches": 0,
+  "preservedFunctionBodiesAndAttributesMatched": 4,
+  "existingGenerationWorkTriggersMatched": true,
+  "newTablesHaveNoAnonAuthenticatedServiceTableOrColumnPrivileges": true,
+  "syntheticFaultCasesPassed": 4,
+  "activePolicyCreated": false,
+  "liveAfterContractNotYetObserved": true,
+  "financialAndQueueProofStillRequiredAfterSeal": true,
+  "historyNormalizationRule": "Do not normalize until total42/exact first41/exactlyone final chat_usage_settlement/version14digits and greater than prior max have been validated; retain raw assigned version separately."
+}

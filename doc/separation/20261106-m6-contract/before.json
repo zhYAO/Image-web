@@ -1,0 +1,551 @@
+{
+  "chatUsageConfiguration": {
+    "exists": false
+  },
+  "migrations": [
+    {
+      "name": "phase1_foundation",
+      "version": "20260824061043"
+    },
+    {
+      "name": "phase1_generation_queue",
+      "version": "20260824063746"
+    },
+    {
+      "name": "phase1_chat",
+      "version": "20260824071500"
+    },
+    {
+      "name": "phase1_cleanup",
+      "version": "20260824074500"
+    },
+    {
+      "name": "phase1_safety_audit",
+      "version": "20260824075500"
+    },
+    {
+      "name": "phase1_preview_guards",
+      "version": "20260824090001"
+    },
+    {
+      "name": "phase1_advisor_hardening",
+      "version": "20260824092147"
+    },
+    {
+      "name": "phase1_cleanup_schedule",
+      "version": "20260824092606"
+    },
+    {
+      "name": "phase1_public_write_hardening",
+      "version": "20260824100500"
+    },
+    {
+      "name": "phase1_generation_schedule",
+      "version": "20260824142104"
+    },
+    {
+      "name": "phase1_generation_emergency_stop",
+      "version": "20260824231500"
+    },
+    {
+      "name": "phase1_modern_secret_key_scheduling",
+      "version": "20260825034227"
+    },
+    {
+      "name": "phase1_enabled_overrides_health",
+      "version": "20260825050000"
+    },
+    {
+      "name": "phase2_auth_accounts",
+      "version": "20260906173500"
+    },
+    {
+      "name": "phase2_auth_runtime_fixes",
+      "version": "20260907111328"
+    },
+    {
+      "name": "phase2_generation_reliability",
+      "version": "20260908043010"
+    },
+    {
+      "name": "commerce_tasks",
+      "version": "20260908043031"
+    },
+    {
+      "name": "commerce_reference_history",
+      "version": "20260908044934"
+    },
+    {
+      "name": "commerce_xhs_poster",
+      "version": "20260913082732"
+    },
+    {
+      "name": "session_activity_summary",
+      "version": "20260913090000"
+    },
+    {
+      "name": "credits",
+      "version": "20260915140000"
+    },
+    {
+      "name": "credits_safe_updates",
+      "version": "20260916085000"
+    },
+    {
+      "name": "ecommerce_workflows",
+      "version": "20260923154547"
+    },
+    {
+      "name": "seedream_5_models",
+      "version": "20261006133912"
+    },
+    {
+      "name": "apparel_catalog",
+      "version": "20261006133915"
+    },
+    {
+      "name": "creative_batch_worker",
+      "version": "20261008163150"
+    },
+    {
+      "name": "creative_batch_legacy_insert_schedule",
+      "version": "20261008164204"
+    },
+    {
+      "name": "creative_batch_progress_owner_access",
+      "version": "20261008181145"
+    },
+    {
+      "name": "creative_batch_review_progress",
+      "version": "20261008181443"
+    },
+    {
+      "name": "commerce_single_task_limits",
+      "version": "20261010085155"
+    },
+    {
+      "name": "unknown_generation_health_once",
+      "version": "20261010100000"
+    },
+    {
+      "name": "creative_batch_history_access",
+      "version": "20261010100100"
+    },
+    {
+      "name": "active_business_session_asset_reads",
+      "version": "20261010100150"
+    },
+    {
+      "name": "retire_creative_batch_cron",
+      "version": "20261010100200"
+    },
+    {
+      "name": "durable_generation_rejections",
+      "version": "20261010100300"
+    },
+    {
+      "name": "seedream_plan_only_image_admission",
+      "version": "20261012024930"
+    },
+    {
+      "name": "retire_minimax_preserve_history",
+      "version": "20261105141736"
+    },
+    {
+      "name": "openai_chat_edge_relay",
+      "version": "20261105141857"
+    },
+    {
+      "name": "doubao_edge_relay",
+      "version": "20261105141958"
+    },
+    {
+      "name": "commerce_package_orders",
+      "version": "20261105142116"
+    },
+    {
+      "name": "openai_models_disabled",
+      "version": "20261106021932"
+    }
+  ],
+  "objects": {
+    "functions": {
+      "private.chat_usage_amount(jsonb,bigint,jsonb)": null,
+      "private.chat_usage_cap(jsonb)": null,
+      "private.chat_usage_config(text)": null,
+      "private.chat_usage_immutable()": null,
+      "private.credit_dispatch_before_token(uuid,text,jsonb)": null,
+      "private.credit_settle(uuid,text,text)": {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "anonExecute": true,
+        "argumentModes": null,
+        "argumentNames": [
+          "p_id",
+          "p_status",
+          "p_reason"
+        ],
+        "authenticatedExecute": true,
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "defaultArguments": "NULL::text",
+        "kind": "f",
+        "language": "plpgsql",
+        "leakproof": false,
+        "owner": "postgres",
+        "parallel": "u",
+        "returnType": "void",
+        "returnsSet": false,
+        "securityDefiner": true,
+        "serviceExecute": true,
+        "sourceSha256": "07e98b2617dae041fe2a79bd98c3c7b9573ffc5d58aae6909b845643e6bfb35f",
+        "strict": false,
+        "volatility": "v"
+      },
+      "private.credit_settle_before_token(uuid,text,text)": null,
+      "private.doubao_chat_relay_before_token(uuid,uuid,text,text,text)": null,
+      "private.openai_chat_relay_before_token(uuid,uuid,text,text,text)": null,
+      "private.preserve_image_usage_receipt()": null,
+      "public.chat_usage_dispatch(uuid,text,jsonb)": null,
+      "public.credit_dispatch(uuid,text,jsonb)": {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "anonExecute": false,
+        "argumentModes": null,
+        "argumentNames": [
+          "p_user_id",
+          "p_action",
+          "p_input"
+        ],
+        "authenticatedExecute": false,
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "defaultArguments": "'{}'::jsonb",
+        "kind": "f",
+        "language": "plpgsql",
+        "leakproof": false,
+        "owner": "postgres",
+        "parallel": "u",
+        "returnType": "jsonb",
+        "returnsSet": false,
+        "securityDefiner": true,
+        "serviceExecute": true,
+        "sourceSha256": "3398a48764ff9590c9489ec65491014eeb73a04dfd95c7c2c4745f9a6c1b0887",
+        "strict": false,
+        "volatility": "v"
+      },
+      "public.doubao_chat_relay(uuid,uuid,text,text,text)": {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "anonExecute": false,
+        "argumentModes": null,
+        "argumentNames": [
+          "p_user_id",
+          "p_request_id",
+          "p_model",
+          "p_action",
+          "p_content"
+        ],
+        "authenticatedExecute": false,
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "defaultArguments": "NULL::text",
+        "kind": "f",
+        "language": "plpgsql",
+        "leakproof": false,
+        "owner": "postgres",
+        "parallel": "u",
+        "returnType": "jsonb",
+        "returnsSet": false,
+        "securityDefiner": true,
+        "serviceExecute": true,
+        "sourceSha256": "6ace7e075caa8dcd79f885bcaa1039555d0f2ba2880edc8db7fe7da2804f1d7e",
+        "strict": false,
+        "volatility": "v"
+      },
+      "public.openai_chat_relay(uuid,uuid,text,text,text)": {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "anonExecute": false,
+        "argumentModes": null,
+        "argumentNames": [
+          "p_user_id",
+          "p_request_id",
+          "p_model",
+          "p_action",
+          "p_content"
+        ],
+        "authenticatedExecute": false,
+        "configuration": [
+          "search_path=\"\""
+        ],
+        "defaultArguments": "NULL::text",
+        "kind": "f",
+        "language": "plpgsql",
+        "leakproof": false,
+        "owner": "postgres",
+        "parallel": "u",
+        "returnType": "jsonb",
+        "returnsSet": false,
+        "securityDefiner": true,
+        "serviceExecute": true,
+        "sourceSha256": "0ede870251859bfb76f4b2c740080aebde24a0cab8601e75c4a887b3e7bd0293",
+        "strict": false,
+        "volatility": "v"
+      }
+    },
+    "tables": {
+      "private.chat_usage_operations": null,
+      "private.chat_usage_settings": null,
+      "private.chat_usage_versions": null,
+      "private.image_usage_receipts": null
+    },
+    "triggers": {
+      "private.chat_usage_versions.chat_usage_version_immutable": null,
+      "private.generation_work.preserve_image_usage_receipt": null
+    }
+  },
+  "pricing": {
+    "creditSettings": {
+      "enabled": true,
+      "singleton": true,
+      "version": "2026-10-12.1"
+    },
+    "creditVersionsSha256": "17eef2aec51cb4a4a2e2509481a85b2db29ca1af1814396b84449b7a3fdd2984",
+    "packageCostVersionsSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "packageSaleVersionsSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "packageSettings": {
+      "cost_version": null,
+      "enabled": false,
+      "sale_version": null,
+      "singleton": true
+    },
+    "providerFlags": [
+      {
+        "enabled": true,
+        "provider": "doubao"
+      },
+      {
+        "enabled": false,
+        "provider": "gemini"
+      },
+      {
+        "enabled": false,
+        "provider": "gpt-6-astra"
+      },
+      {
+        "enabled": false,
+        "provider": "gpt-6.1-sol"
+      },
+      {
+        "enabled": false,
+        "provider": "minimax"
+      },
+      {
+        "enabled": false,
+        "provider": "openai"
+      },
+      {
+        "enabled": true,
+        "provider": "seedream"
+      }
+    ],
+    "runtimeFlags": [
+      {
+        "enabled": true,
+        "flag": "generation_enabled"
+      },
+      {
+        "enabled": true,
+        "flag": "upload_enabled"
+      }
+    ]
+  },
+  "projectRef": "klmiycyesxnpinxpeqep",
+  "schemaVersion": 2,
+  "supplement": {
+    "affectedNameOverloads": [
+      {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "isReviewedSignature": true,
+        "owner": "postgres",
+        "signature": "private.credit_settle(uuid, text, text)",
+        "sourceSha256": "07e98b2617dae041fe2a79bd98c3c7b9573ffc5d58aae6909b845643e6bfb35f"
+      },
+      {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "isReviewedSignature": true,
+        "owner": "postgres",
+        "signature": "public.credit_dispatch(uuid, text, jsonb)",
+        "sourceSha256": "3398a48764ff9590c9489ec65491014eeb73a04dfd95c7c2c4745f9a6c1b0887"
+      },
+      {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "isReviewedSignature": true,
+        "owner": "postgres",
+        "signature": "public.doubao_chat_relay(uuid, uuid, text, text, text)",
+        "sourceSha256": "6ace7e075caa8dcd79f885bcaa1039555d0f2ba2880edc8db7fe7da2804f1d7e"
+      },
+      {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "service_role",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "isReviewedSignature": true,
+        "owner": "postgres",
+        "signature": "public.openai_chat_relay(uuid, uuid, text, text, text)",
+        "sourceSha256": "0ede870251859bfb76f4b2c740080aebde24a0cab8601e75c4a887b3e7bd0293"
+      }
+    ],
+    "allUserTriggersOnTouchedRelations": {
+      "private.chat_usage_operations": null,
+      "private.chat_usage_settings": null,
+      "private.chat_usage_versions": null,
+      "private.generation_work": [
+        {
+          "deferrable": false,
+          "definition": "CREATE TRIGGER credit_work_finish AFTER UPDATE OF phase, provider_outcome ON private.generation_work FOR EACH ROW EXECUTE FUNCTION private.credit_work_finish()",
+          "enabled": "O",
+          "initiallyDeferred": false,
+          "name": "credit_work_finish"
+        },
+        {
+          "deferrable": false,
+          "definition": "CREATE TRIGGER package_work_changed AFTER UPDATE OF phase, provider_outcome, result ON private.generation_work FOR EACH ROW EXECUTE FUNCTION private.commerce_package_work_changed()",
+          "enabled": "O",
+          "initiallyDeferred": false,
+          "name": "package_work_changed"
+        }
+      ],
+      "private.image_usage_receipts": null
+    },
+    "exactPrivateRevokeScope": [
+      {
+        "acl": [
+          {
+            "grantable": false,
+            "grantee": "postgres",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          },
+          {
+            "grantable": false,
+            "grantee": "PUBLIC",
+            "grantor": "postgres",
+            "privilege": "EXECUTE"
+          }
+        ],
+        "isReviewedSignature": true,
+        "owner": "postgres",
+        "signature": "private.credit_settle(uuid, text, text)",
+        "sourceSha256": "07e98b2617dae041fe2a79bd98c3c7b9573ffc5d58aae6909b845643e6bfb35f"
+      }
+    ],
+    "tableAndColumnAccess": {
+      "private.chat_usage_operations": null,
+      "private.chat_usage_settings": null,
+      "private.chat_usage_versions": null,
+      "private.image_usage_receipts": null
+    }
+  }
+}

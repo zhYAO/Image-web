@@ -1,3 +1,9 @@
+# Installation completed after necessity review — inert tools only
+
+The user explicitly reaffirmed installation after the necessity audit (Sentinel_ea3d4347be9081918efb5314791ba360). The exact scope below is now installed, verified by20-file independent digest/ownership readback at2026-11-06 06:41:36UTC. Four files0640/directory0750, manifest0600 and empty audit parent0700, allroot:root; no extra ACL/capability. Existing16 helpers are unchanged. --help succeeded; read-only status correctly rejected absent policy without mutation. Old PID456496/pointers/ready+meta200/admission unchanged. No active policy, service restart, migration6, switch, provider/price activation or paid call occurred.
+
+See [retained readback and bounded DB preparation](./20261106-m6-contract/README.md). The following proposal/paused sections are historical approval context; do not rerun the installer or overwrite installed targets. Non-executable DB hashes are now prepared but expiry remains null; they confer no authority to activate.
+
 # Installation remains paused after necessity review
 
 The user conditionally approved installation but requested a necessity check first. No installation is performed. [Necessity review](./20261106-paired-tool-necessity-review.md): controlled coordination is required for the exact currentM6/Web artifacts, while this four-file implementation is not architecturally mandatory. Existing39-test tooling is presently the most verified current-artifact route; a smaller one-off or genuine compatibility release needs its own validation before use. The detailed scope below is a proposal, not evidence that installation is the only option.
@@ -31,6 +37,6 @@ This proposal **does not install an active policy, run begin/seal/open, apply M6
 
 ## Later gates — separate from installation
 
-Retain nulls in the non-executable example for the actual before/after DB metadata contract and expiry. Derive/review complete DDL/history/ACL/RLS fingerprints before active policy approval; financial/queue/lease/quota attestation is captured freshly after the real seal. Current read-only service/ingress/Worker fingerprints are available in paired-coordinator-production-policy-inputs.json; they must be refreshed before use.
+The NONEXECUTABLE example now records the bounded V2 before and offline expected-after fingerprints; its expiry remains null and actual after-state remains unobserved. Revalidate these selected DDL/history/ACL/RLS contracts against the live state before active policy approval; financial/queue/lease/quota attestation is captured freshly after the real seal. Never use the offline reference as an actual-after attestation. Current read-only service/ingress/Worker fingerprints are available in paired-coordinator-production-policy-inputs.json; they must be refreshed before use.
 
 The finalF1 artifact/approval needs genuine new-backend compatibility evidence. Existing chat availability must be explicitly resolved: M6 closes default token tariffs, current code accepts only explicitly approved disabled chat availability. Do not silently disable old chat or publish a guessed price. User must log in normally through the documented cookie-free browser workflow only when the main conversation schedules it; a self-XSS warning is a stop condition. Full A+ and real models remain unverified; no paid calls are authorized by this proposal.

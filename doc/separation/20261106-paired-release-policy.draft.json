@@ -20,7 +20,11 @@
   },
   "database": {
     "beforeRevision": "41 verified migrations through openai_models_disabled/20261106021932",
-    "afterRevision": "before + exact chat_usage_settlement; remote assigned version not yet known"
+    "afterRevision": "before + exact chat_usage_settlement; remote assigned version not yet known",
+    "contractMetadataSchemaVersion": 2,
+    "beforeContractSha256": "872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801",
+    "expectedAfterContractSha256": "1759a1d3eade413b59ad827b238a3dea814fd2a2b8ee69821e7018edce6120f4",
+    "afterIsOfflineReferenceOnly": true
   },
   "fixedExistingPaths": {
     "maintenance": "/etc/zimage/backend-maintenance.json",
@@ -40,7 +44,10 @@
     "reviewedCoordinatorClosureSha256": "58280d158aacc3a8056bbc7b3fbf72fc3a79713d518f9dc204555de94e483fcc",
     "implementationLocalTestsPassed": 36,
     "linuxStageTestsPending": 0,
-    "linuxPairedTestsPassed": 39
+    "linuxPairedTestsPassed": 39,
+    "rootToolsInstalled": true,
+    "activePolicyInstalled": false,
+    "installedToolsManifestSha256": "2dddf9040d78f05423ff26dfbcfa91ea68776fc94d8d89642a0631798cd13838"
   },
   "recovery": {
     "beforeMigration": "restore-exact-old-pair-after-reverification",

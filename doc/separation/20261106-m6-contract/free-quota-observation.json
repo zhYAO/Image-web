@@ -1,0 +1,40 @@
+{
+  "recordedAt": "2026-11-06T06:42:14.644030+00:00",
+  "observedAtExact": null,
+  "source": "existing authenticated Edge Supabase dashboard UI, all projects current billing cycle",
+  "url": "https://supabase.com/dashboard/org/gwwfbqcayoylfofoloit/usage",
+  "organizationRef": "gwwfbqcayoylfofoloit",
+  "plan": "Free",
+  "periodStart": "2026-11-06",
+  "periodEnd": "2026-12-06",
+  "allProjects": true,
+  "databaseSummary": {
+    "displayedUsageGB": 0.157,
+    "displayedLimitGB": 0.5,
+    "displayedPercent": 31,
+    "perProjectImageWebMB": 149.77,
+    "limitAppliesPerProject": true
+  },
+  "storage": {
+    "displayedUsageGB": 0.026,
+    "displayedLimitGB": 1
+  },
+  "edgeFunctionInvocations": {
+    "displayedUsage": 311,
+    "displayedLimit": 500000
+  },
+  "egress": {
+    "displayedUsageGB": 0,
+    "displayedLimitGB": 5
+  },
+  "cachedEgress": {
+    "displayedUsageGB": 0,
+    "displayedLimitGB": 5
+  },
+  "dashboardLagSecondsUpTo": 3600,
+  "displayedValuesMayBeRounded": true,
+  "hardCapGuaranteed": false,
+  "requiresRefreshBeforeCutover": true,
+  "noBillingOrPlanChange": true,
+  "keysOrPrivateRowsAccessed": false
+}

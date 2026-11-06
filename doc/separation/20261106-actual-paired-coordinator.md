@@ -1,3 +1,7 @@
+# Installation update — 2026-11-06
+
+Four reviewed root source files, the20-file checksum manifest and empty root-private audit parent are installed after explicit post-audit approval. Independent readback verified ownership/modes/digests, --help and read-only fail-closed status with no policy. The active paired policy is still absent; production remains the oldfb4 pair/PID456496, no maintenance/M6/switch. No new sudo/service authority, model or price activation. Exact [evidence and DB-contract preparation](./20261106-m6-contract/README.md) is retained. Source identity is stillcdf5991 and application7a811. Older no-install sections below are historical; later actual-policy, authentication/F1/chat availability and sealed financial/queue gates remain unsatisfied.
+
 # Linux isolation update — 2026-11-06
 
 The source transfer gate was resolved by the user's explicit approval. The exact254240-byte/e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3 package was uploaded once after that new evidence. All39 Linux paired tests, including3 synthetic layer-preparation tests, passed with no skips. The source70-file closure remained unchanged; all test units exited. The new four-file root coordinator and active policy are still absent from production. See [exact root installation proposal](./20261106-paired-root-install-proposal.md), which is a separate unexecuted security approval gate.

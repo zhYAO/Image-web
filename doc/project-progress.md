@@ -1,5 +1,19 @@
 # ZImage 项目进度
 
+## 2026-11-06 限定root工具安装完成，活动策略与生产切换仍关闭
+
+状态：**root_tools_installed_verified；active_policy_absent；no_production_switch**。必要性复核后，用户再次明确选择安装现有受测方案（Sentinel_ea3d4347be9081918efb5314791ba360）；此次仅执行既定四个root工具、20项摘要清单及空审计父目录的安装，没有重新执行旧迁移或启用发布操作。
+
+- 四项工具位于/usr/local/libexec/zimage-paired-release，目录root:root0750、文件0640；/etc/zimage/paired-release-tools.json为root:root0600、2477B/20项，SHA2dddf9040d78f05423ff26dfbcfa91ea68776fc94d8d89642a0631798cd13838；空/opt/zimage/paired-operations为root:root0700。16个既有依赖的字节及元数据未改，未增加ACL/capability/sudo或修改服务权限。安装不会自动启用这些工具。
+- 独立读回20项摘要及权限一致；--help退出0，缺失活动policy的只读status按预期退出1/FileNotFoundError，未产生操作目录或pycache。06:41:36UTC原zimage服务仍active/running、PID456496、旧fb4后端/旧F0指针、ready/meta200，准入仍open，维护/checking标记不存在。新policy、begin/seal/open、M6和生产切换均未执行。
+- 全组织当前Free账期06Nov–06Dec已通过现有登录Edge页面只读核实：数据库摘要0.157/0.5GB（image-web149.77MB）、Storage0.026/1GB、Functions311/500000、未缓存/缓存出站各0/5GB。UI显示值有舍入且可能延迟1小时，实际切换前需刷新，不保证未来流量不会超限；未升级或修改计费。
+- 06:31:06UTC单个生产只读快照仍41迁移/M6不存在。准备有界M6合同V2：before SHA872f628d62fd77352a1772fe9789e41ce7fe855bec4cfb0a9d41ad2c05456801；离线expected-after SHA1759a1d3eade413b59ad827b238a3dea814fd2a2b8ee69821e7018edce6120f4，后者不是真实迁移结果。独立审查提出动态REVOKE的LIKE通配及重载范围缺口，已补精确selector、表/列有效访问和所有用户trigger清单；4种合成故障均被检测并回滚。生产无意外匹配；未读取客户行或密钥。封口后资金/队列/租约、实际after及新版本历史仍待取证。
+- 既有隔离Linux输出中，以zimage/PrivateNetwork、生产只读方式生成差量包4,616,982B/SHA29bc4858a55dcdaf836e4672580e0ab41c9979408371cf4af6d4712421080606，来源7文件未变、单元已退出；只作准备，没有写入incoming、root release或修改指针。复用库存只是hint，不能替代正式stage校验。
+- 工具源仍cdf5991、应用仍7a811，未改业务代码或重标构建；已有39项Linux、backend189/browser18及domain270/frontend195/Web1308的对应代码未变。本轮仅新文件/状态只读验证，不称完整线上业务通过。原next-env和.env.local保留，无备份、历史处理、付费调用或推送。
+- 下一步由主会话协调精确活动policy及实际操作；真实浏览器本人登录/回执、F1批准、资金和队列/Worker合同以及聊天可用性仍是门禁。Mac目前锁屏，未自动解锁；仅现有Edge授权扩展完成了配额读取。M6默认无聊天费率，当前工具只支持显式批准暂时关闭聊天；尚未获得该产品影响批准，不能静默切换或虚构价格。
+
+证据：[安装、只读查询、规范化合同及配额记录](./separation/20261106-m6-contract/README.md)、[安装记录](./separation/20261106-paired-root-install-proposal.md)。以下“安装暂停/工具不存在”均为历史检查点，已由本条安装结果取代；实际生产发布门禁继续有效。
+
 ## 2026-11-06 配对工具必要性复核完成，安装保持暂停
 
 状态：**necessity_review_completed；conditional_installation_paused；no_production_change**。用户同意安装的同时要求先核查必要性；此次仅只读生产检查、源代码独立审查和本地合成PG17行为验证，未执行安装或选择替代路线。
