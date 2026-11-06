@@ -1,5 +1,19 @@
 # ZImage 项目进度
 
+## 2026-11-06 正式本机构建与 Linux 候选封包通过，Web 尚未激活
+
+状态：**formal_build_and_linux_pack_verified；authenticated_paired_release_pending**。执行通道已恢复，原开发分支未切换。按最新授权仅做本地源码提交，应用固定为 `7a811b326aa4b344cee08bc5a33c04e44a780fd4`；未推送或运行CI。保留用户原始next-env改动与23项.env.local元数据，未读取密钥。
+
+- clean独立worktree的946项源码在真实构建前后相同。Mac Node24.19.0/pnpm11.19.0离线冻结安装、Next webpack及前端构建通过；完整73项资源身份与生产bfb3e444一致。
+- 全新服务器候选以zimage身份、PrivateNetwork、只写独立output、256MiB/无swap/CPU25%/180秒约束验收，没有安装依赖、Next构建或改生产服务。3308处静态导入无缺失、37个生成分块完整，Sharp JPEG/WebP/AVIF往返通过。新code归档4,580,033字节，runtime身份与归档SHA逐字相同；Mac构建来源未改成Linux编译。正式manifest SHA为282f0500d895f9beb97bfff81d9658708df61e754442297648591d20ad6cca37，代码包已取回Mac独立验真。
+- 运行层复用两项校验缺口已通过RED/GREEN修复并独立审查：文件mode必须一致、最终链接目标必须存在且不越界；允许运行层链接由业务层闭合。新增12项测试通过。实验性RSC静态图分析未完整闭合，已移至任务证据，未将其当作正式放行依据。
+- 保留原封包路径重叠失败及启动检查失败，未放松守卫。Next真实启动会新增route-cache，后续只启动独立工作副本；冻结归档未变。无网络时live-session RPC返回network/503，明确不等于鉴权或真实业务通过。独立副本公开页面200、两个规范RSC地址200/text/x-component通过；/account降级页面不等于账户验收，三个私有GET的503不是鉴权通过，浏览器仍未验。详见检查点。
+- 前端namespace为release-7a811b326aa4，正式主体仍acceptanceRequired=true；未构造verifiedBackends或登录验收。现有本机verifier未提供ZIMAGE_AUTH_COOKIE，仅查名称存在性，未读取或提取Cookie。
+- 03:43:58UTC只读检查：生产41项迁移、数据库141,749,395字节，第6项未执行。原服务active/current仍fb4fb09；未切Web/前端、改root策略、启用新模型、发布价格或付费调用，未处理旧数据。Free组织用量在实际切换前仍须再查，数据库指标不能代表所有月度额度。
+- 既有独立backend事务要求schema/Worker/catalog版本不变，本次须真实迁移配对维护/恢复，不能伪造版本或复用旧opened操作。先协调本机安全登录态及正式组合验收，完成具体迁移操作审查后，再按准确范围安装所需root策略并实施第6项与Web配对。
+
+详细记录：[正式构建与运行层复用检查点](./separation/20261106-runtime-reuse-checkpoint.md)。应用与运维工具提交分开标识，后续文档提交不重标7a811应用。以下第5项迁移及更早状态为历史检查点。
+
 ## 2026-11-06 第5项生产迁移完成，剩余Web配对发布
 
 状态：**5/6 migrations deployed；paired_web_release_gated**。用户已明确批准第5项的既有service_role管理能力扩展；代理读取最新用户历史，复核未执行状态及原SQL SHA后，仅重试一次成功。此前第5项安全审批阻塞已解决，无再次拒绝或结果不明写入。
