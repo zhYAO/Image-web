@@ -448,3 +448,9 @@ verify_jwt = false
 
 [functions.doubao-text]
 verify_jwt = false
+
+[functions.provider-diagnostics]
+# Operational-only candidate; deploying/arming requires separate approval.
+enabled = false
+# withSupabase secret authentication remains mandatory inside the handler.
+verify_jwt = false

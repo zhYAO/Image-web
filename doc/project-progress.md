@@ -1,5 +1,16 @@
 # ZImage 项目进度
 
+## 2026-11-06 独立小额诊断候选；生产与钱包不变
+
+- 按最新授权新增独立 `provider-diagnostics` 本地候选，配置默认disabled；另需独立运行门、准确活动ID及数据库owner批准的<=15分钟活动。新迁移只建两张私有RLS表及一个service_role-only dispatcher，不创建活动，不改正式模型开关、价格、用户积分或历史记录；未部署或调用真实供应商。
+- 固定Astra后Sol、每模型至多一次。messages固定60个ASCII字节、代码上限128字节，完整请求SHA256与SQL绑定；n1、输出128、default/30m、30秒超时与有限流读取。Chat没有独立max_input_tokens参数，2048为预算/回执阈值；0.50元是目录缓冲估值，不能当真实账单硬熔断。缓存TTL明确为requestedCacheTtl，不能冒充供应商返回证据。
+- 独立审查三个Important均已复现并修复：数组动作绕过关闭门、跨choice拼接终止、请求TTL误标供应商证据。新增负测RED→GREEN，Worker总188项（新诊断40项），PostgreSQL17.11全套267断言及五组双连接通过，真实Deno六入口check和七项真实SDK禁网假密钥测试通过。
+- lint/typecheck与预算5项通过；隔离前端构建及Web构建通过，源码指纹f4aeabbdd01dcdfd87eb0eb713d0c1b014af172775fb310926d6e115dc3320c0前后不变。最终完整回归domain286、frontend195、Web165文件1313项全部通过，执行Node24.19及正常本地HTTP测试权限。全部QA无.env/真实凭据，使用现有依赖与已校验字体，构建是不可发布QA产物，临时Next产物已安全清理。
+- 环境事件如实保留：最初原仓库测试缓存写入受限，正常审批后执行；Node25/缺字体下全量6套件失败，换既有Node24/离线字体后定向五套件91项通过。隔离全量又发现构建QA变量影响来源断言、沙箱拒绝HTTP监听；移除该变量并正常审批后重新完整运行。隔离构建首次触发pnpm自动依赖修复并因DNS失败退出（downloaded0/added0），后改直接调用既有锁定工具构建通过，没有下载/安装依赖。
+- 一项Minor延后：直接RPC终态record(SQL NULL)会返回原immutable状态而非拒绝；真实本地PG已确认原记录不变、attempt仍1、JSON null被拒绝，无额外调用或财务变更。HTTP入口不会发送此值，扩展该运维API前收紧比较并补专项测试。
+- [诊断范围及后续门禁](provider-diagnostics-2026-11-06.md)。后续生产需明确批准新增SECURITY DEFINER RPC及service_role执行权限、部署和具体付费活动；当前不启用。Seedream成本基准仍等主会话答复；.env.local23项及原next-env改动保留，不读密钥值、不推送。当前本地候选validated、activation_blocked，不能标为生产付费功能done。
+- 精确证据在执行工作区verification：diagnostics-worker-final.log、diagnostics-sql-final.log、diagnostics-native-edge-check-results.json、diagnostics-native-sdk-auth.log、diagnostics-direct-build-results.json、diagnostics-clean-full-*.log、diagnostics-deferred-null-proof.json。以下较早状态均为历史。
+
 ## 2026-11-06 可信token与模型配置候选已验证；生产仍稳定，启用待批准
 
 - 生产保持10:00UTC已开放7a811配套版本；10:44UTC正常HTTPS复核ready/meta/version/静态资源200、匿名私有接口401。10:42UTC数据库42迁移、M6一次、新M7零次、chat费率版本/启用数均0、package=false；没有生产DDL、价格/Secret修改、真实调用或发布。

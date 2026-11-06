@@ -119,7 +119,7 @@ create function public.finish() returns text language sql as $$select 'finished'
 `);
   let count = 0;
   for (const file of [
-    "commerce_packages.test.sql", "chat_usage.test.sql", "chat_metering.test.sql",
+    "commerce_packages.test.sql", "chat_usage.test.sql", "chat_metering.test.sql", "provider_diagnostics.test.sql",
     "durable_generation_rejections.test.sql", "free_worker_recovery.test.sql",
     "openai_models.test.sql",
     "openai_prices.test.sql", "openai_chat_relay.test.sql", "doubao_edge_relay.test.sql",
@@ -217,6 +217,23 @@ create function public.finish() returns text language sql as $$select 'finished'
     const conserved=(await client.query("select available_minor+frozen_minor+spent_minor total from private.credit_wallets where user_id=$1",[uid])).rows[0].total;
     if(conserved!=='1000')throw Error('Doubao concurrency violated wallet conservation');
     console.log('DOUBAO_TWO_CONNECTION_PASS: one attempt; claim and no-attempt refund mutually exclusive; wallet conserved');
+
+    phase='two_connection_diagnostic_claim';
+    const diagnosticCampaign=crypto.randomUUID();
+    await client.query("insert into private.provider_diagnostic_campaigns(id,approval_ref,approved_at,expires_at,state)values($1,'synthetic concurrency approval',clock_timestamp(),clock_timestamp()+interval '10 minutes','armed')",[diagnosticCampaign]);
+    const diagnostic=(connection,slot,action,result=null)=>connection.query('select public.provider_diagnostic($1,$2,$3,$4) as value',[diagnosticCampaign,slot,action,result]);
+    const diagnosticRace=await Promise.all([diagnostic(client,'astra','claim'),diagnostic(second,'astra','claim')]);
+    if(diagnosticRace.filter(x=>x.rows[0].value.action==='start').length!==1||!diagnosticRace.some(x=>x.rows[0].value.attemptState==='claimed'))throw Error('Diagnostic admitted duplicate provider attempts');
+    const diagnosticReceipt={outcome:'verified',receipt:{providerRequestId:'chatcmpl-concurrent',resolvedModel:'gpt-6-astra',serviceTier:'default',requestedCacheTtl:'30m',inputTokens:12,outputTokens:2,totalTokens:14,cachedInputTokens:0,cacheWriteTokens:0,finishReason:'stop'}};
+    await Promise.all([diagnostic(client,'astra','record',diagnosticReceipt),diagnostic(second,'astra','record',diagnosticReceipt)]);
+    const diagnosticReplay=await diagnostic(client,'astra','claim');
+    if(diagnosticReplay.rows[0].value.attemptState!=='verified')throw Error('Diagnostic lost durable receipt');
+    const diagnosticSolRace=await Promise.all([diagnostic(client,'sol','claim'),diagnostic(second,'sol','claim')]);
+    if(diagnosticSolRace.filter(x=>x.rows[0].value.action==='start').length!==1)throw Error('Diagnostic second slot duplicated');
+    await diagnostic(client,'sol','record',{outcome:'uncertain',reason:'provider_evidence_unverified'});
+    if((await diagnostic(second,'sol','claim')).rows[0].value.attemptState!=='needs_review')throw Error('Unknown diagnostic result was retried');
+    if((await client.query('select count(*)::int n from private.provider_diagnostic_attempts where campaign_id=$1',[diagnosticCampaign])).rows[0].n!==2)throw Error('Diagnostic exceeded two attempts');
+    console.log('DIAGNOSTIC_TWO_CONNECTION_PASS: one attempt per slot; duplicate receipt idempotent; lost acknowledgement and unknown result never resend');
 
 
   }finally{await second.end();}

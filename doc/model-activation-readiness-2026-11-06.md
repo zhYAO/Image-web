@@ -9,7 +9,7 @@
 |OpenAI聊天|gpt-6-astra、gpt-6.1-sol|Chat Completions，纯文字，无外部工具；固定default与30m缓存|
 |OpenAI普通生图|gpt-image-2.6-sunburst、gpt-image-2.6-flare|Images generations/edits；1024×1024、medium、PNG；尚不支持A+非方形模块|
 |豆包候选|doubao-seed-2-1-lite-260915|官方现行多模态模型；建议独立配置聊天、视觉、策划三个映射，不能共享一个可变聊天设置|
-|A+图片|doubao-seedream-5.0-pro|现有Agent Plan生图链路；2K，整套费用按成功图片的冻结单价结算|
+|A+图片|现有代码请求别名doubao-seedream-5.0-pro（待核实）|现有Agent Plan链路；不能冒充普通API的doubao-seedream-5-0-pro-260628版本，或直接切换收费路径；按真实像素/供应商回执核实|
 
 官方四个OpenAI页面已逐一打开核实：[Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)、[Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)、[Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst)、[Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare)。豆包准确版本来自[官方模型列表](https://docs.volcengine.com/docs/ark/model-list?lang=zh)。这证明公开ID/能力，不证明本项目密钥有权限、地域可用或账户已开通。
 
@@ -49,7 +49,7 @@ Seedream Agent Plan以AFP计量，不能从usage精确推导人民币实付。A+
 ## 建议的下一次逐项授权
 
 1. 确认Astra/Sol的示例汇率7.2、32k/4k上限及上表销售费率，或给出替代值；确认豆包三个独立映射采用2.1 Lite及其费率。此时仍不发真实请求。
-2. 首轮真实验收仅2次聊天（每模型一次），合成文字、输入预算2048/output128，不上传私图、不重试；目录最坏估值约0.28元API费，建议授权预算0.50元。此预算是事前估值和停止规则，供应商最终账单不能实时硬熔断。缺用量/模型不符即停、保留回执待核对。检查OpenAI key/模型权限和真实usage字段后，再决定缓存/停止/图片完整验收。
+2. 首轮真实验收拟为2次聊天、每模型一次。0.50元预算只适用于独立2048/128诊断，不能套用正式32k/4k上限（两次供应商目录估值5.184元）。已另行准备[默认关闭的小额诊断本地候选](provider-diagnostics-2026-11-06.md)：固定60字节消息JSON、n1/output128、独立活动与持久一次资格，不触及用户积分。Chat没有独立max_input_tokens参数；2048为保守预算/回执阈值，不伪称供应商输入token硬熔断。后续仍需明确批准新增RPC权限/部署、具体单次活动及付费预算；当前不调用。供应商最终账单不能实时硬熔断；缺失或矛盾证据即停，不自动重试。
 3. 图片分析/整套的后续验收需先批准Seedream成本依据及按模型/规格单价，再明确图片内容、张数、AFP和API现金预算。建议先一张公开合成商品图、一次分析/一次策划/一张输出，不测试真实未知结果重买；失败退款/重复结算已在隔离测试验证。
 
 模型调用资格、真实图像效果、供应商账单以及生产新价格均未验收。网站已恢复不等于这些付费能力已开放。
