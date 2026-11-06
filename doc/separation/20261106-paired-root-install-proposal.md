@@ -1,3 +1,7 @@
+# Installation remains paused after necessity review
+
+The user conditionally approved installation but requested a necessity check first. No installation is performed. [Necessity review](./20261106-paired-tool-necessity-review.md): controlled coordination is required for the exact currentM6/Web artifacts, while this four-file implementation is not architecturally mandatory. Existing39-test tooling is presently the most verified current-artifact route; a smaller one-off or genuine compatibility release needs its own validation before use. The detailed scope below is a proposal, not evidence that installation is the only option.
+
 # Exact root-tool installation proposal — not executed
 
 Candidate source commit: cdf5991b3d09976f466da7da9f8adff87052756b. Application remains7a811b326aa4b344cee08bc5a33c04e44a780fd4. Source transfer and isolated tests were explicitly approved; that approval does not install a production coordinator or active policy.

@@ -1,5 +1,18 @@
 # ZImage 项目进度
 
+## 2026-11-06 配对工具必要性复核完成，安装保持暂停
+
+状态：**necessity_review_completed；conditional_installation_paused；no_production_change**。用户同意安装的同时要求先核查必要性；此次仅只读生产检查、源代码独立审查和本地合成PG17行为验证，未执行安装或选择替代路线。
+
+- 结论：原M6＋7a811确实需要受控协同发布，但不必然需要这四个root文件。原子DDL不覆盖Web进程、两套文件指针及已加载的旧标签。工具价值是持久顺序/失败门禁，不是全局ACID，也不是解决客户端计费协议兼容。
+- 原生PG17.11新私有Unix-socket实例应用37项迁移/shim，完整验证7个案例：旧M5请求可冻结；新RPC在M5缺失42883；默认M6新chat报价2→0/旧新请求chat_tariff_unavailable；已有旧订单可回放并完成；启用合成费率后旧F0缺rateVersion仍报credit_price_changed；新协议可冻结；旧完成接口遇新token订单正确报use_token_settlement，未整额捕获。拒绝请求未改变被检查的钱包/操作/账本；全程无TCP、生产连接、真实模型调用或备份，实例已停止。
+- 独立fresh gpt-6-astra只读评审同样认为：协调必要、特定916行框架非必需。普通发布器拒绝跨schema并可能自动回旧版，旧frontend精确allowlist和已完成first-window不能伪造；诊断observer会到期重新开放，也不能直接包住M6。
+- 方案比较已形成：[必要性复核](./separation/20261106-paired-tool-necessity-review.md)。一次性维护流程可减少永久安装代码，但仍需相同root操作、持久意图、drain/真实核对和未知结果边界，目前无完整受测替代；兼容expand-contract需要版本化catalog/start/complete、旧标签桥接和新旧订单恢复矩阵，以及新构建/新批准，尚未实现。没有把任一设想标为生产可用。
+- 推荐按当前约束区分：若保持冻结M6/B1不改，已有39项Linux测试的限定operation工具是验证最充分路线，不为少几个文件临时换未测脚本；若目标优先减少永久root代码或保留聊天可用性，则先验证一次性流程/兼容改造，现有代码保留备选。主会话决定路线前继续暂停安装，既不扩大为发布平台，也不把原安装提案当唯一必经步骤。
+- 05:58:52UTC生产仍41项迁移、M6表不存在。SSH复核原Web active、fb4后端/旧F0、无新root工具/策略、无维护标记；未更改服务、密钥、权限、价格或历史数据。应用和工具源代码未改，原next-env及.env.local保持。
+
+证据：verification/m6-release-necessity-matrix-v2.{json,log}（完整钱包/操作/账本行hash）和recheck-m6-release-necessity.py。此前39项Linux通过仍只表示工具合成验收；实际DB合同、身份/F1、旧标签及聊天可用性门禁继续有效。以下安装提案和原“下一门禁”是历史检查点，按本条必要性复核及主会话后续决定执行。
+
 ## 2026-11-06 Linux配对协调器隔离验收通过，准确root安装待确认
 
 状态：**linux_paired_tests_verified；root_installation_not_performed；no_production_switch**。用户明确批准约254KB非公开测试包上传及隔离运行；读取实际对话证据后只重试一次上传并成功，先前自动审批阻塞已解决。包为254240字节，SHA e0878e33141998100e273c5152e00abec21882a73c7e79946c97452aeffee0d3；临时归档0600，70项解压输入root只读，未安装到生产工具路径。
