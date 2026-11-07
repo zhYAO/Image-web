@@ -12,19 +12,18 @@ test "$(git rev-parse HEAD)" = "${EXPECTED_COMMIT:?Set the approved main commit}
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 archive=node-v24.19.0-linux-x64.tar.gz
-curl --fail --location --proto '=https' --tlsv1.2 --retry 2 --connect-timeout 20 --max-time 300 \
-  "https://nodejs.org/dist/v24.19.0/$archive" --output "$work/$archive"
-printf '%s  %s\n' \
-  f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4 \
-  "$work/$archive" | sha256sum --check -
-tar -xzf "$work/$archive" -C "$work"
+cache_root="${HOME:?HOME is required}/.cache/zimage-yunxiao"
+node_archive="$cache_root/node/$archive"
+bash "$PROJECT_DIR/docs/superpowers/plans/assets/yunxiao-node-archive-draft.sh" \
+  "$node_archive" f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4
+tar -xzf "$node_archive" -C "$work"
 export PATH="$work/node-v24.19.0-linux-x64/bin:$PATH"
 test "$(node --version)" = v24.19.0
 npm install --global pnpm@11.19.0
 test "$(pnpm --version)" = 11.19.0
 export CI=true NEXT_TELEMETRY_DISABLED=1
 
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile --store-dir "$cache_root/pnpm-store"
 
 mkdir "$work/font-source"
 for weight in Regular Bold; do
@@ -48,6 +47,7 @@ node --test apps/web/scripts/ui-dependency-boundary.test.mjs apps/web/scripts/me
 python3 -m unittest discover -s ops/aliyun -p 'test_*.py'
 python3 -m unittest discover -s ops/aliyun/frontend -p 'test_*.py'
 python3 -m unittest discover -s ops/aliyun/backend -p 'test_*.py'
+python3 "$PROJECT_DIR/docs/superpowers/plans/assets/test_yunxiao_node_cache.py"
 node --test ops/aliyun/frontend/package.test.mjs ops/aliyun/backend/http-admission.test.cjs
 pnpm exec vitest run supabase/functions/generation-worker supabase/functions/cleanup-worker
 
