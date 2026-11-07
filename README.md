@@ -37,6 +37,8 @@ LangGraph 初始化入口为 `pnpm setup:langgraph`。真实环境验收需单�
 
 ## 质量门禁
 
+代码提交、GitHub 主库和 Codeup 单向构建副本的工作流程见 [代码提交规范](CONTRIBUTING.md)。
+
 ```bash
 pnpm lint
 pnpm typecheck
