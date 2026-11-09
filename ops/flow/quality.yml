@@ -7,7 +7,7 @@ sources:
     branch: codex/yunxiao-quality-2098dfb
     certificate:
       type: serviceConnection
-      serviceConnection: 18238
+      serviceConnection: rpy5jbjw7kknkz88
 variables:
   - key: EXPECTED_COMMIT
     value: ''

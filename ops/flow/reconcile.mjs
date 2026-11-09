@@ -63,7 +63,7 @@ async function request(url, headers, { body, missing = false } = {}) {
   return response.json();
 }
 
-function controller(env) {
+export function createController(env, execute = execFileSync) {
   const { ZIMAGE_GITHUB_APP_TOKEN: githubToken, ZIMAGE_GITHUB_APP_BOT_ID: botId,
     ZIMAGE_FLOW_PAT: flowToken, ZIMAGE_FLOW_QUALITY_PIPELINE_ID: pipelineId } = env;
   if (!githubToken || !flowToken || !/^[1-9][0-9]*$/.test(botId ?? '') || !/^[1-9][0-9]*$/.test(pipelineId ?? '')) {
@@ -92,8 +92,8 @@ function controller(env) {
     syncMirror() {
       let result;
       try {
-        result = JSON.parse(execFileSync('aliyun', ['devops', 'TriggerRepositoryMirrorSync', '--region', 'cn-shanghai',
-          '--organizationId', organization, '--repositoryId', codeupId],
+        result = JSON.parse(execute('aliyun', ['devops', 'POST', `/repository/${codeupId}/mirror`,
+          '--version', '2021-06-25', '--region', 'cn-shanghai', '--organizationId', organization],
         { encoding: 'utf8', timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'] }));
       } catch {
         throw new Error('Codeup mirror sync could not be submitted by the official Aliyun CLI');
@@ -138,7 +138,7 @@ function controller(env) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const services = controller(process.env);
+    const services = createController(process.env);
     for (const target of await services.targets()) {
       try { console.log(`${target.branch}: ${await reconcileRef(target, services)}`); }
       catch (error) { console.error(`${target.branch}: ${error.message}`); process.exitCode = 1; }

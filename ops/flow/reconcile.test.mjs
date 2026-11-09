@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { reconcileRef } from './reconcile.mjs';
+import { createController, reconcileRef } from './reconcile.mjs';
 
 const sha = 'a'.repeat(40);
 const different = 'b'.repeat(40);
@@ -69,4 +69,17 @@ test('reconciles a manually retried Flow run without submitting a duplicate', as
     run: { sha, status: 'SUCCESS', quality: 'SUCCESS', database: 'SUCCESS' } });
   assert.equal(await reconcileRef(target, services), 'success');
   assert.deepEqual(events, [{ state: 'success', runId: '42' }]);
+});
+
+test('calls mirror synchronization with the official ROA method and resource path', () => {
+  const calls = [];
+  const client = createController({
+    ZIMAGE_GITHUB_APP_TOKEN: 'fixture', ZIMAGE_GITHUB_APP_BOT_ID: '2',
+    ZIMAGE_FLOW_PAT: 'fixture', ZIMAGE_FLOW_QUALITY_PIPELINE_ID: '3',
+  }, (program, args) => {
+    calls.push({ program, args });
+    return JSON.stringify({ success: true, result: { result: true } });
+  });
+  client.syncMirror();
+  assert.deepEqual(calls[0].args.slice(0, 3), ['devops', 'POST', '/repository/5027582/mirror']);
 });
