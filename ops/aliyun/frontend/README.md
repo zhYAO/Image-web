@@ -125,13 +125,33 @@ incoming 使用目录 FD + O_NOFOLLOW 打开，检查单硬链接和前后 inode
 
 ## 激活、失败与回退
 
-先获取共享锁、记录 exact current/backend、验证 API major/minor/capabilities/verified 组合和 root 批准，再做独立 HTTPS baseline。只有这些门禁通过后才创建公开 namespace 映射并原子切 `current`；未批准、不兼容或 baseline 失败的私有封存目录不能经 `/frontend-assets/` 公开访问，封存重试也必须重新过门禁。通过后才更新 previous；整个过程不会重启后端。
+先获取共享锁并记录确切的当前前端。候选归档在私有暂存区核对完整内容和清单，root 批准通过后才封存目录或写入对象缓存。随后核对实际后端、API 兼容范围和独立 HTTPS 基线。通过后才创建公开 namespace 映射并原子切换 `current`。复用已封存的候选也要重新校验批准。只有切换后的检查通过才更新 `previous`。整个过程无需重启后端。
 
 生产检查已实现：loopback `/api/meta` 严格契约，每次准入实时 GET 固定 `/api/public-config` 并校验严格 DTO 和上述正式认证 HTTP 模式、独立公网 HTTPS `/api/meta` backend 身份、首页 HTML MIME/no-store、最小 `version.json` 精确 namespace/no-store、代表性 JS/CSS 真实 SHA/MIME/immutable、缺 chunk 真实404且不带 immutable；忽略代理环境，禁止重定向，正常 TLS 验证。公开配置 503、无效 JSON/DTO、错误 MIME 或不支持模式均拒绝准入；动态法律版本/CAPTCHA 值可由后端更新，不要求整份运行期配置摘要与构建时相同。完整资源闭包另在磁盘逐文件检查。ready/PID、所有媒体 HTTP、真实账号只读、退役状态和旧 RSC/`_next`/草稿在途请求仍需整合层/真实环境验收，不能将这些标记为已经完成。
 
 失败只在 current 仍为本事务候选、且全局 sequence 仍属于本事务时恢复捕获的旧目录；不猜 previous。namespace 相等不能绕过 B→C→B 的世代检查。恢复最多一次，复验失败或 current 漂移记 `needs_attention`，保持最初失败；不会反选坏版本或循环重试。`recovered` 的 `success` 仍为 false，CLI 非0退出。掉线/不确定结果先用 status/journal 查询，不用新的 operation 重放。
 
 统一 CLI、Nginx split 模板与入口兼容由父任务整合，不在本目录改旧文件。Linux 文件系统/断电恢复、生产内存/磁盘余量、完整真实组合与性能仍须在上线前验证。
+
+## Flow 单次授权入口
+
+Flow 使用独立锁定账号 `zimage-flow-frontend`。把审查过的 `flow_release.py`、`release.py`、`manifest.py`、`transport.py` 安装到独立的 root 管理目录 `/opt/zimage/frontend-flow-tools/`。现有配对发布会校验 `/opt/zimage/frontend-tools/` 的工具摘要，安装 Flow 时须使用独立目录。把 `flow-ssh-command.sh` 安装为 root 管理的 `/usr/local/libexec/zimage-flow-frontend`。该账号的 `authorized_keys` 由 root 管理，每把密钥使用 `restrict,command="/usr/local/libexec/zimage-flow-frontend"`，首次演练使用短期公钥。只配置这一条 sudo 规则，安装前用 `visudo` 校验。
+
+```sudoers
+zimage-flow-frontend ALL=(root) NOPASSWD: NOSETENV: /usr/bin/python3 -I -B /opt/zimage/frontend-flow-tools/flow_release.py
+```
+
+管理员在生产本机以 root 执行 `python3 -I -B /opt/zimage/frontend-flow-tools/flow_release.py --approval-context`，获得当前前端、后端、发布序列及策略摘要。策略摘要覆盖实际安装的四个 Python 文件和 `frontend-release.json`。维护期间或配对发布尚未结束时不能生成上下文。逐项审查输入后将批准文件原子安装到 root 管理的 `/etc/zimage/frontend-flow-approvals/<operationId>.json`。文件为 canonical JSON，使用 UTF-8、排序键、紧凑分隔和末尾 LF，哈希是文件原始字节的 SHA-256。
+
+| 批准字段 | 绑定内容 |
+| --- | --- |
+| `schemaVersion`、`operationId`、`action` | `1`、`flow-front-` 开头的唯一 ID、`deploy` 或 `rollback` |
+| `namespace`、`artifactId`、`sourceSHA`、`manifestSha256` | 目标制品和完整源码身份 |
+| `archiveSha256`、`archiveBytes` | 发布包 SHA-256 和字节数。回退分别填 `null` 和 `0` |
+| `expectedCurrent`、`expectedBackend`、`expectedSequence`、`policySha256` | 从本机读取的精确生产基线与策略 |
+| `issuedAt`、`expiresAt` | 整数 Unix 秒，批准有效期最长 30 分钟 |
+
+制品仍需已有的 `frontend-acceptances/<artifactId>.json`。Flow 通过固定 SSH 命令提交批准摘要和归档，不能写批准目录。服务端在共享锁内核对请求动作、目标、源码、后端和归档摘要，再确认维护、当前版本、序列、策略和批准。通过后先持久化操作预留，再接收归档，封存前重新核验。已产生的日志按同一批准摘要只读返回。需要回退时，单独审查并绑定回退目标与新的生产基线。
 
 ## 缺失 blob 增量传输
 

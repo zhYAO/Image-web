@@ -1,0 +1,104 @@
+name: ZImage frontend main candidate
+sources:
+  zimage:
+    type: codeup
+    name: ZImage Codeup mirror
+    endpoint: https://zimage-cn-shanghai.devops.aliyuncs.com/codeup/zhYAO/Image-web.git
+    branch: main
+    branchesFilter: '^main$'
+    certificate:
+      type: serviceConnection
+      serviceConnection: rpy5jbjw7kknkz88
+variables:
+  - key: EXPECTED_COMMIT
+    value: ''
+  - key: ZIMAGE_FRONTEND_BACKEND_RELEASES
+    value: ''
+  - key: ZIMAGE_GITHUB_APP_BOT_ID
+    value: ''
+stages:
+  candidate:
+    name: Frontend candidate
+    jobs:
+      frontend:
+        name: Build frontend candidate
+        timeoutMinutes: 30
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux4@sha256:77802307369f3797bb079ead332059a1fefc457fd37f2740484850eb79be1a00
+          instanceType: LARGE_4C8G
+        steps:
+          build:
+            name: Build and identify frontend payload
+            step: Command
+            with:
+              run: |
+                set -euo pipefail
+                cd "$PROJECT_DIR"
+                revision="${EXPECTED_COMMIT:?Flow must supply EXPECTED_COMMIT}"
+                [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
+                test "$(git rev-parse --verify HEAD)" = "$revision" || {
+                  echo 'Codeup checkout does not match the approved GitHub main SHA' >&2
+                  exit 1
+                }
+                test -z "$(git status --porcelain=v1 --untracked-files=all)"
+                test -z "$(find . apps/frontend -maxdepth 1 -name '.env*' -print -quit)"
+                releases="${ZIMAGE_FRONTEND_BACKEND_RELEASES:?Supply the backend release SHAs to validate}"
+                [[ "$releases" =~ ^[a-f0-9]{40}(,[a-f0-9]{40})*$ ]]
+                python3 -I -B ops/flow/frontend_operation.py --check-main "$revision"
+                [[ "$PIPELINE_ID" =~ ^[0-9]+$ && "$BUILD_NUMBER" =~ ^[0-9]+$ ]]
+                namespace="flow-${PIPELINE_ID}-${BUILD_NUMBER}-${revision:0:12}"
+
+                work="$(mktemp -d)"
+                trap 'rm -rf -- "$work"' EXIT
+                archive="$work/node-v24.19.0-linux-x64.tar.gz"
+                bash docs/superpowers/plans/assets/yunxiao-node-archive-draft.sh \
+                  "$archive" f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4
+                tar -xzf "$archive" -C "$work"
+                export PATH="$work/node-v24.19.0-linux-x64/bin:$PATH"
+                npm install --global --prefix "$work/pnpm" --no-audit --no-fund pnpm@11.19.0
+                export PATH="$work/pnpm/bin:$PATH"
+                test "$(node --version)" = v24.19.0
+                test "$(pnpm --version)" = 11.19.0
+                CI=true pnpm --filter '@zimage/frontend...' install --frozen-lockfile
+
+                descriptor="$(node -e '
+                  const allowedBackendReleases = [...new Set(process.argv[1].split(","))];
+                  const apiRequirements = { major: 1, minMinor: 0, capabilities: ["runtime.public-config.v1", "runtime.meta.v1"] };
+                  console.log(JSON.stringify({ apiRequirements, allowedBackendReleases }));
+                ' "$releases")"
+                env -i PATH="$PATH" HOME="$HOME" CI=true \
+                  ZIMAGE_ASSET_NAMESPACE="$namespace" ZIMAGE_FRONTEND_COMPATIBILITY="$descriptor" \
+                  pnpm build:frontend
+
+                test "$(git rev-parse --verify HEAD)" = "$revision"
+                test -z "$(git status --porcelain=v1 --untracked-files=all)"
+                node --input-type=module - "$revision" "$namespace" "$descriptor" <<'NODE'
+                import assert from 'node:assert/strict';
+                import { readFileSync } from 'node:fs';
+                const [sourceSHA, namespace, descriptor] = process.argv.slice(2);
+                const candidate = JSON.parse(readFileSync('apps/frontend/dist/.release/candidate.json', 'utf8'));
+                assert.equal(candidate.sourceIdentity.sourceSHA, sourceSHA);
+                assert.equal(candidate.sourceIdentity.dirty, false);
+                assert.equal(candidate.namespace, namespace);
+                assert.deepEqual(candidate.allowedBackendReleases, JSON.parse(descriptor).allowedBackendReleases);
+                NODE
+                python3 -I -B ops/flow/frontend_operation.py --check-main "$revision"
+                mkdir frontend-flow-output
+                tar -czf frontend-flow-output/frontend-candidate.tgz -C apps/frontend/dist .
+                cp apps/frontend/dist/.release/candidate.json frontend-flow-output/candidate.json
+                cd frontend-flow-output
+                sha256sum frontend-candidate.tgz candidate.json | tee SHA256SUMS
+                printf 'frontend-candidate-built commit=%s namespace=%s\n' "$revision" "$namespace"
+          archive:
+            name: Archive candidate for compatibility acceptance
+            step: ArtifactUpload
+            with:
+              uploadType: packages
+              serviceConnection: kkuk8ikqptc1y8uj
+              repo: flow_generic_repo
+              artifact: zimage-frontend-candidate
+              version: '${PIPELINE_ID}-${BUILD_NUMBER}'
+              filePath:
+                - frontend-flow-output/
+              includePathInArtifact: false

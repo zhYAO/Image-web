@@ -1,0 +1,79 @@
+name: ZImage frontend deploy
+sources:
+  zimage:
+    type: codeup
+    endpoint: https://zimage-cn-shanghai.devops.aliyuncs.com/codeup/zhYAO/Image-web.git
+    branch: main
+    branchesFilter: '^main$'
+    certificate:
+      type: serviceConnection
+      serviceConnection: rpy5jbjw7kknkz88
+  review_package:
+    type: packages
+    name: Reviewed frontend package
+    repoType: generic
+    repo: flow_generic_repo
+    artifact: zimage-frontend-release-review
+    version: '1415019-5'
+    certificate:
+      type: serviceConnection
+      serviceConnection: kkuk8ikqptc1y8uj
+defaultWorkspace: zimage
+variables:
+  - key: ZIMAGE_FRONTEND_OPERATION
+    value: ''
+  - key: ZIMAGE_FRONTEND_APPROVAL_SHA256
+    value: ''
+  - key: ZIMAGE_FRONTEND_PACKAGE_VERSION
+    value: ''
+  - key: ZIMAGE_FRONTEND_ARCHIVE_SHA256
+    value: ''
+  - key: ZIMAGE_FRONTEND_TARGET
+    value: ''
+  - key: ZIMAGE_FRONTEND_BACKEND
+    value: ''
+  - key: ZIMAGE_FRONTEND_SOURCE
+    value: ''
+stages:
+  approve:
+    name: Review exact frontend release
+    jobs:
+      review:
+        name: Approve reviewed frontend release
+        component: ManualValidate
+        with:
+          validatorType: users
+          validateMethod: and
+          validators:
+            - '__ZIMAGE_FRONTEND_REVIEWER_ID__'
+  deploy:
+    name: Apply the approved frontend release
+    jobs:
+      production:
+        name: Call the restricted ECS publisher
+        timeoutMinutes: 10
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux4@sha256:77802307369f3797bb079ead332059a1fefc457fd37f2740484850eb79be1a00
+          instanceType: SMALL_1C2G
+        steps:
+          publish:
+            name: Verify immutable inputs and apply once
+            step: Command
+            with:
+              run: |
+                set -euo pipefail
+                cd "$PROJECT_DIR"
+                test "$(git rev-parse HEAD)" = "${ZIMAGE_FRONTEND_SOURCE:?}"
+                test -z "$(git status --porcelain=v1 --untracked-files=all)"
+                version="${ZIMAGE_FRONTEND_PACKAGE_VERSION:?}"
+                [[ "$version" =~ ^[1-9][0-9]*-[1-9][0-9]*$ ]]
+                bundle="$(find "$(dirname "$(realpath "$PROJECT_DIR")")/review_package" -maxdepth 3 -type f -name "zimage-frontend-release-review_${version}.tgz" -print -quit)"
+                test -n "$bundle"
+                work="$(mktemp -d)"
+                trap 'rm -rf -- "$work"' EXIT
+                (ulimit -f 1048576; tar -xOf "$bundle" ./frontend-review.tgz > "$work/frontend.tgz")
+                python3 -I -B ops/flow/frontend_operation.py --action deploy \
+                  --operation "${ZIMAGE_FRONTEND_OPERATION:?}" --approval-sha256 "${ZIMAGE_FRONTEND_APPROVAL_SHA256:?}" \
+                  --archive "$work/frontend.tgz" --archive-sha256 "${ZIMAGE_FRONTEND_ARCHIVE_SHA256:?}" \
+                  --target "${ZIMAGE_FRONTEND_TARGET:?}" --backend "${ZIMAGE_FRONTEND_BACKEND:?}" --source "$ZIMAGE_FRONTEND_SOURCE"

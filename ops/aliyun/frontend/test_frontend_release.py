@@ -698,17 +698,18 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result['state'], 'needs_attention')
         self.assertEqual(self.adapter.current(), 'web-B')
 
-    def test_missing_trusted_acceptance_never_activates_candidate(self):
+    def test_missing_trusted_acceptance_never_seals_candidate(self):
         report = self.pack()
         self.adapter.approval = lambda manifest, manifest_sha: False
         with self.assertRaisesRegex(ValueError, 'acceptance'):
             self.deploy(report)
         self.assertIsNone(self.adapter.current())
         self.assertFalse(os.path.lexists(self.server / 'frontend/assets/web-A'))
-        # A private sealed candidate is not public authorization on retry.
+        self.assertFalse((self.server / 'frontend/releases/web-A').exists())
+        self.assertEqual(list((self.server / 'frontend/objects').iterdir()), [])
         with self.assertRaisesRegex(ValueError, 'acceptance'):
             self.adapter.deploy('op-A', 'web-A', report['archiveSha256'], report['manifestSha256'], None)
-        self.assertFalse(os.path.lexists(self.server / 'frontend/assets/web-A'))
+        self.assertFalse((self.server / 'frontend/releases/web-A').exists())
 
     def test_rollback_requires_compatible_retained_target(self):
         a, b = self.pack(), self.pack('web-B')

@@ -278,21 +278,28 @@ class Publisher:
                 sync_directory(target.parent)
             finally: temporary.unlink(missing_ok=True)
 
-    def seal(self, operation, namespace, archive_sha, manifest_sha):
+    def seal(self, operation, namespace, archive_sha, manifest_sha, *, private_archive=None, prepare=None):
         path = self.base / 'releases' / namespace
         if os.path.lexists(path):
             try: value = self.sealed(namespace, manifest_sha)
             except ValueError as exc: raise ValueError('Immutable namespace already sealed with different bytes') from exc
+            self.require_approval(value, manifest_sha)
+            if prepare is not None: prepare(value)
             self.cache_sealed_objects(namespace)
             return value
         stage = Path(tempfile.mkdtemp(prefix=operation + '-', dir=self.base / '.stage'))
         try:
             archive = stage / 'input.tgz'
-            self.copy_incoming(operation, archive_sha, archive)
+            if private_archive is None:
+                self.copy_incoming(operation, archive_sha, archive)
+            else:
+                os.replace(private_archive, archive)
             value = transport.assemble(archive, stage / 'dist', manifest_sha, self.cached_object)
             if value['assetNamespace'] != namespace: raise ValueError('Uploaded namespace differs from request')
             # No uploader path is read after this point. All validation is over
             # root-private copied bytes, never a checked-but-writable incoming.
+            self.require_approval(value, manifest_sha)
+            if prepare is not None: prepare(value)
             self.freeze(stage / 'dist')
             os.rename(stage / 'dist', path)
             os.chmod(path, 0o555)
@@ -304,11 +311,14 @@ class Publisher:
         finally:
             shutil.rmtree(stage)
 
+    def require_approval(self, value, manifest_sha):
+        if self.approval is None or self.approval(value, manifest_sha) is not True:
+            raise ValueError('Missing trusted acceptance approval')
+
     def checked_meta(self, value):
         if self.meta is None: raise ValueError('Missing trusted meta reader')
         manifest_sha = m.digest(m.read_regular(self.base / 'releases' / value['assetNamespace'] / '.release/manifest.json', m.MAX_JSON))
-        if self.approval is None or self.approval(value, manifest_sha) is not True:
-            raise ValueError('Missing trusted acceptance approval')
+        self.require_approval(value, manifest_sha)
         meta = self.meta()
         backend = m.compatibility(value, meta)
         return backend

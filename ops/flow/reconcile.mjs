@@ -1,8 +1,16 @@
+const fullSha = /^[a-f0-9]{40}$/;
+const flowId = /^[1-9][0-9]*$/;
+const pendingRuns = new Set(['INIT', 'PENDING', 'RUNNING', 'QUEUED', 'WAITING', 'CANCELLING']);
+
+function qualityPassed(run, sha) {
+  return run?.status === 'SUCCESS' && run.sha === sha && run.quality === 'SUCCESS' && run.database === 'SUCCESS';
+}
+
 // Run only from a protected Flow job with concurrency set to one. The
 // reservation must be durable before Flow is asked to start a run.
-export async function reconcileRef(target, services, { mirrorPolls = 12 } = {}) {
+export async function reconcileRef(target, services, { mirrorPolls = 12, succeeded = qualityPassed, beforeStart } = {}) {
   const { branch, sha } = target;
-  if (typeof branch !== 'string' || !branch || !/^[a-f0-9]{40}$/.test(sha ?? '')) {
+  if (typeof branch !== 'string' || !branch || !fullSha.test(sha ?? '')) {
     throw new Error('Reconciliation requires a GitHub branch and full commit SHA');
   }
   const current = () => services.readPrimary(branch);
@@ -13,13 +21,15 @@ export async function reconcileRef(target, services, { mirrorPolls = 12 } = {}) 
   if (check) {
     if (!check.runId) return check.state === 'pending' ? 'submission-uncertain' : check.state;
     const run = await services.readRun(check.runId);
-    if (!run || ['RUNNING', 'QUEUED', 'WAITING'].includes(run.status)) return 'pending';
+    if (!run || pendingRuns.has(run.status)) return 'pending';
     if (await current() !== sha) return 'superseded';
-    const state = run.sha === sha && run.status === 'SUCCESS' &&
-      run.quality === 'SUCCESS' && run.database === 'SUCCESS' ? 'success' : 'failure';
+    const state = succeeded(run, sha) ? 'success' : 'failure';
     if (state !== check.state) await services.writeCheck(target, { state, runId: check.runId });
     return state;
   }
+
+  const blocked = await beforeStart?.();
+  if (blocked) return blocked;
 
   if (await services.readMirror(branch) !== sha) {
     await services.syncMirror();
@@ -35,9 +45,21 @@ export async function reconcileRef(target, services, { mirrorPolls = 12 } = {}) 
   if (await current() !== sha) return 'superseded';
   await services.writeCheck(target, { state: 'pending' });
   const runId = await services.start(target);
-  if (!/^[1-9][0-9]*$/.test(runId ?? '')) throw new Error('Flow did not return a valid run ID');
+  if (!flowId.test(runId ?? '')) throw new Error('Flow did not return a valid run ID');
   await services.writeCheck(target, { state: 'pending', runId });
   return 'submitted';
+}
+
+export async function reconcileFrontend(target, services) {
+  if (target.branch !== 'main' || !services.frontend) return 'disabled';
+  return reconcileRef(target, { ...services, ...services.frontend }, {
+    succeeded: (run, sha) => run.sha === sha && run.status === 'SUCCESS' && run.candidate === 'SUCCESS',
+    beforeStart: async () => {
+      const quality = await services.readCheck(target);
+      if (quality?.state !== 'success' || !flowId.test(quality.runId ?? '') ||
+          !qualityPassed(await services.readRun(quality.runId), target.sha)) return 'quality-unverified';
+    },
+  });
 }
 import { execFileSync } from 'node:child_process';
 import { sign } from 'node:crypto';
@@ -51,6 +73,7 @@ const codeupId = '5027582';
 const site = 'https://zimage-cn-shanghai.devops.aliyuncs.com';
 const cloneUrl = `${site}/codeup/zhYAO/Image-web.git`;
 const context = 'yunxiao/quality';
+const frontendContext = 'yunxiao/frontend-candidate';
 
 async function request(url, headers, { body, missing = false } = {}) {
   const response = await fetch(url, {
@@ -82,10 +105,15 @@ export function createController(env, execute = execFileSync, send = request) {
   const { ZIMAGE_GITHUB_APP_TOKEN: githubToken, ZIMAGE_GITHUB_APP_BOT_ID: botId,
     ZIMAGE_GITHUB_APP_CLIENT_ID: clientId, ZIMAGE_GITHUB_APP_INSTALLATION_ID: installationId,
     ZIMAGE_GITHUB_APP_PRIVATE_KEY: privateKey,
-    ZIMAGE_FLOW_PAT: flowToken, ZIMAGE_FLOW_QUALITY_PIPELINE_ID: pipelineId } = env;
-  const appConfigured = clientId && privateKey && /^[1-9][0-9]*$/.test(installationId ?? '');
-  if ((!githubToken && !appConfigured) || !flowToken || !/^[1-9][0-9]*$/.test(botId ?? '') || !/^[1-9][0-9]*$/.test(pipelineId ?? '')) {
+    ZIMAGE_FLOW_PAT: flowToken, ZIMAGE_FLOW_QUALITY_PIPELINE_ID: pipelineId,
+    ZIMAGE_FLOW_FRONTEND_CANDIDATE_PIPELINE_ID: frontendId, ZIMAGE_FRONTEND_BACKEND_RELEASES: backends } = env;
+  const appConfigured = clientId && privateKey && flowId.test(installationId ?? '');
+  if ((!githubToken && !appConfigured) || !flowToken || !flowId.test(botId ?? '') || !flowId.test(pipelineId ?? '')) {
     throw new Error('Protected controller requires a GitHub App, its bot ID, a Flow PAT and the quality pipeline ID');
+  }
+  if (frontendId && (!flowId.test(frontendId) || frontendId === pipelineId ||
+      !/^[a-f0-9]{40}(,[a-f0-9]{40})*$/.test(backends ?? ''))) {
+    throw new Error('Frontend reconciliation needs a separate candidate pipeline and exact backend SHAs');
   }
   let token;
   const github = async (path, options) => {
@@ -94,8 +122,45 @@ export function createController(env, execute = execFileSync, send = request) {
       { Authorization: `Bearer ${await token}`, Accept: 'application/vnd.github+json' }, options);
   };
   const yunxiao = (path, options) => send(`${site}/oapi/v1/${path}`, { 'x-yunxiao-token': flowToken }, options);
-  const runs = `flow/pipelines/${pipelineId}/runs`;
   const readPrimary = async (branch) => (await github(`git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, { missing: true }))?.object?.sha;
+
+  function pipelineChecks(id, statusContext, names, inputs) {
+    const runs = `flow/pipelines/${id}/runs`;
+    return {
+      async readCheck({ sha }) {
+        for (let page = 1; ; page += 1) {
+          const statuses = await github(`commits/${sha}/statuses?per_page=100&page=${page}`);
+          const status = statuses.find(item => item.context === statusContext && String(item.creator?.id) === botId);
+          if (status) return { state: status.state, runId: /^Flow run ([1-9][0-9]*)$/.exec(status.description ?? '')?.[1] };
+          if (statuses.length < 100) return null;
+        }
+      },
+      async writeCheck({ sha }, { state, runId }) {
+        const result = await github(`statuses/${sha}`, { body: {
+          context: statusContext, state, description: runId ? `Flow run ${runId}` : 'Flow submission reserved',
+          ...(runId ? { target_url: `${site}/flow/pipelines/${id}/runs/${runId}` } : {}),
+        } });
+        if (String(result.creator?.id) !== botId) throw new Error('GitHub status was not written by the configured App bot');
+      },
+      async start({ branch, sha }) {
+        const runId = await yunxiao(runs, { body: { params: JSON.stringify({
+          envs: { EXPECTED_COMMIT: sha, ...inputs }, runningBranchs: { [cloneUrl]: branch },
+        }) } });
+        return String(runId);
+      },
+      async readRun(runId) {
+        const run = await yunxiao(`${runs}/${runId}`);
+        if (String(run.pipelineRunId) !== runId || String(run.pipelineId) !== id) throw new Error('Unexpected Flow run identity');
+        const jobs = (run.stages ?? []).flatMap(stage => stage.stageInfo?.jobs ?? []);
+        const result = { sha: run.globalParams?.find(param => param.key === 'EXPECTED_COMMIT')?.value, status: run.status };
+        for (const [key, name] of Object.entries(names)) {
+          const matching = jobs.filter(job => job.name === name);
+          result[key] = matching.length === 1 ? matching[0].status : undefined;
+        }
+        return result;
+      },
+    };
+  }
 
   return {
     readPrimary,
@@ -122,38 +187,10 @@ export function createController(env, execute = execFileSync, send = request) {
       }
       if (result.success !== true || result.result?.result !== true) throw new Error('Codeup mirror sync request was rejected');
     },
-    async readCheck({ sha }) {
-      for (let page = 1; ; page += 1) {
-        const statuses = await github(`commits/${sha}/statuses?per_page=100&page=${page}`);
-        const status = statuses.find(item => item.context === context && String(item.creator?.id) === botId);
-        if (status) return { state: status.state, runId: /^Flow run ([1-9][0-9]*)$/.exec(status.description ?? '')?.[1] };
-        if (statuses.length < 100) return null;
-      }
-    },
-    async writeCheck({ sha }, { state, runId }) {
-      const result = await github(`statuses/${sha}`, { body: {
-        context, state, description: runId ? `Flow run ${runId}` : 'Flow submission reserved',
-        ...(runId ? { target_url: `${site}/flow/pipelines/${pipelineId}/runs/${runId}` } : {}),
-      } });
-      if (String(result.creator?.id) !== botId) throw new Error('GitHub status was not written by the configured App bot');
-    },
-    async start({ branch, sha }) {
-      const runId = await yunxiao(runs, { body: { params: JSON.stringify({
-        envs: { EXPECTED_COMMIT: sha }, runningBranchs: { [cloneUrl]: branch },
-      }) } });
-      return String(runId);
-    },
-    async readRun(runId) {
-      const run = await yunxiao(`${runs}/${runId}`);
-      if (String(run.pipelineRunId) !== runId || String(run.pipelineId) !== pipelineId) throw new Error('Unexpected Flow run identity');
-      const jobs = (run.stages ?? []).flatMap(stage => stage.stageInfo?.jobs ?? []);
-      const jobStatus = (name) => {
-        const matching = jobs.filter(job => job.name === name);
-        return matching.length === 1 ? matching[0].status : undefined;
-      };
-      return { sha: run.globalParams?.find(param => param.key === 'EXPECTED_COMMIT')?.value,
-        status: run.status, quality: jobStatus('quality'), database: jobStatus('database') };
-    },
+    ...pipelineChecks(pipelineId, context, { quality: 'quality', database: 'database' }),
+    frontend: frontendId ? pipelineChecks(frontendId, frontendContext, { candidate: 'Build frontend candidate' }, {
+      ZIMAGE_FRONTEND_BACKEND_RELEASES: backends, ZIMAGE_GITHUB_APP_BOT_ID: botId,
+    }) : null,
     wait: () => sleep(5_000),
   };
 }
@@ -162,7 +199,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const services = createController(process.env);
     for (const target of await services.targets()) {
-      try { console.log(`${target.branch}: ${await reconcileRef(target, services)}`); }
+      try {
+        const quality = await reconcileRef(target, services);
+        console.log(`${target.branch}: ${quality}`);
+        if (target.branch === 'main' && services.frontend) {
+          console.log(`main frontend candidate: ${await reconcileFrontend(target, services)}`);
+        }
+      }
       catch (error) { console.error(`${target.branch}: ${error.message}`); process.exitCode = 1; }
     }
   } catch (error) {

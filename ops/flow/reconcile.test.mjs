@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import { test } from 'node:test';
-import { createController, reconcileRef } from './reconcile.mjs';
+import * as controller from './reconcile.mjs';
+
+const { createController, reconcileRef, reconcileFrontend } = controller;
 
 const sha = 'a'.repeat(40);
 const different = 'b'.repeat(40);
@@ -70,6 +72,75 @@ test('reconciles a manually retried Flow run without submitting a duplicate', as
     run: { sha, status: 'SUCCESS', quality: 'SUCCESS', database: 'SUCCESS' } });
   assert.equal(await reconcileRef(target, services), 'success');
   assert.deepEqual(events, [{ state: 'success', runId: '42' }]);
+});
+
+test('keeps an initialized Flow run pending until execution starts', async () => {
+  const { services, events } = fixture({ check: { state: 'pending', runId: '42' }, run: { status: 'INIT' } });
+  assert.equal(await reconcileRef(target, services), 'pending');
+  assert.deepEqual(events, []);
+});
+
+test('submits one frontend candidate only after exact main quality and database success', async () => {
+  const quality = { sha, status: 'SUCCESS', quality: 'SUCCESS', database: 'SUCCESS' };
+  const primary = fixture({ check: { state: 'success', runId: '42' }, run: quality });
+  const frontend = fixture({ run: { sha, status: 'SUCCESS', candidate: 'SUCCESS' } });
+  primary.services.frontend = frontend.services;
+  assert.equal(await reconcileFrontend({ branch: 'topic', sha }, primary.services), 'disabled');
+  assert.equal(await reconcileFrontend(target, primary.services), 'submitted');
+  assert.equal(await reconcileFrontend(target, primary.services), 'success');
+  assert.equal(await reconcileFrontend(target, primary.services), 'success');
+  assert.deepEqual(frontend.events, [{ state: 'pending' }, target, { state: 'pending', runId: '42' }, { state: 'success', runId: '42' }]);
+  assert.deepEqual(primary.events, []);
+});
+
+test('does not start a frontend candidate from a stale or partial quality result', async () => {
+  for (const run of [
+    { sha: different, status: 'SUCCESS', quality: 'SUCCESS', database: 'SUCCESS' },
+    { sha, status: 'SUCCESS', quality: 'SUCCESS', database: 'SKIPPED' },
+    { sha, status: 'INIT' },
+  ]) {
+    const { services } = fixture({ check: { state: 'success', runId: '42' }, run });
+    const frontend = fixture();
+    services.frontend = frontend.services;
+    assert.equal(await reconcileFrontend(target, services), 'quality-unverified');
+    assert.deepEqual(frontend.events, []);
+  }
+});
+
+test('keeps an uncertain candidate reservation without a second submission', async () => {
+  const { services } = fixture({ check: { state: 'success', runId: '42' },
+    run: { sha, status: 'SUCCESS', quality: 'SUCCESS', database: 'SUCCESS' } });
+  const frontend = fixture({ startFails: true });
+  services.frontend = frontend.services;
+  await assert.rejects(reconcileFrontend(target, services), /submission connection lost/);
+  assert.equal(await reconcileFrontend(target, services), 'submission-uncertain');
+  assert.deepEqual(frontend.events, [{ state: 'pending' }, target]);
+});
+
+test('records a canceled candidate even after quality is no longer available', async () => {
+  const { services } = fixture({ check: { state: 'failure', runId: '21' } });
+  const frontend = fixture({ check: { state: 'pending', runId: '42' }, run: { sha, status: 'CANCELED' } });
+  services.frontend = frontend.services;
+  assert.equal(await reconcileFrontend(target, services), 'failure');
+  assert.deepEqual(frontend.events, [{ state: 'failure', runId: '42' }]);
+});
+
+test('submits frontend inputs to the configured candidate pipeline without forwarding credentials', async () => {
+  const backend = 'c'.repeat(40);
+  const calls = [];
+  const services = createController({
+    ZIMAGE_GITHUB_APP_TOKEN: 'fixture', ZIMAGE_GITHUB_APP_BOT_ID: '2', ZIMAGE_FLOW_PAT: 'fixture',
+    ZIMAGE_FLOW_QUALITY_PIPELINE_ID: '3', ZIMAGE_FLOW_FRONTEND_CANDIDATE_PIPELINE_ID: '4',
+    ZIMAGE_FRONTEND_BACKEND_RELEASES: backend,
+  }, undefined, async (url, headers, options) => {
+    calls.push({ url, headers, options });
+    return 42;
+  });
+  assert.equal(await services.frontend.start(target), '42');
+  assert.match(calls[0].url, /\/flow\/pipelines\/4\/runs$/);
+  assert.deepEqual(JSON.parse(calls[0].options.body.params).envs, {
+    EXPECTED_COMMIT: sha, ZIMAGE_FRONTEND_BACKEND_RELEASES: backend, ZIMAGE_GITHUB_APP_BOT_ID: '2',
+  });
 });
 
 test('calls mirror synchronization with the official ROA method and resource path', () => {

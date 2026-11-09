@@ -1,0 +1,61 @@
+name: ZImage frontend rollback
+sources:
+  zimage:
+    type: codeup
+    endpoint: https://zimage-cn-shanghai.devops.aliyuncs.com/codeup/zhYAO/Image-web.git
+    branch: main
+    branchesFilter: '^main$'
+    certificate:
+      type: serviceConnection
+      serviceConnection: rpy5jbjw7kknkz88
+defaultWorkspace: zimage
+variables:
+  - key: ZIMAGE_FRONTEND_OPERATION
+    value: ''
+  - key: ZIMAGE_FRONTEND_APPROVAL_SHA256
+    value: ''
+  - key: ZIMAGE_FRONTEND_TARGET
+    value: ''
+  - key: ZIMAGE_FRONTEND_BACKEND
+    value: ''
+  - key: ZIMAGE_FRONTEND_SOURCE
+    value: ''
+  - key: ZIMAGE_FRONTEND_CONTROL_SHA
+    value: ''
+stages:
+  approve:
+    name: Review exact retained frontend rollback target
+    jobs:
+      review:
+        name: Approve frontend rollback
+        component: ManualValidate
+        with:
+          validatorType: users
+          validateMethod: and
+          validators:
+            - '__ZIMAGE_FRONTEND_REVIEWER_ID__'
+  rollback:
+    name: Restore the approved frontend version
+    jobs:
+      production:
+        name: Call the restricted ECS publisher
+        timeoutMinutes: 10
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux4@sha256:77802307369f3797bb079ead332059a1fefc457fd37f2740484850eb79be1a00
+          instanceType: SMALL_1C2G
+        steps:
+          restore:
+            name: Restore only the approved retained frontend
+            step: Command
+            with:
+              run: |
+                set -euo pipefail
+                cd "$PROJECT_DIR"
+                control_sha="${ZIMAGE_FRONTEND_CONTROL_SHA:?}"
+                [[ "$control_sha" =~ ^[a-f0-9]{40}$ ]]
+                test "$(git rev-parse HEAD)" = "$control_sha"
+                test -z "$(git status --porcelain=v1 --untracked-files=all)"
+                python3 -I -B ops/flow/frontend_operation.py --action rollback \
+                  --operation "${ZIMAGE_FRONTEND_OPERATION:?}" --approval-sha256 "${ZIMAGE_FRONTEND_APPROVAL_SHA256:?}" \
+                  --target "${ZIMAGE_FRONTEND_TARGET:?}" --backend "${ZIMAGE_FRONTEND_BACKEND:?}" --source "${ZIMAGE_FRONTEND_SOURCE:?}"
