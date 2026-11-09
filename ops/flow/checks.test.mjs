@@ -74,6 +74,7 @@ test('quality runs web coverage without preparing or requiring apparel fonts', (
   const { input, commands } = fixture(t);
   runChecks({ ...input, job: 'quality', environment: {} });
   assert.ok(!commands.some(command => command.startsWith('curl ') || command.includes('package-static-assets.mjs ')));
+  assert.ok(!commands.some(command => /(?:package-static-assets|native-font-probe)\.test\.mjs/.test(command)));
   assert.ok(commands.some(command => command.includes('vitest run --coverage') && command.includes('--testNamePattern')));
   assert.ok(commands.includes('pnpm build:frontend'));
   assert.ok(commands.includes('pnpm build'));
@@ -82,10 +83,16 @@ test('quality runs web coverage without preparing or requiring apparel fonts', (
 test('backend requires real apparel tests with the verified candidate fonts before packaging', (t) => {
   const { input, commands } = fixture(t);
   let verifiedFonts;
+  let assetTestsVerifiedFonts;
   const execute = (program, args, options) => {
     const output = input.execute(program, args, options);
     if (args[0] === 'ops/aliyun/package-static-assets.mjs') {
       return JSON.stringify({ versionDirectory: input.cwd, manifestSha256: 'b'.repeat(64) });
+    }
+    if (args.includes('ops/aliyun/native-font-probe.test.mjs')) {
+      assert.ok(args.includes('ops/aliyun/package-static-assets.test.mjs'));
+      assert.equal(options.env.ZIMAGE_STATIC_ASSET_SHA256, 'b'.repeat(64));
+      assetTestsVerifiedFonts = options.env.ZIMAGE_SHARED_FONT_DIR;
     }
     if (args.includes('tests/apparel-renderer.test.ts')) {
       verifiedFonts = options.env.ZIMAGE_SHARED_FONT_DIR;
@@ -100,6 +107,7 @@ test('backend requires real apparel tests with the verified candidate fonts befo
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_synthetic_fixture' },
   }), /real font render failed/);
   assert.equal(verifiedFonts, join(input.cwd, 'fonts'));
+  assert.equal(assetTestsVerifiedFonts, verifiedFonts);
   assert.ok(!commands.some(command => command.includes('package-release.mjs apps/web/.next')));
 });
 

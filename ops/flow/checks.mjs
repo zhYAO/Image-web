@@ -53,7 +53,7 @@ function qualityChecks(run, env, expectedCommit) {
   run('pnpm', ['--filter', '@zimage/web', 'test:acceptance-budget']);
   run('node', ['--test', 'scripts/dev.test.mjs', 'scripts/dev-split.test.mjs', 'scripts/acceptance-credit-budget.test.mjs',
     'scripts/release.test.mjs', 'apps/web/scripts/ui-dependency-boundary.test.mjs', 'apps/web/scripts/measure-dist.test.mjs',
-    'ops/aliyun/package-static-assets.test.mjs', 'ops/aliyun/package-release.test.mjs', 'ops/aliyun/native-font-probe.test.mjs',
+    'ops/aliyun/package-release.test.mjs',
     'ops/aliyun/frontend/package.test.mjs', 'ops/aliyun/backend/http-admission.test.cjs',
     'ops/flow/checks.test.mjs', 'ops/flow/reconcile.test.mjs']);
   for (const directory of ['ops/aliyun', 'ops/aliyun/frontend', 'ops/aliyun/backend', 'ops/aliyun/paired']) {
@@ -98,6 +98,7 @@ function buildBackend(run, env, expectedCommit, backend) {
       ZIMAGE_SHARED_FONT_DIR: join(resources.versionDirectory, 'fonts'),
       ZIMAGE_STATIC_ASSET_SHA256: resources.manifestSha256, NODE_OPTIONS: '--max-old-space-size=4096',
     });
+    run('node', ['--test', 'ops/aliyun/package-static-assets.test.mjs', 'ops/aliyun/native-font-probe.test.mjs']);
     run('pnpm', ['--filter', '@zimage/web', 'exec', 'vitest', 'run',
       'tests/apparel-font-files.test.ts', 'tests/apparel-renderer.test.ts', 'tests/apparel-service.test.ts',
       '--maxWorkers=1', '--testTimeout=120000']);

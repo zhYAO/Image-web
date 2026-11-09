@@ -24,6 +24,6 @@ Node `24.19.0` 归档经过摘要校验，pnpm 使用 `11.19.0`。质量任务�
 
 在与 ECS 匹配的 Linux 环境执行 `bash ops/flow/run-checks.sh backend`。传入 `EXPECTED_COMMIT`、`ZIMAGE_FLOW_TARGET_FILE`、`ZIMAGE_FLOW_FONT_SOURCE` 和仓库外的新目录 `ZIMAGE_FLOW_ARTIFACT_DIR`。构建配置使用项目文档列出的公开变量。
 
-候选构建先校验已配置的原始字体和许可。使用同一份制品资源运行字体文件、服装渲染和服装服务三套测试，全部通过后才构建并打包。
+候选构建先校验已配置的原始字体和许可。使用同一份制品资源运行字体文件、服装渲染、服装服务、静态资源打包和原生探针测试，全部通过后才构建并打包。新增带 `[apparel-fonts]` 标记的测试文件时，将其加入后端测试命令。
 
 交付制品选取 `transport.tgz` 与 `release-result.json`。打包输出包含预检及摘要，部署仍需生产审批、兼容性与独立验证回执。
