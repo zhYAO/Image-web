@@ -30,11 +30,13 @@ stages:
             step: Command
             with:
               run: |
-                cd "$CI_WORKSPACE/zimage"
+                set -euo pipefail
+                cd "$PROJECT_DIR"
                 bash ops/flow/run-checks.sh quality
       database:
         name: database
         timeoutMinutes: 30
+        enableDockerDaemon: true
         runsOn:
           group: public/cn-hangzhou
           container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest
@@ -45,5 +47,23 @@ stages:
             step: Command
             with:
               run: |
-                cd "$CI_WORKSPACE/zimage"
+                set -euo pipefail
+                docker_host="$(printenv DOCKER_HOST || true)"
+                if [[ -z "$docker_host" ]]; then
+                  docker_host="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+                fi
+                case "$docker_host" in
+                  unix:///*|tcp://127.0.0.1:*|tcp://localhost:*) ;;
+                  *) echo 'Database task requires a local Docker endpoint.' >&2; exit 1 ;;
+                esac
+                unset DOCKER_CONTEXT
+                export DOCKER_HOST="$docker_host"
+                docker version --format 'Docker server {{.Server.Version}}'
+                containers="$(docker ps -aq)"
+                volumes="$(docker volume ls -q)"
+                if [[ -n "$containers" || -n "$volumes" ]]; then
+                  echo 'Docker daemon already contains containers or volumes.' >&2
+                  exit 1
+                fi
+                cd "$PROJECT_DIR"
                 bash ops/flow/run-checks.sh database

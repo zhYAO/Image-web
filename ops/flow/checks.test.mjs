@@ -60,6 +60,39 @@ test('requires explicit isolation before starting the local Supabase stack', (t)
   assert.ok(!commands.some((command) => command.includes('supabase start')));
 });
 
+test('rejects pre-existing Docker volumes before starting or stopping Supabase', (t) => {
+  const { input, commands } = fixture(t);
+  const execute = (program, args, options) => {
+    const output = input.execute(program, args, options);
+    return program === 'docker' && args[0] === 'volume' ? 'fixture-volume\n' : output;
+  };
+  assert.throws(() => runChecks({ ...input, execute }), /0 containers, 1 volume/);
+  assert.ok(!commands.some(command => command.startsWith('pnpm exec supabase')));
+});
+
+test('quality checks use the pinned font fallback when GitHub Raw is unavailable', (t) => {
+  const { input, commands } = fixture(t);
+  const licenses = join(input.cwd, 'doc', 'licenses', 'apparel-noto');
+  mkdirSync(licenses, { recursive: true });
+  for (const name of ['LICENSE.txt', 'README.md']) writeFileSync(join(licenses, name), 'fixture\n');
+  const execute = (program, args, options) => {
+    const output = input.execute(program, args, options);
+    if (program === 'curl' && args.at(-1).startsWith('https://raw.githubusercontent.com/')) {
+      throw new Error('TLS connection failed');
+    }
+    if (args[0] === 'ops/aliyun/package-static-assets.mjs') {
+      return JSON.stringify({ versionDirectory: input.cwd, manifestSha256: 'fixture' });
+    }
+    return output;
+  };
+  runChecks({ ...input, job: 'quality', execute });
+  const downloads = commands.filter(command => command.startsWith('curl '));
+  assert.equal(downloads.length, 4);
+  assert.match(downloads[1], /cdn\.jsdelivr\.net\/gh\/notofonts\/noto-cjk@Sans2\.004\/.*Regular\.otf$/);
+  assert.match(downloads[3], /cdn\.jsdelivr\.net\/gh\/notofonts\/noto-cjk@Sans2\.004\/.*Bold\.otf$/);
+  assert.ok(commands.some(command => command.startsWith('node ops/aliyun/package-static-assets.mjs')));
+});
+
 test('backend validates the target before installing dependencies', (t) => {
   const { input, commands } = fixture(t);
   const execute = (program, args, options) => {

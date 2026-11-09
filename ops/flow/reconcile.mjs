@@ -40,6 +40,7 @@ export async function reconcileRef(target, services, { mirrorPolls = 12 } = {}) 
   return 'submitted';
 }
 import { execFileSync } from 'node:child_process';
+import { sign } from 'node:crypto';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +51,6 @@ const codeupId = '5027582';
 const site = 'https://zimage-cn-shanghai.devops.aliyuncs.com';
 const cloneUrl = `${site}/codeup/zhYAO/Image-web.git`;
 const context = 'yunxiao/quality';
-
 
 async function request(url, headers, { body, missing = false } = {}) {
   const response = await fetch(url, {
@@ -63,15 +63,37 @@ async function request(url, headers, { body, missing = false } = {}) {
   return response.json();
 }
 
-export function createController(env, execute = execFileSync) {
+async function installationToken({ clientId, installationId, privateKey }, send) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const claims = encode({ iss: clientId, iat: now - 60, exp: now + 540 });
+  const unsigned = encode({ alg: 'RS256', typ: 'JWT' }) + '.' + claims;
+  const jwt = unsigned + '.' + sign('RSA-SHA256', Buffer.from(unsigned), privateKey).toString('base64url');
+  const result = await send(`https://api.github.com/app/installations/${installationId}/access_tokens`,
+    { Authorization: `Bearer ${jwt}`, Accept: 'application/vnd.github+json' }, { body: {
+      repositories: ['Image-web'],
+      permissions: { contents: 'read', pull_requests: 'read', statuses: 'write' },
+    } });
+  if (typeof result?.token !== 'string' || !result.token) throw new Error('GitHub App did not return an installation token');
+  return result.token;
+}
+
+export function createController(env, execute = execFileSync, send = request) {
   const { ZIMAGE_GITHUB_APP_TOKEN: githubToken, ZIMAGE_GITHUB_APP_BOT_ID: botId,
+    ZIMAGE_GITHUB_APP_CLIENT_ID: clientId, ZIMAGE_GITHUB_APP_INSTALLATION_ID: installationId,
+    ZIMAGE_GITHUB_APP_PRIVATE_KEY: privateKey,
     ZIMAGE_FLOW_PAT: flowToken, ZIMAGE_FLOW_QUALITY_PIPELINE_ID: pipelineId } = env;
-  if (!githubToken || !flowToken || !/^[1-9][0-9]*$/.test(botId ?? '') || !/^[1-9][0-9]*$/.test(pipelineId ?? '')) {
+  const appConfigured = clientId && privateKey && /^[1-9][0-9]*$/.test(installationId ?? '');
+  if ((!githubToken && !appConfigured) || !flowToken || !/^[1-9][0-9]*$/.test(botId ?? '') || !/^[1-9][0-9]*$/.test(pipelineId ?? '')) {
     throw new Error('Protected controller requires a GitHub App, its bot ID, a Flow PAT and the quality pipeline ID');
   }
-  const github = (path, options) => request(`https://api.github.com/repos/${repository}/${path}`,
-    { Authorization: `Bearer ${githubToken}`, Accept: 'application/vnd.github+json' }, options);
-  const yunxiao = (path, options) => request(`${site}/oapi/v1/${path}`, { 'x-yunxiao-token': flowToken }, options);
+  let token;
+  const github = async (path, options) => {
+    token ??= githubToken || installationToken({ clientId, installationId, privateKey }, send);
+    return send(`https://api.github.com/repos/${repository}/${path}`,
+      { Authorization: `Bearer ${await token}`, Accept: 'application/vnd.github+json' }, options);
+  };
+  const yunxiao = (path, options) => send(`${site}/oapi/v1/${path}`, { 'x-yunxiao-token': flowToken }, options);
   const runs = `flow/pipelines/${pipelineId}/runs`;
   const readPrimary = async (branch) => (await github(`git/ref/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, { missing: true }))?.object?.sha;
 

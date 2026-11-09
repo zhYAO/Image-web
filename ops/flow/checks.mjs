@@ -14,8 +14,11 @@ function runCommand(program, args, { cwd, env, capture }) {
 }
 
 function databaseChecks(run, cwd) {
-  if (run('docker', ['ps', '-aq'], true).trim()) {
-    throw new Error('Database checks require an empty, isolated Docker daemon');
+  const count = (output) => output.split(/\r?\n/).filter(line => line.trim()).length;
+  const containers = count(run('docker', ['ps', '-aq'], true));
+  const volumes = count(run('docker', ['volume', 'ls', '-q'], true));
+  if (containers || volumes) {
+    throw new Error(`Database checks require an empty, isolated Docker daemon (${containers} containers, ${volumes} volumes)`);
   }
 
   let failure;
@@ -47,9 +50,15 @@ function qualityChecks(run, cwd, env, expectedCommit) {
     mkdirSync(fontSource);
     for (const weight of ['Regular', 'Bold']) {
       const name = `NotoSansCJKsc-${weight}.otf`;
-      run('curl', ['--fail', '--location', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2',
-        '--retry', '2', '--max-time', '300', '--output', join(fontSource, name),
-        `https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/${name}`]);
+      const file = `Sans/OTF/SimplifiedChinese/${name}`;
+      const options = ['--fail', '--location', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2',
+        '--connect-timeout', '10', '--retry', '2', '--max-time', '120', '--output', join(fontSource, name)];
+      try {
+        run('curl', [...options, `https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/${file}`]);
+      } catch {
+        console.log('GitHub Raw unavailable; trying the pinned font mirror.');
+        run('curl', [...options, `https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/${file}`]);
+      }
     }
     for (const name of ['LICENSE.txt', 'README.md']) {
       const text = readFileSync(join(cwd, 'doc/licenses/apparel-noto', name), 'utf8');

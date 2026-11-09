@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, verify } from 'node:crypto';
 import { test } from 'node:test';
 import { createController, reconcileRef } from './reconcile.mjs';
 
@@ -82,4 +83,34 @@ test('calls mirror synchronization with the official ROA method and resource pat
   });
   client.syncMirror();
   assert.deepEqual(calls[0].args.slice(0, 3), ['devops', 'POST', '/repository/5027582/mirror']);
+});
+
+test('scheduled reconciliation can obtain a GitHub App token scoped to Image-web', async () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const calls = [];
+  const client = createController({
+    ZIMAGE_GITHUB_APP_CLIENT_ID: 'Iv1.example',
+    ZIMAGE_GITHUB_APP_INSTALLATION_ID: '123',
+    ZIMAGE_GITHUB_APP_PRIVATE_KEY: privateKey.export({ format: 'pem', type: 'pkcs8' }),
+    ZIMAGE_GITHUB_APP_BOT_ID: '2',
+    ZIMAGE_FLOW_PAT: 'fixture',
+    ZIMAGE_FLOW_QUALITY_PIPELINE_ID: '3',
+  }, undefined, async (url, headers, options) => {
+    calls.push({ url, headers, options });
+    return calls.length === 1 ? { token: 'short-lived-app-token' } : { object: { sha } };
+  });
+
+  assert.equal(await client.readPrimary('main'), sha);
+  assert.equal(calls[0].url, 'https://api.github.com/app/installations/123/access_tokens');
+  assert.deepEqual(calls[0].options.body, {
+    repositories: ['Image-web'],
+    permissions: { contents: 'read', pull_requests: 'read', statuses: 'write' },
+  });
+  const [header, payload, signature] = calls[0].headers.Authorization.replace(/^Bearer /, '').split('.');
+  assert.equal(JSON.parse(Buffer.from(header, 'base64url')).alg, 'RS256');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url'));
+  assert.equal(claims.iss, 'Iv1.example');
+  assert.equal(claims.exp - claims.iat, 600);
+  assert.ok(verify('RSA-SHA256', Buffer.from(`${header}.${payload}`), publicKey, Buffer.from(signature, 'base64url')));
+  assert.equal(calls[1].headers.Authorization, 'Bearer short-lived-app-token');
 });
