@@ -1,0 +1,48 @@
+name: ZImage quality
+sources:
+  zimage:
+    type: codeup
+    name: ZImage Codeup mirror
+    endpoint: https://zimage-cn-shanghai.devops.aliyuncs.com/codeup/zhYAO/Image-web.git
+    branch: codex/yunxiao-quality-2098dfb
+    certificate:
+      type: serviceConnection
+      serviceConnection: 18238
+variables:
+  - key: EXPECTED_COMMIT
+    value: ''
+  - key: ZIMAGE_FLOW_ISOLATED_DOCKER
+    value: '0'
+stages:
+  checks:
+    jobs:
+      quality:
+        name: quality
+        timeoutMinutes: 45
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest
+          instanceType: LARGE_4C8G
+        steps:
+          check:
+            name: Run quality checks
+            step: Command
+            with:
+              run: |
+                cd "$CI_WORKSPACE/zimage"
+                bash ops/flow/run-checks.sh quality
+      database:
+        name: database
+        timeoutMinutes: 30
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux3:latest
+          instanceType: LARGE_4C8G
+        steps:
+          check:
+            name: Test local database
+            step: Command
+            with:
+              run: |
+                cd "$CI_WORKSPACE/zimage"
+                bash ops/flow/run-checks.sh database
