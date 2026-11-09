@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,60 +43,33 @@ function databaseChecks(run, cwd) {
   if (failure) throw failure;
 }
 
-function qualityChecks(run, cwd, env, expectedCommit) {
-  const work = mkdtempSync(join(tmpdir(), 'zimage-flow-quality-'));
-  try {
-    const fontSource = join(work, 'font-source');
-    mkdirSync(fontSource);
-    for (const weight of ['Regular', 'Bold']) {
-      const name = `NotoSansCJKsc-${weight}.otf`;
-      const file = `Sans/OTF/SimplifiedChinese/${name}`;
-      const options = ['--fail', '--location', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2',
-        '--connect-timeout', '10', '--retry', '2', '--max-time', '120', '--output', join(fontSource, name)];
-      try {
-        run('curl', [...options, `https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/${file}`]);
-      } catch {
-        console.log('GitHub Raw unavailable; trying the pinned font mirror.');
-        run('curl', [...options, `https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/${file}`]);
-      }
-    }
-    for (const name of ['LICENSE.txt', 'README.md']) {
-      const text = readFileSync(join(cwd, 'doc/licenses/apparel-noto', name), 'utf8');
-      writeFileSync(join(fontSource, name), text.replace(/\r?\n/g, '\r\n'));
-    }
-    const fonts = JSON.parse(run('node', ['ops/aliyun/package-static-assets.mjs', '--font-source', fontSource,
-      '--fonts-only', 'true', '--output', join(work, 'test-fonts')], true));
-    env.ZIMAGE_SHARED_FONT_DIR = join(fonts.versionDirectory, 'fonts');
-    env.ZIMAGE_STATIC_ASSET_SHA256 = fonts.manifestSha256;
-
-    run('pnpm', ['lint']);
-    run('pnpm', ['typecheck']);
-    run('pnpm', ['--filter', '@zimage/domain', 'test:coverage']);
-    run('pnpm', ['--filter', '@zimage/frontend', 'test:run']);
-    run('pnpm', ['--filter', '@zimage/web', 'exec', 'vitest', 'run', '--coverage', '--maxWorkers=1', '--testTimeout=120000']);
-    run('pnpm', ['--filter', '@zimage/web', 'test:acceptance-budget']);
-    run('node', ['--test', 'scripts/dev.test.mjs', 'scripts/dev-split.test.mjs', 'scripts/acceptance-credit-budget.test.mjs',
-      'scripts/release.test.mjs', 'apps/web/scripts/ui-dependency-boundary.test.mjs', 'apps/web/scripts/measure-dist.test.mjs',
-      'ops/aliyun/package-static-assets.test.mjs', 'ops/aliyun/package-release.test.mjs', 'ops/aliyun/native-font-probe.test.mjs',
-      'ops/aliyun/frontend/package.test.mjs', 'ops/aliyun/backend/http-admission.test.cjs',
-      'ops/flow/checks.test.mjs', 'ops/flow/reconcile.test.mjs']);
-    for (const directory of ['ops/aliyun', 'ops/aliyun/frontend', 'ops/aliyun/backend', 'ops/aliyun/paired']) {
-      run('python3', ['-B', '-m', 'unittest', 'discover', '-s', directory, '-p', 'test_*.py']);
-    }
-    run('pnpm', ['exec', 'vitest', 'run', 'supabase/functions/generation-worker', 'supabase/functions/cleanup-worker']);
-
-    env.ZIMAGE_ASSET_NAMESPACE = `ci-${expectedCommit}`;
-    env.ZIMAGE_FRONTEND_COMPATIBILITY = JSON.stringify({
-      apiRequirements: { major: 1, minMinor: 0, capabilities: ['runtime.public-config.v1', 'runtime.meta.v1'] },
-      allowedBackendReleases: [expectedCommit],
-    });
-    run('pnpm', ['build:frontend']);
-    env.NEXT_PUBLIC_DATA_MODE = 'mock';
-    run('pnpm', ['build']);
-    run('node', ['apps/web/scripts/verify-built-retired-route.mjs']);
-  } finally {
-    rmSync(work, { recursive: true, force: true });
+function qualityChecks(run, env, expectedCommit) {
+  run('pnpm', ['lint']);
+  run('pnpm', ['typecheck']);
+  run('pnpm', ['--filter', '@zimage/domain', 'test:coverage']);
+  run('pnpm', ['--filter', '@zimage/frontend', 'test:run']);
+  run('pnpm', ['--filter', '@zimage/web', 'exec', 'vitest', 'run', '--coverage',
+    '--testNamePattern', '^(?!.*\\[apparel-fonts\\])', '--maxWorkers=1', '--testTimeout=120000']);
+  run('pnpm', ['--filter', '@zimage/web', 'test:acceptance-budget']);
+  run('node', ['--test', 'scripts/dev.test.mjs', 'scripts/dev-split.test.mjs', 'scripts/acceptance-credit-budget.test.mjs',
+    'scripts/release.test.mjs', 'apps/web/scripts/ui-dependency-boundary.test.mjs', 'apps/web/scripts/measure-dist.test.mjs',
+    'ops/aliyun/package-static-assets.test.mjs', 'ops/aliyun/package-release.test.mjs', 'ops/aliyun/native-font-probe.test.mjs',
+    'ops/aliyun/frontend/package.test.mjs', 'ops/aliyun/backend/http-admission.test.cjs',
+    'ops/flow/checks.test.mjs', 'ops/flow/reconcile.test.mjs']);
+  for (const directory of ['ops/aliyun', 'ops/aliyun/frontend', 'ops/aliyun/backend', 'ops/aliyun/paired']) {
+    run('python3', ['-B', '-m', 'unittest', 'discover', '-s', directory, '-p', 'test_*.py']);
   }
+  run('pnpm', ['exec', 'vitest', 'run', 'supabase/functions/generation-worker', 'supabase/functions/cleanup-worker']);
+
+  env.ZIMAGE_ASSET_NAMESPACE = `ci-${expectedCommit}`;
+  env.ZIMAGE_FRONTEND_COMPATIBILITY = JSON.stringify({
+    apiRequirements: { major: 1, minMinor: 0, capabilities: ['runtime.public-config.v1', 'runtime.meta.v1'] },
+    allowedBackendReleases: [expectedCommit],
+  });
+  run('pnpm', ['build:frontend']);
+  env.NEXT_PUBLIC_DATA_MODE = 'mock';
+  run('pnpm', ['build']);
+  run('node', ['apps/web/scripts/verify-built-retired-route.mjs']);
 }
 
 function backendPreflight(run, cwd, backend) {
@@ -125,6 +98,9 @@ function buildBackend(run, env, expectedCommit, backend) {
       ZIMAGE_SHARED_FONT_DIR: join(resources.versionDirectory, 'fonts'),
       ZIMAGE_STATIC_ASSET_SHA256: resources.manifestSha256, NODE_OPTIONS: '--max-old-space-size=4096',
     });
+    run('pnpm', ['--filter', '@zimage/web', 'exec', 'vitest', 'run',
+      'tests/apparel-font-files.test.ts', 'tests/apparel-renderer.test.ts', 'tests/apparel-service.test.ts',
+      '--maxWorkers=1', '--testTimeout=120000']);
     run('pnpm', ['--filter', '@zimage/web', 'exec', 'next', 'build', '--webpack']);
     run('node', ['apps/web/scripts/verify-built-retired-route.mjs']);
     run('node', ['apps/web/scripts/measure-dist.mjs', '--assert-slim']);
@@ -184,7 +160,7 @@ export function runChecks({ job, expectedCommit, cwd = process.cwd(), execute = 
   run('pnpm', ['install', '--frozen-lockfile']);
   if (job === 'database') databaseChecks(run, cwd);
   else if (job === 'backend') buildBackend(run, env, expectedCommit, backend);
-  else qualityChecks(run, cwd, env, expectedCommit);
+  else qualityChecks(run, env, expectedCommit);
   checkCheckout();
 }
 

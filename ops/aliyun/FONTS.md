@@ -52,7 +52,7 @@ node ops/aliyun/package-static-assets.mjs --font-source 'C:/external/original-fo
 
 这些只是本地脚本与模板变更；没有创建服务器配置、读取凭据、调用 systemctl、上传资源或发布应用。Linux 的 root/服务 UID 权限、flock、systemd 实际元数据及完整发布/回滚仍需在已有授权验证环境验证。
 
-CI 的 quality job 显式从官方 HTTPS 源准备测试字体，然后由相同工具执行固定 SHA 校验；下载内容漂移或不可用会失败。此 CI 步骤不等于本地隐式下载，也不证明生产部署就绪。
+Flow 的通用 quality 任务无需下载字体。真实字体用例由后端候选任务使用已校验的原始资源执行，通过后才打包。过渡期的 GitHub quality 任务仍会从官方 HTTPS 源准备测试字体并校验固定 SHA。
 
 ## 核算
 

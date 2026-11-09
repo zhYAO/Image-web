@@ -31,7 +31,7 @@ async function sources() {
   return map;
 }
 describe("deterministic apparel renderer", () => {
-  it("renders exact catalog names, JPEG encodings and unstretched display dimensions", async () => {
+  it("[apparel-fonts] renders exact catalog names, JPEG encodings and unstretched display dimensions", async () => {
     const map = await sources();
     const hashes = [...map.values()].map((bytes) =>
       createHash("sha256").update(bytes).digest("hex"),
@@ -99,7 +99,7 @@ describe("deterministic apparel renderer", () => {
     ).rejects.toThrow(/3:4/);
     expect(count).toBe(0);
   });
-  it("rejects an opaque logo and excessive DESIGN text during preflight", async () => {
+  it("rejects an opaque logo during preflight", async () => {
     const map = await sources();
     const opaque = await sharp({
       create: { width: 400, height: 100, channels: 3, background: "white" },
@@ -111,6 +111,9 @@ describe("deterministic apparel renderer", () => {
         id === apparelIds[6] ? opaque : map.get(id)!,
       ).next(),
     ).rejects.toThrow(/Logo/);
+  });
+  it("[apparel-fonts] rejects excessive DESIGN text during preflight", async () => {
+    const map = await sources();
     await expect(
       renderApparelPages(
         {
@@ -138,7 +141,7 @@ describe("deterministic apparel renderer", () => {
       renderApparelPages(apparelFixture, async (id) => map.get(id)!).next(),
     ).rejects.toThrow(/高度/);
   });
-  it("normalizes EXIF and composites the logo once on the first detail", async () => {
+  it("[apparel-fonts] normalizes EXIF and composites the logo once on the first detail", async () => {
     const map = await sources();
     map.set(
       apparelIds[0]!,
@@ -170,7 +173,7 @@ describe("deterministic apparel renderer", () => {
       (await sharp(pages[0]!.bytes).metadata()).orientation,
     ).toBeUndefined();
   });
-  it("points to overflowing care and table fields and rejects an empty crop", async () => {
+  it("[apparel-fonts] points to overflowing care and table fields and rejects an empty crop", async () => {
     const map = await sources();
     await expect(
       renderApparelPages(
@@ -202,7 +205,7 @@ describe("deterministic apparel renderer", () => {
       "80% 棉 / 20% 亚麻",
     );
   });
-  it("rejects multiline size values before publishing instead of clipping table rows", async () => {
+  it("[apparel-fonts] rejects multiline size values before publishing instead of clipping table rows", async () => {
     const map = await sources();
     await expect(
       renderApparelPages(

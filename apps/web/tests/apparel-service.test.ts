@@ -86,7 +86,7 @@ describe.each([false, true])(
       ["development", true, 14],
       ["production", true, 14],
     ] as const)(
-      "preserves every baseline output hash in %s with legacy reuse request=%s and %s reads",
+      "[apparel-fonts] preserves every baseline output hash in %s with legacy reuse request=%s and %s reads",
       async (mode, reuse, expectedReads) => {
         vi.stubEnv("NODE_ENV", mode);
         vi.stubEnv(

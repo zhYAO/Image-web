@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import {
   copyFileSync, mkdirSync, mkdtempSync, openSync, closeSync, readFileSync,
@@ -12,8 +12,7 @@ import sharp from "sharp";
 import { resolveApparelFont } from "@/server/apparel/font-files";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const sourceFonts = path.dirname(resolveApparelFont(false));
-resolveApparelFont(true);
+let sourceFonts: string;
 const filenames = ["NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf", "LICENSE.txt", "README.md"];
 const temporary: string[] = [];
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -70,6 +69,13 @@ describe("apparel local font files", () => {
     noSharedFonts();
     vi.spyOn(process, "cwd").mockReturnValue(appRoot);
     expect(() => resolveApparelFont(false)).toThrow(/ZIMAGE_SHARED_FONT_DIR/);
+  });
+});
+
+describe("[apparel-fonts] verified external font files", () => {
+  beforeAll(() => {
+    sourceFonts = path.dirname(resolveApparelFont(false));
+    resolveApparelFont(true);
   });
 
   it.each([false, true])("renders identical real Sharp Chinese pixels with the shared font (bold=%s)", async (bold) => {

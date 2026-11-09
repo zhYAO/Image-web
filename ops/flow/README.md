@@ -8,7 +8,7 @@
 2. 为 `database` 任务启用独立、初始为空的 Docker daemon。执行器通过隔离验收后，才允许将 `ZIMAGE_FLOW_ISOLATED_DOCKER` 设为 `1`。任务在依赖安装前后检查容器和卷。
 3. 确认 `quality` 与 `database` 对同一 SHA 均成功。用错误 SHA 和有类型漂移的提交复验失败路径。
 
-Node `24.19.0` 归档经过摘要校验，pnpm 使用 `11.19.0`。质量任务运行应用、Worker 和运维检查。数据库任务仅在隔离 daemon 内启动 Supabase，并比较生成的数据库类型。
+Node `24.19.0` 归档经过摘要校验，pnpm 使用 `11.19.0`。质量任务无需下载字体，保留应用覆盖率、双端构建、Worker 和运维检查。标记为 `[apparel-fonts]` 的真实字体用例在后端候选构建时运行。数据库任务仅在隔离 daemon 内启动 Supabase，并比较生成的数据库类型。
 
 ## 受保护的同步与回写
 
@@ -23,5 +23,7 @@ Node `24.19.0` 归档经过摘要校验，pnpm 使用 `11.19.0`。质量任务�
 ## 后端候选构建
 
 在与 ECS 匹配的 Linux 环境执行 `bash ops/flow/run-checks.sh backend`。传入 `EXPECTED_COMMIT`、`ZIMAGE_FLOW_TARGET_FILE`、`ZIMAGE_FLOW_FONT_SOURCE` 和仓库外的新目录 `ZIMAGE_FLOW_ARTIFACT_DIR`。构建配置使用项目文档列出的公开变量。
+
+候选构建先校验已配置的原始字体和许可。使用同一份制品资源运行字体文件、服装渲染和服装服务三套测试，全部通过后才构建并打包。
 
 交付制品选取 `transport.tgz` 与 `release-result.json`。打包输出包含预检及摘要，部署仍需生产审批、兼容性与独立验证回执。
