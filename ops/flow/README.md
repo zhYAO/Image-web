@@ -2,7 +2,7 @@
 
 ## 质量检查试运行
 
-从 [quality.yml](quality.yml) 创建独立验证流水线，使用上海站 Codeup 镜像和既有服务连接。原流水线 `1414878` 的运行记录作为现有构建通道证据。
+独立验证流水线 `1414986` 使用 [quality.yml](quality.yml)、上海站 Codeup 镜像和既有服务连接。原流水线 `1414878` 的运行记录作为现有构建通道证据。
 
 1. 核对 GitHub 与 Codeup 的完整分支 SHA。手工试运行时设置 `EXPECTED_COMMIT` 为该 SHA。
 2. 为 `database` 任务启用独立、初始为空的 Docker daemon。实测隔离后通过运行变量设置 `ZIMAGE_FLOW_ISOLATED_DOCKER=1`。

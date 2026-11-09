@@ -15,6 +15,7 @@ variables:
     value: '0'
 stages:
   checks:
+    name: Checks
     jobs:
       quality:
         name: quality
