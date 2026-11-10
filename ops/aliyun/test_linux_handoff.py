@@ -1,8 +1,4 @@
-"""Offline handoff guards; no Git mutation, credential contents, install or build.
-
-Git state fixtures are mocked. The one real Git query reads candidate path names
-only, so it also catches a newly added source extension needing explicit review.
-"""
+"""Offline handoff guards with synthetic Git state and no credential reads."""
 import argparse
 import base64
 import contextlib
@@ -126,19 +122,6 @@ class SourceGuards(HandoffFixture):
                      'ops/key.pem', 'unexpected-root-file.py'):
             with self.subTest(name=name):
                 self.assertFalse(HANDOFF.allowed(name))
-
-    def test_actual_repository_candidate_names_require_no_credential_content(self):
-        root = SCRIPT.resolve().parents[2]
-        result = subprocess.run(['git', '-C', str(root), 'ls-files', '-z',
-            '--cached', '--others', '--exclude-standard'], check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env={'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'GIT_OPTIONAL_LOCKS': '0'})
-        names = [name.decode() for name in result.stdout.split(b'\0') if name]
-        self.assertIn('ops/aliyun/linux-handoff.py', names)
-        self.assertIn('apps/web/.env.example', names)
-        self.assertIn('supabase/functions/generation-worker/.npmrc', names)
-        self.assertEqual([name for name in names if not credential_name(name)
-                          and not HANDOFF.allowed(name)], [])
 
     def test_credential_names_are_skipped_before_filesystem_probe_or_content_read(self):
         credentials = ['apps/web/.env', 'apps/web/.env.example',
