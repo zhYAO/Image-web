@@ -156,6 +156,25 @@ test('calls mirror synchronization with the official ROA method and resource pat
   assert.deepEqual(calls[0].args.slice(0, 3), ['devops', 'POST', '/repository/5027582/mirror']);
 });
 
+test('links commit statuses to the Flow console run details', async () => {
+  const statuses = [];
+  const services = createController({
+    ZIMAGE_GITHUB_APP_TOKEN: 'fixture', ZIMAGE_GITHUB_APP_BOT_ID: '2', ZIMAGE_FLOW_PAT: 'fixture',
+    ZIMAGE_FLOW_QUALITY_PIPELINE_ID: '3', ZIMAGE_FLOW_FRONTEND_CANDIDATE_PIPELINE_ID: '4',
+    ZIMAGE_FRONTEND_BACKEND_RELEASES: 'c'.repeat(40),
+  }, undefined, async (_url, _headers, { body }) => {
+    statuses.push(body);
+    return { creator: { id: 2 } };
+  });
+
+  await services.writeCheck(target, { state: 'success', runId: '8' });
+  await services.frontend.writeCheck(target, { state: 'success', runId: '10' });
+  assert.deepEqual(statuses.map(({ context, target_url }) => [context, target_url]), [
+    ['yunxiao/quality', 'https://zimage-cn-shanghai.devops.aliyuncs.com/flow/pipelines/3/builds/8'],
+    ['yunxiao/frontend-candidate', 'https://zimage-cn-shanghai.devops.aliyuncs.com/flow/pipelines/4/builds/10'],
+  ]);
+});
+
 test('scheduled reconciliation can obtain a GitHub App token scoped to Image-web', async () => {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const calls = [];

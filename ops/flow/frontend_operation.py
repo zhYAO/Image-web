@@ -17,7 +17,7 @@ import urllib.request
 HOST = 'www.zimage.store'
 HOST_FINGERPRINT = 'SHA256:JeRc+Z2z5z7KM2QBBrwnymDM234qFUISlwsoPK3ClFk'
 GITHUB = 'https://api.github.com/repos/zhYAO/Image-web/'
-QUALITY_RUN_URL = 'https://zimage-cn-shanghai.devops.aliyuncs.com/flow/pipelines/1414986/runs/'
+QUALITY_RUN_URL = 'https://zimage-cn-shanghai.devops.aliyuncs.com/flow/pipelines/1414986/builds/'
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_JSON = 2 * 1024 * 1024
 

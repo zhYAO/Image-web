@@ -138,7 +138,7 @@ export function createController(env, execute = execFileSync, send = request) {
       async writeCheck({ sha }, { state, runId }) {
         const result = await github(`statuses/${sha}`, { body: {
           context: statusContext, state, description: runId ? `Flow run ${runId}` : 'Flow submission reserved',
-          ...(runId ? { target_url: `${site}/flow/pipelines/${id}/runs/${runId}` } : {}),
+          ...(runId ? { target_url: `${site}/flow/pipelines/${id}/builds/${runId}` } : {}),
         } });
         if (String(result.creator?.id) !== botId) throw new Error('GitHub status was not written by the configured App bot');
       },

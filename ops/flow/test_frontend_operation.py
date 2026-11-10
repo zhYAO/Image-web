@@ -19,17 +19,21 @@ class FrontendOperationTests(unittest.TestCase):
 
     def test_gate_rejects_wrong_branch_or_wrong_status_author(self):
         ref = {'object': {'sha': self.source}}
+        run_url = 'https://zimage-cn-shanghai.devops.aliyuncs.com/flow/pipelines/1414986/builds/10'
         status = {'context': 'yunxiao/quality', 'state': 'success', 'creator': {'id': 42},
-                  'description': 'Flow run 10', 'target_url': self.client.QUALITY_RUN_URL + '10'}
-        for branch, entries in ((ref, [status]), ({'object': {'sha': 'f' * 40}}, [status]),
-                                (ref, [dict(status, creator={'id': 99}), status]), (ref, [dict(status, state='pending')])):
+                  'description': 'Flow run 10', 'target_url': run_url}
+        replies = iter([ref, [status]])
+        self.assertEqual(self.client.require_main(self.source, '42', lambda _: next(replies)), '10')
+        for branch, entries in (
+            ({'object': {'sha': 'f' * 40}}, [status]),
+            (ref, [dict(status, creator={'id': 99}), status]),
+            (ref, [dict(status, state='pending')]),
+            (ref, [dict(status, target_url=run_url.replace('/builds/', '/runs/'))]),
+        ):
             with self.subTest(branch=branch, entries=entries):
                 replies = iter([branch, entries])
-                if branch == ref and entries == [status]:
+                with self.assertRaises(self.client.OperationError):
                     self.client.require_main(self.source, '42', lambda _: next(replies))
-                else:
-                    with self.assertRaises(self.client.OperationError):
-                        self.client.require_main(self.source, '42', lambda _: next(replies))
 
     def test_disconnect_only_queries_and_never_submits_again(self):
         absent = {'schemaVersion': 1, 'operationId': self.operation, 'state': 'absent'}
