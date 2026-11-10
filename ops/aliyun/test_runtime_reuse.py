@@ -34,7 +34,7 @@ class BindingGuards(unittest.TestCase):
 class RuntimeCopyGuards(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(REUSE,'runtime reuse adapter missing')
-        self.tmp=tempfile.TemporaryDirectory(prefix='runtime-reuse-',dir='/private/tmp')
+        self.tmp=tempfile.TemporaryDirectory(prefix='runtime-reuse-')
         self.base=Path(self.tmp.name).resolve()
         def cleanup():
             for root,dirs,files in os.walk(self.base):

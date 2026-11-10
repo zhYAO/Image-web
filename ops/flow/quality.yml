@@ -31,9 +31,21 @@ stages:
             with:
               run: |
                 set -euo pipefail
+                if ! command -v openssl >/dev/null; then
+                  timeout 120s dnf -qy install openssl
+                fi
                 cd "$PROJECT_DIR"
                 python3 --version
-                bash ops/flow/run-checks.sh quality
+                if [ "$(id -u)" -ne 0 ]; then
+                  exec bash ops/flow/run-checks.sh quality
+                fi
+                work="$(mktemp -d)"
+                trap 'rm -rf -- "$work"' EXIT
+                git clone --quiet --no-local --depth=1 --no-tags -- "$PROJECT_DIR" "$work/source"
+                mkdir "$work/home"
+                chown -R "$(id -u nobody):$(id -g nobody)" "$work"
+                runuser -u nobody -- env HOME="$work/home" bash -c \
+                  'cd -- "$1" && exec bash ops/flow/run-checks.sh quality' bash "$work/source"
       database:
         name: database
         timeoutMinutes: 30
