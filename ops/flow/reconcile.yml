@@ -1,0 +1,47 @@
+name: ZImage protected reconciliation
+concurrencyConfig:
+  maxRunningPipelineInstances: 1
+  pipelineMaxRunningBehavior: rejectNew
+  maxRunningJobInstances: 1
+variables:
+  - key: ZIMAGE_FLOW_QUALITY_PIPELINE_ID
+    value: '1414986'
+  - key: ZIMAGE_FLOW_FRONTEND_CANDIDATE_PIPELINE_ID
+    value: '1415019'
+  - key: ZIMAGE_FRONTEND_BACKEND_RELEASES
+    value: ''
+stages:
+  reconcile:
+    name: Reconcile GitHub, Codeup and Flow
+    jobs:
+      control:
+        name: Check the exact GitHub commits and publish statuses
+        timeoutMinutes: 10
+        runsOn:
+          group: public/cn-hangzhou
+          container: build-steps-public-registry.cn-beijing.cr.aliyuncs.com/build-steps/alinux4@sha256:77802307369f3797bb079ead332059a1fefc457fd37f2740484850eb79be1a00
+          instanceType: SMALL_1C2G
+        steps:
+          check:
+            name: Run the reviewed controller outside the PR workspace
+            step: Command
+            with:
+              run: |
+                set -euo pipefail
+                work="$(mktemp -d)"
+                trap 'rm -rf -- "$work"' EXIT
+                control_commit='a34fc54ffb4a517bc284836c365236c6074a3582'
+                repository='https://api.github.com/repos/zhYAO/Image-web/contents'
+                fetch_reviewed() {
+                  curl --disable --fail --silent --show-error --proto '=https' --connect-timeout 10 --max-time 30 \
+                    -H 'Accept: application/vnd.github.raw+json' "$repository/$1?ref=$control_commit" -o "$2"
+                  printf '%s  %s\n' "$3" "$2" | sha256sum --check -
+                }
+                fetch_reviewed ops/flow/reconcile.mjs "$work/reconcile.mjs" \
+                  d0af712390db160519093e93c064e66c676c90e6e7b9d0ad8638cf52258ca439
+                fetch_reviewed docs/superpowers/plans/assets/yunxiao-node-archive-draft.sh "$work/fetch-node.sh" \
+                  ecc83ce42f9d226809dd55b47c65beb874c2e4891bd62bac5f700da668b28439
+                archive="$work/node-v24.19.0-linux-x64.tar.gz"
+                bash "$work/fetch-node.sh" "$archive" f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4
+                tar -xzf "$archive" -C "$work"
+                "$work/node-v24.19.0-linux-x64/bin/node" "$work/reconcile.mjs"
