@@ -27,6 +27,7 @@ stages:
             step: Command
             with:
               run: |
+                set +x
                 set -euo pipefail
                 work="$(mktemp -d)"
                 trap 'rm -rf -- "$work"' EXIT
@@ -44,4 +45,13 @@ stages:
                 archive="$work/node-v24.19.0-linux-x64.tar.gz"
                 bash "$work/fetch-node.sh" "$archive" f625d97cd707df4ff96254916fbc5ff014f09c09effe5a1e0ca8f6d41a8789d4
                 tar -xzf "$archive" -C "$work"
+                if [[ -v ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64 ]]; then
+                  if [[ -v ZIMAGE_GITHUB_APP_PRIVATE_KEY ]]; then
+                    echo 'Configure only one GitHub App private key input' >&2
+                    exit 1
+                  fi
+                  ZIMAGE_GITHUB_APP_PRIVATE_KEY="$(printf '%s' "$ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64" | base64 --decode)"
+                  export ZIMAGE_GITHUB_APP_PRIVATE_KEY
+                  unset ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64
+                fi
                 "$work/node-v24.19.0-linux-x64/bin/node" "$work/reconcile.mjs"
