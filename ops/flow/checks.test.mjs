@@ -70,12 +70,13 @@ test('rejects pre-existing Docker volumes before starting or stopping Supabase',
   assert.ok(!commands.some(command => command.startsWith('pnpm exec supabase')));
 });
 
-test('quality runs web coverage without preparing or requiring apparel fonts', (t) => {
+test('quality runs web coverage and Flow tests without preparing or requiring apparel fonts', (t) => {
   const { input, commands } = fixture(t);
   runChecks({ ...input, job: 'quality', environment: {} });
   assert.ok(!commands.some(command => command.startsWith('curl ') || command.includes('package-static-assets.mjs ')));
   assert.ok(!commands.some(command => /(?:package-static-assets|native-font-probe)\.test\.mjs/.test(command)));
   assert.ok(commands.some(command => command.includes('vitest run --coverage') && command.includes('--testNamePattern')));
+  assert.ok(commands.includes('python3 -B -m unittest discover -s ops/flow -p test_*.py'));
   assert.ok(commands.includes('pnpm build:frontend'));
   assert.ok(commands.includes('pnpm build'));
 });

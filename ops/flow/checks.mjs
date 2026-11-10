@@ -56,7 +56,7 @@ function qualityChecks(run, env, expectedCommit) {
     'ops/aliyun/package-release.test.mjs',
     'ops/aliyun/frontend/package.test.mjs', 'ops/aliyun/backend/http-admission.test.cjs',
     'ops/flow/checks.test.mjs', 'ops/flow/reconcile.test.mjs']);
-  for (const directory of ['ops/aliyun', 'ops/aliyun/frontend', 'ops/aliyun/backend', 'ops/aliyun/paired']) {
+  for (const directory of ['ops/aliyun', 'ops/aliyun/frontend', 'ops/aliyun/backend', 'ops/aliyun/paired', 'ops/flow']) {
     run('python3', ['-B', '-m', 'unittest', 'discover', '-s', directory, '-p', 'test_*.py']);
   }
   run('pnpm', ['exec', 'vitest', 'run', 'supabase/functions/generation-worker', 'supabase/functions/cleanup-worker']);
