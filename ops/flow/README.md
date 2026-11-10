@@ -17,7 +17,7 @@ Node `24.19.0` 归档经过摘要校验，pnpm 使用 `11.19.0`。质量任务�
 [reconcile.yml](reconcile.yml) 用于独立受保护的控制流水线。它从 GitHub 固定提交读取控制脚本并核对摘要，不依赖待同步的 Codeup 代码源。更新控制脚本时同时审查固定提交和两个文件摘要。保存后从 Flow 设置回读并发上限 `1`、超额拒绝新运行。任务从 GitHub 读取 `main` 和本仓开放 PR，校验 Codeup 镜像后发起质量运行。GitHub 推送和 Flow 定时补查应调用同一个控制任务。
 
 - 定时任务通过 `ZIMAGE_GITHUB_APP_CLIENT_ID`、`ZIMAGE_GITHUB_APP_INSTALLATION_ID` 和受保护的 `ZIMAGE_GITHUB_APP_PRIVATE_KEY` 在运行时获取短期令牌。已有的短期安装令牌也可通过 `ZIMAGE_GITHUB_APP_TOKEN` 传入。`ZIMAGE_GITHUB_APP_BOT_ID` 指定回写账号 ID。令牌只授权读取本仓内容及 PR 并写入提交状态。
-- Flow 的私密字符变量可使用单行 `ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64` 保存 PEM 的 Base64 编码。仅在控制流水线开启私密模式，关闭运行时设置。任务在内存中解码，原始 PEM 和编码值均不进入 YAML 或日志。
+- Flow 的私密字符变量可使用 `ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64` 保存 PEM 的单行 Base64 编码。任务也兼容在该变量中保存的 GitHub PKCS#1 PEM 原文，并恢复单行表单去掉的换行。仅在控制流水线开启私密模式，关闭运行时设置。原始 PEM 和编码值均不进入 YAML 或日志。
 - `ZIMAGE_FLOW_PAT` 需要读取 Codeup 分支及读写该质量流水线运行。`ZIMAGE_FLOW_QUALITY_PIPELINE_ID` 指向包含 `quality` 和 `database` 的试运行流水线。
 - 受保护的执行器需要配置官方 `aliyun` CLI 的镜像同步授权。先在上海站核验 `TriggerRepositoryMirrorSync` 的实际支持、授权和响应，再启用自动触发。
 

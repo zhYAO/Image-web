@@ -50,7 +50,17 @@ stages:
                     echo 'Configure only one GitHub App private key input' >&2
                     exit 1
                   fi
-                  ZIMAGE_GITHUB_APP_PRIVATE_KEY="$(printf '%s' "$ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64" | base64 --decode)"
+                  if [[ "$ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64" == '-----BEGIN RSA PRIVATE KEY-----'* ]]; then
+                    # A single-line input may drop the original PEM line breaks.
+                    pem_body="$(printf '%s' "$ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64" \
+                      | sed 's/^-----BEGIN RSA PRIVATE KEY-----//; s/-----END RSA PRIVATE KEY-----[[:space:]]*$//' \
+                      | tr -d '[:space:]' | fold -w 64)"
+                    ZIMAGE_GITHUB_APP_PRIVATE_KEY="$(printf '%s\n%s\n%s\n' \
+                      '-----BEGIN RSA PRIVATE KEY-----' "$pem_body" '-----END RSA PRIVATE KEY-----')"
+                    unset pem_body
+                  else
+                    ZIMAGE_GITHUB_APP_PRIVATE_KEY="$(printf '%s' "$ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64" | base64 --decode)"
+                  fi
                   export ZIMAGE_GITHUB_APP_PRIVATE_KEY
                   unset ZIMAGE_GITHUB_APP_PRIVATE_KEY_BASE64
                 fi
