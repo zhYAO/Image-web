@@ -54,9 +54,17 @@ credentials, rollback health, or real artifact API behavior. It does not install
 deploy, trigger Actions, change GitHub settings, or enable business features.
 
 Candidate jobs cannot read production-scoped variables. Required nonsecret
-public build configuration, measured target and provisioned font source must be
-available in an approved scope to the build runner. Repository variables were
-empty at preflight; production-scoped variables alone are insufficient. The
+public build configuration and measured target must be available in an approved
+scope to the build runner. An explicit ZIMAGE_RELEASE_FONT_SOURCE remains subject
+to the unchanged packaging checks. If absent, only the explicit candidate job
+prepares a fresh runner-temporary directory from official notofonts/noto-cjk
+commit f8d157532fbfaeda587e826d4cd5b21a49186f7c using HTTPS-only curl, then restores
+the committed original license/provenance CRLF bytes as in the quality job.
+Both downloaded OTFs were independently SHA256-verified on D1M against the existing
+committed fingerprints. All four original hashes remain enforced by the provisioner
+and existing package-static-assets.mjs; no hashes, fonts or licenses were changed.
+Nothing downloads inside the deploy/rollback jobs or during application startup.
+Repository variables were empty at preflight; production-scoped variables alone are insufficient. The
 existing target gate fails before install if target configuration is absent.
 Organization variable availability has not been verified. No scope was changed.
 

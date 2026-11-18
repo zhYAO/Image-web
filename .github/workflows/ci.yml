@@ -137,12 +137,13 @@ jobs:
           printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
           node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
       - run: pnpm install --frozen-lockfile
-      - name: Prepare complete resources from provisioned verified original fonts
+      - name: Prepare complete resources from verified original fonts
         env:
           FONT_SOURCE: ${{ vars.ZIMAGE_RELEASE_FONT_SOURCE }}
         run: |
           set -euo pipefail
-          test -n "$FONT_SOURCE" || { echo 'Administrator must provision the verified original fonts and license directory.' >&2; exit 1; }
+          node ops/aliyun/prepare-candidate-fonts.mjs > "$RUNNER_TEMP/zimage-font-source.json"
+          FONT_SOURCE=$(node --input-type=module -e 'import fs from "node:fs"; process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1], "utf8")));' "$RUNNER_TEMP/zimage-font-source.json")
           node ops/aliyun/package-static-assets.mjs --font-source "$FONT_SOURCE" --output "$RUNNER_TEMP/zimage-production-resources" > "$RUNNER_TEMP/zimage-resources.json"
           node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync(process.argv[1])); fs.appendFileSync(process.env.GITHUB_ENV,"ZIMAGE_RESOURCE_DIRECTORY="+r.versionDirectory+"\nZIMAGE_SHARED_FONT_DIR="+r.versionDirectory+"/fonts\nZIMAGE_STATIC_ASSET_SHA256="+r.manifestSha256+"\n");' "$RUNNER_TEMP/zimage-resources.json"
       - name: Build production HTTP application
