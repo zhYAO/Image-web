@@ -89,3 +89,35 @@ set verify_lifecycle=true and succeed. Backend helper/catalog installation,
 missing preload launch reconciliation, full Linux drain/recovery evidence,
 production compatibility policy and activation approval remain separate.
 The unchanged ordinary layered deployment does not invoke BackendTransaction.
+
+
+## Local diagnostic revision
+
+Private status failures carry only fixed enums: phase (startup or after_probes),
+furthest completed stage, and the final observed reason code. A later failed poll
+can have an earlier stage than the furthest completed stage. No exception text,
+socket path, PID, status JSON, app log or environment value is included in these
+diagnostics. Application stderr remains private and is not scanned or published.
+
+The supervisor counts the full encoded Unix socket pathname, including the
+external chroot prefix, against Linux's 107-byte pathname budget plus terminating
+NUL. With the default /tmp directory and CPython's eight-character random suffix,
+the current external path is 74 bytes and the app's internal path is 34 bytes.
+A longer temporary-directory prefix fails closed with socket_path_too_long.
+Linux's sockaddr_un definition is documented in
+https://github.com/torvalds/linux/blob/master/include/uapi/linux/un.h.
+
+The supervisor and its directly launched app share the one PID namespace created
+by unshare. chroot, setsid and privilege dropping do not create a PID namespace.
+SO_PEERCRED is therefore compared to Popen.pid in the same namespace, with the
+existing UID and status PID checks retained. Linux converts the peer PID through
+pid_vnr in cred_to_ucred in
+https://github.com/torvalds/linux/blob/master/net/core/sock.c.
+
+Windows offline tests verify the path boundary, mocked Linux peer/status exchange,
+fixed failure codes, both wait phases and unchanged startup/isolation assertions.
+The mocked socket test supplies Linux-only constants explicitly. It does not
+execute a Linux kernel socket, chroot, namespace or candidate app. These checks
+prove the old diagnostic ambiguity, without identifying the previous run's
+specific startup failure. A subsequent authorized candidate run is still required
+to observe the new enums and test the real Linux behavior.

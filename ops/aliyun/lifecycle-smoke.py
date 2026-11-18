@@ -4,6 +4,7 @@ No production transport/activation, package installation, build or artifact uplo
 Linux execution is opt-in and has NOT been validated merely by local unit tests.
 """
 import argparse
+import errno
 import hashlib
 import http.client
 import importlib.util
@@ -229,35 +230,101 @@ def validate_status(value, pid):
             'Offline smoke left unfinished work')
 
 
-def private_status(root, pid):
+# Only these fixed values can reach a diagnostic. Never serialize an exception,
+# pathname, PID, status payload or application output.
+STATUS_STAGES = ('waiting', 'path_checked', 'socket_verified', 'connected',
+                 'peer_verified', 'response_received', 'status_validated')
+STATUS_REASONS = {
+    'Malformed private status shape': 'status_shape_invalid',
+    'Untrusted private socket': 'socket_untrusted',
+    'Private socket peer PID/UID differs': 'peer_mismatch',
+    'Invalid bounded status response': 'response_invalid',
+    'Private lifecycle identity/control mismatch': 'identity_control_mismatch',
+    'Actual HTTP bridge is unavailable': 'http_bridge_invalid',
+    'Actual audited Next hook is unavailable': 'framework_contract_invalid',
+    'Offline smoke left unfinished work': 'work_not_idle',
+    'Linux Unix socket pathname exceeds the bounded address': 'socket_path_too_long',
+}
+
+
+class StatusWaitFailure(SmokeFailure):
+    def __init__(self, phase, stage, code):
+        require(phase in ('startup', 'after_probes') and stage in STATUS_STAGES
+                and code in set(STATUS_REASONS.values()) | {
+                    'socket_missing', 'connection_refused', 'socket_timeout',
+                    'socket_permission', 'socket_io_error', 'status_json_invalid',
+                    'status_shape_invalid', 'status_invalid', 'child_exited'},
+                'Invalid diagnostic enum')
+        super().__init__('Exact bridge/status verification failed')
+        self.diagnostic = dict(phase=phase, reachedStage=stage, reasonCode=code)
+
+
+def socket_path(root):
     path = root / 'run/zimage-lifecycle/control.sock'
+    # Linux sockaddr_un.sun_path has 108 bytes, including the terminating NUL.
+    # Count the supervisor's full path, including the chroot's external prefix.
+    require(len(os.fsencode(path)) <= 107,
+            'Linux Unix socket pathname exceeds the bounded address')
+    return path
+
+
+def private_status(root, pid, progress):
+    path = socket_path(root)
+    progress['stage'] = 'path_checked'
     info = path.lstat()
     require(stat.S_ISSOCK(info.st_mode) and info.st_uid == UID and stat.S_IMODE(info.st_mode) == 0o600,
             'Untrusted private socket')
+    progress['stage'] = 'socket_verified'
     with socket.socket(socket.AF_UNIX) as connection:
         connection.settimeout(2)
         connection.connect(str(path))
+        progress['stage'] = 'connected'
         peer = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
         require(peer[:2] == (pid, UID), 'Private socket peer PID/UID differs')
+        progress['stage'] = 'peer_verified'
         connection.sendall(b'{"command":"status"}\n')
         body = b''
         while not body.endswith(b'\n'):
             chunk = connection.recv(4096)
             require(bool(chunk) and len(body) + len(chunk) <= 16384, 'Invalid bounded status response')
             body += chunk
+    progress['stage'] = 'response_received'
     value = json.loads(body)
+    require(isinstance(value, dict) and isinstance(value.get('httpAdmission'), dict)
+            and isinstance(value['httpAdmission'].get('frameworkWork'), dict)
+            and isinstance(value.get('counters'), dict), 'Malformed private status shape')
     validate_status(value, pid)
+    progress['stage'] = 'status_validated'
     return value
 
 
-def wait_status(root, app, timeout):
+def status_reason(error):
+    if isinstance(error, SmokeFailure):
+        return STATUS_REASONS.get(str(error), 'status_invalid')
+    if isinstance(error, OSError):
+        return {errno.ENOENT: 'socket_missing', errno.ECONNREFUSED: 'connection_refused',
+                errno.EACCES: 'socket_permission', errno.EPERM: 'socket_permission',
+                errno.ETIMEDOUT: 'socket_timeout'}.get(error.errno,
+                    'socket_timeout' if isinstance(error, TimeoutError) else 'socket_io_error')
+    if isinstance(error, (json.JSONDecodeError, UnicodeError)):
+        return 'status_json_invalid'
+    return 'status_invalid'
+
+
+def wait_status(root, app, timeout, phase):
     deadline = time.monotonic() + timeout
+    reached = 'waiting'
     while True:
-        require(app.poll() is None, 'Exact candidate exited; private logs are not published')
+        if app.poll() is not None:
+            raise StatusWaitFailure(phase, reached, 'child_exited')
+        progress = dict(stage='waiting')
         try:
-            return private_status(root, app.pid)
-        except (OSError, ValueError):
-            require(time.monotonic() < deadline, 'Exact bridge/status did not become ready and idle')
+            return private_status(root, app.pid, progress)
+        except (OSError, ValueError) as error:
+            if STATUS_STAGES.index(progress['stage']) > STATUS_STAGES.index(reached):
+                reached = progress['stage']
+            if time.monotonic() >= deadline:
+                raise StatusWaitFailure(phase, reached, status_reason(error)) from None
             time.sleep(0.1)
 
 
@@ -411,7 +478,7 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
                 stdin=subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True,
                 preexec_fn=lambda: child_setup(root))
             try:
-                wait_status(root, app, 40)
+                wait_status(root, app, 40, 'startup')
                 status, headers, value = get('/api/health/ready')
                 require(status == 200 and value.get('version') == SOURCE
                         and 'no-store' in headers.get('cache-control', ''), 'Exact ready failed')
@@ -421,7 +488,7 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
                 status, headers, value = get('/api/chat')
                 require(status == 503 and value.get('code') == 'network'
                         and headers.get('retry-after') == '30', 'Protected-path barrier did not reject')
-                wait_status(root, app, 2)
+                wait_status(root, app, 2, 'after_probes')
                 print(json.dumps(dict(source=SOURCE, artifactName=expected['artifact_name'], runtime=fingerprint, framework=EXPECTED_FRAMEWORK,
                     exactArtifactBoot=True, privatePeerAndBridge=True, checkingBarrier=True,
                     transportSha256=expected['transport_sha256'], artifactUploaded=False,
@@ -466,7 +533,10 @@ if __name__ == '__main__':
         main()
     except Exception as error:
         # Never print app output, inherited values, URL bodies or arbitrary exception text.
-        print(json.dumps(dict(smokeFailed=True, errorType=type(error).__name__,
+        failure = dict(smokeFailed=True, errorType=type(error).__name__,
             reason=str(error) if isinstance(error, SmokeFailure) else 'Runner prerequisite or execution failed; no fallback',
-            productionReady=False)), file=sys.stderr)
+            productionReady=False)
+        if isinstance(error, StatusWaitFailure):
+            failure.update(error.diagnostic)
+        print(json.dumps(failure), file=sys.stderr)
         sys.exit(1)

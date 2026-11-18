@@ -98,6 +98,111 @@ class SmokeTests(unittest.TestCase):
             bad=status();change(bad)
             with self.assertRaises(smoke.SmokeFailure): smoke.validate_status(bad,17)
 
+    def test_linux_socket_path_counts_full_prefix_and_encoded_bytes(self):
+        from pathlib import PurePosixPath
+        external = PurePosixPath('/tmp/zimage-artifact-smoke-abcdefgh/root')
+        internal = PurePosixPath('/')
+        self.assertEqual(len(smoke.os.fsencode(smoke.socket_path(external))), 74)
+        self.assertEqual(len(smoke.os.fsencode(smoke.socket_path(internal))), 34)
+        suffix = '/run/zimage-lifecycle/control.sock'
+        exact = PurePosixPath('/' + 'x' * (107 - len(suffix) - 1))
+        self.assertEqual(len(smoke.os.fsencode(smoke.socket_path(exact))), 107)
+        for root in [PurePosixPath(str(exact)+'x'), PurePosixPath('/'+'字'*40)]:
+            with self.assertRaisesRegex(smoke.SmokeFailure, 'bounded address'):
+                smoke.socket_path(root)
+
+    def test_socket_reader_binds_same_namespace_child_pid_and_keeps_guards(self):
+        import stat
+        import struct
+        root = mock.Mock()
+        root.__truediv__ = mock.Mock(return_value=root)
+        root.lstat.return_value = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600, st_uid=smoke.UID)
+        conn = mock.MagicMock()
+        conn.__enter__.return_value = conn
+        conn.getsockopt.return_value = struct.pack('3i', 17, smoke.UID, smoke.UID)
+        conn.recv.return_value = json.dumps(status()).encode() + b'\n'
+        with mock.patch.object(smoke.socket, 'AF_UNIX', 1, create=True), mock.patch.object(smoke.socket, 'SO_PEERCRED', 17, create=True), mock.patch.object(smoke, 'socket_path', return_value=root), mock.patch.object(smoke.socket, 'socket', return_value=conn):
+            progress = dict(stage='waiting')
+            self.assertEqual(smoke.private_status(root,17,progress),status())
+            self.assertEqual(progress['stage'],'status_validated')
+            conn.sendall.assert_called_once_with(b'{"command":"status"}\n')
+            for peer in [(18,smoke.UID,0),(17,0,0)]:
+                conn.getsockopt.return_value = struct.pack('3i',*peer)
+                with self.assertRaisesRegex(smoke.SmokeFailure,'peer PID/UID differs'):
+                    smoke.private_status(root,17,dict(stage='waiting'))
+            root.lstat.return_value = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o666, st_uid=smoke.UID)
+            with self.assertRaisesRegex(smoke.SmokeFailure,'Untrusted private socket'):
+                smoke.private_status(root,17,dict(stage='waiting'))
+
+    def test_wait_reports_fixed_phase_stage_reason_without_payload(self):
+        import errno
+        errors = [
+            (FileNotFoundError(errno.ENOENT,'synthetic-private-payload'),'socket_missing','path_checked'),
+            (ConnectionRefusedError(errno.ECONNREFUSED,'synthetic-private-payload'),'connection_refused','socket_verified'),
+            (TimeoutError('synthetic-private-payload'),'socket_timeout','peer_verified'),
+            (PermissionError(errno.EACCES,'synthetic-private-payload'),'socket_permission','path_checked'),
+            (OSError(errno.EIO,'synthetic-private-payload'),'socket_io_error','connected'),
+            (smoke.SmokeFailure('Malformed private status shape'),'status_shape_invalid','response_received'),
+            (smoke.SmokeFailure('Linux Unix socket pathname exceeds the bounded address'),'socket_path_too_long','waiting'),
+            (smoke.SmokeFailure('Private socket peer PID/UID differs'),'peer_mismatch','connected'),
+            (smoke.SmokeFailure('Private lifecycle identity/control mismatch'),'identity_control_mismatch','response_received'),
+            (smoke.SmokeFailure('Actual HTTP bridge is unavailable'),'http_bridge_invalid','response_received'),
+            (smoke.SmokeFailure('Actual audited Next hook is unavailable'),'framework_contract_invalid','response_received'),
+            (smoke.SmokeFailure('Offline smoke left unfinished work'),'work_not_idle','response_received'),
+            (json.JSONDecodeError('synthetic-private-payload','private',0),'status_json_invalid','response_received'),
+            (smoke.SmokeFailure('synthetic-private-payload'),'status_invalid','waiting'),
+        ]
+        app=SimpleNamespace(pid=17,poll=lambda:None)
+        for phase in ('startup','after_probes'):
+            for error,code,stage in errors:
+                def fail(root,pid,progress):
+                    progress['stage']=stage
+                    raise error
+                with mock.patch.object(smoke,'private_status',side_effect=fail), mock.patch.object(smoke.time,'monotonic',side_effect=[0,41]):
+                    with self.assertRaises(smoke.StatusWaitFailure) as caught:
+                        smoke.wait_status(None,app,40,phase)
+                self.assertEqual(caught.exception.diagnostic,dict(phase=phase,reachedStage=stage,reasonCode=code))
+                self.assertNotIn('synthetic-private-payload',str(caught.exception)+json.dumps(caught.exception.diagnostic))
+
+    def test_wait_keeps_furthest_stage_and_observed_exit(self):
+        app=SimpleNamespace(pid=17,poll=lambda:None)
+        stages=iter(['response_received','path_checked'])
+        def fail(root,pid,progress):
+            progress['stage']=next(stages)
+            raise FileNotFoundError(smoke.errno.ENOENT,'private')
+        with mock.patch.object(smoke,'private_status',side_effect=fail), mock.patch.object(smoke.time,'monotonic',side_effect=[0,1,41]), mock.patch.object(smoke.time,'sleep'):
+            with self.assertRaises(smoke.StatusWaitFailure) as caught:
+                smoke.wait_status(None,app,40,'startup')
+        self.assertEqual(caught.exception.diagnostic,dict(phase='startup',reachedStage='response_received',reasonCode='socket_missing'))
+        with mock.patch.object(smoke,'private_status') as reader:
+            with self.assertRaises(smoke.StatusWaitFailure) as caught:
+                smoke.wait_status(None,SimpleNamespace(poll=lambda:1),40,'after_probes')
+            reader.assert_not_called()
+        self.assertEqual(caught.exception.diagnostic['reasonCode'],'child_exited')
+
+    def test_diagnostics_preserve_startup_isolation_and_all_status_assertions(self):
+        baseline = subprocess.check_output(['git','show',
+            'f0f6c252f186583dcf4c735276e94960166cc2fe:ops/aliyun/lifecycle-smoke.py'],cwd=ROOT).decode()
+        current=(HERE/'lifecycle-smoke.py').read_text(encoding='utf-8')
+        def function_body(source,name):
+            tree=ast.parse(source)
+            node=next(node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name==name)
+            return ast.dump(node,include_attributes=False)
+        for name in ['validate_status','validate_inspection','child_setup','app_environment',
+                     'network_isolated','prepare','recheck','target_binding']:
+            self.assertEqual(function_body(baseline,name),function_body(current,name),name)
+        original_linux=function_body(baseline,'linux')
+        # The two explicit wait phases are the only startup/supervisor edits.
+        normalized=current.replace("wait_status(root, app, 40, 'startup')",'wait_status(root, app, 40)')
+        normalized=normalized.replace("wait_status(root, app, 2, 'after_probes')",'wait_status(root, app, 2)')
+        self.assertEqual(original_linux,function_body(normalized,'linux'))
+        # unshare creates a single PID namespace before the supervisor's Popen;
+        # child_setup chroots and drops privileges without creating another PID namespace.
+        workflow=subprocess.check_output(['git','show',
+            'f0f6c252f186583dcf4c735276e94960166cc2fe:.github/workflows/ci.yml'],cwd=ROOT)
+        self.assertEqual(workflow,(ROOT/'.github/workflows/ci.yml').read_bytes().replace(b'\r\n',b'\n'))
+        self.assertIn('--mount --net --pid --fork --kill-child --mount-proc',workflow.decode())
+
     def test_network_namespace_and_routes_fail_closed(self):
         smoke.network_isolated('net:[1]',['lo'],[dict(dev='lo',dst='::1')],'net:[2]')
         for args in [('same',['lo'],[],'same'), ('old',['lo','eth0'],[],'new'),
