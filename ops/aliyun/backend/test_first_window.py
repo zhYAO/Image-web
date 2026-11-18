@@ -92,7 +92,7 @@ class Ops:
         counters = {key: self.active.get(key, 0) for key in f.tx.COUNTERS}
         bridge = {'protocolVersion': 1, 'installed': True, 'barrierId': 'node-http-create-server-v1',
             'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
-            'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.1', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}}
+            'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.5', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}}
         return {'schemaVersion': 1, 'backendRelease': B, 'pid': self.proc['pid'], 'controlValid': True,
             'maintenance': gate['mode'] != 'open', 'admissionEpoch': gate['operationId'], 'admissionMode': gate['mode'],
             'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework, 'httpAdmission': bridge,

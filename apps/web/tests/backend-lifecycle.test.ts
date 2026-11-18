@@ -8,7 +8,7 @@ describe('backend drain lifecycle', () => {
   const admission = (mode: 'open' | 'draining' | 'checking', activeHttpRequests = 0, operationId = 'operation-1') => ({
     protocolVersion: 1 as const, barrierId: 'node-http-create-server-v1' as const, installed: true,
     wrappedServerCount: 1, activeHttpRequests, activeFrameworkWork: 0,
-    frameworkWork: { protocolVersion: 1 as const, installed: true, nextVersion: '16.4.1', hook: 'response-cache-revalidate-v1', controlValid: true },
+    frameworkWork: { protocolVersion: 1 as const, installed: true, nextVersion: '16.4.5', hook: 'response-cache-revalidate-v1', controlValid: true },
     controlValid: true, schemaVersion: 2 as const,
     admissionMode: mode, admissionEpoch: operationId,
   });

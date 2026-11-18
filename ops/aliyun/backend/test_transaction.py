@@ -39,7 +39,7 @@ class FakeOps:
                 'admissionMode': gate['mode'], 'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
                 'httpAdmission': {'protocolVersion': 1, 'installed': self.bridge_valid, 'barrierId': 'node-http-create-server-v1',
                     'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
-                    'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.1', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}},
+                    'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.5', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}},
                 'drained': (gate['mode'] != 'open') and not any(counters.values()) and self.http == self.framework == 0}
     def validate(self, release): self.calls.append(('validate', release))
     def stop(self): self.calls.append(('stop', self.release))

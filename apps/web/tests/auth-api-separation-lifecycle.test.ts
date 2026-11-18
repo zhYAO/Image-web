@@ -14,7 +14,7 @@ vi.mock('@/server/lifecycle/request-lifecycle', async original => {
     return { schemaVersion: 2, mode: mocks.maintenance ? "draining" : "open", operationId: 'fixture-operation' };
   }, () => ({ protocolVersion: 1, barrierId: 'node-http-create-server-v1', installed: true,
     wrappedServerCount: 1, activeHttpRequests: 0, activeFrameworkWork: 0, controlValid: !mocks.invalidControl,
-    frameworkWork: { protocolVersion: 1, installed: true, nextVersion: '16.4.1', hook: 'response-cache-revalidate-v1', controlValid: true },
+    frameworkWork: { protocolVersion: 1, installed: true, nextVersion: '16.4.5', hook: 'response-cache-revalidate-v1', controlValid: true },
     schemaVersion: 2, admissionEpoch: 'fixture-operation', admissionMode: mocks.maintenance ? 'draining' : 'open' }));
   return { ...actual, lifecycle: fixture,
     assertMutationAdmission: () => fixture.admission(),

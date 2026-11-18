@@ -14,7 +14,7 @@
 | 包管理器 | `pnpm@11.19.0` | 使用冻结锁文件，不换版本、不重写lock |
 | Python | 目标 `3.10.12`，修复后201项通过 | 构建/打包工具需要已有Python3.10或兼容更新版本；最终目标仍须实测 |
 | 归档与文件系统 | Linux GNU tar、POSIX权限/链接 | 须支持当前脚本的 `--hard-dereference`、实际原子发布/硬链接/锁；BSD tar不能替代 |
-| 依赖 | 锁定Next16.4.1、Sharp0.35.5等 | 必须在匹配Linux环境按锁安装/复用经过核实的缓存，不能复制Mac/Windows node_modules |
+| 依赖 | 锁定Next16.4.5、Sharp0.35.5等 | 必须在匹配Linux环境按锁安装/复用经过核实的缓存，不能复制Mac/Windows node_modules |
 
 可安全交付给构建任务的目标JSON如下，来自实际目标测量，仍应在构建前重新核对：
 
