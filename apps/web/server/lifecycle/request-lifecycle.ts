@@ -1,5 +1,7 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { ApiRouteError } from '../api-error';
+import appPackage from '../../package.json';
+import sourceProfiles from '../../../../ops/aliyun/backend/next-source-profiles.json';
 
 export const MAINTENANCE_FILE = '/etc/zimage/backend-maintenance.json';
 export const COUNTERS = ['activeMutations', 'activeStreams', 'activeRenders', 'activeExports', 'pendingFinalizers'] as const;
@@ -8,8 +10,13 @@ export type Maintenance = { schemaVersion: 2; operationId: string; mode: 'open' 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{6,79}$/;
 const HTTP_BRIDGE = Symbol.for('zimage.http-admission.v1');
 const HTTP_BARRIER = 'node-http-create-server-v1';
-const AUDITED_NEXT_VERSION = '16.4.5';
-type FrameworkAdmission = { protocolVersion: 1; installed: boolean; nextVersion: string; hook: string; controlValid: boolean };
+// Bundled from the artifact's exact declared dependency and reviewed source policy.
+// Never learn a version/profile from the first live bridge response.
+export const COMPILED_NEXT_CONTRACT = Object.freeze({ protocolVersion: 2 as const,
+  nextVersion: appPackage.dependencies.next, sourceProfile: sourceProfiles.candidateProfile });
+const stableNext = (value: unknown): value is string => typeof value === 'string'
+  && /^16\.4\.(0|[1-9][0-9]*)$/.test(value) && Number.isSafeInteger(Number(value.split('.')[2]));
+type FrameworkAdmission = { protocolVersion: 2; installed: boolean; nextVersion: string; sourceProfile: string; hook: string; controlValid: boolean };
 type HttpAdmission = { protocolVersion: 1; barrierId: typeof HTTP_BARRIER; installed: boolean;
   wrappedServerCount: number; activeHttpRequests: number; activeFrameworkWork: number; frameworkWork: FrameworkAdmission; controlValid: boolean;
   schemaVersion: 2; admissionEpoch: string; admissionMode: Maintenance['mode'] };
@@ -18,7 +25,7 @@ export function readHttpAdmission(): HttpAdmission {
   if (process.env.ZIMAGE_LIFECYCLE_ENABLED !== '1') {
     return { protocolVersion: 1, barrierId: HTTP_BARRIER, installed: false, wrappedServerCount: 0,
       activeHttpRequests: 0, activeFrameworkWork: 0,
-      frameworkWork: { protocolVersion: 1, installed: false, nextVersion: AUDITED_NEXT_VERSION, hook: 'response-cache-revalidate-v1', controlValid: true },
+      frameworkWork: { ...COMPILED_NEXT_CONTRACT, installed: false, hook: 'response-cache-revalidate-v1', controlValid: true },
       controlValid: true, schemaVersion: 2, admissionEpoch: 'disabled-local', admissionMode: 'open' };
   }
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, HTTP_BRIDGE);
@@ -31,8 +38,12 @@ export function readHttpAdmission(): HttpAdmission {
     || !Number.isSafeInteger(state.wrappedServerCount) || state.wrappedServerCount < 1
     || !Number.isSafeInteger(state.activeHttpRequests) || state.activeHttpRequests < 0
     || !Number.isSafeInteger(state.activeFrameworkWork) || state.activeFrameworkWork < 0
-    || state.frameworkWork?.protocolVersion !== 1 || state.frameworkWork.installed !== true
-    || state.frameworkWork.nextVersion !== AUDITED_NEXT_VERSION || state.frameworkWork.hook !== 'response-cache-revalidate-v1'
+    || state.frameworkWork?.protocolVersion !== 2 || state.frameworkWork.installed !== true
+    || !stableNext(COMPILED_NEXT_CONTRACT.nextVersion) || !stableNext(state.frameworkWork.nextVersion)
+    || state.frameworkWork.nextVersion !== COMPILED_NEXT_CONTRACT.nextVersion
+    || state.frameworkWork.sourceProfile !== COMPILED_NEXT_CONTRACT.sourceProfile
+    || Object.keys(state.frameworkWork).sort().join(',') !== 'controlValid,hook,installed,nextVersion,protocolVersion,sourceProfile'
+    || state.frameworkWork.hook !== 'response-cache-revalidate-v1'
     || state.frameworkWork.controlValid !== true
     || typeof state.controlValid !== 'boolean' || state.schemaVersion !== 2
     || !['open', 'draining', 'checking'].includes(state.admissionMode)
@@ -104,7 +115,7 @@ export class RequestLifecycle {
       controlValid = false;
       http = { protocolVersion: 1, barrierId: HTTP_BARRIER, installed: false, wrappedServerCount: 0,
         activeHttpRequests: 0, activeFrameworkWork: 0,
-        frameworkWork: { protocolVersion: 1, installed: false, nextVersion: AUDITED_NEXT_VERSION, hook: 'response-cache-revalidate-v1', controlValid: false },
+        frameworkWork: { ...COMPILED_NEXT_CONTRACT, installed: false, hook: 'response-cache-revalidate-v1', controlValid: false },
         controlValid: false, schemaVersion: 2, admissionMode: 'draining', admissionEpoch: 'invalid-control' };
     }
     const counters = { ...this.counts };

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "candidateProfile": "sha256:e2b48b0ee58bbe42bb949922fac6252d881f3d62e24a689b61a67ccf5ed32e62",
+  "profiles": {
+    "sha256:e2b48b0ee58bbe42bb949922fac6252d881f3d62e24a689b61a67ccf5ed32e62": {
+      "hashes": {
+        "next/dist/server/lib/start-server.js": "2beb0e087fc69702d0eb7b67e5fd0f95fa216d6463dc3732c9a2966310aea5ad",
+        "next/dist/server/next-server.js": "b213afa46803f94a38aa506c6b130eeb94841d7e1ca37686357adf2637cce69e",
+        "next/dist/server/response-cache/index.js": "2f69084f08c875effc18db29f5ae4cf01fa23f76c26530c3e685bc7272121cc4",
+        "next/dist/server/image-optimizer.js": "b599e7d1483e6df7d941ca23c45a00c2b3db3903869180e1384ab4558af644ba",
+        "next/dist/lib/batcher.js": "fb64a7f69707222bed0a3bc8f9fca482db9a45aafe116ada65cc8a0ce641352b",
+        "next/dist/lib/scheduler.js": "8198d8ad75e5d0dc739068bf3660dde1d0dad2fec9b5a208e75b8610d8e77ce0",
+        "next/dist/server/lib/disk-lru-cache.external.js": "36676a59923aede5b12c419eb03689a58e29706e0af8cb15b47957036bdd835c",
+        "next/dist/server/lib/lru-cache.js": "b9b499c0213d746b6d7e2d6df2f99f1948c7a01034f9a1b0c3a4c860dc3cb56d",
+        "next/dist/server/image-optimizer/transform.js": "7234aedad279bacd68855dfe629bfb5c50b6afe4cc58221543673d28c50a9455"
+      }
+    },
+    "sha256:390dc1812e35e24a5a5134d01409b91cbdcb23d202bf37c96ecf11d31b29a5a1": {
+      "hashes": {
+        "next/dist/server/lib/start-server.js": "840e9d4b844ef1adfb1b6435f219c9bf3af459b5738756c03919f9b46035ff0e",
+        "next/dist/server/next-server.js": "973a8ed699b0295f4751d32fb53043574103f19c5a43d241d99ef9574c099fca",
+        "next/dist/server/response-cache/index.js": "2f69084f08c875effc18db29f5ae4cf01fa23f76c26530c3e685bc7272121cc4",
+        "next/dist/server/image-optimizer.js": "b599e7d1483e6df7d941ca23c45a00c2b3db3903869180e1384ab4558af644ba",
+        "next/dist/lib/batcher.js": "fb64a7f69707222bed0a3bc8f9fca482db9a45aafe116ada65cc8a0ce641352b",
+        "next/dist/lib/scheduler.js": "8198d8ad75e5d0dc739068bf3660dde1d0dad2fec9b5a208e75b8610d8e77ce0",
+        "next/dist/server/lib/disk-lru-cache.external.js": "36676a59923aede5b12c419eb03689a58e29706e0af8cb15b47957036bdd835c",
+        "next/dist/server/lib/lru-cache.js": "b9b499c0213d746b6d7e2d6df2f99f1948c7a01034f9a1b0c3a4c860dc3cb56d",
+        "next/dist/server/image-optimizer/transform.js": "7234aedad279bacd68855dfe629bfb5c50b6afe4cc58221543673d28c50a9455"
+      }
+    }
+  },
+  "legacy": {
+    "nextVersion": "16.4.1",
+    "profile": "sha256:390dc1812e35e24a5a5134d01409b91cbdcb23d202bf37c96ecf11d31b29a5a1",
+    "releases": [
+      "7a811b326aa4b344cee08bc5a33c04e44a780fd4",
+      "fb4fb09f909c0ae5dce98ebd0d9540386685ddb7"
+    ]
+  }
+}

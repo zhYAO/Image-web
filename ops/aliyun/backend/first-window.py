@@ -20,7 +20,7 @@ HERE = Path(__file__).resolve().parent
 # Unit tests import the wrapper as a module; privileged execution uses __main__.
 if __name__ == '__main__':
     if os.geteuid() != 0 or not sys.flags.isolated: raise SystemExit('Requires root and isolated Python')
-    for target in (Path(__file__).absolute(), HERE / 'release.py', HERE / 'first_window.py', HERE / 'transaction.py', HERE / 'frontend_bootstrap.py'):
+    for target in (Path(__file__).absolute(), HERE / 'release.py', HERE / 'first_window.py', HERE / 'transaction.py', HERE / 'frontend_bootstrap.py', HERE / 'next-source-profiles.json'):
         for path in (target, *target.parents):
             info = path.lstat()
             if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
@@ -331,7 +331,7 @@ def main():
     receipt.add_argument('pid', type=int); receipt.add_argument('expected_receipt_sha256')
     args = parser.parse_args()
     if os.geteuid() != 0 or not sys.flags.isolated: raise RuntimeError('Requires root and isolated Python')
-    for name in ('first-window.py', 'first_window.py', 'frontend_bootstrap.py', 'release.py', 'transaction.py', 'receipt.py', 'verify.py', 'http-admission.cjs', 'backend-lifecycle.conf', 'backend-legacy.conf'):
+    for name in ('first-window.py', 'first_window.py', 'frontend_bootstrap.py', 'release.py', 'transaction.py', 'receipt.py', 'verify.py', 'http-admission.cjs', 'next-source-profiles.json', 'backend-lifecycle.conf', 'backend-legacy.conf'):
         r.owned(HERE / name)
     r.owned(r.ROOT, directory=True); r.owned(JOURNAL.parent, directory=True)
     if os.path.lexists(r.SERVICE_DROPIN):

@@ -86,13 +86,14 @@ class Ops:
         self.action('start')
         self.pid_counter += 1
         self.proc = dict(PROCESS, pid=self.pid_counter, startTicks=1234 + self.pid_counter)
+    def framework_contract(self, release): return {'protocolVersion':2,'nextVersion':'16.4.5','sourceProfile':f.tx.SOURCE_PROFILES['candidateProfile']}
     def status(self):
         if self.release == A: raise AssertionError('Genuine B0 has no socket/meta/drain marker')
         gate = json.loads(self.gate.read_text())
         counters = {key: self.active.get(key, 0) for key in f.tx.COUNTERS}
         bridge = {'protocolVersion': 1, 'installed': True, 'barrierId': 'node-http-create-server-v1',
             'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
-            'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.5', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}}
+            'frameworkWork': {'installed': True, 'protocolVersion': 2, 'nextVersion': '16.4.5', 'sourceProfile': f.tx.SOURCE_PROFILES['candidateProfile'], 'hook': 'response-cache-revalidate-v1', 'controlValid': True}}
         return {'schemaVersion': 1, 'backendRelease': B, 'pid': self.proc['pid'], 'controlValid': True,
             'maintenance': gate['mode'] != 'open', 'admissionEpoch': gate['operationId'], 'admissionMode': gate['mode'],
             'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework, 'httpAdmission': bridge,
