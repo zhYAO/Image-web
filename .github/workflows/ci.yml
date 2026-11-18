@@ -266,12 +266,16 @@ jobs:
           printf 'Verified rollback point: %s\n' "$original"
       - name: Upload and activate immutable release
         env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ATTEMPT: ${{ inputs.candidate_attempt }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
           RELEASE_SHA: ${{ github.sha }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
+          python3 -I -B ops/aliyun/candidate-artifact.py --recheck "$CANDIDATE_RUN_ID" "$CANDIDATE_ATTEMPT" "$RELEASE_SHA" /tmp/production
           digest=$(sha256sum /tmp/production/transport.tgz | cut -d ' ' -f1)
           if [[ "$RELEASE_FORMAT" == layers ]]; then
             suffix=layers.tgz

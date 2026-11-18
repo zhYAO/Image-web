@@ -24,6 +24,7 @@ class CandidateTests(unittest.TestCase):
                         head_branch='main', head_sha=self.sha, status='completed', conclusion='success')
         self.jobs = [dict(name='candidate-build', conclusion='success', run_id=100), dict(name='deploy', conclusion='skipped')]
         self.artifact = dict(id=9, name=f'candidate-{self.sha}-100-2', expired=False,
+                             size_in_bytes=1024,
                              workflow_run=dict(id=100, head_sha=self.sha, head_branch='main', repository_id=42, head_repository_id=42),
                              created_at='2026-11-18T00:00:00Z', expires_at='2026-11-19T00:00:00Z', digest='sha256:'+'b'*64)
         self.now = datetime(2026, 11, 18, 1, tzinfo=timezone.utc)
@@ -87,6 +88,7 @@ class CandidateTests(unittest.TestCase):
             for name,data in files.items(): archive.writestr(name,data)
         data=output.getvalue()
         self.artifact['digest']='sha256:'+hashlib.sha256(data).hexdigest()
+        self.artifact['size_in_bytes']=len(data)
         return data
 
     def test_extracts_only_verified_bytes(self):
@@ -142,6 +144,29 @@ class CandidateTests(unittest.TestCase):
                     else:
                         candidate.main()
                         self.assertTrue((dest/'transport.tgz').exists())
+                        candidate.recheck(dest,self.sha,100,2)
+                        self.run['run_attempt']=3
+                        with self.assertRaisesRegex(ValueError,'Run/attempt mismatch'):
+                            candidate.recheck(dest,self.sha,100,2)
+                        self.run['run_attempt']=2
+                        self.artifact['expired']=True
+                        with self.assertRaises(ValueError): candidate.recheck(dest,self.sha,100,2)
+                        self.artifact['expired']=False
+                        with patch.object(candidate,'datetime',wraps=datetime) as clock:
+                            clock.now.return_value=now+timedelta(days=2)
+                            with self.assertRaisesRegex(ValueError,'expired or older'):
+                                candidate.recheck(dest,self.sha,100,2)
+                        def moved_api(path,binary=False):
+                            return dict(sha='c'*40) if path=='/commits/main' else api(path,binary)
+                        with patch.object(candidate,'api',moved_api), self.assertRaisesRegex(ValueError,'Main moved before upload'):
+                            candidate.recheck(dest,self.sha,100,2)
+                        self.artifact['id']=10
+                        with self.assertRaisesRegex(ValueError,'Selected artifact changed'):
+                            candidate.recheck(dest,self.sha,100,2)
+                        self.artifact['id']=9
+                        (dest/'transport.tgz').write_bytes(b'changed local bytes')
+                        with self.assertRaisesRegex(ValueError,'Candidate file changed'):
+                            candidate.recheck(dest,self.sha,100,2)
                 self.assertTrue(all('zip' not in c or c=='/actions/artifacts/9/zip' for c in calls))
 
     def test_rejects_symlink_and_duplicate_members(self):
@@ -163,9 +188,43 @@ class CandidateTests(unittest.TestCase):
                         target.writestr('transport.tgz',b'duplicate')
             data=output.getvalue()
             self.artifact['digest']='sha256:'+hashlib.sha256(data).hexdigest()
+            self.artifact['size_in_bytes']=len(data)
             with self.subTest(special=special), tempfile.TemporaryDirectory() as root:
                 dest=Path(root)/'new'
                 with self.assertRaises(ValueError): candidate.unpack(data,self.artifact,self.sha,100,2,dest)
                 self.assertFalse(dest.exists())
+
+    def test_bounded_metadata_and_download_sizes(self):
+        data=self.archive()
+        with tempfile.TemporaryDirectory() as root:
+            dest=Path(root)/'new'
+            with patch.object(candidate,'MAX_ARCHIVE',len(data)-1), self.assertRaisesRegex(ValueError,'size'):
+                candidate.unpack(data,self.artifact,self.sha,100,2,dest)
+            with patch.object(candidate,'MAX_METADATA',1), self.assertRaisesRegex(ValueError,'Unsafe artifact member'):
+                candidate.unpack(data,self.artifact,self.sha,100,2,dest)
+            self.artifact['size_in_bytes']+=1
+            with self.assertRaisesRegex(ValueError,'size mismatch'):
+                candidate.unpack(data,self.artifact,self.sha,100,2,dest)
+            self.assertFalse(dest.exists())
+
+    def test_rejects_archive_size_metadata(self):
+        for size in (0, -1, candidate.MAX_ARCHIVE+1):
+            with self.subTest(size=size):
+                self.artifact['size_in_bytes']=size
+                with self.assertRaisesRegex(ValueError,'archive size'): self.validate()
+
+    def test_api_response_cap_kills_download(self):
+        class Process:
+            def __init__(self):
+                self.stdout=io.BytesIO(b'123456')
+                self.killed=False
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def kill(self): self.killed=True
+            def wait(self): return 0
+        process=Process()
+        with patch.object(candidate.subprocess,'Popen',return_value=process), patch.object(candidate,'MAX_ARCHIVE',5):
+            with self.assertRaisesRegex(ValueError,'response size limit'): candidate.api('/unused',binary=True)
+        self.assertTrue(process.killed)
 
 if __name__ == '__main__': unittest.main()
