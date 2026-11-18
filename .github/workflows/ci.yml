@@ -19,6 +19,10 @@ on:
         type: choice
         options: [layers, full]
         default: layers
+      verify_lifecycle:
+        description: 'Opt-in: verify this fresh layers candidate in isolated Linux before upload'
+        type: boolean
+        default: false
       release:
         description: '回滚版本目录名；默认 previous'
         default: previous
@@ -200,6 +204,36 @@ jobs:
               summary.write('Candidate transport bytes: ' + str((root/'transport.tgz').stat().st_size) + '\n')
               summary.write('```json\n' + Path('/tmp/zimage-dist-report.json').read_text() + '\n```\n')
           PY
+      - name: Verify fresh candidate lifecycle before upload
+        if: inputs.verify_lifecycle && github.ref == 'refs/heads/main' && inputs.action == 'candidate'
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_FORMAT: ${{ inputs.format }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_RUN: ${{ github.run_id }}
+          EXPECTED_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_FORMAT" = layers
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = Linux
+          for tool in /usr/bin/unshare /usr/bin/mount /usr/sbin/ip /usr/bin/ldd; do test -x "$tool"; done
+          test ! -e /opt/zimage
+          transport_sha=$(sha256sum /tmp/zimage-delivery/transport.tgz)
+          transport_sha=${transport_sha%% *}
+          selection="$RUNNER_TEMP/zimage-lifecycle-selection"
+          python3 -I -B ops/aliyun/lifecycle-smoke.py prepare /tmp/zimage-delivery "$RUNNER_TEMP/zimage-target.json" "$selection" "$EXPECTED_SHA" "$EXPECTED_RUN" "$EXPECTED_ATTEMPT" "$transport_sha"
+          node_source=$(readlink -f "$(command -v node)")
+          node_stage=$(sudo mktemp -d /tmp/zimage-lifecycle-node.XXXXXXXX)
+          sudo install -o root -g root -m 0555 "$node_source" "$node_stage/node"
+          outer_namespace=$(readlink /proc/self/ns/net)
+          outer_mount_namespace=$(readlink /proc/self/ns/mnt)
+          sudo env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 /usr/bin/unshare --mount --net --pid --fork --kill-child --mount-proc \
+            /usr/bin/python3 -I -B "$GITHUB_WORKSPACE/ops/aliyun/lifecycle-smoke.py" linux \
+            "$selection" "$node_stage/node" "$outer_namespace" "$outer_mount_namespace" "$EXPECTED_SHA" "$EXPECTED_RUN" "$EXPECTED_ATTEMPT" "$transport_sha"
+          python3 -I -B ops/aliyun/lifecycle-smoke.py recheck /tmp/zimage-delivery "$RUNNER_TEMP/zimage-target.json" "$selection" "$EXPECTED_SHA" "$EXPECTED_RUN" "$EXPECTED_ATTEMPT" "$transport_sha"
+          printf 'Lifecycle smoke passed: %s run %s attempt %s transport %s (checking only).\n' "$EXPECTED_SHA" "$EXPECTED_RUN" "$EXPECTED_ATTEMPT" "$transport_sha" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
