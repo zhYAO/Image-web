@@ -200,7 +200,7 @@ test('actual audited Next stale image response stays counted through delayed fet
   while (cache.revalidateBatcher.pending.size) await tick();
   await tick();
   assert.equal(f.controller.snapshot().activeFrameworkWork, 0);
-  assert.deepEqual(f.controller.snapshot().frameworkWork, { protocolVersion: 1, installed: true, nextVersion: '16.4.1', hook: 'response-cache-revalidate-v1', controlValid: true });
+  assert.deepEqual(f.controller.snapshot().frameworkWork, { protocolVersion: 1, installed: true, nextVersion: '16.4.5', hook: 'response-cache-revalidate-v1', controlValid: true });
 
   await t.test('error retention persists the previous cache entry before releasing work', async () => {
     const retained = deferred(), retaining = deferred(), error = new Error('render failed');
@@ -294,8 +294,10 @@ test('actual audited Next stale image response stays counted through delayed fet
 
 test('framework pins reject version and source drift before installing hooks', () => {
   const nextRequire = createRequire(resolve(__dirname, '../../../apps/web/package.json'));
-  const wrongVersion = () => ({ version: '16.4.2' });
-  assert.throws(() => installFrameworkTracking(createAdmissionController(() => gate('open')), wrongVersion), /audited Next/);
+  for (const version of ['16.4.1', '16.4.2', '16.4.6', '16.4.5-canary.1', 'v16.4.5', '', null, 16.45]) {
+    const wrongVersion = () => ({ version });
+    assert.throws(() => installFrameworkTracking(createAdmissionController(() => gate('open')), wrongVersion), /audited Next/);
+  }
   const wrongSource = name => nextRequire(name);
   wrongSource.resolve = () => __filename;
   assert.throws(() => installFrameworkTracking(createAdmissionController(() => gate('open')), wrongSource), /Unaudited Next admission source/);

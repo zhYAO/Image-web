@@ -8,6 +8,7 @@ export type Maintenance = { schemaVersion: 2; operationId: string; mode: 'open' 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{6,79}$/;
 const HTTP_BRIDGE = Symbol.for('zimage.http-admission.v1');
 const HTTP_BARRIER = 'node-http-create-server-v1';
+const AUDITED_NEXT_VERSION = '16.4.5';
 type FrameworkAdmission = { protocolVersion: 1; installed: boolean; nextVersion: string; hook: string; controlValid: boolean };
 type HttpAdmission = { protocolVersion: 1; barrierId: typeof HTTP_BARRIER; installed: boolean;
   wrappedServerCount: number; activeHttpRequests: number; activeFrameworkWork: number; frameworkWork: FrameworkAdmission; controlValid: boolean;
@@ -17,7 +18,7 @@ export function readHttpAdmission(): HttpAdmission {
   if (process.env.ZIMAGE_LIFECYCLE_ENABLED !== '1') {
     return { protocolVersion: 1, barrierId: HTTP_BARRIER, installed: false, wrappedServerCount: 0,
       activeHttpRequests: 0, activeFrameworkWork: 0,
-      frameworkWork: { protocolVersion: 1, installed: false, nextVersion: '16.4.1', hook: 'response-cache-revalidate-v1', controlValid: true },
+      frameworkWork: { protocolVersion: 1, installed: false, nextVersion: AUDITED_NEXT_VERSION, hook: 'response-cache-revalidate-v1', controlValid: true },
       controlValid: true, schemaVersion: 2, admissionEpoch: 'disabled-local', admissionMode: 'open' };
   }
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, HTTP_BRIDGE);
@@ -31,7 +32,7 @@ export function readHttpAdmission(): HttpAdmission {
     || !Number.isSafeInteger(state.activeHttpRequests) || state.activeHttpRequests < 0
     || !Number.isSafeInteger(state.activeFrameworkWork) || state.activeFrameworkWork < 0
     || state.frameworkWork?.protocolVersion !== 1 || state.frameworkWork.installed !== true
-    || state.frameworkWork.nextVersion !== '16.4.1' || state.frameworkWork.hook !== 'response-cache-revalidate-v1'
+    || state.frameworkWork.nextVersion !== AUDITED_NEXT_VERSION || state.frameworkWork.hook !== 'response-cache-revalidate-v1'
     || state.frameworkWork.controlValid !== true
     || typeof state.controlValid !== 'boolean' || state.schemaVersion !== 2
     || !['open', 'draining', 'checking'].includes(state.admissionMode)
@@ -103,7 +104,7 @@ export class RequestLifecycle {
       controlValid = false;
       http = { protocolVersion: 1, barrierId: HTTP_BARRIER, installed: false, wrappedServerCount: 0,
         activeHttpRequests: 0, activeFrameworkWork: 0,
-        frameworkWork: { protocolVersion: 1, installed: false, nextVersion: '16.4.1', hook: 'response-cache-revalidate-v1', controlValid: false },
+        frameworkWork: { protocolVersion: 1, installed: false, nextVersion: AUDITED_NEXT_VERSION, hook: 'response-cache-revalidate-v1', controlValid: false },
         controlValid: false, schemaVersion: 2, admissionMode: 'draining', admissionEpoch: 'invalid-control' };
     }
     const counters = { ...this.counts };

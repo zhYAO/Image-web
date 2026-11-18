@@ -14,6 +14,13 @@ import time
 COUNTERS = ('activeMutations', 'activeStreams', 'activeRenders', 'activeExports', 'pendingFinalizers')
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{6,79}')
 SHA = re.compile(r'[a-f0-9]{40}')
+NEXT_VERSION = '16.4.5'
+# Historical process observation only, for these exact retained source releases.
+# This does not allow a new candidate to run old Next or bypass its source pins.
+LEGACY_FRAMEWORK_RELEASES = frozenset({
+    '7a811b326aa4b344cee08bc5a33c04e44a780fd4',
+    'fb4fb09f909c0ae5dce98ebd0d9540386685ddb7',
+})
 
 
 def atomic_json(path, body, mode=0o600):
@@ -80,6 +87,7 @@ class BackendTransaction:
         counters = status.get('counters', {})
         bridge = status.get('httpAdmission', {})
         framework = bridge.get('frameworkWork', {})
+        expected_next = '16.4.1' if release in LEGACY_FRAMEWORK_RELEASES else NEXT_VERSION
         if (type(status.get('schemaVersion')) is not int or status['schemaVersion'] != 1 or status.get('backendRelease') != release
                 or type(status.get('pid')) is not int or status['pid'] <= 0
                 or (pid is not None and status['pid'] != pid)
@@ -90,7 +98,7 @@ class BackendTransaction:
                 or bridge.get('activeHttpRequests') != status.get('activeHttpRequests')
                 or type(status.get('activeFrameworkWork')) is not int or status['activeFrameworkWork'] < 0
                 or bridge.get('activeFrameworkWork') != status.get('activeFrameworkWork')
-                or framework != {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.1',
+                or framework != {'installed': True, 'protocolVersion': 1, 'nextVersion': expected_next,
                                  'hook': 'response-cache-revalidate-v1', 'controlValid': True}
                 or type(framework.get('protocolVersion')) is not int
                 or set(counters) != set(COUNTERS)

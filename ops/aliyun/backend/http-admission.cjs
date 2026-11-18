@@ -1,9 +1,10 @@
 'use strict';
 
 // Loaded by Node --require before the unmodified Next standalone server. Next
-// 16.4.1 start-server.js awaits requestHandler inside its createServer callback.
+// 16.4.5 start-server.js awaits requestHandler inside its createServer callback.
 const fs = require('node:fs');
 const http = require('node:http');
+const path = require('node:path');
 const { createRequire, syncBuiltinESMExports } = require('node:module');
 const { createHash, randomUUID } = require('node:crypto');
 const CONTROL_FILE = '/etc/zimage/backend-maintenance.json';
@@ -12,11 +13,12 @@ const PROTOCOL_VERSION = 1;
 const BARRIER_ID = 'node-http-create-server-v1';
 const CHECK_PATHS = new Set(['/api/health/ready', '/api/meta', '/api/public-config', '/api/auth/session', '/api/account', '/api/sessions', '/api/credits/pricing', '/login']);
 const FRAMEWORK_HOOK = 'response-cache-revalidate-v1';
+const NEXT_VERSION = '16.4.5';
 // These exact files establish the image request/cache/async handoff boundaries.
 // Upgrading Next requires a new source audit and these pins, not a version bypass.
 const NEXT_SOURCE_HASHES = Object.freeze({
-  'next/dist/server/lib/start-server.js': '840e9d4b844ef1adfb1b6435f219c9bf3af459b5738756c03919f9b46035ff0e',
-  'next/dist/server/next-server.js': '973a8ed699b0295f4751d32fb53043574103f19c5a43d241d99ef9574c099fca',
+  'next/dist/server/lib/start-server.js': '2beb0e087fc69702d0eb7b67e5fd0f95fa216d6463dc3732c9a2966310aea5ad',
+  'next/dist/server/next-server.js': 'b213afa46803f94a38aa506c6b130eeb94841d7e1ca37686357adf2637cce69e',
   'next/dist/server/response-cache/index.js': '2f69084f08c875effc18db29f5ae4cf01fa23f76c26530c3e685bc7272121cc4',
   'next/dist/server/image-optimizer.js': 'b599e7d1483e6df7d941ca23c45a00c2b3db3903869180e1384ab4558af644ba',
   'next/dist/lib/batcher.js': 'fb64a7f69707222bed0a3bc8f9fca482db9a45aafe116ada65cc8a0ce641352b',
@@ -25,6 +27,34 @@ const NEXT_SOURCE_HASHES = Object.freeze({
   'next/dist/server/lib/lru-cache.js': 'b9b499c0213d746b6d7e2d6df2f99f1948c7a01034f9a1b0c3a4c860dc3cb56d',
   'next/dist/server/image-optimizer/transform.js': '7234aedad279bacd68855dfe629bfb5c50b6afe4cc58221543673d28c50a9455',
 });
+const LEGACY_RELEASES = new Set([
+  '7a811b326aa4b344cee08bc5a33c04e44a780fd4',
+  'fb4fb09f909c0ae5dce98ebd0d9540386685ddb7',
+]);
+// Separately audited retained runtime, never a general old-version allowance.
+const LEGACY_SOURCE_HASHES = Object.freeze({ ...NEXT_SOURCE_HASHES,
+  'next/dist/server/lib/start-server.js': '840e9d4b844ef1adfb1b6435f219c9bf3af459b5738756c03919f9b46035ff0e',
+  'next/dist/server/next-server.js': '973a8ed699b0295f4751d32fb53043574103f19c5a43d241d99ef9574c099fca',
+});
+function legacyReleaseFromCanonicalPath(entry) {
+  const match = /^\/opt\/zimage\/releases\/([a-f0-9]{40})\/apps\/web\/server\.js$/.exec(entry);
+  return match && LEGACY_RELEASES.has(match[1]) ? match[1] : undefined;
+}
+function frameworkProfile(legacyRelease) {
+  if (legacyRelease === undefined) return { version: NEXT_VERSION, hashes: NEXT_SOURCE_HASHES };
+  if (!LEGACY_RELEASES.has(legacyRelease)) throw new Error('Unapproved legacy Next release');
+  return { version: '16.4.1', hashes: LEGACY_SOURCE_HASHES };
+}
+function trustedLegacyEntry(entry) {
+  // Production callers get entry only from realpath(process.argv[1]). Existing
+  // managed release/helper trust checks remain; no environment override exists.
+  for (let current = entry; ; current = path.dirname(current)) {
+    const info = fs.lstatSync(current);
+    if (info.isSymbolicLink() || (!info.isFile() && !info.isDirectory()) || info.uid !== 0 || (info.mode & 0o022))
+      throw new Error('Untrusted retained Next entry');
+    if (current === path.dirname(current)) break;
+  }
+}
 
 function validateControl(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)
@@ -57,7 +87,7 @@ function createAdmissionController(readGate = readControl) {
   function snapshot() {
     let control;
     try { control = gate(); } catch { /* fail closed */ }
-    const frameworkWork = frameworkProbe ? frameworkProbe() : { protocolVersion: 1, installed: false, nextVersion: '16.4.1', hook: FRAMEWORK_HOOK, controlValid: false };
+    const frameworkWork = frameworkProbe ? frameworkProbe() : { protocolVersion: 1, installed: false, nextVersion: NEXT_VERSION, hook: FRAMEWORK_HOOK, controlValid: false };
     return { protocolVersion: PROTOCOL_VERSION, barrierId: BARRIER_ID, installed: true,
       wrappedServerCount, activeHttpRequests, activeFrameworkWork, controlValid: !!control && (!frameworkProbe || frameworkWork.controlValid),
       frameworkWork,
@@ -166,10 +196,11 @@ function createAdmissionController(readGate = readControl) {
   return Object.freeze({ snapshot, createServer, trackFramework, setFrameworkProbe });
 }
 
-function installFrameworkTracking(controller, nextRequire) {
+function installFrameworkTracking(controller, nextRequire, legacyRelease) {
   if (controller.snapshot().frameworkWork.installed) throw new Error('Incompatible or repeated Next admission hook');
-  if (nextRequire('next/package.json').version !== '16.4.1') throw new Error('HTTP admission requires audited Next 16.4.1');
-  for (const [name, expected] of Object.entries(NEXT_SOURCE_HASHES)) {
+  const profile = frameworkProfile(legacyRelease);
+  if (nextRequire('next/package.json').version !== profile.version) throw new Error('HTTP admission requires audited Next ' + profile.version);
+  for (const [name, expected] of Object.entries(profile.hashes)) {
     if (createHash('sha256').update(fs.readFileSync(nextRequire.resolve(name))).digest('hex') !== expected) throw new Error('Unaudited Next admission source: ' + name);
   }
   const diskPath = nextRequire.resolve('next/dist/server/lib/disk-lru-cache.external');
@@ -210,15 +241,15 @@ function installFrameworkTracking(controller, nextRequire) {
   }
   Object.freeze(responseExports);
   Object.defineProperty(responseModule, 'exports', { value: responseExports, writable: false, configurable: false });
-  controller.setFrameworkProbe(() => ({ protocolVersion: 1, installed: true, nextVersion: '16.4.1', hook: FRAMEWORK_HOOK,
+  controller.setFrameworkProbe(() => ({ protocolVersion: 1, installed: true, nextVersion: profile.version, hook: FRAMEWORK_HOOK,
     controlValid: methods.every(name => prototype[name] === wrappers.get(name))
       && require.cache[diskPath] === diskModule && diskModule.exports === trackedDiskExports
       && require.cache[responsePath] === responseModule && responseModule.exports === responseExports && responseExports.default === ResponseCache }));
 }
 
-function installController(controller, nextRequire, qaOnly) {
+function installController(controller, nextRequire, qaOnly, legacyRelease) {
   if (Object.hasOwn(globalThis, BRIDGE_KEY)) throw new Error('HTTP admission preload already installed');
-  installFrameworkTracking(controller, nextRequire);
+  installFrameworkTracking(controller, nextRequire, legacyRelease);
   const original = http.createServer;
   http.createServer = function(...args) { return controller.createServer(original, this, args); };
   syncBuiltinESMExports();
@@ -230,7 +261,10 @@ function installController(controller, nextRequire, qaOnly) {
 function install() {
   // Resolve from the actual standalone entry, rather than the root helper's
   // install directory, so we observe the same module instance as Next itself.
-  return installController(createAdmissionController(), createRequire(process.argv[1]), false);
+  const entry = fs.realpathSync(process.argv[1]);
+  const legacyRelease = legacyReleaseFromCanonicalPath(entry);
+  if (legacyRelease) trustedLegacyEntry(entry);
+  return installController(createAdmissionController(), createRequire(entry), false, legacyRelease);
 }
 
 function installForTesting({ readGate, nextRequire }) {
@@ -240,5 +274,5 @@ function installForTesting({ readGate, nextRequire }) {
   return installController(createAdmissionController(readGate), nextRequire, true);
 }
 
-module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
+module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, legacyReleaseFromCanonicalPath, frameworkProfile, trustedLegacyEntry, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
 if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') install();
