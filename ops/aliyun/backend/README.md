@@ -93,7 +93,7 @@ the last running renewal finish. ZIP source iteration retains `activeExports`
 through pending downloads and asynchronous iterator cancellation/finally.
 
 The wrapper closes root admission, verifies the same old SHA/PID observed that
-operation, and waits for all five business counters, `activeHttpRequests`, and `activeFrameworkWork` to reach zero under `mode: draining`. Every recovery stop repeats this sequence, including the transition from checking back to draining. Missing or invalid HTTP/framework bridge markers cannot authorize stop. New candidates pin reviewed Next 16.4.5 source hashes and ResponseCache hooks and count detached cache revalidation through native processing and cache writes; an HTTP response ending alone is insufficient. Their runtime marker is `frameworkWork: {installed:true,protocolVersion:1,nextVersion:"16.4.5",hook:"response-cache-revalidate-v1",controlValid:true}`. Unknown version, missing hooks or invalid integrity fails closed. Default maximum is
+operation, and waits for all five business counters, `activeHttpRequests`, and `activeFrameworkWork` to reach zero under `mode: draining`. Every recovery stop repeats this sequence, including the transition from checking back to draining. Missing or invalid HTTP/framework bridge markers cannot authorize stop. New candidates accept canonical stable Next 16.4.x labels only with one complete reviewed nine-file source profile and ResponseCache hooks and count detached cache revalidation through native processing and cache writes; an HTTP response ending alone is insufficient. Their frameworkWork protocol is version 2, carrying actual artifact-pinned nextVersion and the reviewed sourceProfile SHA256 ID. The app compiles its expectation from its exact dependency pin and reviewed catalog; the root observer independently inspects the verified immutable artifact before consulting live status. Unknown source groups, version/profile/artifact disagreement, missing hooks or invalid integrity fail closed. The dependency and lock remain pinned to 16.4.5; compatibility is not permission to ship vulnerable older binaries. Default maximum is
 300 seconds. Timeout cancels the update, reopens admission only for the exact
 still-running old process, and never calls stop/restart/select. Process or pointer
 drift instead leaves the gate closed and records `needs_attention`.
@@ -103,10 +103,10 @@ Only retained source releases `7a811b326aa4b344cee08bc5a33c04e44a780fd4` and
 profile. Production preload selects it only from the canonical real entry
 `/opt/zimage/releases/<exact-retained-SHA>/apps/web/server.js`, after checking
 root-owned, non-writable file/ancestors. All nine old source hashes still apply.
-Transaction process observation binds the old marker to these two SHAs only;
+These two SHAs keep the original exact protocol-1 frameworkWork payload, without extra fields. Transaction process observation binds the old marker to these two SHAs only;
 it never accepts an old marker for a new/unknown candidate. These helper changes
 require separate reviewed installation and Linux recovery acceptance, not an
-automatic deployment using the previously installed helper digests.
+automatic deployment using the previously installed helper digests. The root-owned next-source-profiles.json, preload, app and observer must be reviewed/installed together. See next-16.4-compatibility.md for negotiation and evidence limits.
 
 After drain: stop old, probe candidate native/fonts, select exact new SHA, start,
 verify exact API/process plus local HTTP/real-Host TLS, then require independent

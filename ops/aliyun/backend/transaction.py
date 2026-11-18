@@ -14,7 +14,8 @@ import time
 COUNTERS = ('activeMutations', 'activeStreams', 'activeRenders', 'activeExports', 'pendingFinalizers')
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{6,79}')
 SHA = re.compile(r'[a-f0-9]{40}')
-NEXT_VERSION = '16.4.5'
+SOURCE_PROFILES = json.loads(Path(__file__).with_name('next-source-profiles.json').read_text())
+NEXT_VERSION = '16.4.x'
 # Historical process observation only, for these exact retained source releases.
 # This does not allow a new candidate to run old Next or bypass its source pins.
 LEGACY_FRAMEWORK_RELEASES = frozenset({
@@ -83,11 +84,24 @@ class BackendTransaction:
         atomic_json(self.maintenance, {'schemaVersion': 2, 'operationId': operation, 'mode': mode}, 0o644)
 
     def observed(self, release, operation=None, pid=None):
+        # Independent immutable-artifact inspection precedes any live status.
+        # Missing companion support is an error, never trust-on-first-live-use.
+        expected = self.ops.framework_contract(release)
+        if release in LEGACY_FRAMEWORK_RELEASES:
+            if expected != {'protocolVersion': 1, 'nextVersion': '16.4.1'} or type(expected.get('protocolVersion')) is not int:
+                raise TransactionFailure('Historical framework binding differs')
+        else:
+            version = expected.get('nextVersion')
+            match = re.fullmatch(r'16\.4\.(0|[1-9][0-9]*)', version) if isinstance(version, str) else None
+            if (set(expected) != {'protocolVersion', 'nextVersion', 'sourceProfile'}
+                    or type(expected['protocolVersion']) is not int or expected['protocolVersion'] != 2
+                    or not match or int(match[1]) > 9007199254740991
+                    or expected['sourceProfile'] != SOURCE_PROFILES['candidateProfile']):
+                raise TransactionFailure('Reviewed artifact framework contract unavailable')
         status = self.ops.status()
         counters = status.get('counters', {})
         bridge = status.get('httpAdmission', {})
         framework = bridge.get('frameworkWork', {})
-        expected_next = '16.4.1' if release in LEGACY_FRAMEWORK_RELEASES else NEXT_VERSION
         if (type(status.get('schemaVersion')) is not int or status['schemaVersion'] != 1 or status.get('backendRelease') != release
                 or type(status.get('pid')) is not int or status['pid'] <= 0
                 or (pid is not None and status['pid'] != pid)
@@ -98,9 +112,9 @@ class BackendTransaction:
                 or bridge.get('activeHttpRequests') != status.get('activeHttpRequests')
                 or type(status.get('activeFrameworkWork')) is not int or status['activeFrameworkWork'] < 0
                 or bridge.get('activeFrameworkWork') != status.get('activeFrameworkWork')
-                or framework != {'installed': True, 'protocolVersion': 1, 'nextVersion': expected_next,
-                                 'hook': 'response-cache-revalidate-v1', 'controlValid': True}
+                or framework != {'installed': True, **expected, 'hook': 'response-cache-revalidate-v1', 'controlValid': True}
                 or type(framework.get('protocolVersion')) is not int
+                or framework.get('installed') is not True or framework.get('controlValid') is not True
                 or set(counters) != set(COUNTERS)
                 or any(type(value) is not int or value < 0 for value in counters.values())):
             raise TransactionFailure('Exact backend process/lifecycle evidence is unavailable; legacy bootstrap is blocked')

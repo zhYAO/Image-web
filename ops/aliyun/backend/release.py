@@ -74,6 +74,7 @@ def bounded_json(path, limit=65536):
 
 def service_launch_preflight():
     owned(Path(__file__).with_name('http-admission.cjs'))
+    owned(Path(__file__).with_name('next-source-profiles.json'))
     fields = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage.service', '--property=ExecStart', '--value'], text=True)
     match = __import__('re').search(r'argv\[\]=([^;]+);', fields)
     expected = ['/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node', '--require',
@@ -88,6 +89,43 @@ class SystemOps:
 
     def current(self):
         return self.adapter.current_target().name
+
+    def framework_contract(self, release):
+        if not HEX40.fullmatch(release):
+            raise ValueError('Exact artifact release required')
+        cache = getattr(self, '_framework_contracts', {})
+        if release not in cache:
+            target = ROOT / 'releases' / release
+            self.adapter.verify_retained_layered(target, release)
+            helper = Path(__file__).with_name('http-admission.cjs')
+            catalog = helper.with_name('next-source-profiles.json')
+            owned(helper); owned(catalog)
+            # Static resolution/JSON/hash inspection only, not server.js execution.
+            raw = subprocess.check_output([
+                '/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node',
+                str(helper), 'inspect', str(target / 'apps/web/server.js')])
+            if len(raw) > 32768:
+                raise ValueError('Framework inspection exceeds bound')
+            value = json.loads(raw)
+            if (set(value) != {'release', 'contract', 'files'} or value['release'] != release
+                    or not isinstance(value['files'], list) or len(value['files']) != 15):
+                raise ValueError('Independent artifact framework inspection failed')
+            paths = [item['path'] for item in value['files']]
+            if (len(set(paths)) != 15 or any(not (Path(name).is_relative_to(target)
+                    or Path(name) in (helper, catalog)) for name in paths)):
+                raise ValueError('Inspected framework escapes reviewed closure')
+            cache[release] = value
+            self._framework_contracts = cache
+        value = cache[release]
+        # Never refresh a changed artifact/profile within an operation.
+        for item in value['files']:
+            owned(Path(item['path']))
+            info = Path(item['path']).stat()
+            identity = [str(v) for v in (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                                         info.st_ctime_ns, info.st_mode, info.st_uid)]
+            if identity != item['identity']:
+                raise ValueError('Immutable framework identity changed after inspection')
+        return dict(value['contract'])
 
     def frontend(self):
         base = ROOT / 'frontend'
@@ -252,6 +290,7 @@ def main():
     if os.geteuid() != 0 or not sys.flags.isolated:
         raise RuntimeError('Requires root, isolated Python, and administrator-installed fixed helper closure')
     owned(Path(__file__).absolute())
+    owned(Path(__file__).with_name('next-source-profiles.json'))
     engine = load(Path(__file__).with_name('transaction.py'), 'backend_transaction')
     bridge = load(TOOLS / 'release-three-layer.py', 'backend_layers')
     layers, legacy = bridge.load_tools(strict=True)

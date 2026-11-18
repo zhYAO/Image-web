@@ -13,37 +13,44 @@ const PROTOCOL_VERSION = 1;
 const BARRIER_ID = 'node-http-create-server-v1';
 const CHECK_PATHS = new Set(['/api/health/ready', '/api/meta', '/api/public-config', '/api/auth/session', '/api/account', '/api/sessions', '/api/credits/pricing', '/login']);
 const FRAMEWORK_HOOK = 'response-cache-revalidate-v1';
-const NEXT_VERSION = '16.4.5';
+const CATALOG_PATH = path.join(__dirname, 'next-source-profiles.json');
+if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1' || (require.main === module && process.argv[2] === 'inspect')) {
+  trustedLegacyEntry(CATALOG_PATH);
+  trustedLegacyEntry(__filename);
+}
+const SOURCE_PROFILES = require('./next-source-profiles.json');
+const NEXT_VERSION = '16.4.x';
 // These exact files establish the image request/cache/async handoff boundaries.
 // Upgrading Next requires a new source audit and these pins, not a version bypass.
-const NEXT_SOURCE_HASHES = Object.freeze({
-  'next/dist/server/lib/start-server.js': '2beb0e087fc69702d0eb7b67e5fd0f95fa216d6463dc3732c9a2966310aea5ad',
-  'next/dist/server/next-server.js': 'b213afa46803f94a38aa506c6b130eeb94841d7e1ca37686357adf2637cce69e',
-  'next/dist/server/response-cache/index.js': '2f69084f08c875effc18db29f5ae4cf01fa23f76c26530c3e685bc7272121cc4',
-  'next/dist/server/image-optimizer.js': 'b599e7d1483e6df7d941ca23c45a00c2b3db3903869180e1384ab4558af644ba',
-  'next/dist/lib/batcher.js': 'fb64a7f69707222bed0a3bc8f9fca482db9a45aafe116ada65cc8a0ce641352b',
-  'next/dist/lib/scheduler.js': '8198d8ad75e5d0dc739068bf3660dde1d0dad2fec9b5a208e75b8610d8e77ce0',
-  'next/dist/server/lib/disk-lru-cache.external.js': '36676a59923aede5b12c419eb03689a58e29706e0af8cb15b47957036bdd835c',
-  'next/dist/server/lib/lru-cache.js': 'b9b499c0213d746b6d7e2d6df2f99f1948c7a01034f9a1b0c3a4c860dc3cb56d',
-  'next/dist/server/image-optimizer/transform.js': '7234aedad279bacd68855dfe629bfb5c50b6afe4cc58221543673d28c50a9455',
-});
-const LEGACY_RELEASES = new Set([
-  '7a811b326aa4b344cee08bc5a33c04e44a780fd4',
-  'fb4fb09f909c0ae5dce98ebd0d9540386685ddb7',
-]);
-// Separately audited retained runtime, never a general old-version allowance.
-const LEGACY_SOURCE_HASHES = Object.freeze({ ...NEXT_SOURCE_HASHES,
-  'next/dist/server/lib/start-server.js': '840e9d4b844ef1adfb1b6435f219c9bf3af459b5738756c03919f9b46035ff0e',
-  'next/dist/server/next-server.js': '973a8ed699b0295f4751d32fb53043574103f19c5a43d241d99ef9574c099fca',
-});
+const NEXT_SOURCE_HASHES = Object.freeze(SOURCE_PROFILES.profiles[SOURCE_PROFILES.candidateProfile].hashes);
+const LEGACY_RELEASES = new Set(['7a811b326aa4b344cee08bc5a33c04e44a780fd4', 'fb4fb09f909c0ae5dce98ebd0d9540386685ddb7']);
+if (SOURCE_PROFILES.schema !== 1 || SOURCE_PROFILES.legacy.releases.length !== 2
+    || !SOURCE_PROFILES.legacy.releases.every(sha => LEGACY_RELEASES.has(sha))) throw new Error('Invalid historical Next binding');
+for (const [id, profile] of Object.entries(SOURCE_PROFILES.profiles)) {
+  const canonical = JSON.stringify(Object.fromEntries(Object.entries(profile.hashes).sort()));
+  if (Object.keys(profile.hashes).length !== 9 || id !== 'sha256:' + createHash('sha256').update(canonical).digest('hex')) throw new Error('Invalid reviewed Next profile');
+  Object.freeze(profile.hashes);
+  Object.freeze(profile);
+}
+Object.freeze(SOURCE_PROFILES.profiles);
+Object.freeze(SOURCE_PROFILES.legacy.releases);
+Object.freeze(SOURCE_PROFILES.legacy);
+Object.freeze(SOURCE_PROFILES);
+function stableNext(version) {
+  const match = typeof version === 'string' && /^16\.4\.(0|[1-9][0-9]*)$/.exec(version);
+  return !!match && Number.isSafeInteger(Number(match[1]));
+}
 function legacyReleaseFromCanonicalPath(entry) {
   const match = /^\/opt\/zimage\/releases\/([a-f0-9]{40})\/apps\/web\/server\.js$/.exec(entry);
   return match && LEGACY_RELEASES.has(match[1]) ? match[1] : undefined;
 }
-function frameworkProfile(legacyRelease) {
-  if (legacyRelease === undefined) return { version: NEXT_VERSION, hashes: NEXT_SOURCE_HASHES };
-  if (!LEGACY_RELEASES.has(legacyRelease)) throw new Error('Unapproved legacy Next release');
-  return { version: '16.4.1', hashes: LEGACY_SOURCE_HASHES };
+function frameworkProfile(version, hashes, legacyRelease) {
+  if (!stableNext(version)) throw new Error('HTTP admission requires audited Next stable 16.4.x');
+  if (legacyRelease !== undefined && (!LEGACY_RELEASES.has(legacyRelease) || version !== SOURCE_PROFILES.legacy.nextVersion)) throw new Error('Unapproved legacy Next release/version');
+  const profileId = legacyRelease === undefined ? SOURCE_PROFILES.candidateProfile : SOURCE_PROFILES.legacy.profile;
+  const expected = SOURCE_PROFILES.profiles[profileId].hashes;
+  if (!hashes || Object.keys(hashes).length !== 9 || !Object.entries(expected).every(([name, value]) => hashes[name] === value)) throw new Error('Unaudited Next admission source profile');
+  return { version, profileId, hashes: expected, legacy: legacyRelease !== undefined };
 }
 function trustedLegacyEntry(entry) {
   // Production callers get entry only from realpath(process.argv[1]). Existing
@@ -196,17 +203,68 @@ function createAdmissionController(readGate = readControl) {
   return Object.freeze({ snapshot, createServer, trackFramework, setFrameworkProbe });
 }
 
-function installFrameworkTracking(controller, nextRequire, legacyRelease) {
-  if (controller.snapshot().frameworkWork.installed) throw new Error('Incompatible or repeated Next admission hook');
-  const profile = frameworkProfile(legacyRelease);
-  if (nextRequire('next/package.json').version !== profile.version) throw new Error('HTTP admission requires audited Next ' + profile.version);
-  for (const [name, expected] of Object.entries(profile.hashes)) {
-    if (createHash('sha256').update(fs.readFileSync(nextRequire.resolve(name))).digest('hex') !== expected) throw new Error('Unaudited Next admission source: ' + name);
+function inspectRuntime(nextRequire, entry, strict) {
+  const pkg = nextRequire('next/package.json');
+  if (!stableNext(pkg.version)) throw new Error('HTTP admission requires audited Next stable 16.4.x');
+  if (typeof nextRequire.resolve !== 'function') throw new Error('Unaudited Next source resolution');
+  const packagePath = fs.realpathSync(nextRequire.resolve('next/package.json'));
+  const packageRoot = path.dirname(packagePath);
+  const publicEntry = fs.realpathSync(nextRequire.resolve('next'));
+  if (!publicEntry.startsWith(packageRoot + path.sep)
+      || publicEntry !== fs.realpathSync(path.join(packageRoot, 'dist/server/next.js'))) throw new Error('Unaudited Next admission source module identity');
+  const paths = {}, hashes = {};
+  for (const name of Object.keys(NEXT_SOURCE_HASHES)) {
+    const resolved = fs.realpathSync(nextRequire.resolve(name));
+    if (!resolved.startsWith(packageRoot + path.sep)
+        || resolved !== fs.realpathSync(path.join(packageRoot, name.slice(5)))) throw new Error('Unaudited Next admission source module identity');
+    paths[name] = resolved;
+    hashes[name] = createHash('sha256').update(fs.readFileSync(resolved)).digest('hex');
   }
-  const diskPath = nextRequire.resolve('next/dist/server/lib/disk-lru-cache.external');
+  let release, legacyRelease, appPackage;
+  if (strict) {
+    entry = fs.realpathSync(entry);
+    const match = /^(\/opt\/zimage\/releases\/([a-f0-9]{40}))\/apps\/web\/server\.js$/.exec(entry);
+    if (!match) throw new Error('Next identity requires canonical immutable release entry');
+    release = match[2];
+    legacyRelease = legacyReleaseFromCanonicalPath(entry);
+    appPackage = path.join(path.dirname(entry), 'package.json');
+    const declared = JSON.parse(fs.readFileSync(appPackage, 'utf8')).dependencies?.next;
+    if (declared !== pkg.version || !stableNext(declared)) throw new Error('Resolved Next differs from artifact pin');
+    for (const file of [entry, appPackage, packagePath, publicEntry, ...Object.values(paths)]) {
+      if (!fs.realpathSync(file).startsWith(match[1] + '/')) throw new Error('Next module escapes immutable release');
+      trustedLegacyEntry(fs.realpathSync(file));
+    }
+    trustedLegacyEntry(CATALOG_PATH);
+    trustedLegacyEntry(__filename);
+  }
+  const profile = frameworkProfile(pkg.version, hashes, legacyRelease);
+  const contract = profile.legacy
+    ? { protocolVersion: 1, nextVersion: pkg.version }
+    : { protocolVersion: 2, nextVersion: pkg.version, sourceProfile: profile.profileId };
+  const files = strict ? [entry, appPackage, packagePath, publicEntry, ...Object.values(paths), CATALOG_PATH, __filename].map(file => {
+    file = fs.realpathSync(file);
+    const s = fs.statSync(file, { bigint: true });
+    return { path: file, identity: [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs,s.mode,s.uid].map(String) };
+  }) : [];
+  return { pkg, packagePath, publicEntry, paths, profile, contract, release, files };
+}
+
+function installFrameworkTracking(controller, nextRequire, runtime) {
+  if (controller.snapshot().frameworkWork.installed) throw new Error('Incompatible or repeated Next admission hook');
+  if (!runtime) {
+    if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') throw new Error('Production hooks require immutable release identity');
+    runtime = inspectRuntime(nextRequire, undefined, false);
+  }
+  const { profile, contract, pkg, packagePath } = runtime;
+  const packageModule = require.cache[packagePath];
+  if (!packageModule || packageModule.exports !== pkg) throw new Error('Next package module identity differs');
+  Object.freeze(pkg);
+  const diskPath = fs.realpathSync(nextRequire.resolve('next/dist/server/lib/disk-lru-cache.external'));
+  if (diskPath !== runtime.paths['next/dist/server/lib/disk-lru-cache.external.js']) throw new Error('Next disk module alias differs from audited identity');
   // Existing image-optimizer imports could retain unobservable original exports.
   if (require.cache[diskPath]) throw new Error('Next disk cache loaded before HTTP admission preload');
-  const responsePath = nextRequire.resolve('next/dist/server/response-cache');
+  const responsePath = fs.realpathSync(nextRequire.resolve('next/dist/server/response-cache'));
+  if (responsePath !== runtime.paths['next/dist/server/response-cache/index.js']) throw new Error('Next response module alias differs from audited identity');
   const responseExports = nextRequire(responsePath), responseModule = require.cache[responsePath];
   const ResponseCache = responseExports.default;
   if (!responseModule || responseModule.exports !== responseExports) throw new Error('Incompatible Next response cache module');
@@ -241,15 +299,18 @@ function installFrameworkTracking(controller, nextRequire, legacyRelease) {
   }
   Object.freeze(responseExports);
   Object.defineProperty(responseModule, 'exports', { value: responseExports, writable: false, configurable: false });
-  controller.setFrameworkProbe(() => ({ protocolVersion: 1, installed: true, nextVersion: profile.version, hook: FRAMEWORK_HOOK,
+  controller.setFrameworkProbe(() => ({ ...contract, installed: true, hook: FRAMEWORK_HOOK,
     controlValid: methods.every(name => prototype[name] === wrappers.get(name))
+      && pkg.version === profile.version && require.cache[packagePath] === packageModule && packageModule.exports === pkg
+      && fs.realpathSync(nextRequire.resolve('next')) === runtime.publicEntry
+      && Object.entries(runtime.paths).every(([name, resolved]) => fs.realpathSync(nextRequire.resolve(name)) === resolved)
       && require.cache[diskPath] === diskModule && diskModule.exports === trackedDiskExports
       && require.cache[responsePath] === responseModule && responseModule.exports === responseExports && responseExports.default === ResponseCache }));
 }
 
-function installController(controller, nextRequire, qaOnly, legacyRelease) {
+function installController(controller, nextRequire, qaOnly, entry) {
   if (Object.hasOwn(globalThis, BRIDGE_KEY)) throw new Error('HTTP admission preload already installed');
-  installFrameworkTracking(controller, nextRequire, legacyRelease);
+  installFrameworkTracking(controller, nextRequire, inspectRuntime(nextRequire, entry, !qaOnly));
   const original = http.createServer;
   http.createServer = function(...args) { return controller.createServer(original, this, args); };
   syncBuiltinESMExports();
@@ -262,9 +323,7 @@ function install() {
   // Resolve from the actual standalone entry, rather than the root helper's
   // install directory, so we observe the same module instance as Next itself.
   const entry = fs.realpathSync(process.argv[1]);
-  const legacyRelease = legacyReleaseFromCanonicalPath(entry);
-  if (legacyRelease) trustedLegacyEntry(entry);
-  return installController(createAdmissionController(), createRequire(entry), false, legacyRelease);
+  return installController(createAdmissionController(), createRequire(entry), false, entry);
 }
 
 function installForTesting({ readGate, nextRequire }) {
@@ -274,5 +333,9 @@ function installForTesting({ readGate, nextRequire }) {
   return installController(createAdmissionController(readGate), nextRequire, true);
 }
 
-module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, legacyReleaseFromCanonicalPath, frameworkProfile, trustedLegacyEntry, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
-if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') install();
+module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, SOURCE_PROFILES, stableNext, inspectRuntime, legacyReleaseFromCanonicalPath, frameworkProfile, trustedLegacyEntry, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
+const inspection = require.main === module && process.argv.length === 4 && process.argv[2] === 'inspect';
+if (inspection) {
+  const value = inspectRuntime(createRequire(process.argv[3]), process.argv[3], true);
+  console.log(JSON.stringify({ release: value.release, contract: value.contract, files: value.files }));
+} else if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') install();

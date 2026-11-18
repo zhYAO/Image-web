@@ -28,6 +28,7 @@ class FakeOps:
     def current(self): return self.release
     def frontend(self): return self.front
     def policy(self): return self.approved
+    def framework_contract(self, release): return {'protocolVersion':2,'nextVersion':'16.4.5','sourceProfile':tx.SOURCE_PROFILES['candidateProfile']}
     def status(self):
         if self.legacy: raise ConnectionError('old version has no lifecycle socket')
         gate = json.loads(self.gate.read_text())
@@ -39,7 +40,7 @@ class FakeOps:
                 'admissionMode': gate['mode'], 'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
                 'httpAdmission': {'protocolVersion': 1, 'installed': self.bridge_valid, 'barrierId': 'node-http-create-server-v1',
                     'activeHttpRequests': self.http, 'activeFrameworkWork': self.framework,
-                    'frameworkWork': {'installed': True, 'protocolVersion': 1, 'nextVersion': '16.4.5', 'hook': 'response-cache-revalidate-v1', 'controlValid': True}},
+                    'frameworkWork': {'installed': True, 'protocolVersion': 2, 'nextVersion': '16.4.5', 'sourceProfile': tx.SOURCE_PROFILES['candidateProfile'], 'hook': 'response-cache-revalidate-v1', 'controlValid': True}},
                 'drained': (gate['mode'] != 'open') and not any(counters.values()) and self.http == self.framework == 0}
     def validate(self, release): self.calls.append(('validate', release))
     def stop(self): self.calls.append(('stop', self.release))
