@@ -1,12 +1,16 @@
-import type { Event } from '@sentry/nextjs';
+interface SanitizableEvent {
+  breadcrumbs?: unknown; contexts?: unknown; extra?: unknown; request?: unknown;
+  user?: Record<string, unknown>; tags?: Record<string, unknown>;
+  exception?: { values?: { value?: string; [key: string]: unknown }[] };
+  message?: string;
+}
 
-export function sanitizeSentryEvent<T extends Event>(event: T): T {
+export function sanitizeEvent<T extends SanitizableEvent>(event: T): T {
   delete event.breadcrumbs;
   delete event.contexts;
   delete event.extra;
   delete event.request;
-  // Relay infers the transport IP when user is absent. An unspecified address
-  // prevents that inference without carrying a real user identity or location.
+  // Use a fixed address to omit user identity and location.
   event.user = { ip_address: '0.0.0.0' };
 
   const tags = event.tags ?? {};

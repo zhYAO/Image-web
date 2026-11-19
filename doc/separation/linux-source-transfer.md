@@ -163,3 +163,6 @@ python3 "$SOURCE/ops/aliyun/linux-handoff.py" return \
 return 包仅含 `transport.tgz`、`release-result.json`、`build-result.json`、`platform-preflight.json`、`source-manifest.json` 和记录各项字节/SHA 的 `return-index.json`，真实 commit 必须一致。外层 `<归档>.receipt.json` 绑定最终归档字节/SHA。公开 JSON 原文件、env、HOME、logs、source maps、debug-maps/build-traces、源码 checkout 与原字体输入不在回传白名单。组包不自动上传；Mac 经先前已验真的现有通道取回后，核外层 receipt、内层 index 和 commit，再进入既有 Mac 发布流程。
 
 本地离线守卫测试：`python3 -B -m unittest discover -s ops/aliyun -p test_linux_handoff.py -v`。这些测试使用非敏感临时 fixtures 和模拟 Git 状态，不安装依赖、不运行真实 Node/Linux 构建。真实新 commit、Git 推送/fetch、现有云执行能力、fresh 预检与正式 build/return 均须由实际结果单独记录；本文及本地测试本身不把这些 pending 条件改为成功。
+
+
+2026-11-18 更新：移除外部错误遥测后，当前构建只使用 Supabase URL、publishable key 和 Turnstile sitekey 三键。适配器继续接收原五键文件并校验其文件权限与完整性，丢弃两项旧遥测值后才注入构建环境。历史文件指纹和交付记录保留。

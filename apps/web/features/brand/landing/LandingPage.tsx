@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image from "@/features/commerce/PublicExampleImage";
 import Link from "next/link";
 import { IntentLink } from "@/features/brand/IntentLink";
 import { ArrowRight, ArrowUpRight } from "lucide-react";

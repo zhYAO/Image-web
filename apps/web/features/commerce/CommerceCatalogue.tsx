@@ -2,7 +2,7 @@
 
 import { COMMERCE_PRIMARY_SCENE_IDS, COMMERCE_SCENES } from "@zimage/domain";
 import Link from "next/link";
-import Image from "next/image";
+import Image from "@/features/commerce/PublicExampleImage";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { commerceHref } from "@/features/workspace/workspace-route";
 import { commerceExampleForScene } from "./commerce-examples";

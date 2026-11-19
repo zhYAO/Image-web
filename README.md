@@ -31,7 +31,7 @@ pnpm dev
 
 可用 `--frontend-port`、`--backend-port` 调整端口。复用已运行的本地后端时，使用 `pnpm dev:split --backend-origin http://127.0.0.1:7788 --backend-sha <完整40位Git SHA>`，并在该后端配置对应前端地址的 `ZIMAGE_ALLOWED_ORIGINS`。退出分离启动器只停止自己启动的进程；端口被占用或身份不符时明确失败。
 
-数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Sentry、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
+数据库迁移、pgTAP 与 Edge Worker 位于 `supabase/`。真实 Provider、Supabase Cloud 和 Vercel Preview 验证需要部署侧密钥，不能用本地 mock 结果替代。
 
 LangGraph 初始化入口为 `pnpm setup:langgraph`。真实环境验收需单独安排，涉及 Storage 写入或付费模型时必须遵守现有授权范围与预算限制。
 

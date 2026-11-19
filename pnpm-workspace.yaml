@@ -6,7 +6,6 @@ confirmModulesPurge: false
 
 allowBuilds:
   '@parcel/watcher': true
-  '@sentry/cli': true
   esbuild: true
   sharp: true
   unrs-resolver: true

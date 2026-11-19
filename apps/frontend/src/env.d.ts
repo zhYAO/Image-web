@@ -1,6 +1,6 @@
 declare const __ZIMAGE_ASSET_NAMESPACE__: string;
+declare const __ZIMAGE_PUBLIC_IMAGE_BASE__: string;
 declare const __ZIMAGE_COMPATIBILITY__: unknown;
-declare const __ZIMAGE_OBSERVABILITY__: import('./platform/observability').BrowserObservabilityOptions | null;
 declare module '*.css';
 interface Window {
   turnstile?: {

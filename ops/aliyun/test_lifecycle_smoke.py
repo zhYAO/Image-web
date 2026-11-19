@@ -200,6 +200,8 @@ class SmokeTests(unittest.TestCase):
         # child_setup chroots and drops privileges without creating another PID namespace.
         workflow=subprocess.check_output(['git','show',
             'f0f6c252f186583dcf4c735276e94960166cc2fe:.github/workflows/ci.yml'],cwd=ROOT)
+        workflow=b''.join(line for line in workflow.splitlines(keepends=True)
+            if not line.lstrip().startswith((b'NEXT_PUBLIC_SENTRY_DSN:', b'NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:')))
         self.assertEqual(workflow,(ROOT/'.github/workflows/ci.yml').read_bytes().replace(b'\r\n',b'\n'))
         self.assertIn('--mount --net --pid --fork --kill-child --mount-proc',workflow.decode())
 
@@ -233,6 +235,9 @@ class SmokeTests(unittest.TestCase):
         import yaml
         base=yaml.safe_load(subprocess.check_output(['git','show',BASE+':.github/workflows/ci.yml'],cwd=ROOT))
         current=yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        for step in base['jobs']['candidate-build']['steps']:
+            for key in ('NEXT_PUBLIC_SENTRY_DSN', 'NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE'):
+                step.get('env', {}).pop(key, None)
         self.assertEqual(set(base['jobs']),set(current['jobs']))
         for name,job in base['jobs'].items():
             if name!='candidate-build': self.assertEqual(job,current['jobs'][name],name)

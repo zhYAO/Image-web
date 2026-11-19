@@ -2,6 +2,7 @@ import { preflightCandidate } from './package-preflight.mjs';
 import { cp, mkdir, readdir, lstat, readFile, open, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { compiledPublicImageContract, verifyPublicImageSources } from '../../apps/web/build/public-image-build.mjs';
 
 const { excludedSourceFiles, generatedSourcemapRoots, generatedBuildTraceRoots } = JSON.parse(
   await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
@@ -31,15 +32,19 @@ export async function stageCandidate({ dist, destination, project = process.cwd(
   destination = path.resolve(destination);
   const config = JSON.parse(await readFile(path.join(dist, 'required-server-files.json'), 'utf8')).config;
   if (config?.distDir !== '.next') throw new Error('Deployment requires the canonical .next distDir');
+  const images = compiledPublicImageContract(config);
+  if (images) await verifyPublicImageSources(path.join(project, 'apps/web/public'), images);
+  const imagePaths = new Set(images?.files.map(file => `apps/web/public/${file.path}`));
   await mustNotExist(destination);
   await mkdir(destination);
   const safe = source => !path.basename(source).startsWith('.env');
   const standalone = path.join(dist, 'standalone');
   const publicRoot = path.join(project, 'apps/web/public');
   await cp(standalone, destination, { recursive: true, verbatimSymlinks: true,
-    filter: source => safe(source) && !excluded.has(relative(standalone, source)) });
+    filter: source => safe(source) && !excluded.has(relative(standalone, source)) && !imagePaths.has(relative(standalone, source)) });
   await cp(publicRoot, path.join(destination, 'apps/web/public'), { recursive: true,
-    filter: source => safe(source) && !excluded.has(`apps/web/public/${relative(publicRoot, source)}`) });
+    filter: source => safe(source) && !excluded.has(`apps/web/public/${relative(publicRoot, source)}`)
+      && !imagePaths.has(`apps/web/public/${relative(publicRoot, source)}`) });
   await cp(path.join(dist, 'static'), path.join(destination, 'apps/web/.next/static'), {
     recursive: true, filter: safe,
   });

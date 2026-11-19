@@ -1373,3 +1373,60 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - ZIMAGE_GEMINI_IMAGE_MODEL及所有其他条目字节保持；权限、UID/GID、inode、flags和ACL不变，完整记录语法校验通过。未输出/复制密钥值或创建含值备份。
 - 前一步Sentry四项删除已完成并验证，本轮不改SDK、生产配置或云端Secret，不执行服务重启、部署或付费调用。当前状态取代前一条“Gemini保留待确认”的待办状态。
 - 证据：/Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/gemini-env-removal-proof.json；Sentry证据为同目录sentry-env-removal-proof.json。两次原位修改都仅删除各自授权记录，应用源码和原分支/HEAD保持。
+
+
+### 2026-11-18 本地移除外部错误遥测
+
+按用户指令移除 Web、独立前端和 Edge worker 的 Sentry 直接集成。保留通用脱敏、结构化错误日志、健康检查及 Node lifecycle 注册。此记录为本地实现，构建与上线验收仍需对应环境证据。历史验收记录保留。
+
+本地验证：pnpm 11.19.0 官方元数据生成锁文件后离线冻结锁校验通过，保留的直接依赖版本未变。日志/脱敏/生命周期入口 8 项测试、候选保护 17 项回归、公开配置向后兼容测试通过，四个修改源码的聚焦类型检查零诊断。完整安装因离线缓存缺少锁定 Zod 包未完成，全量类型检查、构建与 Deno 原生冻结锁执行未验证。Deno 锁按既有图删除不可达 SDK 节点并检查剩余引用。
+
+
+### 2026-11-18 浏览器保留原生默认字体（本地待构建验收）
+
+在独立分支、Sentry 移除提交 df734af 之上移除两端共享浏览器样式的显式 family、家族变量和 Markdown/SVG 固定字族。font: inherit 改为不含 family 的字号、字重、字形、变体、宽度与行高继承，保留其他布局和可访问性。Vite 与 Next 共享样式，因此两者同受约束；未改服务端 Sharp 字体、四件套、健康检查或回滚保护。
+
+本地证据：新增 3 项离线源码政策测试通过；现有 PostCSS 对 14 份 CSS 的基线/修改 AST 对照确认非家族选择器与声明语义等价；frontend 冻结锁离线安装与类型检查通过，无下载、锁文件不变。后续精确提交构建及产物扫描记录保存在工作区独立报告；当前未声称浏览器实测、Next 完整构建或 Linux/生产验收。完整 Web 安装受官方 Next/SWC 精确包下载超时阻塞；未改来源或保护。未推送、触发 CI、安装字体或部署。
+
+
+### 2026-11-18 本地交接保存
+
+按用户“先提交，稍后换机器继续”停止 ECS 核验与新构建。保留 Sentry 和浏览器原生默认字体提交，并精确收拢独立图片迁移/差量原型七文件；未改已存在的业务逻辑、发布助手或工作流。未完成的宿主字体与图片 URL/HTTP 验收、Next 下载阻塞和全部旧分支 SHA 见 doc/LOCAL-HANDOFF-20261118.md。只做本地检查点，未推送、合并 main 或上线。
+
+
+### 2026-11-19 共享代码高亮分片（本地验证）
+
+从本地交接 733a363 建独立优化分支。确认 shiki/langs 全注册表会把全部语法加入浏览器构建；改为 14 个常用语言的静态子路径懒加载，保留 JavaScript/TypeScript/JSX/TSX/JSON/HTML/CSS/Python/Shell/SQL/Markdown/YAML/Rust/Java 及常见别名。其余 fence 保留完整转义原文和精确复制，不加载高亮引擎。新增三项离线回归通过（真实语法加载、别名与原文复制）；实际构建及原始体积见后续工作区测量报告，未声称 Linux/Next/生产验收。字体声明与下载维持为零，依赖版本和冻结锁未改，未裁剪追踪运行依赖、Sharp 或安全/回滚保护。
+
+
+### 2026-11-19 显式图片外置预览（非生产模式）
+
+新增仅针对已审 62 张图片的双端共用白名单，Vite 显式 external-preview 时绑定图片清单字节 SHA 与不可变 HTTPS 路径，先核实所有源图再不复制本地图片，其他公共许可文件仍保留。默认仍为带图构建，未知路径/上传/查询不重写。preview 带 productionVerified:false 的独立内部元数据，正式发布 pack 的原闭包规则未改，不允许据此直接上线；www.zimage.store 的真实图片版本仍未验证，reserved .test URL 只用于合成映射回归。五项离线回归通过，后续同提交带图/外置预览的实际原始文件对照见工作区报告。没有请求 ECS、上传、改路由、触发 CI 或减少后端/回滚字体保护。
+
+
+外置预览构建补充：实际端到端构建暴露新检查器把既有 Turnstile 精确脚本误归为图片外链；仅保留该固定 URL，添加拒绝未知外链/未知参数回归。图片策略 6 项、Shiki 3 项、既有 candidate-build 15 项共 24 项通过，frontend 类型检查通过。正式发布闭包验证器拒绝 preview-only 元数据已离线核实，未改正式发布规则。
+
+
+### 2026-11-19 共享高亮代码入口瘦身（D1M 本地）
+
+从 3b209c9 独立保留代码优化分支，使用同一 Shiki 公开 primitive/tokenizer，避免构造未使用的 HTML/HAST 方法；14 语法/原引擎/主题/回退/复制保留。4 项高亮回归、frontend 类型检查及完整 Vite 生产流程通过；同图 payload 10562253→10530121 B，JS 2120008→2087876 B，图片/CSS/许可哈希不变、浏览器字体为零。计数既有 8 项回归通过。原 Windows Next16.4.1/development NFT 仅作独立历史排查，不计为新候选体积；新 Next 冻结环境仍缺包，本轮未重试安装，也没有可实证的后端层减重结论。没有修改 Next trace/生产启动/原生编解码/字体/回滚保护；没有远端、CI、ECS 或部署动作。详情见 BUILD-RAW-OPTIMIZATION-20261119.md；仅本地包验证完成，不标记生产就绪。
+
+
+### 2026-11-19 公共示例图自有 ECS 核验与本地收敛
+
+用户明确要求62图及未来示例使用自有 ECS 版本化 HTTPS。通过 D1M 既有官方云助手只读确认：服务器已有完整62图，路径/记录集合摘要/实际长度/SHA和root所有、组/其他不可写元数据匹配，无需重传。当前版本化地址本机严格TLS GET返回404，普通公开图200且字节正确但非immutable；D1M公网连接重置、ECS外部GET超时，不能宣称62张公网验收。未上传、改Nginx/目录/权限或重启。生产默认保留原安全模式，Next资源契约不放宽。修复图片专属清单CRLF/LF导致版本不同，规范LF命名空间6cec0b...，旧完整资源bfb3e...及回滚字节不改；Next图片源限制自有www origin，补只读全量HTTPS验收与62条路由审阅映射、长期开发说明。frontend类型检查与27项定向回归通过；10项Python图片回归通过；完整构建与原始字节另以task机器报告为证，不代表线上完成。当前阻塞是受审的图片路由配置与正式外置打包契约，不是缺图片或需用户手工上传。未推送、Actions或应用发布；详情 PUBLIC-EXAMPLE-IMAGES.md。
+
+### 2026-11-19 — 单一示例图片配置（本地准备，未上线）
+
+- 从1035557独立准备：Vite/Next唯一用户输入ZIMAGE_PUBLIC_IMAGE_BASE_URL；内部派生编译常量、规范LF版本及62路径、旧配置冲突失败、普通构建逐张HTTPS/MIME/长度/SHA门槛。改值必须重建两端，仅ECS运行环境变量变更无效。
+- 38项定向离线测试通过（36项配置/响应/闭包，2项组件URL/动态预览放大）；前端typecheck通过。jsdom对原生dialog只模拟open位，不代表浏览器焦点或实际公网验收。Next SDK/冻结生产构建仍未具备，不能声称新Next包测量完成。
+- Next示例Image仅对已配置新基址且命中62白名单绕开优化，其他图片保持原行为；浏览器字体、生命周期、字形、编解码、旧回滚保护未改。
+- ECS62图文件已存在且匹配；有效静态版本路径当前代理给应用，本机严格TLS/上游同URI均404，普通200依赖current。精确只读证据和未执行的最小路由/回滚方案见PUBLIC-IMAGE-ROUTE-REVIEW.md。
+- 正式发布仍阻塞：公网62图未验收；Python前端manifest与Next完整资源契约仍拒绝图片专用外置输出。不把JS测试或预览假定为可发，不删除productionVerified:false标记。未写服务器、推送、Actions或部署。
+### 2026-11-19 — 正式图片契约本地分阶段完成；服务器通道受阻
+
+- 独立前端提交7226d8a：普通public-image-contract.json进入文件索引与公开配置指纹；Python subject/pack/verify和JS使用同一固定62路径/逐文件摘要。旧包身份不变，预览、其他远端资源、冲突和改名副本失败。原验收证据仍必需。
+- 后续本地schema3/public-images：Next单一BASE派生编译契约，图片与完整含字体资源身份分开；暂存两条拷贝和资源包先验证原62图再排除；pack/assemble绑定源码/config/层摘要，旧schema1/2、字体与原生/回滚门保持。合成旧schema1/2 manifest对d3117ac逐字节相等。
+- 前端50项既有+正式契约回归通过，Next契约/拷贝8项通过，Python前端6项、新schema3 6项、原portable层20项通过；前端typecheck通过。Windows ctime测试适配仅在fixture内，真实Linux assemble/native/lifecycle仍未证。原打包整组45通过/6缺Sharp fixture失败/18平台跳过；不重试冻结安装，不拿Vite证明Next。
+- 用户已批准专用公开示例图目录的受控Nginx变更。但D1M Edge官方云助手现存标签连接返回Debugger unattached，未提交生产预检命令、未写文件/目录/配置、未nginx-t或reload。新方案不直接开放缓存/release；只复制62图至独立root只读版本目录，已有旧审阅件保留，新摘要在任务目录专用审阅包。URL尚未全量公网验收。
+- 生产适配器、workflow、部署/数据库/生命周期/凭据设置均未修改。启用仍需真实Linux构建与消费协议/可信助手闭包审阅，以及恢复正常ECS通道刷新预检；没有推送、Actions或部署。

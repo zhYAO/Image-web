@@ -210,7 +210,7 @@ deriveSupabaseCredential(rawPassword)
   return "v1:" + base64urlWithoutPadding(digest)  // 67 个 ASCII 字节，小于 72
 ```
 
-原始密码和派生凭证都属于高敏感凭证：禁止日志、指标、Sentry、数据库和队列记录；响应只返回稳定错误码。预哈希不替代 Supabase 的 bcrypt，而是在其前面提供固定长度输入；Supabase 仍负责带盐慢哈希。算法版本前缀为未来迁移保留辨识能力，切换版本时必须采用“成功登录后升级”或强制重置方案，不能直接改变 `v1` 算法。
+原始密码和派生凭证都属于高敏感凭证：禁止日志、指标、外部遥测、数据库和队列记录；响应只返回稳定错误码。预哈希不替代 Supabase 的 bcrypt，而是在其前面提供固定长度输入；Supabase 仍负责带盐慢哈希。算法版本前缀为未来迁移保留辨识能力，切换版本时必须采用“成功登录后升级”或强制重置方案，不能直接改变 `v1` 算法。
 
 浏览器不得直接调用 `supabase.auth.signUp`、`signInWithPassword` 或 `updateUser({ password })`；否则会绕过 Unicode、HIBP、枚举保护和锁定策略。HIBP 仅在注册、主动改密和找回重置等“设置新密码”路径调用，普通登录只派生凭证，不把每次登录可用性绑定到外部 HIBP。
 
@@ -919,7 +919,7 @@ Stage 5: prove outcome
 | `TS-STORAGE-01`～`TS-STORAGE-05` | uploads/generated private bucket、受控路径、短期 signed URL、生成图 90 天/参考图 30 天、Storage API 删除 |
 | `TS-DELETE-01` | 会话先标记 deleting 并入清理队列，UI 隐藏；checkpoint、对象、子记录和 session 可重入清理 |
 | `TS-HEALTH-01` | provider 共享健康窗口及 warning/unavailable 阈值 |
-| `TS-OBS-01`～`TS-OBS-03` | Sentry、结构化日志、correlation ID 和 API/SSE/queue/provider/Storage/配额/清理指标 |
+| `TS-OBS-01`～`TS-OBS-03` | 结构化日志、correlation ID 和 API/SSE/queue/provider/Storage/配额/清理指标 |
 | `TS-OPS-03`～`TS-OPS-07` | 数据库/Storage 独立备份、季度恢复、制品回滚、expand/contract、secret/type/migration/pgTAP CI 门禁仍属生产边界 |
 | `TS-AUTH-01`、`TS-AUTH-02` | 匿名 bootstrap 与同浏览器恢复是历史行为，Phase 2 被 `P2-TS-AUTH-01`、`P2-TS-CUTOVER-02` 明确覆盖 |
 | `TS-SCOPE-01`～`TS-SCOPE-04` | Web、无协作/精修/训练/市场/4K/付费/原生客户端等边界继续保留；账号绑定、外部告警延后表述按第 1.2 节修正 |

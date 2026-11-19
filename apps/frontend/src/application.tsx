@@ -4,7 +4,6 @@ import { useRuntime } from './platform/runtime-provider';
 import { prefetchWorkspace } from './platform/load-workspace';
 import { resolveRoute } from './route-policy';
 import { Routes } from './routes';
-import { trackNavigation } from './platform/observability';
 import { RuntimeBoundary } from './platform/runtime-boundary';
 
 const Runtime = lazy(() => import('./runtime-application').then(module => ({ default: module.RuntimeApplication })));
@@ -16,7 +15,6 @@ export function Application() {
   const route = resolveRoute(navigation.href);
   const needsRuntime = route.kind === 'page' && route.page !== 'home';
   const [entered, setEntered] = useState(false);
-  useEffect(() => trackNavigation(navigation.pathname), [navigation.pathname]);
   if (needsRuntime && runtime.status === 'ready' && !entered) setEntered(true);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');

@@ -1,5 +1,5 @@
 import { withSupabase } from '@supabase/server';
-import { captureWorkerException } from '../_shared/sentry.ts';
+import { captureWorkerException } from '../_shared/observability.ts';
 import { parseClaim, processCleanup, type AdminClient } from '../_shared/cleanup-runner.ts';
 
 function requiredEnvironment(name: string) {

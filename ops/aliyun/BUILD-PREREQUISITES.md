@@ -56,8 +56,6 @@
 | `NEXT_PUBLIC_SUPABASE_URL` | 真实生产项目HTTPS URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | 真实公开publishable key或角色确为anon的旧公开JWT；拒绝 `sb_secret_` 和service_role等服务秘密 |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 来源确认的公开sitekey；不是secret key |
-| `NEXT_PUBLIC_SENTRY_DSN` | 真实公开客户端DSN，或已确认的空值 |
-| `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` | 已确认的实际采样率/允许空值，不能自行猜测 |
 
 历史记录的受控五键文件为387字节、SHA256 `6179525465d0edd265a532944ac6bb61693d5492515dd8a912090cdb853e5eff`；这只证明当时交付，不证明当前保存的云环境仍有该文件或变量。历史Library物化失败不能当作成功，也不重试旧失效路线。若复用文件，先确认它仍是管理员认可的生产公开配置，再核实当前字节、键白名单与值类型，只记录存在性/配置摘要。历史Turnstile值是官方always-pass测试sitekey：它虽公开且可编译，却不能作为真实防机器人验收；激活前仍须明确处置此既有风险，不静默换key或关闭验证。
 
@@ -67,7 +65,7 @@
 
 - Supabase服务秘密（`SUPABASE_SECRET_KEY`/service_role）、数据库URL/密码、供应商密钥（Ark/Gemini/MiniMax等）、`AUTH_RATE_LIMIT_PEPPER`、Worker/Cron秘密及Turnstile secret均不需要进入纯构建任务。Edge Function自身的秘密继续留在既有Edge秘密存储。
 - 生产SSH私钥/密码、宝塔凭据、云账号/OIDC新增权限和部署身份不交给云构建；产物可经核实过的既有文件交付能力返回，再由已有Mac SSH通道部署。文件交付能力本身也需核实，不能编造下载URL或忽略历史下载失败。
-- 模型映射、积分/提交开关、批准法务版本、可信代理和允许来源等运行配置继续由目标机既有 `/etc/zimage/environment` 及原受控配置注入；不为了构建更改它们。服务端Sentry运行配置也留在原处；纯构建无需Sentry上传token或上传source maps。
+- 模型映射、积分/提交开关、批准法务版本、可信代理和允许来源等运行配置继续由目标机既有 `/etc/zimage/environment` 及原受控配置注入；不为了构建更改它们。旧遥测环境变量可继续保留，应用构建与运行会忽略。
 - 每个release的字体目录/资源SHA由目标安装器绑定为 `/opt/zimage/current/.runtime-assets.env`，加载顺序须最后；保留现有凭据与出口环境文件。云构建不读取或复制 `/etc/zimage/environment`。
 
 代码依据：公开校验在 `apps/web/lib/supabase/env.ts`，服务端凭据由 `createSupabaseAdminClient()` 运行时读取，聊天provider在解析请求时读取API key；现行workflow的正式构建段也只注入公开配置和构建开关。按现行契约应只需公开配置，但此次最终提交的正式构建尚未执行成功。若实际编译意外要求私密值，应定位构建期执行边界并暂停，不能添加真实或假秘密来过门禁；即使纯公开配置编译成功，也不证明真实认证、SSE、模型或数据库健康。
@@ -83,6 +81,6 @@
 
 当前官方[Cloud environments文档](https://learn.chatgpt.com/docs/environments/cloud-environments)只证明已发布环境可提供隔离任务、保存准备状态和直接变量配置；不证明此账号环境的OS、资源、实际变量、网络权限或费用。新旧云环境机制有差异，不把旧文档的secret行为套用到未辨认的保存环境。
 
-最小下一步：由能访问该已保存环境的父会话/操作者，选择它做**仅只读预检**，不先安装工具、拉镜像、修改网络/权限或启动构建。核对实际源码commit、Node/ABI/Node-API/glibc、已有pnpm/Python/GNU tar、cgroup/RAM/磁盘、原字体来源、五个公开键的存在性及可信产物取回方式；不要运行 `env`/`printenv` 全量输出。若宿主glibc不同，仅在已有可信匹配容器和执行能力均能实测时才继续评估，不自动下载或扩大权限。
+最小下一步：由能访问该已保存环境的父会话/操作者，选择它做**仅只读预检**，不先安装工具、拉镜像、修改网络/权限或启动构建。核对实际源码commit、Node/ABI/Node-API/glibc、已有pnpm/Python/GNU tar、cgroup/RAM/磁盘、原字体来源、三个当前公开构建键的存在性及可信产物取回方式；不要运行 `env`/`printenv` 全量输出。若宿主glibc不同，仅在已有可信匹配容器和执行能力均能实测时才继续评估，不自动下载或扩大权限。
 
 若这些条件均满足，可以用上述**公开输入**在云端隔离构建，目标机秘密继续只在运行时注入。若现有环境不满足且没有已保留的匹配执行方式，最小用户决策是：指定另一台已授权且匹配的现有Linux构建机，或另行批准具体的临时构建资源/安装及其费用上限；批准前停止依赖步骤。不会因此改用生产机327MiB余量、GitHub Actions或不兼容产物。

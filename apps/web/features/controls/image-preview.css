@@ -1,7 +1,7 @@
 /* Canonical product-set preview surface, shared by all image inspections. */
 .zi-control-image-preview-dialog {
   color: var(--text);
-  font-family: var(--font);
+
   border: 1px solid var(--border);
   background: var(--panel);
   border-radius: 20px;

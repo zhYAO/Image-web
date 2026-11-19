@@ -166,7 +166,7 @@ Phase 2 在保留 Phase 1 工作区、会话、生成和安全边界的基础上
 | US7-AC01 | 用户看到可行动的错误状态；内部错误、密钥、provider 原始敏感响应不得泄漏。 |
 | US7-AC02 | 聊天仅在首个 SSE 内容块输出前对瞬时 LLM 错误自动重试一次；输出后失败必须结束流并允许用户重发。 |
 | US7-AC03 | 配额在任务入队前原子预占，失败或取消按确定规则释放，避免并发超额。 |
-| US7-AC04 | 队列积压、死信、清理失败、provider 高错误率和备份失败均产生 Sentry 告警。 |
+| US7-AC04 | 队列积压、死信、清理失败、provider 高错误率和备份失败均产生 结构化错误日志。 |
 | US7-AC05 | 对外基础错误码至少统一为 `bad_request`、`unauthorized`、`quota_exceeded`、`provider_error`、`network`、`moderation`；资产过期和删除中使用额外稳定领域码。 |
 
 ## 4. 公共接口契约
@@ -243,7 +243,7 @@ Phase 2 在保留 Phase 1 工作区、会话、生成和安全边界的基础上
 | OPS-06 | 生产使用 Supabase Pro 或更高方案的每日数据库备份，目标 RPO 不超过 24 小时。 |
 | OPS-07 | 每日将两个 private bucket 的对象复制到独立 S3-compatible 备份目标；数据库备份不能替代该任务。 |
 | OPS-08 | 每季度执行数据库与 Storage 联合恢复演练，记录证据并验证 RTO 不超过 4 小时。 |
-| OPS-09 | Phase 1 使用 Sentry 收集错误、性能和告警；飞书、钉钉、PagerDuty 等外部告警通道推迟到 Phase 2。 |
+| OPS-09 | Phase 1 使用本地结构化日志记录错误，性能与告警验收另行记录；飞书、钉钉、PagerDuty 等外部告警通道推迟到 Phase 2。 |
 | OPS-10 | 关键指标含 API QPS/成功率/错误率/P95、SSE 首块、队列等待、生成耗时/成功率/费用、配额 80% 阈值、死信、清理、signed URL 和备份状态。 |
 | OPS-11 | 每个 PR 生成隔离预览；生产发布需人工提升且可回退到上一制品；数据库破坏性变更采用 expand/contract，不依赖高风险 down migration。 |
 | OPS-12 | CI 执行 secret scanning、环境变量 schema、数据库类型/迁移漂移和权限测试；禁止只在控制台修改生产 schema。 |
@@ -370,7 +370,7 @@ Phase 2 在保留 Phase 1 工作区、会话、生成和安全边界的基础上
 | US7-AC01 | TS-OBS-01 | M02/M17/F09 | covered | 稳定错误码与脱敏 |
 | US7-AC02 | TS-RETRY-01 | M05/F02 | covered | 首块前仅重试一次 |
 | US7-AC03 | TS-QUOTA-01 | M06/M10/F03 | covered | 原子预占与释放 |
-| US7-AC04 | TS-OBS-02 | M12/M15/M17/F09 | covered | Sentry 告警范围 |
+| US7-AC04 | TS-OBS-02 | M12/M15/M17/F09 | covered | 结构化错误日志范围 |
 | US7-AC05 | TS-API-07 | M02/M06/F09 | covered | 稳定错误码集合 |
 | API-01 | TS-API-01 | M05/F02 | covered | SSE 聊天统一接口 |
 | API-02 | TS-API-02 | M06/F03 | covered | 异步生图接口 |
@@ -416,7 +416,7 @@ Phase 2 在保留 Phase 1 工作区、会话、生成和安全边界的基础上
 | OPS-06 | TS-OPS-03 | M17/F08 | covered | 每日数据库备份 |
 | OPS-07 | TS-OPS-04 | M13/M17/F08 | covered | 独立 Storage 备份 |
 | OPS-08 | TS-OPS-05 | M17/F08 | covered | 季度联合恢复演练 |
-| OPS-09 | TS-OBS-02 | M17/F09 | covered | Phase 1 Sentry |
+| OPS-09 | TS-OBS-02 | M17/F09 | covered | Phase 1 结构化日志 |
 | OPS-10 | TS-OBS-03 | M17/F09 | covered | 关键指标集合 |
 | OPS-11 | TS-OPS-06 | M17/M18/F08 | covered | 预览、人工提升与安全回滚 |
 | OPS-12 | TS-OPS-07 | M16/M18 | covered | secret/env/migration/权限门禁 |
@@ -445,7 +445,7 @@ Phase 1C 零费内测前必须同时满足：
 
 - Chromium、Edge、Playwright WebKit 的 mock 关键流程通过；不要求真实 Safari。
 - 本地 HTTP 验收完成匿名恢复、跨用户拒绝、上传、Doubao/MiniMax、Seedream 三个单图场景、signed URL 与清理闭环。
-- Web 与 Domain 的 branches/functions/lines/statements 均不低于 70%，并完成 moderation 故障注入和 Sentry 脱敏 replay。
+- Web 与 Domain 的 branches/functions/lines/statements 均不低于 70%，并完成 moderation 故障注入和 本地结构化日志脱敏验证。
 - Gemini 保持 disabled；正常验收只生成 3 张 Seedream 图片，累计硬上限 5 张，未知提交结果不得自动重试。
 
 以下条款是后续生产门禁，不属于零费内测完成声明：真实 Safari、1000 条/95% 安全集、Seedream/Gemini 各 n≥30 与 2K P95、Supabase Pro 自动每日数据库备份、独立 Storage 每日备份、数据库与 Storage 联合恢复、生产部署和回滚。
@@ -923,3 +923,8 @@ D09：文字与商品由 AI 共同生成整张图，改字须新方案确认并�
 生图按模型、规格和成功图片张数的事先展示固定单价收费，后台单独记录供应商用量核算成本估值。分析和策划包含在整套报价；出图前取消全退；无成功全退；有成功时整单最低0.5积分；明确失败部分退款，未知结果先核对。成本加价100%为可配置变量；具体单价仍须批准。
 
 聊天按实际输入、输出token和模型费率换算积分，展示并冻结最高金额，可信用量结算后退回差额。缓存必须有可靠证据。用户主动停止按已产生且可核实用量结算，无法核实则待核对，不重复扣费。高精度合计后再按钱包0.01积分精度处理；不应用图片最低价。供应商usage及配置费率是成本估值依据，不宣称是最终实付账单。
+
+
+### 2026-11-19 用户确认：公共示例图使用自有 ECS 链接
+
+62张已审核公开 JPEG/WebP 示例图及后续新增示例图使用用户自己的阿里云 ECS、同站版本化 HTTPS 链接；源码通过共享公共图片 helper 引用，正式外置产物不再复制同一批图。仅迁移公开白名单，不自动公开用户上传/生成图、私有资源、字体或禁止发布原图。保留原图字节校验、旧版本和回滚；实际远端逐张 HTTP/MIME/SHA 验收及发布契约通过后才切换生产默认，未验收预览不能视为上线。实施边界与当前阻塞见 PUBLIC-EXAMPLE-IMAGES.md 和项目进度。

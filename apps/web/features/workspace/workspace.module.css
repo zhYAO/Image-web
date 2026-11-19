@@ -619,7 +619,7 @@
   border-radius: 12px;
   background: var(--z-panel);
   color: var(--z-muted);
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   text-align: left;
 }
 
@@ -705,7 +705,7 @@
   background: transparent;
   color: var(--z-muted);
   cursor: pointer;
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   font-size: 14px;
   font-weight: 600;
   text-align: left;

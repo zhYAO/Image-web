@@ -11,4 +11,4 @@
 .codeToolbar button { color: inherit; background: transparent; border: 1px solid #8886; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
 .codeToolbar button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .codeBlock pre { margin: 0; padding: 12px; overflow-x: auto; line-height: 1.6; }
-.codeBlock code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; white-space: pre; }
+.codeBlock code { font-size: 13px; white-space: pre; }

@@ -3,6 +3,7 @@ import { lstat, readFile, mkdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { compiledPublicImageContract } from '../../apps/web/build/public-image-build.mjs';
 
 const packageManager = 'pnpm@11.19.0';
 const assemblyCacheRoot = '/opt/zimage/layer-cache';
@@ -135,7 +136,9 @@ export async function packageRelease(args, project = process.cwd()) {
   if (options.format === 'layers') await checkTarget(options.target, project);
   if (options.checkTarget) return { targetCompatible: true, productionReady: false };
   const dist = path.resolve(project, options.dist), destination = path.resolve(project, options.destination);
+  const compiledImages = compiledPublicImageContract((await readJson(path.join(dist, 'required-server-files.json'))).config);
   if (options.format === 'full') {
+    if (compiledImages) throw new Error('Independent public images require explicit schema-3 layered packaging');
     const archive = destination + '.tgz', debugArchive = destination + '.debug-maps.tgz', traceArchive = destination + '.build-traces.tgz';
     for (const output of [destination, archive, debugArchive, traceArchive]) await mustNotExist(output);
     const stage = await stageCandidate({ dist, destination, project });
@@ -162,7 +165,7 @@ export async function packageRelease(args, project = process.cwd()) {
   const python = options.python ?? process.env.ZIMAGE_PYTHON_BIN ?? 'python3';
   const pack = pythonJson(python, './three-layer-release.py', ['pack', artifacts.staging, artifacts.store,
     '--project', project, '--assets', assets, '--release-id', options.releaseId, '--source-commit', options.releaseId,
-    '--target', targetFile], project);
+    '--target', targetFile, ...(compiledImages ? ['--schema', '3', '--asset-delivery-mode', 'public-images'] : [])], project);
   const manifestArgs = [artifacts.store, artifacts.manifest, '--manifest-sha256', pack.manifestSha256];
   const request = pythonJson(python, './release-transport.py', ['request', ...manifestArgs], project);
   const inventoryArgs = inventoryFile ? ['--inventory', inventoryFile] : [];

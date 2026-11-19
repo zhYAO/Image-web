@@ -13,7 +13,6 @@ Add these already-used exact browser dependencies for the full business UI:
 
 - `zod@4.4.3`, `zustand@5.0.4`
 - `react-markdown@10.1.0`, `remark-gfm@4.0.1`, `remend@1.3.0`, `shiki@4.4.3`
-- `@sentry/browser@10.75.2` (replaces the Next browser instrumentation)
 
 No Next, Sharp, server Supabase, LangChain, raw fonts or Node modules belong in
 this browser package. Tests and production resolve the direct frontend dependencies; no legacy
@@ -60,8 +59,7 @@ calling it around an unversioned constant alone does not satisfy artifact
 closure. Both build checking and formal packaging reject raw root resource URLs.
 Build/subject outcomes and remaining acceptance gates are recorded in
 `../../doc/project-progress.md`; build success does not establish production readiness.
-No `.env` values are exposed. Optional public telemetry inputs are `ZIMAGE_SENTRY_DSN` and
-`ZIMAGE_SENTRY_TRACES_SAMPLE_RATE` (default 0); absent DSN means no telemetry init.
+No `.env` values are exposed. Retired telemetry environment settings are ignored.
 Sourcemaps remain disabled; public payload cannot contain private sourcemaps.
 
 ## Runtime and extraction boundary
@@ -110,3 +108,14 @@ Missing/retired paths and APIs need real HTTP errors from ingress; browser route
 classification cannot supply status codes. Exact version marker, release index,
 retained old Next/RSC resources, Windows build, full resource artifact and rollback
 are coordinator gates. All browser work belongs to Terra. Production stays paused.
+
+
+## Owner-hosted public example images
+
+Follow [the shared image hosting contract](../../doc/PUBLIC-EXAMPLE-IMAGES.md).
+New examples belong on the owner's www.zimage.store ECS in a reviewed immutable
+namespace. Update the common pinned manifest/path list and this package's exact
+allowlist together; use publicAssetUrl(), and never automatically publish user
+uploads. external-preview excludes the 62 verified local copies but remains
+nonproduction. Default production packaging stays bundled until real HTTPS and
+package-contract acceptance; the current ECS versioned route has not passed.

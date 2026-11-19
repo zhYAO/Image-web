@@ -44,7 +44,7 @@ Default packaging is the three-layer entry described below; use its shared stagi
 
 `.github/workflows/ci.yml` 在 PR 执行质量与本地数据库检查；`main` 更新且两项检查全部成功后，在 Ubuntu 24.04、Node 24.19.0、pnpm 11.19.0 上构建 HTTP standalone，连同 Linux 原生依赖、public、static 打包。生产服务器不构建，不自动迁移数据库或发布 Worker。上文 2026-09-17 为历史记录。
 
-GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_TURNSTILE_SITE_KEY`、可选 Sentry DSN/采样率；连接变量 `DEPLOY_HOST`、`DEPLOY_PORT`；Secrets 为独立的 `DEPLOY_SSH_KEY` 和已核验指纹的 `DEPLOY_KNOWN_HOSTS`。模型与数据库私密配置继续由 `/etc/zimage/environment` 提供，所有 `.env*` 排除在产物之外。
+GitHub `production` 环境只允许 `main`：公开构建变量为 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_TURNSTILE_SITE_KEY`；连接变量 `DEPLOY_HOST`、`DEPLOY_PORT`；Secrets 为独立的 `DEPLOY_SSH_KEY` 和已核验指纹的 `DEPLOY_KNOWN_HOSTS`。模型与数据库私密配置继续由 `/etc/zimage/environment` 提供，所有 `.env*` 排除在产物之外。
 
 ### 2026-10-26 发布验证职责分离（待安装新版 helper 后启用）
 

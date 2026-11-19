@@ -4,6 +4,7 @@ import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, writeFile } fr
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { publicImageContract, verifyPublicImageSources } from '../../apps/web/build/public-image-build.mjs';
 
 // Offline prototype: sources and the output parent must remain unchanged during a run.
 // The exclusive sibling lock coordinates this CLI only. Node's rename is atomic, but
@@ -89,6 +90,8 @@ function provenanceFor(file, publicPaths) {
   }
 }
 async function packageAssets(project, output, fontRoot, fontsOnly) {
+  const images = process.env.ZIMAGE_PUBLIC_IMAGE_BASE_URL ? publicImageContract(process.env.ZIMAGE_PUBLIC_IMAGE_BASE_URL) : undefined;
+  if (images && fontsOnly) throw new Error('External public images require the complete reviewed resource scope');
   if (contains(project, output) || contains(output, project)) throw new Error('Output and project paths overlap');
   await noSymlinkAncestors(project);
   const publicRoot = path.join(project, 'apps/web/public');
@@ -106,7 +109,9 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
     const excluded = new Set(policy.excludedSourceFiles.map(safePath));
     // Any change to the exclusion list must be a deliberate policy edit, not a typo.
     if (excluded.size !== 4 || policy.excludedSourceFiles.length !== 4) throw new Error('Expected exactly four source exclusions');
-    const publicFiles = (fontsOnly ? [] : await walk(publicRoot)).filter(file => !excluded.has(file));
+    if (images) await verifyPublicImageSources(publicRoot, images);
+    const imagePaths = new Set(images?.files.map(file => file.path));
+    const publicFiles = (fontsOnly ? [] : await walk(publicRoot)).filter(file => !excluded.has(file) && !imagePaths.has(file));
     const fonts = await walk(fontRoot);
     if (JSON.stringify(fonts) !== JSON.stringify(fontNames)) throw new Error('Font directory must contain exactly the two fonts, LICENSE.txt and README.md');
     const publicPaths = new Set(publicFiles), assets = [];
@@ -140,7 +145,7 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
       }
     }
     assets.sort((a, b) => a.entry.path < b.entry.path ? -1 : a.entry.path > b.entry.path ? 1 : 0);
-    const manifestBytes = Buffer.from(`${JSON.stringify({ schema: 1, productionReady: false, files: assets.map(asset => asset.entry) }, null, 2)}\n`);
+    const manifestBytes = Buffer.from(`${JSON.stringify({ schema: 1, productionReady: false, ...(images ? { publicImages: images } : {}), files: assets.map(asset => asset.entry) }, null, 2)}\n`);
     const manifestSha256 = hash(manifestBytes);
     stage = await mkdtemp(path.join(path.dirname(output), `.${path.basename(output)}.static-assets.tmp-`));
     const version = path.join(stage, manifestSha256);

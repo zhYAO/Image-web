@@ -101,7 +101,7 @@ the input and in a separate `<destination>.debug-maps.tgz`; they are omitted fro
 runtime archives/indexes. Public/dependency maps and map-suffixed directories are
 retained. The sidecar is optional at runtime but must be kept privately for
 debugging and associated with the exact build before production adoption. This
-prototype does not upload it or establish Sentry online symbolication.
+prototype does not upload it or establish online symbolication.
 
 Generated regular `.js.nft.json` files under `.next/server` are likewise retained
 in the input and a separate `<destination>.build-traces.tgz`, then omitted from

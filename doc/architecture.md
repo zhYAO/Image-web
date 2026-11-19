@@ -30,7 +30,7 @@ flowchart LR
     K --> P[Image Providers]
     K --> S
     K --> D
-    W --> O[Sentry / Metrics]
+    W --> O[Structured logs / Metrics]
     K --> O
     S --> B[(Independent S3 Backup)]
 ```
@@ -55,7 +55,7 @@ flowchart LR
 | M14 | Provider Health Service | Postgres 5 分钟共享窗口、阈值、用户可见状态。 |
 | M15 | Cleanup Worker | 会话删除、90 天到期、步骤审计、重试和告警。 |
 | M16 | Auth / RLS Boundary | 匿名身份、cookie/session、`auth.uid()`、显式 GRANT 与 RLS。 |
-| M17 | Observability / Backup | Sentry、结构化指标、数据库备份、独立 Storage 备份和恢复演练。 |
+| M17 | Observability / Backup | 结构化日志、指标、数据库备份、独立 Storage 备份和恢复演练。 |
 | M18 | CI / Release Gate | 类型、lint、测试覆盖率、pgTAP、浏览器矩阵、安全样本与恢复证据。 |
 
 ## 3. 部署与信任边界
@@ -264,7 +264,7 @@ flowchart LR
 
 API/worker 将 provider 结果按 correlation ID 写入共享窗口。M14 对 5 分钟窗口计算：错误率达到 30% 为 warning；超过 50% 且样本不少于 10 为 unavailable。UI 只显示归一化状态和建议，不展示内部错误；选择替代图片 provider 必须由用户确认。
 
-Sentry 接收 API QPS/成功率/错误率/P95、SSE SLO、queue depth/oldest age、配额使用达到 80%、死信、未知提交结果、清理重试、provider unavailable、signed URL 异常和备份失败。Phase 1 不依赖外部即时通讯告警通道。
+观测指标覆盖 API QPS/成功率/错误率/P95、SSE SLO、queue depth/oldest age、配额使用达到 80%、死信、未知提交结果、清理重试、provider unavailable、signed URL 异常和备份失败。Phase 1 不依赖外部即时通讯告警通道。
 
 健康故障回放必须满足 unavailable 告警误报低于 5%、漏报低于 1%；API 所有失败分支必须通过统一错误 schema，不能只在常见路径满足契约。
 
@@ -314,7 +314,7 @@ stateDiagram-v2
 | Image provider 明确拒绝 | 不自动重试 | 单张失败，可主动 recreate | 归一化错误、安全审计 |
 | Image provider 提交结果未知 | 不再次提交 | 标记失败/待对账，提示可能计费 | 高优先级事件 |
 | Queue worker 崩溃 | 可见性超时后重投 | 卡片继续 processing/pending | oldest age、attempts |
-| Queue 死信 | 停止自动处理 | 卡片失败，可人工处置 | Sentry 告警 |
+| Queue 死信 | 停止自动处理 | 卡片失败，可人工处置 | 结构化错误日志 |
 | Storage 上传失败 | 仅在 provider 结果可安全复用时重试上传 | processing 后失败/恢复 | 对象关联 ID |
 | signed URL 过期 | 重新签发 | 图片短暂 loading | 签发失败率 |
 | Cleanup 失败 | 从记录步骤重试 | 会话保持隐藏 | step、attempt、告警 |
@@ -370,7 +370,7 @@ stateDiagram-v2
 
 - 按 migration 创建 M09–M16 数据与权限；pgTAP 验证显式 GRANT/RLS。
 - 接入 F02、F03、F04、F05、F06、F07，完成故障注入。
-- 接入 Sentry、共享健康窗口、配额和内容安全固定集。
+- 完善结构化日志、共享健康窗口、配额和内容安全固定集。
 - 接入 Doubao/MiniMax chat adapter，并验证与 Seedream/Gemini 图片选择相互独立。
 - 使用平台无关的本地或 HTTPS Next.js HTTP 服务验收；本轮固定本地生产模式服务，不依赖 Vercel。
 - 真实调用限于 Doubao 一次短 SSE、MiniMax 一次显式聊天工具生图和 Seedream 三个 `count=1` 场景；累计第 6 次图片请求必须停止。
@@ -378,7 +378,7 @@ stateDiagram-v2
 ### Phase 1C：零费内测门禁
 
 - 该阶段只证明受控内测可用，不代表生产就绪。
-- 完成 70% 覆盖率、三引擎 mock E2E、本地 HTTP/RLS/Provider/Storage/cleanup、moderation 故障注入与 Sentry Free 脱敏 replay。
+- 完成 70% 覆盖率、三引擎 mock E2E、本地 HTTP/RLS/Provider/Storage/cleanup、moderation 故障注入与 本地结构化日志脱敏验证。
 - Gemini 保持 disabled；不升级套餐、不充值、不创建生产部署。
 
 ### 后续生产门禁

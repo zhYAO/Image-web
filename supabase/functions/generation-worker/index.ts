@@ -1,5 +1,5 @@
 import { withSupabase } from '@supabase/server';
-import { captureWorkerException } from '../_shared/sentry.ts';
+import { captureWorkerException } from '../_shared/observability.ts';
 import { generationQueueRpc, parseClaim, processClaim, type AdminClient } from '../_shared/generation-runner.ts';
 
 function env(name: string) {
