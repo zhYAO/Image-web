@@ -27,6 +27,7 @@ jobs:
     outputs:
       archive_sha: ${{ steps.build.outputs.archive_sha }}
       receipt_sha: ${{ steps.build.outputs.receipt_sha }}
+      evidence_sha: ${{ steps.build.outputs.evidence_sha }}
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
@@ -60,6 +61,7 @@ jobs:
     outputs:
       archive_sha: ${{ steps.build.outputs.archive_sha }}
       receipt_sha: ${{ steps.build.outputs.receipt_sha }}
+      evidence_sha: ${{ steps.build.outputs.evidence_sha }}
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
@@ -90,6 +92,7 @@ jobs:
   same-run-review:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected
     needs: [backend, frontend]
+    environment: release-rehearsal
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions:
@@ -106,8 +109,11 @@ jobs:
           BACKEND_ARTIFACT_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
           BACKEND_ARCHIVE_SHA: ${{ needs.backend.outputs.archive_sha }}
           BACKEND_RECEIPT_SHA: ${{ needs.backend.outputs.receipt_sha }}
+          BACKEND_MANIFEST_SHA: ${{ needs.backend.outputs.evidence_sha }}
           FRONTEND_ID: ${{ needs.frontend.outputs.artifact_id }}
           FRONTEND_ARTIFACT_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
           FRONTEND_ARCHIVE_SHA: ${{ needs.frontend.outputs.archive_sha }}
           FRONTEND_RECEIPT_SHA: ${{ needs.frontend.outputs.receipt_sha }}
+          FRONTEND_SUBJECT_SHA: ${{ needs.frontend.outputs.evidence_sha }}
+          REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
         run: bash ops/aliyun/github-rehearsal-review.sh

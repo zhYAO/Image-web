@@ -50,7 +50,7 @@ case "$2" in
 esac
 ''')
             gh.chmod(0o755)
-            output = subprocess.run(['bash', str(HERE / 'github-rehearsal-review.sh')], env=env,
+            output = subprocess.run(['bash', str(HERE / 'github-rehearsal-review.sh'), '--metadata-only'], env=env,
                                     capture_output=True, text=True, check=False)
             return output, (root / 'summary').read_text() if (root / 'summary').is_file() else None
 

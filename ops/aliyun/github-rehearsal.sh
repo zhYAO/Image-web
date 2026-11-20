@@ -62,8 +62,13 @@ fi
 
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
   payload=transport.tgz
-  if [[ "$component" == frontend ]]; then payload=frontend-rehearsal.tgz; fi
+  if [[ "$component" == frontend ]]; then
+    payload=frontend-rehearsal.tgz
+    evidence_sha=$(sha256sum "$delivery/frontend-subject.json")
+  else
+    evidence_sha=$manifest
+  fi
   archive_sha=$(sha256sum "$delivery/$payload")
   receipt_sha=$(sha256sum "$delivery/rehearsal-receipt.json")
-  printf 'archive_sha=%s\nreceipt_sha=%s\n' "${archive_sha%% *}" "${receipt_sha%% *}" >> "$GITHUB_OUTPUT"
+  printf 'archive_sha=%s\nreceipt_sha=%s\nevidence_sha=%s\n' "${archive_sha%% *}" "${receipt_sha%% *}" "${evidence_sha%% *}" >> "$GITHUB_OUTPUT"
 fi

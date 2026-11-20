@@ -60,9 +60,12 @@ def write_receipt(component, delivery, source, env):
                 paths.append((name, file))
         if not 0 < len(paths) < 10000 or sum(p.stat().st_size for _, p in paths) > 100_000_000:
             raise ValueError('Unexpected frontend closure size')
-        with tarfile.open(output, 'x:gz') as tar:
+        with tarfile.open(output, 'x:gz', format=tarfile.USTAR_FORMAT) as tar:
             for name, file in sorted(paths):
-                tar.add(file, arcname=name, recursive=False)
+                info = tarfile.TarInfo(name)
+                info.size, info.mode = file.stat().st_size, 0o644
+                with file.open('rb') as member:
+                    tar.addfile(info, member)
         receipt['files'] = [digest(output), digest(delivery / 'frontend-subject.json')]
         receipt['backendToEvaluate'] = match
     with (delivery / 'rehearsal-receipt.json').open('x') as out:

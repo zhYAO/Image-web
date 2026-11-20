@@ -21,7 +21,7 @@ can nominate a different backend for that frontend test; it cannot promote.
 2. Supply `ZIMAGE_RELEASE_TARGET_JSON` with the independently verified ECS
    target. The named runner is not compatibility evidence: the packer verifies
    exact Node, ABI, platform and glibc. Backend uses model-only schema 3 and
-   re-verifies the cold transport closure after assembly of the transport.
+   re-verifies the complete cold transport closure after unpacking the transport.
    It does not embed production Supabase values, and is not production evidence.
 3. Supply `ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON`, the actual non-secret public
    staging config contract. Frontend builds once from the same main commit and
@@ -30,8 +30,12 @@ can nominate a different backend for that frontend test; it cannot promote.
    absent required configuration blocks the same-run review.
 4. The final job uses the artifact IDs and SHA-256s emitted by those two jobs,
    verifies their repository metadata and exact run/attempt name binding, and
-   refuses a run whose SHA is no longer current `main`. It does not download or
-   execute the artifacts, let alone accept or deploy them. Artifact access follows
+   refuses a run whose SHA is no longer current `main`. The same job downloads the exact two artifact ZIPs by ID,
+   hashes each against the GitHub metadata before extracting an allowlisted
+   file set, rechecks the formal full backend transport, and independently
+   recomputes the formal frontend acceptance subject. It never executes the
+   artifacts and a valid pair still reports production blocked. It cannot
+   generate staging acceptance, an authenticated backend receipt, or root approval. Artifact access follows
    repository access; the rehearsal upload is explicitly scoped to candidates and
    checksum metadata. It excludes traces, videos, Playwright reports and environment
    files, and is retained for two days. Existing comprehensive quality/database
