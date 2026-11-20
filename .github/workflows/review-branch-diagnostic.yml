@@ -1,0 +1,44 @@
+name: ZImage review branch diagnostic (no deployment)
+
+on:
+  push:
+    branches: [codex/zimage-github-actions-review-20261120]
+
+permissions:
+  contents: read
+
+jobs:
+  local-auth-diagnostic:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-github-actions-review-20261120'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - name: Prepare disposable VM
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e /opt/zimage && test ! -L /opt/zimage
+          sudo install -d -m 0755 /opt/zimage
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
+          export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
+          test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
+          corepack enable pnpm
+      - name: Build and test exact branch commit without publishing any artifacts
+        run: |
+          set -euo pipefail
+          private=$(mktemp -d "$RUNNER_TEMP/zimage-branch-fixture.XXXXXXXX")
+          trap 'rm -rf -- "$private"' EXIT
+          mkdir -m 700 -- "$private/home"
+          env -i PATH="$PATH" HOME="$private/home" TMPDIR="$private" \
+            COREPACK_HOME="$RUNNER_TEMP/zimage-corepack" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+            RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
+            GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-review-branch-diagnostic.sh
+          printf '%s\n' 'Local fixture passed for this branch push only. No deployment or promotable evidence was produced.' >> "$GITHUB_STEP_SUMMARY"

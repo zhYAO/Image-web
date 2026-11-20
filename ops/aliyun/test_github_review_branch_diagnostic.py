@@ -1,0 +1,44 @@
+"""Offline security/integration assertions for the fixed review branch."""
+from pathlib import Path
+import os
+import subprocess
+import tempfile
+import unittest
+
+HERE = Path(__file__).resolve().parent
+WORKFLOW = HERE.parents[1] / '.github/workflows/review-branch-diagnostic.yml'
+SCRIPT = HERE / 'github-review-branch-diagnostic.sh'
+BRANCH = 'refs/heads/codex/zimage-github-actions-review-20261120'
+REPO = 'zhYAO/Image-web'
+WORKFLOW_REF = f'{REPO}/.github/workflows/review-branch-diagnostic.yml@{BRANCH}'
+
+
+class BranchDiagnostic(unittest.TestCase):
+    def test_workflow_has_only_fixed_push_and_no_release_context(self):
+        body = WORKFLOW.read_text()
+        self.assertIn('branches: [codex/zimage-github-actions-review-20261120]', body)
+        self.assertIn('runs-on: ubuntu-22.04', body)
+        self.assertIn('persist-credentials: false', body)
+        self.assertIn('env -i', body)
+        for forbidden in ('workflow_dispatch', 'pull_request', 'environment:', 'upload-artifact',
+                          'outputs:', 'secrets.', 'vars.', 'self-hosted', 'GH_TOKEN', 'ZIMAGE_PAIRED_'):
+            self.assertNotIn(forbidden, body)
+        self.assertNotIn('github-rehearsal-review.sh', body)
+        self.assertNotIn('github-paired-controller', SCRIPT.read_text())
+
+    def test_wrong_provenance_rejected_before_git_or_build(self):
+        for field, value in (('GITHUB_REPOSITORY', 'fork/not-zimage'), ('GITHUB_EVENT_NAME', 'pull_request'),
+                             ('GITHUB_REF', 'refs/heads/main'), ('RUNNER_ENVIRONMENT', 'self-hosted'),
+                             ('GITHUB_WORKFLOW_REF', f'{REPO}/.github/workflows/ci.yml@{BRANCH}')):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temp:
+                env = dict(os.environ, GITHUB_REPOSITORY=REPO, GITHUB_EVENT_NAME='push',
+                           GITHUB_REF=BRANCH, GITHUB_SHA='a' * 40, GITHUB_RUN_ID='1', GITHUB_RUN_ATTEMPT='1',
+                           GITHUB_WORKFLOW_REF=WORKFLOW_REF, RUNNER_ENVIRONMENT='github-hosted', RUNNER_OS='Linux')
+                env[field] = value
+                out = subprocess.run(['bash', str(SCRIPT)], cwd=temp, env=env, capture_output=True, text=True)
+                self.assertNotEqual(out.returncode, 0)
+                self.assertEqual(out.stderr, '')
+
+
+if __name__ == '__main__':
+    unittest.main()

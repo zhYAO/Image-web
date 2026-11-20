@@ -151,3 +151,16 @@ References: [secure use](https://docs.github.com/en/actions/reference/security/s
 [protected environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
 [deployment controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments),
 [artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data).
+
+## Fixed review-branch diagnostic, without merging main
+
+`review-branch-diagnostic.yml` runs only for a push to the exact
+`codex/zimage-github-actions-review-20261120` branch of `zhYAO/Image-web`.
+It builds the branch SHA, verifies the complete formal backend transport,
+assembles it against a disposable VM cache, checks the matching nonpromotable
+frontend subject, and exercises loopback Auth with newly generated local data.
+It has no GitHub environment, deployment controller, artifact upload, provider
+credentials or production dependency. Its public image CDN references are the
+already pinned read-only policy; all authenticated requests stay in the fixture.
+No GitHub setting or main workflow gate is changed. New commits and a first
+push/run still require separate review and authorization.
