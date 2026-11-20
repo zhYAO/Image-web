@@ -20,6 +20,9 @@
     "@langchain/core": "1.2.9",
     "@langchain/langgraph": "1.4.9",
     "@langchain/langgraph-checkpoint-postgres": "1.0.4",
+    "@jsquash/jpeg": "1.6.0",
+    "@jsquash/png": "3.1.1",
+    "@jsquash/webp": "1.5.0",
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "@zimage/domain": "workspace:*",
@@ -30,7 +33,6 @@
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
     "remend": "1.3.0",
-    "sharp": "0.35.5",
     "shiki": "4.4.3",
     "zod": "4.4.3",
     "zustand": "5.0.4"

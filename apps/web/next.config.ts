@@ -24,10 +24,17 @@ export default async function createNextConfig(): Promise<NextConfig> {
     distDir: process.env.NEXT_DIST_DIR ?? '.next',
     reactStrictMode: true,
     output: 'standalone',
-    ...(imageBase ? {
-      images: { remotePatterns: publicAssetRemotePatterns(imageBase) },
-    } : {}),
-    env: { ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development', ZIMAGE_PUBLIC_IMAGE_BASE_URL: sharedImageBase ? imageBase! : '',
+    images: { unoptimized: true, ...(imageBase ? { remotePatterns: publicAssetRemotePatterns(imageBase) } : {}) },
+    serverExternalPackages: ['@jsquash/jpeg', '@jsquash/png', '@jsquash/webp'],
+    outputFileTracingIncludes: {
+      '/api/*': [
+        '../../node_modules/.pnpm/@jsquash+jpeg@1.6.0/node_modules/@jsquash/jpeg/codec/enc/mozjpeg_enc.wasm',
+        '../../node_modules/.pnpm/@jsquash+jpeg@1.6.0/node_modules/@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm',
+        '../../node_modules/.pnpm/@jsquash+png@3.1.1/node_modules/@jsquash/png/codec/pkg/squoosh_png_bg.wasm',
+        '../../node_modules/.pnpm/@jsquash+webp@1.5.0/node_modules/@jsquash/webp/codec/dec/webp_dec.wasm',
+      ],
+    },
+    env: { ZIMAGE_APPAREL_TEXT_MODE: 'model-only', ZIMAGE_IMAGE_ENGINE: 'jsquash', ZIMAGE_BUILD_SHA: process.env.ZIMAGE_BUILD_SHA ?? 'development', ZIMAGE_PUBLIC_IMAGE_BASE_URL: sharedImageBase ? imageBase! : '',
       ZIMAGE_PUBLIC_IMAGE_CONTRACT: sharedImageBase ? JSON.stringify(publicImageContract(imageBase!)) : '' },
     generateBuildId: async () => process.env.ZIMAGE_BUILD_SHA ?? null,
     outputFileTracingRoot: path.join(__dirname, '../..'),

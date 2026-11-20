@@ -44,10 +44,10 @@ export function CommerceCatalogue() {
                 <ArrowUpRight size={17} aria-hidden />
               </div>
               <div className={styles.description}>
-                <p>{scene.description}</p>
+                <p>{scene.id === "apparel-catalog" ? "填写商品资料，在生图工作台用提示词生成包含中文的服装图。" : scene.description}</p>
                 <small>
                   {scene.id === "apparel-catalog"
-                    ? "整套 11–30 张 · 固定排版"
+                    ? "提示词生图 · 参考图可选"
                     : scene.id === "clone"
                       ? "最多 20 张参考图"
                       : scene.id === "detail"

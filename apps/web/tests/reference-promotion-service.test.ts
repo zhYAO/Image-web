@@ -8,7 +8,7 @@ const taskId = '20000000-0000-4000-8000-000000000001';
 const generationId = '30000000-0000-4000-8000-000000000001';
 const requestId = '40000000-0000-4000-8000-000000000001';
 const reference = { id: '50000000-0000-4000-8000-000000000001', name: 'reference.png', mimeType: 'image/png', size: 68 };
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nKsAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==', 'base64');
 function fixture(options: { denied?: string; guardDenied?: string; sourceSize?: number; reused?: boolean; prepareReused?: boolean; fail?: string; oversized?: boolean; corrupt?: boolean; abandonFails?: boolean; finalized?: boolean } = {}) {
   const sequence: string[] = [];
   const rpc = vi.fn(async (name: string, input?: Record<string, unknown>) => {

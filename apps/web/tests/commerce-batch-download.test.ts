@@ -1,5 +1,6 @@
 import { buildCommerceSlots } from '@zimage/domain';
-import sharp from 'sharp';
+import { solid } from './raster-fixture';
+import { decodeRaster } from '@/server/images/raster-engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boundary = vi.hoisted(() => ({ user: vi.fn(), admin: vi.fn() }));
@@ -42,7 +43,7 @@ async function fixture(options: { failure?: Failure; allExpired?: boolean; noTas
     items: [{ id: uuid(40), createRequestId: uuid(51), submitRequestId: uuid(52), plan,
       overrides: {}, ...(options.noTask ? {} : { taskId }), status: 'submitted' }],
     created_at: '2026-10-10', updated_at: '2026-10-10' };
-  const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#dddddd' } }).png().toBuffer();
+  const png = await solid(4, 4, '#dddddd');
   const admin = {
     async rpc(_name: string, args: Record<string, unknown>) {
       if (options.taskUnavailable) return { data: null, error: { message: `not_found ${privateDiagnostic}` } };
@@ -122,7 +123,7 @@ describe('historical commerce batch ZIP export', () => {
     await fixture();
     const files = await entries(await download());
     expect([...files.keys()]).toEqual(['商品-01/01.jpg', '商品-01/02.jpg']);
-    for (const bytes of files.values()) expect(await sharp(bytes).metadata()).toMatchObject({ width: 4, height: 4, format: 'jpeg' });
+    for (const bytes of files.values()) expect((await decodeRaster(bytes)).meta).toMatchObject({ width: 4, height: 4, format: 'jpeg' });
   });
   it.each([
     ['http-404', 'source_unavailable'],

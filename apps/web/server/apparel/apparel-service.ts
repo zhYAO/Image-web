@@ -1,21 +1,16 @@
-import { beginWork, trackFinalizer } from '@/server/lifecycle/request-lifecycle';
 import {
   apparelCreateSchema,
   apparelSaveSchema,
-  apparelSubmitSchema,
   apparelSelectSchema,
   apparelExportSchema,
   apparelTaskSchema,
   apparelExportResultSchema,
-  apparelPlanSchema,
   type ApparelTask,
 } from "@zimage/domain";
 import { z } from "zod";
 import { ApiRouteError } from "@/server/api-error";
+import { apparelRenderRetired } from "./apparel-render-retired";
 import { hashCanonicalRequest } from "@/server/image/image-service";
-import { renderApparelPages } from "./apparel-renderer";
-import { createApparelSourceReader } from "./apparel-source-reader";
-import { isApparelSourceReuseEnabled } from "./apparel-config";
 interface Client {
   rpc(
     name: string,
@@ -141,13 +136,12 @@ export function createApparelService(client: Client) {
     ) {
       z.uuid().parse(userId);
       if (taskId) z.uuid().parse(taskId);
+      if (operation === "submit") throw apparelRenderRetired();
       const input =
         operation === "create"
           ? apparelCreateSchema.parse(raw)
           : operation === "save"
             ? apparelSaveSchema.parse(raw)
-            : operation === "submit"
-              ? apparelSubmitSchema.parse(raw)
               : operation === "select"
                 ? apparelSelectSchema.parse(raw)
                 : operation === "export"
@@ -173,158 +167,7 @@ export function createApparelService(client: Client) {
       if (operation === "list")
         return z.array(apparelTaskSchema).parse(data).map(hydrate);
       if (operation === "export") return apparelExportResultSchema.parse(data);
-      if (operation !== "submit") return hydrate(apparelTaskSchema.parse(data));
-      const claim = z
-        .object({
-          claimed: z.boolean(),
-          runId: z.uuid().optional(),
-          claimToken: z.uuid().optional(),
-          plan: apparelPlanSchema.optional(),
-          task: apparelTaskSchema,
-        })
-        .parse(data);
-      if (!claim.claimed) return hydrate(claim.task);
-      if (!claim.runId || !claim.claimToken || !claim.plan || !taskId)
-        throw failure("invalid_claim");
-      const endRender = beginWork('activeRenders');
-      const fence = { runId: claim.runId, claimToken: claim.claimToken };
-      let leaseError: unknown;
-      let renewing = false;
-      let renewal: Promise<void> | undefined;
-      const renew = async () => {
-        if (leaseError) throw leaseError;
-        await rpc(userId, "renew", taskId, fence, correlationId);
-        if (leaseError) throw leaseError;
-      };
-      const timer = setInterval(() => {
-        if (renewing) return;
-        renewing = true;
-        renewal = trackFinalizer(renew)
-          .catch((error) => {
-            leaseError = error;
-          })
-          .finally(() => {
-            renewing = false;
-          });
-      }, 25000);
-      let sourceReader:
-        ReturnType<typeof createApparelSourceReader> | undefined;
-      try {
-        const sources = z
-          .array(z.object({ id: z.uuid(), path: z.string() }))
-          .parse(await rpc(userId, "sources", taskId, fence, correlationId));
-        const checkSource = (id: string) => {
-          if (leaseError) throw leaseError;
-          if (!sources.some((item) => item.id === id))
-            throw failure("reference_expired");
-        };
-        const downloadSource = async (id: string) => {
-          const source = sources.find((item) => item.id === id)!;
-          const response = await client.storage
-            .from("uploads")
-            .download(source.path)
-            .catch(() => {
-              throw failure("storage_read_failed");
-            });
-          if (response.error || !response.data) {
-            const error = response.error as {
-              status?: unknown;
-              statusCode?: unknown;
-            } | null;
-            const httpStatus = Number(error?.status);
-            const status =
-              Number.isFinite(httpStatus) && httpStatus > 0
-                ? httpStatus
-                : Number(error?.statusCode);
-            throw failure(
-              status === 404 || (!response.error && !response.data)
-                ? "reference_expired"
-                : "storage_read_failed",
-            );
-          }
-          try {
-            return new Uint8Array(await response.data.arrayBuffer());
-          } catch {
-            throw failure("storage_read_failed");
-          }
-        };
-        const directLoad = async (id: string) => {
-          checkSource(id);
-          const bytes = await downloadSource(id);
-          checkSource(id);
-          return bytes;
-        };
-        // Sample once per claim. Disabled is the baseline guarded download path.
-        if (isApparelSourceReuseEnabled())
-          sourceReader = createApparelSourceReader(downloadSource, checkSource);
-        for await (const page of renderApparelPages(
-          claim.plan,
-          sourceReader ? sourceReader.read : directLoad,
-        )) {
-          await renew();
-          const intent = z.object({ id: z.uuid(), path: z.string() }).parse(
-            await rpc(
-              userId,
-              "register",
-              taskId,
-              {
-                ...fence,
-                name: page.name,
-                width: page.width,
-                height: page.height,
-              },
-              correlationId,
-            ),
-          );
-          if (leaseError) throw leaseError;
-          const written = await client.storage
-            .from("generated")
-            .upload(intent.path, page.bytes, {
-              contentType: "image/jpeg",
-              upsert: false,
-              cacheControl: "0",
-            });
-          if (written.error) throw failure("storage_write_failed");
-          await rpc(
-            userId,
-            "uploaded",
-            taskId,
-            { ...fence, assetId: intent.id },
-            correlationId,
-          );
-        }
-        return hydrate(
-          apparelTaskSchema.parse(
-            await rpc(userId, "complete", taskId, fence, correlationId),
-          ),
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "排版失败，请重试。";
-        try {
-          await rpc(
-            userId,
-            "fail",
-            taskId,
-            { ...fence, error: message },
-            correlationId,
-          );
-        } catch {
-          /* Lease expiry recovers an interrupted request and registered Storage intents. */
-        }
-        if (error instanceof ApiRouteError) throw error;
-        throw new ApiRouteError({
-          code: "bad_request",
-          status: 400,
-          retryable: false,
-          message,
-        });
-      } finally {
-        clearInterval(timer);
-        // clearInterval does not cancel an already running lease RPC.
-        // Keep the claim counted until that write and all Storage work settle.
-        try { await renewal; } finally { sourceReader?.dispose(); endRender(); }
-      }
+      return hydrate(apparelTaskSchema.parse(data));
     },
   };
 }

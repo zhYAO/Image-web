@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import { inspectRaster } from '../../apps/web/server/images/raster-header.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { publicImageContract, verifyPublicImageSources } from '../../apps/web/build/public-image-build.mjs';
@@ -9,8 +9,6 @@ import { publicImageContract, verifyPublicImageSources } from '../../apps/web/bu
 // Offline prototype: sources and the output parent must remain unchanged during a run.
 // The exclusive sibling lock coordinates this CLI only. Node's rename is atomic, but
 // does not provide RENAME_NOREPLACE against uncooperative concurrent filesystem writers.
-const require = createRequire(new URL('../../apps/web/package.json', import.meta.url));
-const sharp = require('sharp');
 const fontNames = ['LICENSE.txt', 'NotoSansCJKsc-Bold.otf', 'NotoSansCJKsc-Regular.otf', 'README.md'];
 const mimeTypes = new Map([
   ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'],
@@ -131,10 +129,10 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
         }[relative]) throw new Error(`Original font/license/provenance SHA-256 mismatch: ${relative}`);
         const entry = { path: assetPath, kind, bytes: bytes.length, sha256: hash(bytes), mime };
         if (mime.startsWith('image/')) {
-          const metadata = await sharp(bytes, { failOn: 'warning' }).metadata(); // Metadata only: no resize, encode or rotate.
+          const metadata = inspectRaster(bytes, { maxBytes: 64 * 1024 * 1024, maxEdge: 16384, maxPixels: 64_000_000 }); // No resize, encode or rotate.
           const expected = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.webp': 'webp' }[extension];
           if (metadata.format !== expected || !metadata.width || !metadata.height) throw new Error(`Invalid image metadata: ${relative}`);
-          Object.assign(entry, { width: metadata.width, height: metadata.height, hasAlpha: Boolean(metadata.hasAlpha), orientation: metadata.orientation ?? null, blurDataURL: null });
+          Object.assign(entry, { width: metadata.width, height: metadata.height, hasAlpha: Boolean(metadata.hasAlpha), orientation: metadata.orientation === 1 ? null : metadata.orientation, blurDataURL: null });
         }
         if (kind === 'font' && extension === '.otf') Object.assign(entry, { license: 'fonts/LICENSE.txt', provenance: ['fonts/README.md'] });
         if (kind === 'public') {

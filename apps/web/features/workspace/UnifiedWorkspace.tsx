@@ -1261,6 +1261,20 @@ export function UnifiedWorkspace({ gateway: providedGateway, route, onNavigate, 
               timelineLoading={(initializing && (!route || route.kind === 'session')) || activeRuntime?.loadStatus === 'loading'
                 || (route?.kind === 'session' && activeSessionId !== route.sessionId)}
               settings={{ provider: selectedProvider ?? 'seedream', model: selectedModelId ?? 'doubao-seedream-5.0-pro', aspectRatio, resolution }}
+              onPrepareApparelModelPrompt={(prompt, apparelReferences) => {
+                if (!isOwnerCurrent() || preparingReferences || apparelReferences.length > MAX_REFERENCES) return false;
+                const current = useWorkspaceStore.getState();
+                const home = current.activeComposerSessionId ? current.composers[''] : current;
+                if (home?.draft.trim() || home?.references.length) return false;
+                setActiveSessionId(undefined);
+                setCommerceLaunch(undefined);
+                setCommerceMode(undefined);
+                setReferences(apparelReferences.map((reference) => ({ ...reference, id: undefined })));
+                setDraft(prompt);
+                setExplicitImageToolEnabled(true);
+                onNavigate?.('/workspace');
+                return true;
+              }}
               onReferenceAdd={addReferences} onReferenceRemove={removeReference} referencesPreparing={preparingReferences > 0}
               onReferencesAdopt={(next, sessionId) => {
                 if (!isOwnerCurrent()) return false;
