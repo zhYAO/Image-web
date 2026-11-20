@@ -57,7 +57,10 @@ export default async function createNextConfig(): Promise<NextConfig> {
       // persistent_task_type). Keep HMR/in-memory caching, skip disk restore.
       turbopackFileSystemCacheForDev: false,
       ...(process.env.ZIMAGE_BUILD_CPUS === '1'
-        ? { cpus: 1, webpackMemoryOptimizations: true, webpackBuildWorker: true }
+        ? { cpus: 1, webpackMemoryOptimizations: true,
+            // Keep acceptance in one process for CDN builds. A separate Webpack
+            // worker reloads Next config, multiplying the same 62 anonymous HTTPS GETs.
+            webpackBuildWorker: !sharedImageBase }
         : {}),
     },
     transpilePackages: ['@zimage/domain'],

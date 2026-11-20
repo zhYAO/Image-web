@@ -97,18 +97,20 @@ function immutablePublicCache(value) {
 
 export async function verifyPublishedImages(raw, { request = globalThis.fetch } = {}) {
   const policy = requirePinnedImageBase(raw);
-  const deadline = Date.now() + 150_000;
+  const deadline = Date.now() + 240_000;
   // Cold TLS/proxy connections can exceed five seconds. Use bounded parallel
   // reads for the exact reviewed inventory; no partial result can be accepted.
-  async function verifyOne(entry) {
+  async function attempt(entry) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error('Public image acceptance failed: total-time-limit');
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.min(20_000, remaining));
+    const timer = setTimeout(() => controller.abort(), Math.min(25_000, remaining));
     try {
       const response = await request(policy.base + '/' + entry.path, { method: 'GET', redirect: 'error', credentials: 'omit',
-        headers: { 'Accept-Encoding': 'identity' }, signal: controller.signal });
-      if (response.status !== 200 || response.redirected) throw new Error('http-status-or-redirect');
+        headers: { 'Accept-Encoding': 'identity' }, signal: controller.signal }).catch(() => { throw new Error('image-transport'); });
+      if (response.redirected) throw new Error('http-status-or-redirect');
+      if (response.status >= 500 && response.status <= 599) throw new Error('image-upstream-5xx');
+      if (response.status !== 200) throw new Error('http-status-or-redirect');
       if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== entry.contentType) throw new Error('image-mime');
       if (!['', 'identity'].includes((response.headers.get('content-encoding') ?? '').toLowerCase())) throw new Error('encoded-body');
       if (response.headers.get('x-content-type-options')?.toLowerCase() !== 'nosniff'
@@ -118,7 +120,7 @@ export async function verifyPublishedImages(raw, { request = globalThis.fetch } 
       const digest = createHash('sha256'); let bytes = 0;
       try {
         for (;;) {
-          const result = await reader.read();
+          const result = await reader.read().catch(() => { throw new Error('image-transport'); });
           if (result.done) break;
           bytes += result.value.byteLength;
           if (bytes > entry.bytes) throw new Error('image-bytes');
@@ -126,10 +128,21 @@ export async function verifyPublishedImages(raw, { request = globalThis.fetch } 
         }
       } finally { await reader.cancel().catch(() => {}); }
       if (bytes !== entry.bytes || digest.digest('hex') !== entry.sha256) throw new Error('image-bytes-or-sha256');
-    } catch {
-      // Fail closed without logging response bodies, credential-bearing errors or runtime configuration.
-      throw new Error('Public image acceptance failed; keep the safe bundled mode');
     } finally { controller.abort(); clearTimeout(timer); }
+  }
+  async function verifyOne(entry) {
+    const transient = new Set(['image-transport', 'image-upstream-5xx']);
+    const known = new Set([...transient, 'http-status-or-redirect', 'image-mime', 'encoded-body', 'response-policy',
+      'missing-body', 'image-bytes', 'image-bytes-or-sha256']);
+    for (let count = 0; count < 2; count++) {
+      try { return await attempt(entry); }
+      catch (error) {
+        const reason = known.has(error?.message) ? error.message : 'acceptance';
+        if (count === 0 && transient.has(reason) && Date.now() < deadline) continue;
+        // Report only fixed categories, never response bodies or external errors.
+        throw new Error('Public image acceptance failed; keep the safe bundled mode (' + reason + ')');
+      }
+    }
   }
   await verifyOne(policy.files[0]); // Fail early before fan-out on a stale/missing namespace.
   const batchSize = 6;
