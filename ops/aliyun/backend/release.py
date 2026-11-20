@@ -208,7 +208,9 @@ class SystemOps:
         subprocess.run(['/usr/bin/systemctl', 'start', 'zimage.service'], check=True)
 
     def native(self, release):
-        self.adapter.verify_retained_layered(ROOT / 'releases' / release, release)
+        if not HEX40.fullmatch(release):
+            raise ValueError('Native probe requires exact managed release')
+        self.adapter.activation_preflight(ROOT / 'releases' / release)
 
     def select(self, release, expected):
         if self.current() != expected: raise RuntimeError('Backend current changed before exact selection')
