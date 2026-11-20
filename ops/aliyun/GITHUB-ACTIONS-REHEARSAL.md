@@ -6,36 +6,45 @@ release/rollback gates. It never connects to ECS, uses production secrets,
 executes a production receipt or publishes a site. Do not use its artifacts as
 inputs to the existing production workflow.
 
-## Starting a rehearsal
+## After merging into protected main
 
-1. Review the code on GitHub, including the exact action commits. Restrict
-   `release-rehearsal` to protected `main` and require independent reviewer
-   approval before enabling runs. Disable self-review and bypass where the
-   GitHub plan permits; if unavailable, do not treat this environment as an
-   approval boundary. Do not put any secrets in it.
-2. Configure `ZIMAGE_RELEASE_TARGET_JSON` with the independently verified ECS
-   runtime/toolchain/cache fingerprint. The named runner is not sufficient:
-   the package tool rejects a differing Node version, ABI, platform or glibc.
-   Backend rehearsal uses HTTP mode without production Supabase values; it is
-   a packaging rehearsal, not authenticated production evidence.
-3. Choose **ZImage isolated release candidates**, select protected `main`,
-   and choose exactly one component. Backend builds the actual fontless
-   schema-3 layered transport, verifies the cold object's closure again, and
-   uploads that transport and its rehearsal-only SHA file. Frontend requires
-   the exact backend SHA to evaluate and a controlled, public
-   `ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON` from a staging contract. It builds
-   Vite once and records the official `--subject-only` digest. The optional
-   frontend payload is for inspection, not a formally approved frontend package.
-4. Review the SHA, run ID and attempt in the uploaded rehearsal receipt. The
-   workflow does not create a candidate or approval accepted by production.
-   Artifacts are readable to users with repository access; only payload and
-   explicit digest metadata are listed for upload. There are no traces, test
-   videos, Playwright reports or environment files. Retention is two days.
+A push to protected `main` automatically builds the backend and frontend once,
+bound to that event's exact commit, run ID, and attempt. The frontend nominates
+the backend of that same commit. No release version, run ID or attempt needs to
+be typed. Manual dispatch is only an optional single-component diagnostic and
+can nominate a different backend for that frontend test; it cannot promote.
+
+1. Create `release-rehearsal` before merging and restrict it to protected
+   `main`. Keep it secretless. Required reviewers are optional for the rehearsal
+   boundary; the eventual production environment must require independent
+   reviewers and disallow self-review and administrative bypass where available.
+2. Supply `ZIMAGE_RELEASE_TARGET_JSON` with the independently verified ECS
+   target. The named runner is not compatibility evidence: the packer verifies
+   exact Node, ABI, platform and glibc. Backend uses model-only schema 3 and
+   re-verifies the cold transport closure after assembly of the transport.
+   It does not embed production Supabase values, and is not production evidence.
+3. Supply `ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON`, the actual non-secret public
+   staging config contract. Frontend builds once from the same main commit and
+   records the formal `--subject-only` digest, not an acceptance report. Neither
+   missing variable is replaced with fallback/sample evidence. A failed build or
+   absent required configuration blocks the same-run review.
+4. The final job uses the artifact IDs and SHA-256s emitted by those two jobs,
+   verifies their repository metadata and exact run/attempt name binding, and
+   refuses a run whose SHA is no longer current `main`. It does not download or
+   execute the artifacts, let alone accept or deploy them. Artifact access follows
+   repository access; the rehearsal upload is explicitly scoped to candidates and
+   checksum metadata. It excludes traces, videos, Playwright reports and environment
+   files, and is retained for two days. Existing comprehensive quality/database
+   jobs in `ci.yml` are unchanged and still manually triggered.
 
 ## Before enabling production
 
-Keep deployment manual, with main-only verified build provenance and immutable
-artifacts. Reconcile schema 3 with the pinned, independently reviewed lifecycle
+Attach a production environment-protected job downstream of the same-run review
+and actual staging acceptance. Do not introduce a version selector on the normal
+main path: approval releases the exact artifact IDs/digests bound to that run,
+not whichever artifact is latest at approval time. Recheck current protected
+main after waiting for approval and immediately before any remote operation so
+an older pending run cannot supersede a newer main candidate. Reconcile schema 3 with the pinned, independently reviewed lifecycle
 verifier and the server-side backend receipt workflow. Rehearse with the actual
 isolated staging service first; prove exact rollback and authenticated health.
 For frontend, verify the exact subject against the nominated backend in staging,

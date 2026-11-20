@@ -3,7 +3,7 @@
 set -euo pipefail
 umask 077
 component=${1:-}
-[[ ${GITHUB_EVENT_NAME:-} == workflow_dispatch && ${GITHUB_REPOSITORY:-} == zhYAO/Image-web &&
+[[ ( ${GITHUB_EVENT_NAME:-} == push || ${GITHUB_EVENT_NAME:-} == workflow_dispatch ) && ${GITHUB_REPOSITORY:-} == zhYAO/Image-web &&
    ${GITHUB_REF:-} == refs/heads/main && ${GITHUB_REF_PROTECTED:-} == true &&
    ${RUNNER_ENVIRONMENT:-} == github-hosted && ${RUNNER_OS:-} == Linux &&
    ${GITHUB_SHA:-} =~ ^[a-f0-9]{40}$ && ${GITHUB_RUN_ID:-} =~ ^[1-9][0-9]{0,19}$ &&
@@ -18,12 +18,16 @@ export PATH="$private/bin:$PATH"
 delivery="$RUNNER_TEMP/zimage-rehearsal"
 mkdir -- "$delivery"
 if [[ "$component" == backend ]]; then
-  [[ -n ${TARGET_JSON:-} && ${#TARGET_JSON} -le 16384 ]]
+  [[ -n ${TARGET_JSON:-} && ${#TARGET_JSON} -le 16384 ]] || { echo "Missing or oversized ZIMAGE_RELEASE_TARGET_JSON in release-rehearsal." >&2; exit 1; }
   printf '%s\n' "$TARGET_JSON" > "$private/target.json"
   unset TARGET_JSON
   node ops/aliyun/package-release.mjs --check-target --target "$private/target.json"
 else
-  [[ ${MATCH_BACKEND_SHA:-} =~ ^[a-f0-9]{40}$ && -n ${REHEARSAL_PUBLIC_CONFIG:-} && ${#REHEARSAL_PUBLIC_CONFIG} -le 16384 ]]
+  if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+    export MATCH_BACKEND_SHA="$GITHUB_SHA"
+  fi
+  [[ ${MATCH_BACKEND_SHA:-} =~ ^[a-f0-9]{40}$ ]] || { echo "Frontend diagnostic requires an exact backend commit SHA." >&2; exit 1; }
+  [[ -n ${REHEARSAL_PUBLIC_CONFIG:-} && ${#REHEARSAL_PUBLIC_CONFIG} -le 16384 ]] || { echo "Missing or oversized ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON from staging." >&2; exit 1; }
   printf '%s\n' "$REHEARSAL_PUBLIC_CONFIG" > "$private/config.json"
   unset REHEARSAL_PUBLIC_CONFIG
 fi
@@ -54,4 +58,12 @@ else
   pnpm build:frontend
   python3 -I -B ops/aliyun/frontend/pack.py --dist apps/frontend/dist --public-config "$private/config.json" --subject-only > "$delivery/frontend-subject.json"
   python3 -I -B ops/aliyun/github-rehearsal-receipt.py frontend "$delivery" apps/frontend/dist
+fi
+
+if [[ -n ${GITHUB_OUTPUT:-} ]]; then
+  payload=transport.tgz
+  if [[ "$component" == frontend ]]; then payload=frontend-rehearsal.tgz; fi
+  archive_sha=$(sha256sum "$delivery/$payload")
+  receipt_sha=$(sha256sum "$delivery/rehearsal-receipt.json")
+  printf 'archive_sha=%s\nreceipt_sha=%s\n' "${archive_sha%% *}" "${receipt_sha%% *}" >> "$GITHUB_OUTPUT"
 fi

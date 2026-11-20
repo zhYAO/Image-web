@@ -1,6 +1,8 @@
 name: ZImage isolated release candidates
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       component:
@@ -18,10 +20,15 @@ permissions:
 
 jobs:
   backend:
-    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.component == 'backend'
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/main' && github.ref_protected && (github.event_name == 'push' || inputs.component == 'backend')
     runs-on: ubuntu-22.04
     environment: release-rehearsal
     timeout-minutes: 18
+    outputs:
+      archive_sha: ${{ steps.build.outputs.archive_sha }}
+      receipt_sha: ${{ steps.build.outputs.receipt_sha }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -30,11 +37,13 @@ jobs:
         with:
           node-version: 24.19.0
       - name: Build and verify the backend rehearsal transport
+        id: build
         env:
           TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
           NEXT_TELEMETRY_DISABLED: '1'
         run: bash ops/aliyun/github-rehearsal.sh backend
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: upload
         with:
           name: rehearsal-backend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -44,10 +53,15 @@ jobs:
           retention-days: 2
 
   frontend:
-    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/main' && github.ref_protected && inputs.component == 'frontend'
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/main' && github.ref_protected && (github.event_name == 'push' || inputs.component == 'frontend')
     runs-on: ubuntu-22.04
     environment: release-rehearsal
     timeout-minutes: 18
+    outputs:
+      archive_sha: ${{ steps.build.outputs.archive_sha }}
+      receipt_sha: ${{ steps.build.outputs.receipt_sha }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -56,11 +70,13 @@ jobs:
         with:
           node-version: 24.19.0
       - name: Build isolated frontend and compute exact acceptance subject
+        id: build
         env:
           MATCH_BACKEND_SHA: ${{ inputs.backend_release }}
           REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
         run: bash ops/aliyun/github-rehearsal.sh frontend
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: upload
         with:
           name: rehearsal-frontend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -69,3 +85,29 @@ jobs:
             ${{ runner.temp }}/zimage-rehearsal/rehearsal-receipt.json
           if-no-files-found: error
           retention-days: 2
+
+
+  same-run-review:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected
+    needs: [backend, frontend]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Review immutable candidates from this run; never deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_ID: ${{ needs.backend.outputs.artifact_id }}
+          BACKEND_ARTIFACT_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
+          BACKEND_ARCHIVE_SHA: ${{ needs.backend.outputs.archive_sha }}
+          BACKEND_RECEIPT_SHA: ${{ needs.backend.outputs.receipt_sha }}
+          FRONTEND_ID: ${{ needs.frontend.outputs.artifact_id }}
+          FRONTEND_ARTIFACT_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
+          FRONTEND_ARCHIVE_SHA: ${{ needs.frontend.outputs.archive_sha }}
+          FRONTEND_RECEIPT_SHA: ${{ needs.frontend.outputs.receipt_sha }}
+        run: bash ops/aliyun/github-rehearsal-review.sh
