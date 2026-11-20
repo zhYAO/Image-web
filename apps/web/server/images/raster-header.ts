@@ -71,8 +71,8 @@ function jpeg(b:Buffer): RasterHeader {
   while(p<b.length) {
     if(++chunks>32768 || b[p++]!==0xff)invalid();
     while(b[p]===0xff)p++;
-    const type=b[p++];
-    if(type===undefined || p+2>b.length || type===0 || type===0xd8 || type===0xd9 || (type>=0xd0&&type<=0xd7))invalid();
+    const type=b[p++] ?? 0;
+    if(p+2>b.length || type===0 || type===0xd8 || type===0xd9 || (type>=0xd0&&type<=0xd7))invalid();
     const len=b.readUInt16BE(p);
     if(len<2 || p+len>b.length)invalid();
     if(type===0xda){ if(!width||!height||p+len>=b.length-2)invalid(); return {format:'jpeg',width,height,orientation,hasAlpha:false}; }

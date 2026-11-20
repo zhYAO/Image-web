@@ -16,6 +16,7 @@ const props = {
   references: [],
   onReferenceAdd: vi.fn(),
   onReferenceRemove: vi.fn(),
+  onPrepareModelPrompt: vi.fn(() => true),
 };
 describe("apparel form in the shared commerce workspace", () => {
   afterEach(() => {
@@ -101,7 +102,7 @@ describe("apparel form in the shared commerce workspace", () => {
     expect(screen.getByLabelText("面料成分")).toHaveValue("");
     expect(screen.getByLabelText("上架尺码")).toHaveValue("");
     expect(props.onReferenceAdd).not.toHaveBeenCalled();
-    expect(props.onTask).not.toHaveBeenCalled();
+    expect(props.onPrepareModelPrompt).not.toHaveBeenCalled();
   });
   it("keeps eleven inspectable examples compact while retaining expandable business notes", () => {
     render(<ApparelWorkspace {...props} />);
@@ -116,7 +117,7 @@ describe("apparel form in the shared commerce workspace", () => {
     expect(screen.getByRole("dialog").querySelector("img")).toHaveAttribute("src", expect.stringContaining("main-1.jpg"));
     expect(screen.getByLabelText("商品名称")).toHaveValue("");
     expect(props.onReferenceAdd).not.toHaveBeenCalled();
-    expect(props.onTask).not.toHaveBeenCalled();
+    expect(props.onPrepareModelPrompt).not.toHaveBeenCalled();
   });
   it("uses upload/form inputs, preserves fields on refresh and isolates accounts", () => {
     const first = render(<ApparelWorkspace {...props} />);
