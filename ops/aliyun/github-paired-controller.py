@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -71,6 +72,9 @@ def validate_stage(value, pins, pair_sha, now):
 
 
 def invoke(phase, files, argument, expected_sha):
+    # This installed interface is intake-only. Keep both mutation paths
+    # dormant until an independently reviewed production adapter exists.
+    require(phase == 'staging', 'Installed bridge has no production operations')
     # Authenticated installation, not arbitrary workspace/variable commands.
     for item in (BRIDGE, *BRIDGE.parents):
         info = item.lstat()
@@ -80,13 +84,31 @@ def invoke(phase, files, argument, expected_sha):
     require(sha(BRIDGE.read_bytes()) == expected_sha, 'Installed bridge differs from reviewed digest')
     # Never inherit GH_TOKEN, signing credentials, SSH config or a user PATH.
     # Bridge credential and approved record custody belong to the reviewed service.
-    with tempfile.TemporaryFile() as output:
-        result = subprocess.run([str(BRIDGE), phase, *map(str, files), argument], stdin=subprocess.DEVNULL,
+    with tempfile.TemporaryFile() as request, tempfile.TemporaryFile() as output:
+        request.write(b'ZIMAGE-CI-STAGE\x01')
+        for path, maximum in zip(files, (65536, 100_000_000, 100_000_000, 65536), strict=True):
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as file:
+                info = os.fstat(file.fileno())
+                require(stat.S_ISREG(info.st_mode) and 0 < info.st_size <= maximum, 'Unexpected staging frame input')
+                request.write(struct.pack('!Q', info.st_size))
+                remaining = info.st_size
+                while remaining:
+                    segment = file.read(min(remaining, 1024 * 1024))
+                    require(bool(segment), 'Truncated staging frame input')
+                    request.write(segment)
+                    remaining -= len(segment)
+                require(not file.read(1), 'Unexpected staging frame bytes')
+        request.seek(0)
+        result = subprocess.run([str(BRIDGE), phase, argument], stdin=request,
                                 stdout=output, stderr=subprocess.DEVNULL, timeout=600, check=False,
                                 env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C.UTF-8'})
-        require(result.returncode == 0 and 0 < output.tell() <= 65536, 'Reviewed controller rejected or did not report a result')
+        require(0 < output.tell() <= 65536, 'Reviewed bridge rejected or did not report a result')
         output.seek(0)
-        return json.loads(output.read(65537))
+        body = json.loads(output.read(65537))
+        if result.returncode == 3 and body.get('kind') == 'zimage-staging-intake-only-v1':
+            print('Staging verified immutable bytes only; authenticated stage and production remain blocked.', file=sys.stderr)
+        require(result.returncode == 0, 'No authenticated staging receipt')
+        return body
 
 
 def dispatch(phase, pins, env, call, *, now):

@@ -4,8 +4,9 @@ This workflow is an additive first step. It does not replace `ci.yml`, its
 manual quality/database checks, existing branch protection or the production
 release/rollback gates. Checkout, package and pair intake run by default;
 protected staging and production are both off until separately provisioned.
-There is no target bridge installation in this source tree. A stock runner or
-missing bridge fails closed. Do not feed these artifacts to the legacy workflow.
+This source tree includes a versioned intake-only bridge, not an installed
+staging or production adapter. Missing installation or authenticated stage
+acceptance fails closed. Do not feed these artifacts to the legacy workflow.
 
 ## After merging into protected main
 
@@ -60,16 +61,25 @@ remain unpromotable.
   protected main, no self-review and no bypass where available. All three jobs
   that recalculate the frontend subject need the same reviewed public config
   value. No credentials or authenticated read receipts are uploaded as artifacts.
-- Separately install/review the fixed root-owned executable
-  `/usr/local/libexec/zimage-paired-release/github-bridge` on each target-specific
-  controller runner with the real staging/backend/ordinary adapter closure.
-  Supply role and independently reviewed binary SHA-256 using
-  `ZIMAGE_PAIRED_ROLE` and `ZIMAGE_PAIRED_BRIDGE_SHA256`. The workflow cannot
-  override the path, install code, choose a different host or supply a cookie.
-  CLI protocol: <phase> <pins.json> <backend.zip> <frontend.zip> <config.json>
-  <bound argument>. Roles must only allow `staging` or read-only
-  `authorization` plus `production` respectively; never a general command,
-  unrestricted sudo or unreviewed SSH endpoint.
+- Separately review and install `paired/github-bridge` as
+  `/usr/local/libexec/zimage-paired-release/github-bridge` on a **dedicated
+  independent staging runner**. It runs as the named non-root runner UID, with
+  no sudo and no credentials. Install its exact reviewed Python/JSON tool
+  inventory under the same root-owned directory, preserving relative names.
+  A root-owned `/etc/zimage/ci-staging-bridge.json` must specify
+  `schemaVersion: 1`, `mode: "intake-only"`, numeric `runnerUid`, and a
+  `tools` mapping of every listed source path to its independently reviewed
+  SHA-256. Assign the expected binary hash and role via the protected
+  `ZIMAGE_PAIRED_BRIDGE_SHA256` and `ZIMAGE_PAIRED_ROLE`. Hashes are never
+  learned from a request.
+- Intake protocol v1 permits only `staging PAIR_SHA256`. Request input is
+  bounded stdin: magic `ZIMAGE-CI-STAGE\x01`, then four ordered records with
+  8-byte unsigned big-endian lengths and bytes for pins, backend ZIP, frontend
+  ZIP, and config. No filenames or paths can be supplied by the caller. Output
+  is a sanitized blocked intake report and exit 3, never an authenticated
+  receipt. `authorization`, `production`, alternative commands and all
+  caller-selected paths are refused. The repository client also rejects live
+  production operations with this interface.
 - Staging must independently authenticate the candidate backend with the
   existing nonce/PID/release receipt and exercise actual frontend acceptance
   against that exact backend, config and candidate subject. It returns no auth
@@ -95,7 +105,14 @@ remain unpromotable.
   the approval wait. A genuine production controller must also check current
   main while holding the lock and before reopening traffic.
 
-No live staging/controller was verified or installed here. Enabling repository
+No live staging/controller was verified or installed here. Minimum to run the
+hosted intake job: nominate an independent Linux staging machine and a dedicated
+non-root runner account; authorize and review the runner/group and bridge setup,
+and supply the reviewed staging public config and exact backend target
+fingerprint. This is not enough to go live: authenticated staging additionally
+needs a staging-only test account and a real audited runtime adapter; production
+also needs separate root approval custody, protected settings and a real
+rollback drill. Enabling repository
 flags, installing a privileged adapter, or validating real session credentials
 requires separately authorized operation. The offline tests use fixture
 controllers; they do not create acceptance, approve artifacts or deploy anything.
