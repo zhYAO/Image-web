@@ -120,6 +120,59 @@ jobs:
           ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
         run: bash ops/aliyun/github-rehearsal-review.sh
 
+  isolated-runtime-rehearsal:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_AUTOMATION != 'true' && vars.ZIMAGE_PAIRED_PRODUCTION != 'true'
+    needs: [backend, frontend, same-run-review]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 18
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - name: Prepare disposable VM cache and pin tooling
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e /opt/zimage
+          sudo install -d -m 0755 /opt/zimage
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
+          export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
+          test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
+          corepack enable pnpm
+      - name: Verify and stage exact same-run bytes without executing them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_ID: ${{ needs.backend.outputs.artifact_id }}
+          BACKEND_ARTIFACT_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
+          BACKEND_ARCHIVE_SHA: ${{ needs.backend.outputs.archive_sha }}
+          BACKEND_RECEIPT_SHA: ${{ needs.backend.outputs.receipt_sha }}
+          BACKEND_MANIFEST_SHA: ${{ needs.backend.outputs.evidence_sha }}
+          FRONTEND_ID: ${{ needs.frontend.outputs.artifact_id }}
+          FRONTEND_ARTIFACT_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
+          FRONTEND_ARCHIVE_SHA: ${{ needs.frontend.outputs.archive_sha }}
+          FRONTEND_RECEIPT_SHA: ${{ needs.frontend.outputs.receipt_sha }}
+          FRONTEND_SUBJECT_SHA: ${{ needs.frontend.outputs.evidence_sha }}
+          REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
+          ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
+          ZIMAGE_PAIRED_PRODUCTION: ${{ vars.ZIMAGE_PAIRED_PRODUCTION }}
+        run: bash ops/aliyun/github-rehearsal-review.sh hosted-smoke
+      - name: Test exact release in a disposable local fixture (never promote)
+        run: |
+          set -euo pipefail
+          private="$RUNNER_TEMP/zimage-hosted-smoke"
+          test -d "$private" && test ! -L "$private"
+          trap 'rm -rf -- "$private"' EXIT
+          mkdir -m 700 -- "$private/home"
+          env -i PATH="$PATH" HOME="$private/home" TMPDIR="$private" \
+            COREPACK_HOME="$RUNNER_TEMP/zimage-corepack" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+            bash ops/aliyun/github-hosted-smoke.sh "$private" "$(pwd -P)"
+          printf '%s\n' 'Disposable hosted runtime fixture passed. No approval or promotable evidence was produced.' >> "$GITHUB_STEP_SUMMARY"
+
   authenticated-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
     needs: [backend, frontend, same-run-review]

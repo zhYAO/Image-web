@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify artifacts without executing their contents or producing any approval.
+# Verify artifacts; only the separate hosted smoke mode runs them locally.
 set -euo pipefail
 [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main && "$GITHUB_REF_PROTECTED" == true ]]
 test "$GITHUB_REPOSITORY" = 'zhYAO/Image-web'
@@ -32,8 +32,11 @@ done
 # Tests can exercise metadata policy without a hosted runner or remote fetch.
 if [[ ${1:-} == --metadata-only ]]; then exit 0; fi
 phase=${1:-}
-[[ "$#" -le 1 && ( -z "$phase" || "$phase" == staging || "$phase" == production ) ]]
-if [[ -n "$phase" ]]; then
+[[ "$#" -le 1 && ( -z "$phase" || "$phase" == staging || "$phase" == production || "$phase" == hosted-smoke ) ]]
+if [[ "$phase" == hosted-smoke ]]; then
+  [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${RUNNER_OS:-}" == Linux &&
+     "${ZIMAGE_PAIRED_BUILD_MODE:-}" != true && "${ZIMAGE_PAIRED_PRODUCTION:-}" != true ]]
+elif [[ -n "$phase" ]]; then
   [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted && "${ZIMAGE_PAIRED_ROLE:-}" == "$phase" && "${ZIMAGE_PAIRED_ENABLED:-}" == true ]]
 fi
 [[ "$BACKEND_MANIFEST_SHA" =~ ^[a-f0-9]{64}$ && "$FRONTEND_SUBJECT_SHA" =~ ^[a-f0-9]{64}$ ]]
@@ -78,7 +81,12 @@ print('Exact pair byte verification passed. Production remains blocked until sta
 PY_REPORT
 
 
-if [[ -n "$phase" ]]; then
+if [[ "$phase" == hosted-smoke ]]; then
+  # Leave verified bytes for the next step, after this token-bearing
+  # shell exits. No fixture process runs in this step.
+  test ! -e "$RUNNER_TEMP/zimage-hosted-smoke"
+  mv -T -- "$private" "$RUNNER_TEMP/zimage-hosted-smoke"
+elif [[ -n "$phase" ]]; then
   # No app credentials are transported in GitHub artifacts. The preinstalled
   # target-specific controller owns challenge/auth material and root approvals.
   python3 -I -B ops/aliyun/github-paired-controller.py "$phase" --pins "$private/pins.json" \

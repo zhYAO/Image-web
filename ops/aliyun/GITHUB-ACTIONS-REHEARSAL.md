@@ -43,6 +43,36 @@ can nominate a different backend for that frontend test; it cannot promote.
    files, and is retained for two days. Existing comprehensive quality/database
    jobs in `ci.yml` are unchanged and still manually triggered.
 
+## Disposable GitHub-hosted runtime smoke
+
+On a protected-main push, when both live opt-ins are off, a separate
+`ubuntu-22.04` job tests only the already-verified same-run archives. It has
+no GitHub environment, application secrets, artifact upload, output consumed
+by promotion, or production dependencies. Configure the non-secret
+`ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON` as a repository variable so the job
+can recompute the same subject; the `release-rehearsal` environment must not
+shadow it with different bytes/values. Missing or mismatched config fails
+closed. Manual dispatch remains component-only; do not enable a production
+flag to test a branch.
+
+The job uses the package's exact cache binding in the disposable VM and feeds
+the application a credential-scrubbed process environment. The install uses the
+lockfile-pinned Supabase CLI `2.115.0`, configured PostgreSQL 17 and exact checked
+in SQL migrations, in a new local project with no linked cloud configuration.
+It needs the local Unix Docker socket, isolates all keys in memory, starts no
+project Edge workers, and uses only the fixed loopback endpoint and synthetic
+account. It does not print the CLI status, account credentials, session or cookie.
+
+The runtime check covers same-origin HTTP login (bad password, successful
+password, real cookie-backed live-session RPC, and logout/parsing the cleared
+cookie) on the exact backend. The exact frontend is checked for its matching
+commit, namespace and app shell only. This is not a browser UI/frontend-login
+exercise. A success is only a local synthetic fixture smoke result. It cannot
+issue the independent PID-bound staging acceptance or root approval, nor prove
+production routing, credentials, or rollback. App/runtime failures and
+unsupported fixture prerequisites are failures, not green auth results.
+See [Supabase local Auth testing](https://supabase.com/docs/guides/auth/testing-auth-flows).
+
 ## Protected staging and production (not provisioned)
 
 The same workflow defines the staging job and a downstream GitHub environment
