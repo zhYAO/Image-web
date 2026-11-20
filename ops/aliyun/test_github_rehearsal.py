@@ -17,8 +17,11 @@ class GithubRehearsal(unittest.TestCase):
         self.assertEqual(text.count("(github.event_name == 'push' || inputs.component =="), 2)
         self.assertIn('needs: [backend, frontend]', text)
         self.assertIn('MATCH_BACKEND_SHA="$GITHUB_SHA"', (HERE / 'github-rehearsal.sh').read_text())
-        for value in ('secrets.', 'pull_request_target', 'environment: production', 'candidate_run_id'):
+        for value in ('secrets.', 'pull_request_target', 'candidate_run_id'):
             self.assertNotIn(value, text)
+        self.assertIn('needs: [backend, frontend, same-run-review, authenticated-staging]', text)
+        self.assertIn("vars.ZIMAGE_PAIRED_PRODUCTION == 'true'", text)
+        self.assertIn('group: zimage-production-release', text)
 
     def review(self, *, branch='refs/heads/main', event='push', stale=False, wrong_attempt=False, wrong_digest=False,
                wrong_run=False, wrong_sha=False):

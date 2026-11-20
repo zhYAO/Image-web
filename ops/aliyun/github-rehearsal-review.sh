@@ -31,7 +31,11 @@ done
 
 # Tests can exercise metadata policy without a hosted runner or remote fetch.
 if [[ ${1:-} == --metadata-only ]]; then exit 0; fi
-test "$#" = 0
+phase=${1:-}
+[[ "$#" -le 1 && ( -z "$phase" || "$phase" == staging || "$phase" == production ) ]]
+if [[ -n "$phase" ]]; then
+  [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted && "${ZIMAGE_PAIRED_ROLE:-}" == "$phase" && "${ZIMAGE_PAIRED_ENABLED:-}" == true ]]
+fi
 [[ "$BACKEND_MANIFEST_SHA" =~ ^[a-f0-9]{64}$ && "$FRONTEND_SUBJECT_SHA" =~ ^[a-f0-9]{64}$ ]]
 [[ -n ${REHEARSAL_PUBLIC_CONFIG:-} && ${#REHEARSAL_PUBLIC_CONFIG} -le 16384 ]] || { echo 'Missing staging public configuration for pair intake.' >&2; exit 1; }
 [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" && -z "$(git status --porcelain)" ]]
@@ -51,8 +55,10 @@ def pin(component, extra_name, extra_source):
     return dict(artifactSha256=e[f'{component}_ARTIFACT_DIGEST'], archiveSha256=e[f'{component}_ARCHIVE_SHA'],
                 receiptSha256=e[f'{component}_RECEIPT_SHA'], **{extra_name:e[extra_source]})
 with open(sys.argv[1], 'x') as stream:
+    namespace = ('release-' + e['GITHUB_SHA'][:12]) if e.get('ZIMAGE_PAIRED_BUILD_MODE') == 'true' else (
+        f"rehearsal-{e['GITHUB_SHA']}-{e['GITHUB_RUN_ID']}-{e['GITHUB_RUN_ATTEMPT']}")
     json.dump(dict(commit=e['GITHUB_SHA'], runId=int(e['GITHUB_RUN_ID']), attempt=int(e['GITHUB_RUN_ATTEMPT']),
-                   treeFingerprint=sys.argv[2], lockfileSha256=sys.argv[3],
+                   frontendNamespace=namespace, treeFingerprint=sys.argv[2], lockfileSha256=sys.argv[3],
                    backend=pin('BACKEND','manifestSha256','BACKEND_MANIFEST_SHA'),
                    frontend=pin('FRONTEND','subjectSha256','FRONTEND_SUBJECT_SHA')), stream)
 PY_PINS
@@ -70,3 +76,11 @@ if report['immutablePairVerified'] is not True or report['productionReady'] is n
     raise ValueError('Unexpected rehearsal result')
 print('Exact pair byte verification passed. Production remains blocked until staging and approvals.')
 PY_REPORT
+
+
+if [[ -n "$phase" ]]; then
+  # No app credentials are transported in GitHub artifacts. The preinstalled
+  # target-specific controller owns challenge/auth material and root approvals.
+  python3 -I -B ops/aliyun/github-paired-controller.py "$phase" --pins "$private/pins.json" \
+    --backend "$private/backend.zip" --frontend "$private/frontend.zip" --config "$private/config.json"
+fi

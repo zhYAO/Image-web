@@ -103,13 +103,18 @@ def extract_github_zip(source, destination, expected, names):
                     raise ValueError('Oversized GitHub ZIP member')
 
 def evaluate(pins, backend, frontend, public_config):
-    if set(pins) != {'commit', 'runId', 'attempt', 'treeFingerprint', 'lockfileSha256', 'backend', 'frontend'}:
+    fields = {'commit', 'runId', 'attempt', 'treeFingerprint', 'lockfileSha256', 'backend', 'frontend'}
+    if set(pins) not in (fields, fields | {'frontendNamespace'}):
         raise ValueError('Missing independently supplied same-run pins')
     sha, run, attempt = (pins[k] for k in ('commit', 'runId', 'attempt'))
     if not isinstance(sha, str) or not re.fullmatch(r'[a-f0-9]{40}', sha) or any(type(n) is not int or n <= 0 for n in (run, attempt)):
         raise ValueError('Invalid frozen GitHub identity')
     if any(not isinstance(pins[k], str) or not re.fullmatch(r'[a-f0-9]{64}', pins[k]) for k in ('treeFingerprint', 'lockfileSha256')):
         raise ValueError('Expected clean source identity')
+    rehearsal = f'rehearsal-{sha}-{run}-{attempt}'
+    namespace = pins.get('frontendNamespace', rehearsal)
+    if namespace not in (rehearsal, 'release-' + sha[:12]):
+        raise ValueError('Unexpected exact frontend namespace')
     for component, extra in (('backend', 'manifestSha256'), ('frontend', 'subjectSha256')):
         pin = pins[component]
         if set(pin) != {'artifactSha256', 'archiveSha256', 'receiptSha256', extra} or any(not isinstance(v, str) or not re.fullmatch(r'[a-f0-9]{64}', v) for v in pin.values()):
@@ -141,7 +146,7 @@ def evaluate(pins, backend, frontend, public_config):
         _, candidate, computed = fm.candidate_files(root / 'frontend-dist', public_config)
         expected_subject = dict(computed, **candidate, acceptanceRequired=True)
         if (expected_subject != read_json(output['frontend'] / 'frontend-subject.json')
-                or candidate['namespace'] != f'rehearsal-{sha}-{run}-{attempt}'
+                or candidate['namespace'] != namespace
                 or candidate['sourceIdentity']['sourceSHA'] != sha or candidate['sourceIdentity']['dirty']
                 or any(candidate['sourceIdentity'][k] != pins[k] for k in ('treeFingerprint', 'lockfileSha256'))
                 or candidate['allowedBackendReleases'] != [sha]):

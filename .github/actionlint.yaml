@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - zimage-protected-staging
+    - zimage-protected-production

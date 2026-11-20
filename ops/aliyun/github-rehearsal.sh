@@ -52,7 +52,11 @@ if [[ "$component" == backend ]]; then
   cp -- "$private/backend/transport.tgz" "$delivery/transport.tgz"
   python3 -I -B ops/aliyun/github-rehearsal-receipt.py backend "$delivery" "$private/verify.json"
 else
-  export ZIMAGE_ASSET_NAMESPACE="rehearsal-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+  if [[ "$GITHUB_EVENT_NAME" == push && ${ZIMAGE_PAIRED_BUILD_MODE:-} == true ]]; then
+    export ZIMAGE_ASSET_NAMESPACE="release-${GITHUB_SHA:0:12}"
+  else
+    export ZIMAGE_ASSET_NAMESPACE="rehearsal-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+  fi
   export ZIMAGE_FRONTEND_COMPATIBILITY
   ZIMAGE_FRONTEND_COMPATIBILITY=$(python3 -c 'import json,sys;print(json.dumps(dict(apiRequirements=dict(major=1,minMinor=0,capabilities=["runtime.public-config.v1","runtime.meta.v1"]),allowedBackendReleases=[sys.argv[1]])))' "$MATCH_BACKEND_SHA")
   pnpm build:frontend
