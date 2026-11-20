@@ -97,12 +97,14 @@ function immutablePublicCache(value) {
 
 export async function verifyPublishedImages(raw, { request = globalThis.fetch } = {}) {
   const policy = requirePinnedImageBase(raw);
-  const deadline = Date.now() + 60_000;
-  for (const entry of policy.files) {
+  const deadline = Date.now() + 150_000;
+  // Cold TLS/proxy connections can exceed five seconds. Use bounded parallel
+  // reads for the exact reviewed inventory; no partial result can be accepted.
+  async function verifyOne(entry) {
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error('Public image acceptance failed: total-time-limit');
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.min(5_000, remaining));
+    const timer = setTimeout(() => controller.abort(), Math.min(20_000, remaining));
     try {
       const response = await request(policy.base + '/' + entry.path, { method: 'GET', redirect: 'error', credentials: 'omit',
         headers: { 'Accept-Encoding': 'identity' }, signal: controller.signal });
@@ -128,6 +130,11 @@ export async function verifyPublishedImages(raw, { request = globalThis.fetch } 
       // Fail closed without logging response bodies, credential-bearing errors or runtime configuration.
       throw new Error('Public image acceptance failed; keep the safe bundled mode');
     } finally { controller.abort(); clearTimeout(timer); }
+  }
+  await verifyOne(policy.files[0]); // Fail early before fan-out on a stale/missing namespace.
+  const batchSize = 6;
+  for (let index = 1; index < policy.files.length; index += batchSize) {
+    await Promise.all(policy.files.slice(index, index + batchSize).map(verifyOne));
   }
   return { baseUrl: policy.base, manifestSha256: policy.manifestSha256, images: policy.files.length, allImagesVerified: true };
 }

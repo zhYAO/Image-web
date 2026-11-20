@@ -118,7 +118,7 @@ def safe_environment():
 def tool_paths():
     return ([HERE/name for name in ('cli.py','core.py','system.py','stage.py')]+
             [BACKEND/name for name in ('release.py','receipt.py','transaction.py','first-window.py','first_window.py','frontend_bootstrap.py','http-admission.cjs','next-source-profiles.json')]+
-            [LAYERS/name for name in ('release-three-layer.py','release.py','release-layers.py','three-layer-release.py','release-transport.py','release-public-policy.json')]+
+            [LAYERS/name for name in ('release-three-layer.py','release.py','release-layers.py','three-layer-release.py','release-transport.py','release-public-policy.json','public-image-contract.py')]+
             [FRONTEND/name for name in ('release.py','manifest.py','transport.py')])
 
 

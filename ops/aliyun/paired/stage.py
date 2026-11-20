@@ -49,8 +49,8 @@ def prepare(bridge,adapter,sha,outer_sha,manifest_sha):
             adapter.cache_ownership(assembled)
             (candidate/'apps/web/.next/cache').symlink_to(mutable,target_is_directory=True)
             adapter.validate_candidate(candidate,manifest,sha,entries)
-            adapter.metadata(candidate,sha,outer_sha,manifest_sha,assembled['environment'])
-            adapter.native_check(candidate,assembled['environment'])
+            adapter.metadata(candidate,sha,outer_sha,manifest_sha,assembled['environment'],manifest)
+            adapter.check_release_probe(candidate,assembled['environment'],manifest)
             target=adapter.root/'releases'/sha;reused=os.path.lexists(target)
             if reused:
                 if target.is_symlink():raise ValueError('Existing release symlink rejected')

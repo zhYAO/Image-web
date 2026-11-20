@@ -24,7 +24,7 @@ MAX_OUTER = 2_000_000_000
 MAX_MANIFEST = 1_000_000
 HEX40 = re.compile(r'[a-f0-9]{40}')
 HEX64 = re.compile(r'[a-f0-9]{64}')
-TOOLS = ('release-three-layer.py', 'release.py', 'release-layers.py', 'three-layer-release.py', 'release-transport.py', 'release-public-policy.json')
+TOOLS = ('release-three-layer.py', 'release.py', 'release-layers.py', 'three-layer-release.py', 'release-transport.py', 'public-image-contract.py', 'release-public-policy.json')
 TARGET_CONFIG = Path('/etc/zimage/three-layer-target.json')
 MAX_REQUEST = 16384
 
@@ -91,7 +91,7 @@ def enabled_target_check(manifest=None):
     if target['runtime'] != layers.runtime_identity():
         raise ValueError('Enabled target differs from actual Node/ABI/Linux/glibc runtime')
     if manifest is not None and (manifest['runtime'] != target['runtime'] or
-                                 (manifest['schema'] == 2 and manifest['target'] != target)):
+                                 (manifest['schema'] in (2, 3) and manifest['target'] != target)):
         raise ValueError('Release target differs from administrator enabled target')
     return target
 
@@ -172,6 +172,51 @@ def native_probe(candidate, environment, runner=subprocess.run):
     return load_tools()[1].native_probe(candidate, environment, runner=runner)
 
 
+MODEL_PROFILE = 'model-only-jsquash'
+MODEL_PROBE = r"""(async()=>{
+const fs=require('node:fs/promises'),path=require('node:path');
+const {pathToFileURL}=require('node:url');
+const root=await fs.realpath(path.resolve(process.cwd(),'../..'));
+const binaries=new Map();
+const contained=async(spec)=>{
+ const p=await fs.realpath(require.resolve(spec)),r=path.relative(root,p),st=await fs.stat(p);
+ if(!r||r==='..'||r.startsWith('..'+path.sep)||path.isAbsolute(r)||!st.isFile())throw Error('external codec');
+ return p;
+};
+const get=async(entry,binary)=>{
+ const js=await contained(entry),wasm=await contained(binary);
+ let compiled=binaries.get(wasm);
+ if(!compiled){compiled=WebAssembly.compile(await fs.readFile(wasm));binaries.set(wasm,compiled);}
+ const codec=await import(pathToFileURL(js).href);
+ await codec.init(await compiled);return codec.default;
+};
+if(!globalThis.ImageData){globalThis.ImageData=class{constructor(data,width,height){Object.assign(this,{data,width,height});}};}
+const encJpeg=await get('@jsquash/jpeg/encode.js','@jsquash/jpeg/codec/enc/mozjpeg_enc.wasm');
+const decJpeg=await get('@jsquash/jpeg/decode.js','@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm');
+const encPng=await get('@jsquash/png/encode.js','@jsquash/png/codec/pkg/squoosh_png_bg.wasm');
+const decPng=await get('@jsquash/png/decode.js','@jsquash/png/codec/pkg/squoosh_png_bg.wasm');
+const decWebp=await get('@jsquash/webp/decode.js','@jsquash/webp/codec/dec/webp_dec.wasm');
+const image={width:2,height:2,data:new Uint8ClampedArray([51,102,153,255,51,102,153,255,51,102,153,255,51,102,153,255])};
+const webp=Uint8Array.from(Buffer.from('UklGRjgAAABXRUJQVlA4ICwAAADwAQCdASoCAAIAAUAmJaACdLoB+AAETAAA/u+9V/43bjDfgu/33oDeBgAAAA==','base64')).buffer;
+for(const v of [await decJpeg(await encJpeg(image,{quality:92})),await decPng(await encPng(image)),await decWebp(webp)]){
+ if(v.width!==2||v.height!==2||v.data.length!==16||v.data[3]!==255)throw Error('codec output');
+}
+if(binaries.size!==4)throw Error('codec binaries');
+console.log(JSON.stringify({engine:'jsquash',codecs:['jpeg','png','webp'],wasm:4}));
+})().catch(()=>{console.error('Model-only WASM verification failed');process.exit(1)})"""
+
+
+def model_probe(candidate, environment, runner=subprocess.run):
+    if set(environment) != {'ZIMAGE_STATIC_ASSET_SHA256'} or not HEX64.fullmatch(environment['ZIMAGE_STATIC_ASSET_SHA256']):
+        raise ValueError('Model-only release requires exact fontless asset environment')
+    command = ['/usr/sbin/runuser', '--user', 'zimage', '--', '/usr/bin/env', '-i',
+               'PATH=' + SAFE_PATH, 'NODE_ENV=production', str(NODE), '-e', MODEL_PROBE]
+    result = runner(command, cwd=candidate / 'apps/web', check=True, capture_output=True, text=True, timeout=90,
+                    env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin'})
+    if result.returncode or json.loads(result.stdout) != {'engine': 'jsquash', 'codecs': ['jpeg', 'png', 'webp'], 'wasm': 4}:
+        raise RuntimeError('Non-root model-only WASM candidate verification failed')
+
+
 def service_preflight():
     owned(DROPIN, ancestors=True)
     if DROPIN.read_text() != SYSTEMD_TEMPLATE:
@@ -187,10 +232,10 @@ def service_preflight():
 class Adapter:
     """Internal dependency injection exists for local fixtures, never as CLI path arguments."""
     def __init__(self, root, layers, legacy, native_check=native_probe, service_check=service_preflight,
-                 target_check=enabled_target_check):
+                 target_check=enabled_target_check, model_check=model_probe):
         self.root, self.layers, self.legacy = Path(root).absolute(), layers, legacy
         self.uid = os.geteuid()
-        self.native_check, self.service_check = native_check, service_check
+        self.native_check, self.service_check, self.model_check = native_check, service_check, model_check
         self.transport, self.target_check = load_transport(), target_check
         self.layers.root_path(self.root)
         owned(self.root, self.uid, directory=True)
@@ -238,10 +283,17 @@ class Adapter:
                        and manifest.get('compiledAssetBaseUrl') is None)
         remote = (manifest.get('compiledAssetBaseUrl') == 'https://www.zimage.store/static-assets/' + asset
                   and (manifest.get('schema') == 1 or manifest.get('assetDeliveryMode') == 'remote'))
+        public_images = manifest.get('publicImages', {})
+        fontless = (manifest.get('schema') == 3 and manifest.get('runtimeProfile') == MODEL_PROFILE
+                    and manifest.get('assetDeliveryMode') == 'public-images'
+                    and HEX64.fullmatch(public_images.get('manifestSha256', '')) is not None
+                    and manifest.get('compiledAssetBaseUrl') == public_images.get('baseUrl')
+                    == 'https://www.zimage.store/static-assets/' + public_images['manifestSha256'])
         if (manifest.get('productionReady') is not False or manifest.get('releaseId') != sha or manifest.get('distDir') != '.next'
                 or any(build.get(key) != sha for key in ('sourceCommit', 'marker', 'buildId'))
                 or not HEX64.fullmatch(asset) or manifest.get('assemblyCacheRoot') != str(self.root / 'layer-cache')
-                or not (same_origin or remote)):
+                or not (same_origin or remote or fontless)
+                or ('runtimeProfile' in manifest and not fontless)):
             raise ValueError('Production identity/configuration gates reject this artifact; original manifest is never rewritten')
 
     def initial_empty(self):
@@ -329,9 +381,35 @@ class Adapter:
         finally:
             pending.unlink(missing_ok=True)
 
-    def metadata(self, target, sha, outer_sha, manifest_sha, environment):
+    def resource_environment(self, manifest, environment):
+        asset = manifest['assetsVersion']
+        expected = {'ZIMAGE_STATIC_ASSET_SHA256': asset}
+        if manifest.get('runtimeProfile') != MODEL_PROFILE:
+            expected['ZIMAGE_SHARED_FONT_DIR'] = str(self.root / 'layer-cache' / 'assets' / asset / 'fonts')
+        if environment != expected:
+            raise ValueError('Exact per-release resource environment mismatch')
+        return expected
+
+    def check_release_probe(self, candidate, environment, manifest):
+        self.resource_environment(manifest, environment)
+        if manifest.get('runtimeProfile') == MODEL_PROFILE:
+            self.model_check(candidate, environment)
+        else:
+            self.native_check(candidate, environment)
+
+    def activation_preflight(self, target):
+        marker = target / '.three-layer-release.json'
+        if os.path.lexists(marker):
+            self.verify_retained_layered(target, target.name)
+        elif os.path.lexists(target / '.manifest-sha256'):
+            raise ValueError('Retained layered activation manifest is missing')
+        else:
+            self.legacy.font_preflight(target)
+
+    def metadata(self, target, sha, outer_sha, manifest_sha, environment, manifest):
+        self.resource_environment(manifest, environment)
         values = {'.release-sha': sha + '\n', '.archive-sha256': outer_sha + '\n', '.manifest-sha256': manifest_sha + '\n',
-                  '.runtime-assets.env': ''.join(key + '=' + environment[key] + '\n' for key in ('ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256'))}
+                  '.runtime-assets.env': ''.join(key + '=' + environment[key] + '\n' for key in sorted(environment))}
         for name, value in values.items():
             with (target / name).open('x') as stream:
                 stream.write(value)
@@ -344,8 +422,12 @@ class Adapter:
                 or (candidate / 'apps/web/.next/BUILD_ID').read_text().strip() != sha
                 or base != manifest.get('compiledAssetBaseUrl')):
             raise ValueError('Production candidate actual config/build marker mismatch')
-        if manifest['schema'] == 2 and self.layers.dependency_resolution(config, manifest['inputRoots'].values()) != manifest['configFingerprint']['dependencyResolution']:
+        if manifest['schema'] in (2, 3) and self.layers.dependency_resolution(config, manifest['inputRoots'].values()) != manifest['configFingerprint']['dependencyResolution']:
             raise ValueError('Production candidate actual dependency config differs')
+        if manifest['schema'] == 3 and self.layers.compiled_public_images(config) != manifest['publicImages']:
+            raise ValueError('Production candidate actual image contract differs')
+        if manifest.get('runtimeProfile') == MODEL_PROFILE:
+            self.layers.validate_release_profile(config, MODEL_PROFILE, entries)
         for entry in entries:
             if entry['type'] == 'symlink' and not (candidate / entry['path']).resolve(strict=False).is_relative_to(candidate):
                 raise ValueError('Production candidate original symlink escapes managed final graph')
@@ -404,7 +486,9 @@ class Adapter:
             layer = manifest['layers'][kind]
             body = self.layers.read_regular(self.root / 'layer-store' / layer['index'])
             if kind == 'assets':
-                entries, _ = self.layers.resource_entries(body)
+                profile = manifest.get('runtimeProfile')
+                entries, _ = (self.layers.resource_entries(body, profile)
+                              if profile is not None else self.layers.resource_entries(body))
                 entries = entries + [{'path': 'asset-manifest.json', 'type': 'file', 'mode': 0o644,
                                       'bytes': len(body), 'sha256': layer['identity']}]
             else:
@@ -479,8 +563,8 @@ class Adapter:
                     cache = candidate / 'apps/web/.next/cache'
                     cache.symlink_to(mutable, target_is_directory=True)
                     self.validate_candidate(candidate, manifest, sha, entries)
-                    self.metadata(candidate, sha, outer_sha, manifest_sha, environment)
-                    self.native_check(candidate, environment)
+                    self.metadata(candidate, sha, outer_sha, manifest_sha, environment, manifest)
+                    self.check_release_probe(candidate, environment, manifest)
                     target = self.root / 'releases' / sha
                     reused = os.path.lexists(target)
                     if reused:
@@ -498,11 +582,11 @@ class Adapter:
                 for name in ('current', 'previous', 'last-deployment-run'):
                     if os.path.lexists(self.root / name):
                         raise ValueError('Initial installation changed before activation')
-                self.legacy.activate_initial(target)
+                self.legacy.activate_initial(target, preflight=self.activation_preflight)
             else:
                 if self.current_target() != old:
                     raise ValueError('Current changed before activation')
-                self.legacy.activate(target)
+                self.legacy.activate(target, preflight=self.activation_preflight)
             self.write_sequence(run)
             return {'release': str(target), 'previous': str(old) if old else None, 'initial': initial, 'reused': reused, 'productionReady': False,
                     'activatedLocally': True, 'externalVerificationRequired': True, 'manifestSha256': manifest_sha}
@@ -523,10 +607,16 @@ class Adapter:
                 self.verify_retained_layered(target, sha)
             elif os.path.lexists(target / '.manifest-sha256'):
                 raise ValueError('Retained layered rollback manifest is missing')
-            self.legacy.activate(target, restore_previous_on_failure=False)
+            self.legacy.activate(target, restore_previous_on_failure=False, preflight=self.activation_preflight)
             return {'release': str(target), 'productionReady': False, 'externalVerificationRequired': True}
 
-    def verify_retained_layered(self, target, sha):
+    def verify_retained_layered(self, target, sha, *, run_probe=True):
+        if not HEX40.fullmatch(sha) or target != self.root / 'releases' / sha:
+            raise ValueError('Retained layered release requires exact managed SHA path')
+        owned(target, self.uid, directory=True)
+        owned(target / '.release-sha', self.uid)
+        if (target / '.release-sha').read_text().strip() != sha:
+            raise ValueError('Retained layered release marker differs')
         marker = target / '.three-layer-release.json'
         for name in ('.three-layer-release.json', '.manifest-sha256', '.archive-sha256', '.runtime-assets.env'):
             owned(target / name, self.uid)
@@ -552,9 +642,10 @@ class Adapter:
             self.cache_ownership(assembled)
             (candidate / 'apps/web/.next/cache').symlink_to(self.root / 'cache', target_is_directory=True)
             self.validate_candidate(candidate, manifest, sha, entries)
-            self.metadata(candidate, sha, outer_sha, manifest_sha, assembled['environment'])
+            self.metadata(candidate, sha, outer_sha, manifest_sha, assembled['environment'], manifest)
             self.compare_retained(target, candidate)
-            self.native_check(target, assembled['environment'])
+            if run_probe:
+                self.check_release_probe(target, assembled['environment'], manifest)
             self.verify_store_closure(manifest, body, sha, manifest_sha)
             self.recheck_caches(manifest)
 

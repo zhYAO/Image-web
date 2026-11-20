@@ -94,6 +94,44 @@ class NextImages(PortableFixture):
         changed = copy.deepcopy(manifest); changed['configFingerprint']['publicImages'] = None
         with self.assertRaises(ValueError): self.m.validate_manifest(changed)
 
+    def model_only(self):
+        self.config['env'].update(ZIMAGE_IMAGE_ENGINE='jsquash', ZIMAGE_APPAREL_TEXT_MODE='model-only')
+        self.config['images']['unoptimized'] = True
+        self.set_config()
+        return { 'schema': 2, 'productionReady': False, 'runtimeProfile': self.m.MODEL_ONLY_PROFILE,
+                 'publicImages': copy.deepcopy(CONTRACT), 'files': [] }
+
+    def test_schema3_model_only_requires_and_binds_fontless_assets(self):
+        fontless = self.model_only()
+        with self.assertRaisesRegex(ValueError, 'Unsupported asset manifest'): self.new_pack()
+        self.new_assets(fontless)
+        report = self.new_pack()
+        manifest = self.m.parse(Path(report['manifest']).read_bytes())
+        self.m.validate_manifest(manifest)
+        profile = self.m.MODEL_ONLY_PROFILE
+        self.assertEqual(manifest['runtimeProfile'], profile)
+        self.assertEqual(manifest['configFingerprint']['runtimeProfile'], profile)
+        self.assertEqual(self.m.layer_binding(manifest, 'code')['runtimeProfile'], profile)
+        self.assertEqual(manifest['layers']['assets']['rawBytes'], 0)
+        with self.assertRaisesRegex(ValueError, 'profile/config binding'):
+            changed = copy.deepcopy(manifest)
+            del changed['runtimeProfile']
+            self.m.validate_manifest(changed)
+
+    def test_fontless_schema_rejects_downgrade_fonts_and_native_image_engine(self):
+        metadata = self.model_only()
+        legacy = self.m.parse((self.legacy_assets / 'asset-manifest.json').read_bytes())
+        metadata['files'] = [entry for entry in legacy['files'] if entry['kind'] == 'font']
+        self.new_assets(metadata)
+        with self.assertRaisesRegex(ValueError, 'Font in model-only'): self.new_pack()
+        metadata['files'] = []
+        self.new_assets(metadata)
+        self.put(self.source / 'node_modules/.pnpm/sharp@1/node_modules/sharp/index.js', 'legacy')
+        with self.assertRaisesRegex(ValueError, 'Legacy font or native image engine'): self.new_pack()
+        self.config['env'].pop('ZIMAGE_IMAGE_ENGINE')
+        self.set_config()
+        with self.assertRaisesRegex(ValueError, 'Unsupported asset manifest'): self.new_pack()
+
     def test_old_schema1_and_2_manifest_bytes_match_original_d3117ac_implementation(self):
         self.config = self.legacy_config; self.set_config(); self.assets = self.legacy_assets
         baseline = self.root / 'old-tools'; baseline.mkdir()

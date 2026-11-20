@@ -116,7 +116,8 @@ def _release(store, manifest_path, manifest_sha):
         layer = manifest['layers'][kind]
         index_body = layers.read_regular(store / layer['index'])
         if kind == 'assets':
-            entries, _ = layers.resource_entries(index_body)
+            entries, metadata = layers.resource_entries(index_body, manifest.get('runtimeProfile'))
+            layers.validate_image_assets(metadata, entries, manifest.get('publicImages'))
             if layer['identity'] != manifest['assetsVersion']:
                 raise ValueError('Asset identity mismatch')
         else:
@@ -132,6 +133,8 @@ def _release(store, manifest_path, manifest_sha):
                 sum(len(os.fsencode(entry['target'])) for entry in entries if entry['type'] == 'symlink') != layer['symlinkTargetBytes']):
             raise ValueError('Layer raw accounting mismatch')
     layers.validate_entries(all_entries)
+    if manifest['schema'] == 3:
+        layers.reject_image_copies(all_entries, manifest['publicImages'])
     if sum(layer['rawBytes'] for layer in manifest['layers'].values()) > layers.MAX_RAW:
         raise ValueError('Layer raw payload exceeds bound')
     return store, manifest, body, required

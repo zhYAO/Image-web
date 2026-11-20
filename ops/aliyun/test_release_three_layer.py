@@ -91,6 +91,51 @@ class RootThreeLayerAdapter(unittest.TestCase):
     def deploy(self, run='1'):
         return self.operation.deploy(SHA, self.transport['outerSha256'], self.packed['manifestSha256'], run)
 
+    def test_fontless_schema3_needs_explicit_profile_and_exact_cdn_identity(self):
+        op = self.operation
+        image_sha = 'd' * 64
+        base = 'https://www.zimage.store/static-assets/' + image_sha
+        manifest = {'schema': 3, 'releaseId': SHA, 'productionReady': False, 'distDir': '.next',
+                    'build': dict.fromkeys(('sourceCommit', 'marker', 'buildId'), SHA),
+                    'assetsVersion': self.assets.name, 'assemblyCacheRoot': str(self.cache),
+                    'compiledAssetBaseUrl': base, 'assetDeliveryMode': 'public-images',
+                    'runtimeProfile': self.adapter.MODEL_PROFILE,
+                    'publicImages': {'manifestSha256': image_sha, 'baseUrl': base}}
+        with patch.object(self.layers, 'validate_manifest'):
+            op.validate_manifest(manifest, SHA)
+            for key, value in [('runtimeProfile', None), ('compiledAssetBaseUrl', 'https://other.invalid'),
+                               ('schema', 2), ('assetDeliveryMode', 'same-origin-public')]:
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    op.validate_manifest({**manifest, key: value}, SHA)
+        fontless_env = {'ZIMAGE_STATIC_ASSET_SHA256': self.assets.name}
+        candidate = self.host / 'candidate'
+        candidate.mkdir()
+        op.model_check = Mock()
+        op.check_release_probe(candidate, fontless_env, manifest)
+        op.model_check.assert_called_once_with(candidate, fontless_env)
+        self.native.assert_not_called()
+        with self.assertRaises(ValueError):
+            op.check_release_probe(candidate, {**fontless_env, 'ZIMAGE_SHARED_FONT_DIR': '/untrusted'}, manifest)
+        with self.assertRaises(ValueError):
+            op.check_release_probe(candidate, {'ZIMAGE_STATIC_ASSET_SHA256':'e'*64}, manifest)
+        op.metadata(candidate, SHA, 'c'*64, 'd'*64, fontless_env, manifest)
+        self.assertEqual((candidate / '.runtime-assets.env').read_text(),
+                         'ZIMAGE_STATIC_ASSET_SHA256=' + self.assets.name + '\n')
+
+    def test_fontless_probe_drops_privilege_and_checks_actual_codec_result(self):
+        environment = {'ZIMAGE_STATIC_ASSET_SHA256': self.assets.name}
+        result = types.SimpleNamespace(returncode=0, stdout='{"engine":"jsquash","codecs":["jpeg","png","webp"],"wasm":4}')
+        runner = Mock(return_value=result)
+        self.adapter.model_probe(self.host / 'candidate', environment, runner=runner)
+        command = runner.call_args.args[0]
+        self.assertEqual(command[:6], ['/usr/sbin/runuser', '--user', 'zimage', '--', '/usr/bin/env', '-i'])
+        self.assertEqual(command[-3:], [str(self.adapter.NODE), '-e', self.adapter.MODEL_PROBE])
+        self.assertEqual(set(runner.call_args.kwargs['env']), {'PATH'})
+        self.assertIn('external codec', command[-1])
+        result.stdout = '{"engine":"jsquash","codecs":[],"wasm":0}'
+        with self.assertRaises(RuntimeError):
+            self.adapter.model_probe(self.host / 'candidate', environment, runner=runner)
+
     def test_local_bundle_and_deploy_publish_without_rewriting_manifest(self):
         with tarfile.open(self.bundle, 'r:gz') as archive:
             self.assertEqual(len(archive.getmembers()), 7)
@@ -105,7 +150,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(env.stat().st_mode), 0o600)
         self.assertEqual(env.read_text().splitlines(), [f'ZIMAGE_SHARED_FONT_DIR={self.cache}/assets/{self.assets.name}/fonts', f'ZIMAGE_STATIC_ASSET_SHA256={self.assets.name}'])
         self.native.assert_called_once()
-        self.activate.assert_called_once_with(target)
+        self.activate.assert_called_once_with(target, preflight=self.operation.activation_preflight)
         self.assertEqual((self.host / 'last-deployment-run').read_text(), '1\n')
         self.assertTrue((self.host / 'releases' / ('b' * 40)).exists())
 
@@ -194,7 +239,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
     def test_explicit_rollback_uses_exact_retained_target_without_reverse_recovery(self):
         original = self.host / 'releases' / ('b' * 40)
         self.operation.rollback('b' * 40)
-        self.activate.assert_called_once_with(original, restore_previous_on_failure=False)
+        self.activate.assert_called_once_with(original, restore_previous_on_failure=False, preflight=self.operation.activation_preflight)
         for value in ('previous', '../current', 'qa-name'):
             with self.assertRaises(ValueError):
                 self.operation.rollback(value)
@@ -330,7 +375,7 @@ class RootThreeLayerAdapter(unittest.TestCase):
         retained = (target / '.runtime-assets.env').read_bytes()
         self.activate.reset_mock()
         self.operation.rollback(SHA)
-        self.activate.assert_called_once_with(target, restore_previous_on_failure=False)
+        self.activate.assert_called_once_with(target, restore_previous_on_failure=False, preflight=self.operation.activation_preflight)
         self.assertEqual((target / '.runtime-assets.env').read_bytes(), retained)
         self.assertTrue((self.host / 'releases' / ('b' * 40)).exists())
         runtime_blob = self.store / self.layers.parse(Path(self.packed['manifest']).read_bytes())['layers']['runtime']['archive']

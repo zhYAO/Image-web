@@ -118,7 +118,7 @@ def derive(archive, output, pin, inventory_snapshot, inventory_sha, destination_
         for kind in layers.KINDS:
             layer = manifest['layers'][kind]
             index = layers.read_regular(store / layer['index'])
-            entries = layers.resource_entries(index)[0] if kind == 'assets' else layers.parse(index)['entries']
+            entries = layers.resource_entries(index, manifest.get('runtimeProfile'))[0] if kind == 'assets' else layers.parse(index)['entries']
             destination = work / ('verify-'+kind)
             destination.mkdir(mode=0o755)
             layers.extract(store / layer['archive'], entries, destination)

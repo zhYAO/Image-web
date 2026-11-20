@@ -23,6 +23,7 @@ rename_no_replace = _tools.no_replace_directory
 MAX_RAW, MAX_ENTRIES = _tools.MAX_RAW, _tools.MAX_ENTRIES
 KINDS = ('code', 'runtime', 'assets')
 PUBLIC, FONTS = 'apps/web/public/', 'apps/web/server/apparel/fonts/'
+MODEL_ONLY_PROFILE = 'model-only-jsquash'
 FONT_FILES = {'fonts/' + n for n in ('NotoSansCJKsc-Regular.otf', 'NotoSansCJKsc-Bold.otf', 'LICENSE.txt', 'README.md')}
 SHA = re.compile(r'[a-f0-9]{64}')
 CACHE_ROOT = '/opt/zimage/layer-cache'
@@ -233,9 +234,29 @@ def classify(name):
     return 'runtime' if 'node_modules' in PurePosixPath(name).parts else 'code'
 
 
-def resource_entries(body):
+def validate_release_profile(config, profile, entries):
+    env = config.get('env', {})
+    engine = env.get('ZIMAGE_IMAGE_ENGINE')
+    if profile is None:
+        if engine == 'jsquash':
+            raise ValueError('Model-only build requires an explicit fontless resource profile')
+        return
+    if (profile != MODEL_ONLY_PROFILE or engine != 'jsquash' or env.get('ZIMAGE_APPAREL_TEXT_MODE') != 'model-only'
+            or config.get('images', {}).get('unoptimized') is not True):
+        raise ValueError('Compiled model-only runtime profile mismatch')
+    for entry in entries:
+        name = entry['path']
+        if (name == FONTS.rstrip('/') or name.startswith(FONTS) or name.lower().endswith(('.otf', '.ttf', '.woff', '.woff2', '.eot'))
+                or any(re.match(r'^(?:sharp(?:$|[.@-])|@img[+]sharp|libvips)', part, re.I) for part in name.split('/'))):
+            raise ValueError('Legacy font or native image engine in model-only release: ' + name)
+
+
+def resource_entries(body, profile=None):
     manifest = parse(body)
-    if manifest.get('schema') != 1 or manifest.get('productionReady') is not False:
+    if (manifest.get('schema') != (2 if profile == MODEL_ONLY_PROFILE else 1)
+            or manifest.get('productionReady') is not False
+            or ('runtimeProfile' in manifest) != (profile is not None)
+            or manifest.get('runtimeProfile') != profile):
         raise ValueError('Unsupported asset manifest')
     entries, names = [], set()
     for item in manifest['files']:
@@ -243,13 +264,15 @@ def resource_entries(body):
         safe_name(name)
         if name == 'asset-manifest.json' or item['kind'] not in ('public', 'font') or (item['kind'] == 'font') != name.startswith('fonts/'):
             raise ValueError('Invalid asset kind/path')
+        if profile is not None and (item['kind'] != 'public' or name.lower().endswith(('.otf', '.ttf', '.woff', '.woff2', '.eot'))):
+            raise ValueError('Font in model-only asset manifest')
         if item['kind'] == 'font' and name not in FONT_FILES:
             raise ValueError('Unknown asset font')
         if not isinstance(item.get('mime'), str):
             raise ValueError('Missing asset MIME')
         entries.append({'path': name, 'type': 'file', 'bytes': item['bytes'], 'sha256': item['sha256'], 'mode': 0o644})
         names.add(name)
-    if not FONT_FILES.issubset(names):
+    if profile is None and not FONT_FILES.issubset(names):
         raise ValueError('Asset fonts/license/provenance are missing')
     validate_entries(entries)
     return entries, manifest
@@ -369,6 +392,8 @@ def layer_binding(manifest, kind):
     binding = {'distDir': manifest['distDir'], 'assetsVersion': manifest['assetsVersion']}
     if manifest['schema'] in (2, 3):
         binding.update(schema=manifest['schema'], assetDeliveryMode=manifest['assetDeliveryMode'], compiledAssetBaseUrl=manifest.get('compiledAssetBaseUrl'))
+    if 'runtimeProfile' in manifest:
+        binding['runtimeProfile'] = manifest['runtimeProfile']
     if manifest['schema'] == 3:
         binding['publicImageContractSha256'] = digest(canonical(manifest['publicImages']))
     return binding
@@ -376,6 +401,8 @@ def layer_binding(manifest, kind):
 
 def validate_manifest(manifest):
     """Validate versioned metadata without checking local native runtime or files."""
+    if 'runtimeProfile' in manifest and (manifest.get('schema') != 3 or manifest['runtimeProfile'] != MODEL_ONLY_PROFILE):
+        raise ValueError('Unknown layered release runtime profile')
     if (type(manifest.get('schema')) is not int or manifest['schema'] not in (1, 2, 3) or
             set(manifest.get('layers', {})) != set(KINDS) or manifest.get('productionReady') is not False or
             not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,100}', manifest.get('releaseId', '')) or
@@ -389,6 +416,8 @@ def validate_manifest(manifest):
         fingerprint = manifest['configFingerprint']
         binding = {'schema': manifest['schema'], 'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime'],
                    'toolchain': manifest['target']['toolchain'], 'configSha256': digest(canonical(fingerprint))}
+        if ('runtimeProfile' in fingerprint) != ('runtimeProfile' in manifest) or fingerprint.get('runtimeProfile') != manifest.get('runtimeProfile'):
+            raise ValueError('Runtime profile/config binding mismatch')
         if (manifest['runtime'] != manifest['target']['runtime'] or manifest['assemblyCacheRoot'] != CACHE_ROOT or
                 manifest['runtimeBinding'] != binding or set(fingerprint.get('sources', {})) != set(config_sources(manifest['schema'])) or
                 any(not isinstance(sha, str) or not SHA.fullmatch(sha) for sha in fingerprint['sources'].values())):
@@ -525,12 +554,14 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
     if assets.name != asset_sha:
         raise ValueError('Wrong asset version directory')
     compiled_asset_base = asset_delivery(config, asset_sha, asset_delivery_mode, schema)
-    asset_entries, asset_manifest = resource_entries(asset_body)
+    profile = MODEL_ONLY_PROFILE if schema == 3 and config.get('env', {}).get('ZIMAGE_IMAGE_ENGINE') == 'jsquash' else None
+    asset_entries, asset_manifest = resource_entries(asset_body, profile)
     public_images = compiled_public_images(config) if schema == 3 else None
     validate_image_assets(asset_manifest, asset_entries, public_images)
     manifest_entry = {'path': 'asset-manifest.json', 'type': 'file', 'mode': 0o644, 'bytes': len(asset_body), 'sha256': asset_sha}
     verify_tree(assets, asset_entries + [manifest_entry], label='asset input')
     entries, omitted = inspect_source(source, dist)
+    validate_release_profile(config, profile, entries)
     if public_images is not None:
         reject_image_copies(entries, public_images)
     if schema in (2, 3):
@@ -568,9 +599,13 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
                           'sourceCommit': source_commit, 'markerMatchesSourceCommit': bool(source_commit and marker == source_commit)},
                 'inputRoots': {'source': str(source), 'project': str(project), 'assets': str(assets)},
                 'retainedBuildMetadata': {'files': len(omitted), 'rawBytes': sum(e['bytes'] for e in omitted), 'location': 'Original staged input, unchanged; excluded from runtime delivery'}, 'layers': {}}
+    if profile is not None:
+        manifest['runtimeProfile'] = profile
     if schema in (2, 3):
         fingerprint = {'sources': {name: digest(read_regular(project / name)) for name in config_sources(schema)},
                        'dependencyResolution': dependency_resolution(config, (project, source))}
+        if profile is not None:
+            fingerprint['runtimeProfile'] = profile
         if schema == 3:
             fingerprint['publicImages'] = public_images
             manifest['publicImages'] = public_images
@@ -746,6 +781,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         ancestors_safe(store / child)
     for child in ('runtime', 'assets'):
         ancestors_safe(cache / child)
+    profile = manifest.get('runtimeProfile')
     indexes, archives, raw_assets = {}, {}, None
     for kind in KINDS:
         layer = manifest['layers'][kind]
@@ -758,7 +794,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         index_file = checked_store_file(store, layer['index'], identity, layer['indexBytes'])
         index_body = read_regular(index_file)
         if kind == 'assets':
-            entries, asset_metadata = resource_entries(index_body)
+            entries, asset_metadata = resource_entries(index_body, profile)
             validate_image_assets(asset_metadata, entries, manifest.get('publicImages') if manifest['schema'] == 3 else None)
             if identity != manifest['assetsVersion']:
                 raise ValueError('Wrong asset version')
@@ -827,6 +863,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         restored_config = parse(read_regular(staging / f'apps/web/{manifest["distDir"]}/required-server-files.json'))['config']
         if restored_config.get('distDir', '').removeprefix('./') != manifest['distDir']:
             raise ValueError('Assembled config.distDir mismatch')
+        validate_release_profile(restored_config, profile, combined)
         compiled_base = asset_delivery(restored_config, manifest['assetsVersion'], manifest.get('assetDeliveryMode'), manifest['schema'])
         if manifest['schema'] == 3 and compiled_public_images(restored_config) != manifest['publicImages']:
             raise ValueError('Assembled public image contract mismatch')
@@ -857,7 +894,8 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
     return {'destination': str(destination), 'manifestSha256': expected_digest, 'releaseId': manifest['releaseId'], 'activated': False, 'productionReady': False,
             'raw': manifest['raw'], 'budgetBytes': budget, 'budgetPassed': None if budget is None else True, 'cache': cached, 'runtimeReuse': reused,
             'filesystemAccounting': filesystem_accounting([destination, Path(cached['runtime']['directory']), Path(cached['assets']['directory'])]),
-            'environment': {'ZIMAGE_SHARED_FONT_DIR': str(Path(cached['assets']['directory']) / 'fonts'), 'ZIMAGE_STATIC_ASSET_SHA256': manifest['assetsVersion']}}
+            'environment': {'ZIMAGE_STATIC_ASSET_SHA256': manifest['assetsVersion'],
+                            **({'ZIMAGE_SHARED_FONT_DIR': str(Path(cached['assets']['directory']) / 'fonts')} if profile is None else {})}}
 
 
 def main():
