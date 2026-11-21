@@ -30,7 +30,9 @@ jobs:
           export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
           test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
           corepack enable pnpm
-      - name: Build two exact pairs and rehearse failure rollback inside the runner
+      - name: Run full or admission-only checks on the isolated runner
+        env:
+          ZIMAGE_REVIEW_ADMISSION_ONLY: ${{ contains(github.event.head_commit.message, '[admission-only]') && '1' || '0' }}
         run: |
           set -euo pipefail
           private=$(mktemp -d "$RUNNER_TEMP/zimage-branch-fixture.XXXXXXXX")
@@ -41,5 +43,10 @@ jobs:
             RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            ZIMAGE_REVIEW_ADMISSION_ONLY="$ZIMAGE_REVIEW_ADMISSION_ONLY" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-review-branch-diagnostic.sh
-          printf '%s\n' 'Disposable distinct-commit pair switch, injected failure, rollback and authentication passed. No remote deployment or promotable evidence.' >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$ZIMAGE_REVIEW_ADMISSION_ONLY" == 1 ]]; then
+            printf '%s\n' 'Admission-only: real socket and Nginx checks passed; dual-release and Auth were not rerun. No remote deployment.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' 'Full disposable dual release, rollback, authentication, and private admission checks passed. No remote deployment.' >> "$GITHUB_STEP_SUMMARY"
+          fi

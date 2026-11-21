@@ -23,6 +23,13 @@ PORT = 8088
 PHASE = 'isolation'
 
 
+class CheckFailure(smoke.SmokeFailure):
+    def __init__(self, reason, status=None):
+        super().__init__(reason)
+        self.reason = reason
+        self.status = status
+
+
 def json_file(path, limit):
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and 0 < info.st_size <= limit, 'Bounded regular input required')
@@ -76,14 +83,42 @@ def exact_peer_status(root, pid, mode):
 
 def assert_ready(port, version):
     code, headers, body = local_http(port, 'GET', '/api/health/ready')
-    require(code == 200 and json.loads(body)['version'] == version
-            and 'no-store' in headers.get('Cache-Control', ''), 'Exact versioned readiness failed')
+    if code != 200:
+        cause = {502: 'upstream-bad-gateway', 503: 'gate-or-upstream-unavailable',
+                 504: 'upstream-timeout'}.get(code, 'unexpected-ready-status')
+        raise CheckFailure(cause, code)
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        raise CheckFailure('ready-json-invalid', code)
+    if not isinstance(payload, dict) or payload.get('version') != version:
+        raise CheckFailure('ready-version-mismatch', code)
+    if 'no-store' not in headers.get('Cache-Control', ''):
+        raise CheckFailure('ready-cache-header', code)
 
 
 def assert_denied(port, method, path):
     code, headers, body = local_http(port, method, path)
-    require(code == 503 and headers.get('Retry-After') == '30'
-            and json.loads(body)['code'] == 'network', 'Gate did not reject a non-probe request')
+    if code != 503 or headers.get('Retry-After') != '30':
+        raise CheckFailure('missing-expected-denial', code)
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        raise CheckFailure('denial-json-invalid', code)
+    if not isinstance(payload, dict) or payload.get('code') != 'network':
+        raise CheckFailure('denial-body-invalid', code)
+
+
+def ready_after_bind(child, port, version):
+    deadline = time.monotonic() + 8
+    while child.poll() is None and time.monotonic() < deadline:
+        try:
+            return assert_ready(port, version)
+        except (ConnectionRefusedError, ConnectionResetError):
+            time.sleep(0.15)
+    if child.poll() is not None:
+        raise CheckFailure('listener-exited')
+    raise CheckFailure('listener-bind-timeout')
 
 
 def wait_child(child, callback):
@@ -190,7 +225,9 @@ def run(candidate, node, net, mount, sha, run_id, attempt, digest):
                     executable=smoke.NODE, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
                     preexec_fn=lambda: smoke.child_setup(root))
                 wait_child(app, lambda: exact_peer_status(root, app.pid, 'open'))
-                PHASE = 'nginx-start'
+                PHASE = 'direct-backend-ready'
+                assert_ready(3100, sha)
+                PHASE = 'nginx-config'
                 fixture = work / 'nginx'
                 fixture.mkdir(0o755)
                 os.chown(fixture, smoke.UID, smoke.UID)
@@ -201,13 +238,31 @@ def run(candidate, node, net, mount, sha, run_id, attempt, digest):
                                 ('client_body', 'proxy', 'fastcgi', 'uwsgi', 'scgi'))
                 (fixture / 'nginx.conf').write_text(
                     f'pid {fixture}/nginx.pid; daemon off; master_process off; error_log stderr; events {{}}\n'
-                    f'http {{ access_log off; include {fixture}/maps.conf;\n{temp}\n'
+                    f"http {{ log_format codes '$status $upstream_status'; access_log {fixture}/codes.log codes; "
+                    f"include {fixture}/maps.conf;\n{temp}\n"
                     f'  server {{ listen 127.0.0.1:{PORT}; include {fixture}/rules.conf;\n'
-                    '  location / { proxy_pass http://127.0.0.1:3100; proxy_next_upstream off; } } }\n')
-                nginx = subprocess.Popen(['/usr/sbin/nginx', '-p', str(fixture) + '/', '-c', str(fixture / 'nginx.conf')],
-                    env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}, stdin=subprocess.DEVNULL,
+                    '  location / { proxy_pass http://127.0.0.1:3100; proxy_http_version 1.1; '
+                    'proxy_set_header Host 127.0.0.1:3100; proxy_set_header Connection close; '
+                    'proxy_next_upstream off; } } }\n')
+                args = ['/usr/sbin/nginx', '-p', str(fixture) + '/', '-c', str(fixture / 'nginx.conf')]
+                child_options = dict(env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}, stdin=subprocess.DEVNULL,
                     stdout=out, stderr=out, user=smoke.UID, group=smoke.UID, extra_groups=[])
-                wait_child(nginx, lambda: assert_ready(PORT, sha))
+                if subprocess.run(['/usr/bin/test', '-r', str(etc / 'ingress-open.json')],
+                                  timeout=3, **child_options).returncode:
+                    raise CheckFailure('worker-cannot-read-marker')
+                if subprocess.run([*args, '-t', '-q'], timeout=8, **child_options).returncode:
+                    raise CheckFailure('nginx-config-rejected')
+                PHASE = 'nginx-proxied-ready'
+                nginx = subprocess.Popen(args, **child_options)
+                try:
+                    ready_after_bind(nginx, PORT, sha)
+                except CheckFailure as error:
+                    codes = fixture / 'codes.log'
+                    if codes.is_file() and codes.stat().st_size < 65536:
+                        rows = codes.read_text().splitlines()
+                        if rows and re.fullmatch(r'[1-5][0-9]{2} (?:-|[1-5][0-9]{2})', rows[-1]):
+                            error.hop = 'nginx' if rows[-1].endswith(' -') else 'upstream'
+                    raise
                 PHASE = 'drain'
                 marker(etc, 'ingress-maintenance.json', token)
                 (etc / 'ingress-open.json').unlink()
@@ -247,6 +302,12 @@ if __name__ == '__main__':
         run(*sys.argv[1:])
     except Exception as err:
         # Never publish arbitrary filesystem paths, environment or process logs.
-        print(json.dumps(dict(admissionFixtureFailed=True, phase=PHASE, kind=type(err).__name__,
-                              productionReady=False)), file=sys.stderr)
+        failure = dict(admissionFixtureFailed=True, phase=PHASE, kind=type(err).__name__, productionReady=False)
+        if isinstance(err, CheckFailure):
+            failure['reason'] = err.reason
+            if type(err.status) is int and 100 <= err.status <= 599:
+                failure['status'] = err.status
+            if getattr(err, 'hop', None) in ('nginx', 'upstream'):
+                failure['hop'] = err.hop
+        print(json.dumps(failure), file=sys.stderr)
         sys.exit(1)

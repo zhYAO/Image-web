@@ -32,6 +32,7 @@ build_pair() (
 source=$1
 release_sha=$2
 private=$3
+scope=$4
 cd "$source"
 test "$(git rev-parse HEAD)" = "$release_sha"
 test -z "$(git status --porcelain)"
@@ -65,6 +66,7 @@ PY
 python3 -I -B ops/aliyun/three-layer-release.py assemble "$private/store/releases/$release_sha.json" "$private/store" "$private/app" \
   --cache /opt/zimage/layer-cache --manifest-sha256 "$backend_sha" --allow-sample > "$private/assembly.json"
 
+if [[ "$scope" == backend-only ]]; then exit 0; fi
 export ZIMAGE_ASSET_NAMESPACE="rehearsal-$release_sha-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 export ZIMAGE_FRONTEND_COMPATIBILITY
 ZIMAGE_FRONTEND_COMPATIBILITY=$(python3 -c 'import json,sys;print(json.dumps(dict(apiRequirements=dict(major=1,minMinor=0,capabilities=["runtime.public-config.v1","runtime.meta.v1"]),allowedBackendReleases=[sys.argv[1]])))' "$release_sha")
@@ -81,16 +83,38 @@ if not (subject["namespace"] == sys.argv[2] and subject["allowedBackendReleases"
 PY
 )
 
+run_admission() {
+# No trust from the runner reaches this closed namespace. Copy the pinned tool
+# as root only on an ephemeral hosted VM, never install a machine service.
+outer_net=$(readlink /proc/self/ns/net)
+outer_mount=$(readlink /proc/self/ns/mnt)
+trusted_node="$private/rehearsal-node"
+sudo -n /usr/bin/install -o 0 -g 0 -m 0555 "$(realpath "$(command -v node)")" "$trusted_node"
+sudo -n /usr/bin/unshare --net --mount --pid --fork --mount-proc --kill-child \
+  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 /usr/bin/python3 -I -B \
+  "$root/ops/aliyun/review-schema3-admission.py" "$candidate" "$trusted_node" "$outer_net" "$outer_mount" \
+  "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$candidate_digest"
+}
+
 candidate="$private/candidate"
 retained="$private/baseline"
-build_pair "$root" "$GITHUB_SHA" "$candidate"
+mode=${ZIMAGE_REVIEW_ADMISSION_ONLY:-0}
+[[ "$mode" == 0 || "$mode" == 1 ]] || exit 1
+if [[ "$mode" == 1 ]]; then
+  build_pair "$root" "$GITHUB_SHA" "$candidate" backend-only
+  candidate_digest=$(sha256sum < "$candidate/packed/transport.tgz" | cut -d ' ' -f1)
+  echo 'ZIMAGE_REHEARSAL_MODE admission-only (no fresh dual release or Auth check)'
+  run_admission
+  exit 0
+fi
+build_pair "$root" "$GITHUB_SHA" "$candidate" full
 # Report candidate byte counts before the separate baseline build and runtime.
 node apps/web/scripts/measure-dist.mjs --runtime-audit --json "$candidate/dist-bytes.json" > "$candidate/dist-bytes.log"
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf "$candidate/frontend-diagnostic.tgz" -C "$root/apps/frontend/dist" .
 python3 -I -B ops/aliyun/review-release-sizes.py "$GITHUB_SHA" "$candidate" "$root/apps/frontend/dist"
 
 git worktree add --detach "$base_checkout" "$baseline"
-build_pair "$base_checkout" "$baseline" "$retained"
+build_pair "$base_checkout" "$baseline" "$retained" full
 candidate_digest=$(sha256sum < "$candidate/packed/transport.tgz" | cut -d ' ' -f1)
 baseline_digest=$(sha256sum < "$retained/packed/transport.tgz" | cut -d ' ' -f1)
 test "$candidate_digest" != "$baseline_digest"
@@ -106,13 +130,4 @@ node ops/aliyun/isolated-release-rehearsal.mjs "$retained/app" "$base_checkout/a
   "$candidate/app" "$root/apps/frontend/dist"
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist"
 
-# No trust from the runner reaches this closed namespace. Copy the pinned tool
-# as root only on an ephemeral hosted VM, never install a machine service.
-outer_net=$(readlink /proc/self/ns/net)
-outer_mount=$(readlink /proc/self/ns/mnt)
-trusted_node="$private/rehearsal-node"
-sudo -n /usr/bin/install -o 0 -g 0 -m 0555 "$(realpath "$(command -v node)")" "$trusted_node"
-sudo -n /usr/bin/unshare --net --mount --pid --fork --mount-proc --kill-child \
-  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 /usr/bin/python3 -I -B \
-  "$root/ops/aliyun/review-schema3-admission.py" "$candidate" "$trusted_node" "$outer_net" "$outer_mount" \
-  "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$candidate_digest"
+run_admission
