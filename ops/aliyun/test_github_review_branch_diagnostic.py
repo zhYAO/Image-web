@@ -33,6 +33,9 @@ class BranchDiagnostic(unittest.TestCase):
         self.assertIn('m["productionReady"] is False', script)
         self.assertIn('isolated-release-rehearsal.mjs', script)
         self.assertIn('git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"', script)
+        self.assertLess(script.index('ZIMAGE_REHEARSAL_MODE admission-only'),
+                        script.index('git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"'))
+        self.assertIn('git fetch --no-tags --deepen=32 origin "$GITHUB_SHA"', script)
         self.assertIn('git worktree add --detach "$base_checkout" "$baseline"', script)
         self.assertIn('test "$candidate_digest" != "$baseline_digest"', script)
         self.assertIn('unshare --net --mount --pid --fork --mount-proc --kill-child', script)

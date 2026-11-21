@@ -18,9 +18,6 @@ public_config="$private/config.json"
 printf '%s\n' '{"schema":1,"runtime":{"node":"24.19.0","abi":"137","platform":"linux","arch":"x64","libc":"glibc-2.35"},"toolchain":{"packageManager":"pnpm@11.19.0"},"assemblyCacheRoot":"/opt/zimage/layer-cache"}' > "$target_json"
 printf '%s\n' '{"schemaVersion":1,"formalAuth":true,"dataMode":"http","captchaSiteKey":null,"approvedLegalVersion":null,"registrationEnabled":false}' > "$public_config"
 baseline=532d953cdd8fb4cc2446b83de77f435e13041315
-test "$baseline" != "$GITHUB_SHA"
-test "$(git rev-parse --verify "$baseline^{commit}")" = "$baseline"
-git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"
 base_checkout="$private/baseline-source"
 pool="$private/pnpm-store"
 cleanup() {
@@ -107,6 +104,18 @@ if [[ "$mode" == 1 ]]; then
   run_admission
   exit 0
 fi
+# Only the full dual-artifact rehearsal needs the pinned ancestor. A shallow
+# checkout may no longer contain it after several review-branch iterations.
+if ! git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"; then
+  case "$(git remote get-url origin)" in
+    https://github.com/zhYAO/Image-web|https://github.com/zhYAO/Image-web.git) ;;
+    *) exit 1 ;;
+  esac
+  GIT_TERMINAL_PROMPT=0 git fetch --no-tags --deepen=32 origin "$GITHUB_SHA"
+fi
+test "$baseline" != "$GITHUB_SHA"
+test "$(git rev-parse --verify "$baseline^{commit}")" = "$baseline"
+git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"
 build_pair "$root" "$GITHUB_SHA" "$candidate" full
 # Report candidate byte counts before the separate baseline build and runtime.
 node apps/web/scripts/measure-dist.mjs --runtime-audit --json "$candidate/dist-bytes.json" > "$candidate/dist-bytes.log"
