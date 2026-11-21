@@ -135,6 +135,18 @@ remain unpromotable.
   the approval wait. A genuine production controller must also check current
   main while holding the lock and before reopening traffic.
 
+  In staging only, use `queue: max` without canceling the running job. Under
+  GitHub's default single pending slot, if A is active, current C queues first,
+  and stale B finishes building last, B could replace C before the SHA checks
+  run. The expanded staging queue retains both in this example; the existing
+  current-main check rejects B. Queue order is not commit order; the limit is
+  100 pending jobs. The shared production queue is unchanged, including the
+  legacy manual deploy and rollback jobs; the default single pending slot
+  does not guarantee rollback priority or retain every eligible candidate.
+  Before changing production policy, verify candidate retention and the time
+  to reach an emergency rollback under backlog on the actual runner.
+  See the [GitHub concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+
 No live staging/controller was verified or installed here. Minimum to run the
 hosted intake job: nominate an independent Linux staging machine and a dedicated
 non-root runner account; authorize and review the runner/group and bridge setup,
@@ -164,3 +176,20 @@ credentials or production dependency. Its public image CDN references are the
 already pinned read-only policy; all authenticated requests stay in the fixture.
 No GitHub setting or main workflow gate is changed. New commits and a first
 push/run still require separate review and authorization.
+
+## Disposable review-branch publication
+
+An exact review branch push runs a GitHub-hosted job with no environment
+secrets, OIDC, SSH, promotion evidence or external release target. It verifies
+and assembles the exact schema 3 backend and checks the frontend subject.
+Three separate installations of **the same source SHA** start actual Next
+processes. The rehearsal seals a private write fixture, atomically selects
+the candidate, verifies it, then selects and stops a fault-slot process.
+An actual loopback HTTP 503 triggers restoration of the preceding healthy
+pair. It checks that readiness, the frontend shell and the test write gate
+all recover. Disposable authentication is tested independently.
+
+This is not a two-source upgrade or verification of production Nginx,
+systemd, OIDC, staging provisioning or rollback. The write route is a private
+fixture, not a business API. Public asset verification in the build remains
+read-only; release HTTP, state transitions and data are runner-local.

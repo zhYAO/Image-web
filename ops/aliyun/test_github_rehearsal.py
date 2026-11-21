@@ -1,6 +1,7 @@
 """Offline metadata-only GitHub workflow regression tests."""
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -22,6 +23,74 @@ class GithubRehearsal(unittest.TestCase):
         self.assertIn('needs: [backend, frontend, same-run-review, authenticated-staging]', text)
         self.assertIn("vars.ZIMAGE_PAIRED_PRODUCTION == 'true'", text)
         self.assertIn('group: zimage-production-release', text)
+
+    def test_only_staging_expands_its_queue_without_canceling_running_jobs(self):
+        # Concurrency is repository-wide and group names are case-insensitive.
+        expected = {
+            ('rehearsal-candidates.yml', 'authenticated-staging'): 'zimage-release-staging',
+            ('rehearsal-candidates.yml', 'approved-production'): 'zimage-production-release',
+            ('ci.yml', 'deploy'): 'zimage-production-release',
+            ('ci.yml', 'rollback'): 'zimage-production-release',
+        }
+        found = {}
+        for path in sorted(WORKFLOW.parent.iterdir()):
+            if path.suffix not in ('.yml', '.yaml'):
+                continue
+            lines = path.read_text().splitlines()
+            job = None
+            for index, line in enumerate(lines):
+                if re.fullmatch(r'  [a-zA-Z0-9_-]+:', line):
+                    job = line.strip()[:-1]
+                if not re.fullmatch(r'\s*concurrency:\s*', line):
+                    continue
+                indent = len(line) - len(line.lstrip())
+                fields = {}
+                for option in lines[index + 1:]:
+                    if not option.strip() or option.lstrip().startswith('#'):
+                        continue
+                    if len(option) - len(option.lstrip()) <= indent:
+                        break
+                    key, _, value = option.strip().partition(':')
+                    fields[key] = value.strip().strip("'\"")
+                group = fields.get('group', '').lower()
+                if group not in expected.values():
+                    continue
+                self.assertEqual(indent, 4, 'release concurrency must be job-level')
+                policy = {'group': group, 'cancel-in-progress': 'false'}
+                if group == 'zimage-release-staging':
+                    policy['queue'] = 'max'
+                self.assertEqual(fields, policy)
+                found[(path.name, job)] = group
+        self.assertEqual(found, expected)
+
+    def test_out_of_order_builds_do_not_displace_newest_main_in_staging(self):
+        # Offline model of staging under GitHub's documented pending policy, not a hosted
+        # scheduler test. The real review controller below decides eligibility.
+        def pending_after_ready(arrivals, queue):
+            pending = []
+            for ready in arrivals:
+                if queue == 'single':
+                    pending.clear()
+                pending.append(ready)
+            return pending
+
+        self.assertEqual(pending_after_ready(('C', 'B'), 'single'), ['B'])
+        for arrivals in (('C', 'B'), ('B', 'C')):
+            with self.subTest(arrivals=arrivals):
+                # A is already running. Both pending entries must survive.
+                self.assertCountEqual(pending_after_ready(arrivals, 'max'), ('B', 'C'))
+                eligible = []
+                for run in arrivals:
+                    result, summary = self.review(stale=(run == 'B'))
+                    if run == 'B':
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('Stale main run', result.stderr)
+                        self.assertIsNone(summary)
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn('no production approval', summary)
+                        eligible.append(run)
+                self.assertEqual(eligible, ['C'])
 
     def review(self, *, branch='refs/heads/main', event='push', stale=False, wrong_attempt=False, wrong_digest=False,
                wrong_run=False, wrong_sha=False):

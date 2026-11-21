@@ -26,6 +26,18 @@ class BranchDiagnostic(unittest.TestCase):
         self.assertNotIn('github-rehearsal-review.sh', body)
         self.assertNotIn('github-paired-controller', SCRIPT.read_text())
 
+    def test_release_fixture_has_no_production_authority(self):
+        script = SCRIPT.read_text()
+        self.assertIn('release-transport.py unpack', script)
+        self.assertIn('three-layer-release.py assemble', script)
+        self.assertIn('m["productionReady"] is False', script)
+        self.assertIn('isolated-release-rehearsal.mjs', script)
+        runtime = (HERE / 'isolated-release-rehearsal.mjs').read_text()
+        self.assertIn("server.listen(0, '127.0.0.1')", runtime)
+        self.assertIn("productionReady: false", runtime)
+        for forbid in ('github-paired-controller', '/opt/zimage', 'https://www.zimage.store', 'GH_TOKEN', 'id-token'):
+            self.assertNotIn(forbid, runtime)
+
     def test_wrong_provenance_rejected_before_git_or_build(self):
         for field, value in (('GITHUB_REPOSITORY', 'fork/not-zimage'), ('GITHUB_EVENT_NAME', 'pull_request'),
                              ('GITHUB_REF', 'refs/heads/main'), ('RUNNER_ENVIRONMENT', 'self-hosted'),

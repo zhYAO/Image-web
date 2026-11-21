@@ -7,7 +7,7 @@ umask 077
    "$GITHUB_WORKFLOW_REF" == "$GITHUB_REPOSITORY/.github/workflows/review-branch-diagnostic.yml@$GITHUB_REF" &&
    "$RUNNER_ENVIRONMENT" == github-hosted && "$RUNNER_OS" == Linux &&
    "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ &&
-   "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]]
+   "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]] || exit 1
 [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" && -z "$(git status --porcelain)" ]]
 [[ "$(node --version)" == v24.19.0 && "$(pnpm --version)" == 11.19.0 ]]
 root=$(pwd -P)
@@ -57,4 +57,5 @@ if not (subject["namespace"] == sys.argv[2] and subject["allowedBackendReleases"
         and subject["acceptanceRequired"] is True):
     raise ValueError("Frontend is not an exact, nonpromotable acceptance subject")
 PY
+node ops/aliyun/isolated-release-rehearsal.mjs "$private/app" "$root/apps/frontend/dist"
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$private/app" "$root/apps/frontend/dist"

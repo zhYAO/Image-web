@@ -185,6 +185,7 @@ jobs:
     concurrency:
       group: zimage-release-staging
       cancel-in-progress: false
+      queue: max
     outputs:
       stage_receipt_sha: ${{ steps.controller.outputs.stage_receipt_sha }}
       stage_pair_sha: ${{ steps.controller.outputs.stage_pair_sha }}

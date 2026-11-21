@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Verify artifacts; only the separate hosted smoke mode runs them locally.
 set -euo pipefail
-[[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main && "$GITHUB_REF_PROTECTED" == true ]]
+[[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main && "$GITHUB_REF_PROTECTED" == true ]] || { echo 'Protected main push required for pair review.' >&2; exit 1; }
 test "$GITHUB_REPOSITORY" = 'zhYAO/Image-web'
-[[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]]
+[[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]] || { echo 'Malformed workflow identity.' >&2; exit 1; }
 test "$BACKEND_ID" != "$FRONTEND_ID"
 for id in "$BACKEND_ID" "$FRONTEND_ID"; do [[ "$id" =~ ^[1-9][0-9]{0,19}$ ]]; done
 for sha in "$BACKEND_ARTIFACT_DIGEST" "$BACKEND_ARCHIVE_SHA" "$BACKEND_RECEIPT_SHA" "$FRONTEND_ARTIFACT_DIGEST" "$FRONTEND_ARCHIVE_SHA" "$FRONTEND_RECEIPT_SHA"; do
@@ -32,12 +32,12 @@ done
 # Tests can exercise metadata policy without a hosted runner or remote fetch.
 if [[ ${1:-} == --metadata-only ]]; then exit 0; fi
 phase=${1:-}
-[[ "$#" -le 1 && ( -z "$phase" || "$phase" == staging || "$phase" == production || "$phase" == hosted-smoke ) ]]
+[[ "$#" -le 1 && ( -z "$phase" || "$phase" == staging || "$phase" == production || "$phase" == hosted-smoke ) ]] || { echo 'Unknown or ambiguous review mode.' >&2; exit 1; }
 if [[ "$phase" == hosted-smoke ]]; then
   [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${RUNNER_OS:-}" == Linux &&
-     "${ZIMAGE_PAIRED_BUILD_MODE:-}" != true && "${ZIMAGE_PAIRED_PRODUCTION:-}" != true ]]
+     "${ZIMAGE_PAIRED_BUILD_MODE:-}" != true && "${ZIMAGE_PAIRED_PRODUCTION:-}" != true ]] || { echo 'Hosted smoke requires a GitHub-hosted Linux runner with promotion disabled.' >&2; exit 1; }
 elif [[ -n "$phase" ]]; then
-  [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted && "${ZIMAGE_PAIRED_ROLE:-}" == "$phase" && "${ZIMAGE_PAIRED_ENABLED:-}" == true ]]
+  [[ "${RUNNER_ENVIRONMENT:-}" == self-hosted && "${ZIMAGE_PAIRED_ROLE:-}" == "$phase" && "${ZIMAGE_PAIRED_ENABLED:-}" == true ]] || { echo 'Protected promotion requires the matching isolated runner role.' >&2; exit 1; }
 fi
 [[ "$BACKEND_MANIFEST_SHA" =~ ^[a-f0-9]{64}$ && "$FRONTEND_SUBJECT_SHA" =~ ^[a-f0-9]{64}$ ]]
 [[ -n ${REHEARSAL_PUBLIC_CONFIG:-} && ${#REHEARSAL_PUBLIC_CONFIG} -le 16384 ]] || { echo 'Missing staging public configuration for pair intake.' >&2; exit 1; }

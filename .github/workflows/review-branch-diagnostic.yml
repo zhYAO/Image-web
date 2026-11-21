@@ -1,4 +1,4 @@
-name: ZImage review branch diagnostic (no deployment)
+name: ZImage disposable review-branch release rehearsal
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  local-auth-diagnostic:
+  disposable-release-rehearsal:
     if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-github-actions-review-20261120'
     runs-on: ubuntu-22.04
     timeout-minutes: 35
@@ -29,7 +29,7 @@ jobs:
           export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
           test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
           corepack enable pnpm
-      - name: Build and test exact branch commit without publishing any artifacts
+      - name: Build, switch and roll back the exact branch pair inside the runner
         run: |
           set -euo pipefail
           private=$(mktemp -d "$RUNNER_TEMP/zimage-branch-fixture.XXXXXXXX")
@@ -41,4 +41,4 @@ jobs:
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-review-branch-diagnostic.sh
-          printf '%s\n' 'Local fixture passed for this branch push only. No deployment or promotable evidence was produced.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'Disposable loopback pair switch, injected failure, rollback and authentication passed. No remote deployment or promotable evidence.' >> "$GITHUB_STEP_SUMMARY"
