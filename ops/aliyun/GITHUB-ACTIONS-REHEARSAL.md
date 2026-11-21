@@ -200,3 +200,13 @@ This is not verification of production Nginx, systemd, OIDC, staging
 provisioning or rollback. The write route is a private fixture, not a
 business API. Public asset verification in the build remains read-only;
 release HTTP, state transitions and data are runner-local.
+
+The review runner additionally checks the assembled schema 3 candidate in a
+separate PID, mount and network namespace with no outbound interface. Its
+unprivileged Next child uses the unmodified reviewed preload and 0600 Unix
+socket; the supervisor verifies the kernel peer PID/UID and exact release.
+A private loopback Nginx process uses the existing admission includes with
+only the marker paths relocated. It checks ready, sealed/drained with zero
+work, selective checking, and reopen without changing the app PID. This
+is not the production Nginx/TLS config, a systemd installation, a signed
+staging receipt, or permission to publish outside the runner.

@@ -105,3 +105,14 @@ printf 'ZIMAGE_DISTINCT_PAIR baseline=%s candidate=%s baselineTransport=%s candi
 node ops/aliyun/isolated-release-rehearsal.mjs "$retained/app" "$base_checkout/apps/frontend/dist" \
   "$candidate/app" "$root/apps/frontend/dist"
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist"
+
+# No trust from the runner reaches this closed namespace. Copy the pinned tool
+# as root only on an ephemeral hosted VM, never install a machine service.
+outer_net=$(readlink /proc/self/ns/net)
+outer_mount=$(readlink /proc/self/ns/mnt)
+trusted_node="$private/rehearsal-node"
+sudo -n /usr/bin/install -o 0 -g 0 -m 0555 "$(realpath "$(command -v node)")" "$trusted_node"
+sudo -n /usr/bin/unshare --net --mount --pid --fork --mount-proc --kill-child \
+  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C.UTF-8 /usr/bin/python3 -I -B \
+  "$root/ops/aliyun/review-schema3-admission.py" "$candidate" "$trusted_node" "$outer_net" "$outer_mount" \
+  "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$candidate_digest"

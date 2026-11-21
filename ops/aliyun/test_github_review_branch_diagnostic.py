@@ -35,6 +35,14 @@ class BranchDiagnostic(unittest.TestCase):
         self.assertIn('git merge-base --is-ancestor "$baseline" "$GITHUB_SHA"', script)
         self.assertIn('git worktree add --detach "$base_checkout" "$baseline"', script)
         self.assertIn('test "$candidate_digest" != "$baseline_digest"', script)
+        self.assertIn('unshare --net --mount --pid --fork --mount-proc --kill-child', script)
+        self.assertIn('review-schema3-admission.py', script)
+        gate = (HERE / 'review-schema3-admission.py').read_text()
+        for required in ('socket.SO_PEERCRED', 'private_status', 'smoke.child_setup', '/usr/sbin/nginx',
+                         'network_isolated', 'ingress-maintenance-maps.conf'):
+            self.assertIn(required, gate)
+        for forbidden in ('github-paired-controller', 'www.zimage.store', 'GH_TOKEN', 'systemctl'):
+            self.assertNotIn(forbidden, gate)
         runtime = (HERE / 'isolated-release-rehearsal.mjs').read_text()
         self.assertIn("server.listen(0, '127.0.0.1')", runtime)
         self.assertIn("productionReady: false", runtime)
