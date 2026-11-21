@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Hosted branch-only publication rehearsal. Same exact pair in independent slots.
+// Hosted branch-only publication rehearsal with two separately verified commits.
 // There are no production controllers, approval records or external HTTP requests.
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const branch = 'refs/heads/codex/zimage-github-actions-review-20261120';
 const repo = 'zhYAO/Image-web';
+const baselineSha = '532d953cdd8fb4cc2446b83de77f435e13041315';
 let phase = 'runner-provenance';
 function requireCheck(value, message) {
   if (!value) throw new Error(message);
@@ -34,39 +35,49 @@ const request = (url, options) => fetch(url, {
 });
 async function run() {
   const e = process.env, sha = e.GITHUB_SHA;
-  requireCheck(process.platform === 'linux' && process.versions.node === '24.19.0' && process.argv.length === 4
+  requireCheck(process.platform === 'linux' && process.versions.node === '24.19.0' && process.argv.length === 6
     && e.RUNNER_ENVIRONMENT === 'github-hosted' && e.RUNNER_OS === 'Linux' && e.GITHUB_REPOSITORY === repo
     && e.GITHUB_EVENT_NAME === 'push' && e.GITHUB_REF === branch
     && e.GITHUB_WORKFLOW_REF === repo + '/.github/workflows/review-branch-diagnostic.yml@' + branch
     && /^[a-f0-9]{40}$/.test(sha ?? ''), 'Hosted exact review-branch context required');
   phase = 'canonical-input-paths';
-  const [backend, frontend, temp] = await Promise.all([process.argv[2], process.argv[3], e.TMPDIR].map(item => realpath(item)));
-  requireCheck(backend.startsWith(temp + '/') && frontend !== backend, 'Expected inspected backend under the private temporary directory');
-  phase = 'exact-input-identities';
-  const namespace = 'rehearsal-' + sha + '-' + e.GITHUB_RUN_ID + '-' + e.GITHUB_RUN_ATTEMPT;
-  const frontendMeta = JSON.parse(await readFile(path.join(frontend, '.release/candidate.json'), 'utf8'));
-  requireCheck(frontendMeta.namespace === namespace && frontendMeta.sourceIdentity?.sourceSHA === sha
-    && frontendMeta.sourceIdentity?.dirty === false && frontendMeta.allowedBackendReleases?.length === 1
-    && frontendMeta.allowedBackendReleases[0] === sha, 'Frontend identity is not the exact candidate');
-  requireCheck((await readFile(path.join(backend, 'apps/web/.next/BUILD_ID'), 'utf8')).trim() === sha,
-    'Backend identity is not the exact candidate');
+  const temp = await realpath(e.TMPDIR);
+  requireCheck(baselineSha !== sha, 'Distinct protected rehearsal commits required');
+  async function inspect(backendPath, frontendPath, version) {
+    phase = 'canonical-input-paths';
+    const [backend, frontend] = await Promise.all([backendPath, frontendPath].map(item => realpath(item)));
+    requireCheck(backend.startsWith(temp + '/') && frontend !== backend, 'Expected inspected backend under the private temporary directory');
+    phase = 'exact-input-identities';
+    const namespace = 'rehearsal-' + version + '-' + e.GITHUB_RUN_ID + '-' + e.GITHUB_RUN_ATTEMPT;
+    const meta = JSON.parse(await readFile(path.join(frontend, '.release/candidate.json'), 'utf8'));
+    requireCheck(meta.namespace === namespace && meta.sourceIdentity?.sourceSHA === version
+      && meta.sourceIdentity?.dirty === false && meta.allowedBackendReleases?.length === 1
+      && meta.allowedBackendReleases[0] === version, 'Frontend identity is not the exact candidate');
+    requireCheck((await readFile(path.join(backend, 'apps/web/.next/BUILD_ID'), 'utf8')).trim() === version,
+      'Backend identity is not the exact candidate');
+    return { backend, frontend, version, namespace };
+  }
+  const retained = await inspect(process.argv[2], process.argv[3], baselineSha);
+  const candidate = await inspect(process.argv[4], process.argv[5], sha);
+  requireCheck(retained.backend !== candidate.backend && retained.frontend !== candidate.frontend,
+    'Baseline and candidate outputs must be independent');
   const root = await mkdtemp(path.join(temp, 'local-release.'));
   const slots = new Map();
   let listener;
   let sealed = true;
-  async function install(slot) {
+  async function install(slot, pair) {
     phase = 'install-' + slot;
     const destination = path.join(root, slot);
     await mkdir(destination);
-    await cp(backend, path.join(destination, 'backend'), { recursive: true, verbatimSymlinks: true });
-    await cp(frontend, path.join(destination, 'frontend'), { recursive: true, verbatimSymlinks: true });
+    await cp(pair.backend, path.join(destination, 'backend'), { recursive: true, verbatimSymlinks: true });
+    await cp(pair.frontend, path.join(destination, 'frontend'), { recursive: true, verbatimSymlinks: true });
     const reserved = net.createServer();
     const endpoint = await port(reserved);
     await new Promise(resolve => reserved.close(resolve));
     const app = path.join(destination, 'backend/apps/web');
     const child = spawn(process.execPath, ['server.js'], { cwd: app, stdio: 'ignore', env: {
       LANG: 'C.UTF-8', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
-      HOSTNAME: '127.0.0.1', PORT: String(endpoint), ZIMAGE_BUILD_SHA: sha,
+      HOSTNAME: '127.0.0.1', PORT: String(endpoint), ZIMAGE_BUILD_SHA: pair.version,
       NEXT_PUBLIC_DATA_MODE: 'http', NEXT_PUBLIC_PHASE2_AUTH: 'true',
       NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_rehearsal_only',
@@ -75,12 +86,12 @@ async function run() {
       NO_PROXY: '127.0.0.1,localhost',
     } });
     child.on('error', () => {});
-    const record = { child, origin: 'http://127.0.0.1:' + endpoint, destination, writes: 0 };
+    const record = { child, origin: 'http://127.0.0.1:' + endpoint, destination, pair, writes: 0 };
     slots.set(slot, record);
     for (let i = 0; i < 50; i++) {
       if (child.exitCode !== null || child.signalCode !== null) break;
       const check = await request(record.origin + '/api/health/ready').catch(() => null);
-      if (check?.ok && (await check.json()).version === sha) return;
+      if (check?.ok && (await check.json()).version === pair.version) return;
       await delay(200);
     }
     throw new Error('Installed standalone candidate did not become ready');
@@ -121,46 +132,53 @@ async function run() {
     const origin = 'http://127.0.0.1:' + await port(listener);
     const write = () => request(origin + '/fixture-write', { method: 'POST' });
     async function verify(slot) {
+      const { version, namespace } = slots.get(slot).pair;
       const ready = await request(origin + '/api/health/ready');
-      requireCheck(ready.ok && ready.headers.get('x-fixture-slot') === slot && (await ready.json()).version === sha,
+      requireCheck(ready.ok && ready.headers.get('x-fixture-slot') === slot && (await ready.json()).version === version,
         'Selected backend failed health');
       const front = await request(origin + '/app.html');
       requireCheck(front.ok && front.headers.get('x-fixture-slot') === slot
         && (await front.text()).includes('/frontend-assets/' + namespace + '/'), 'Selected frontend differs');
     }
-    await install('baseline');
+    await install('baseline', retained);
     await select('baseline');
     await verify('baseline');
     sealed = false;
     requireCheck((await write()).status === 204, 'Baseline write gate did not open');
+    const oldPid = slots.get('baseline').child.pid;
 
-    await install('candidate');
-    requireCheck(slots.get('baseline').child.pid !== slots.get('candidate').child.pid, 'Process identities must differ');
+    await install('candidate', candidate);
+    requireCheck(oldPid !== slots.get('candidate').child.pid, 'Process identities must differ');
     sealed = true;
     requireCheck((await write()).status === 503, 'Publish transition did not seal writes');
     await select('candidate');
     await verify('candidate');
-    sealed = false;
-    requireCheck((await write()).status === 204, 'Candidate write gate did not reopen');
-
-    await install('fault');
-    sealed = true;
-    await select('fault');
-    await verify('fault');
-    await stop(slots.get('fault').child);
+    await stop(slots.get('candidate').child);
     phase = 'observe-injected-failure';
     const failed = await request(origin + '/api/health/ready');
-    requireCheck(failed.status === 503 && failed.headers.get('x-fixture-slot') === 'fault'
+    requireCheck(failed.status === 503 && failed.headers.get('x-fixture-slot') === 'candidate'
       && (await write()).status === 503, 'Injected post-switch failure was not observed with writes sealed');
-    await select('candidate');
-    await verify('candidate');
+    await select('baseline');
+    await verify('baseline');
     sealed = false;
-    requireCheck((await write()).status === 204 && slots.get('candidate').writes === 2
-      && slots.get('baseline').writes === 1 && slots.get('fault').writes === 0,
-    'Rollback did not restore the same healthy pair and write gate');
-    return { commit: sha, scope: 'disposable-loopback-pair', productionReady: false,
-      sameSourceDistinctInstallations: true,
-      checks: ['baseline-ready', 'sealed-candidate-switch', 'candidate-ready', 'post-switch-http-503', 'exact-previous-pair-restored', 'writes-reopened'] };
+    requireCheck((await write()).status === 204 && slots.get('baseline').child.pid === oldPid
+      && slots.get('baseline').writes === 2 && slots.get('candidate').writes === 0,
+      'Rollback did not restore the same healthy baseline process and write gate');
+
+    // Fresh diagnostic install, not a replay of the failed operation or a
+    // weaker production rule. Never open writes on the failed process.
+    await install('clean-candidate', candidate);
+    sealed = true;
+    requireCheck((await write()).status === 503, 'Fresh publish transition did not seal writes');
+    await select('clean-candidate');
+    await verify('clean-candidate');
+    sealed = false;
+    requireCheck((await write()).status === 204 && slots.get('clean-candidate').writes === 1,
+      'Fresh candidate write gate did not open');
+    return { baseline: baselineSha, commit: sha, scope: 'disposable-loopback-pair', productionReady: false,
+      checks: ['distinct-verified-builds', 'baseline-ready', 'sealed-candidate-switch', 'candidate-ready',
+        'post-switch-http-503', 'exact-prior-commit-and-process-restored', 'baseline-writes-reopened',
+        'fresh-candidate-ready-and-open'] };
   } finally {
     if (listener?.listening) await new Promise(resolve => { listener.close(resolve); listener.closeAllConnections(); });
     try { await Promise.all([...slots.values()].map(record => stop(record.child))); }

@@ -180,16 +180,23 @@ push/run still require separate review and authorization.
 ## Disposable review-branch publication
 
 An exact review branch push runs a GitHub-hosted job with no environment
-secrets, OIDC, SSH, promotion evidence or external release target. It verifies
-and assembles the exact schema 3 backend and checks the frontend subject.
-Three separate installations of **the same source SHA** start actual Next
-processes. The rehearsal seals a private write fixture, atomically selects
-the candidate, verifies it, then selects and stops a fault-slot process.
-An actual loopback HTTP 503 triggers restoration of the preceding healthy
-pair. It checks that readiness, the frontend shell and the test write gate
-all recover. Disposable authentication is tested independently.
+secrets, OIDC, SSH, promotion evidence or external release target. The job
+checks the pinned prior commit 532d953cdd8fb4cc2446b83de77f435e13041315 is
+in the candidate's history. It independently builds each commit in a clean
+worktree with a shared pnpm store, verifies each schema 3 backend transport
+and frontend subject, and rejects identical archive digests. The two
+commits may intentionally have identical application source; the log
+separately reports that fact. Release IDs and frontend namespaces differ.
 
-This is not a two-source upgrade or verification of production Nginx,
-systemd, OIDC, staging provisioning or rollback. The write route is a private
-fixture, not a business API. Public asset verification in the build remains
-read-only; release HTTP, state transitions and data are runner-local.
+The runtime uses independent Next processes for the paired builds. It seals
+a private test write route, selects the candidate, verifies the exact
+candidate through loopback, then stops its process while it is selected.
+The resulting HTTP 503 is required before rollback; the exact previous
+commit, frontend namespace, live process and write gate must recover. A
+fresh diagnostic install then verifies healthy candidate activation.
+Disposable authentication is tested once on the candidate.
+
+This is not verification of production Nginx, systemd, OIDC, staging
+provisioning or rollback. The write route is a private fixture, not a
+business API. Public asset verification in the build remains read-only;
+release HTTP, state transitions and data are runner-local.

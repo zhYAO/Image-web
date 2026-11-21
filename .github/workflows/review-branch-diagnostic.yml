@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 6
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24.19.0
@@ -29,7 +30,7 @@ jobs:
           export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
           test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
           corepack enable pnpm
-      - name: Build, switch and roll back the exact branch pair inside the runner
+      - name: Build two exact pairs and rehearse failure rollback inside the runner
         run: |
           set -euo pipefail
           private=$(mktemp -d "$RUNNER_TEMP/zimage-branch-fixture.XXXXXXXX")
@@ -41,4 +42,4 @@ jobs:
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-review-branch-diagnostic.sh
-          printf '%s\n' 'Disposable loopback pair switch, injected failure, rollback and authentication passed. No remote deployment or promotable evidence.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'Disposable distinct-commit pair switch, injected failure, rollback and authentication passed. No remote deployment or promotable evidence.' >> "$GITHUB_STEP_SUMMARY"
