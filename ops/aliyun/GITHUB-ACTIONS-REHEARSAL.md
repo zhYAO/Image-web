@@ -210,3 +210,10 @@ only the marker paths relocated. It checks ready, sealed/drained with zero
 work, selective checking, and reopen without changing the app PID. This
 is not the production Nginx/TLS config, a systemd installation, a signed
 staging receipt, or permission to publish outside the runner.
+
+The byte report distinguishes source-input scanning (which may count public
+source files delivered externally), verified schema 3 layer/index/metadata
+accounting, regular files inside the assembled app directory (without following
+external cache links), and actual cold-transport gzip bytes. The frontend
+diagnostic gzip is a local archive of the built static folder, not a
+promotable package.
