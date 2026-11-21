@@ -24,10 +24,11 @@ PHASE = 'isolation'
 
 
 class CheckFailure(smoke.SmokeFailure):
-    def __init__(self, reason, status=None):
+    def __init__(self, reason, status=None, retry_after=False):
         super().__init__(reason)
         self.reason = reason
         self.status = status
+        self.maintenance_retry_header = retry_after
 
 
 def json_file(path, limit):
@@ -86,7 +87,7 @@ def assert_ready(port, version):
     if code != 200:
         cause = {502: 'upstream-bad-gateway', 503: 'gate-or-upstream-unavailable',
                  504: 'upstream-timeout'}.get(code, 'unexpected-ready-status')
-        raise CheckFailure(cause, code)
+        raise CheckFailure(cause, code, code == 503 and headers.get("Retry-After") == "30")
     try:
         payload = json.loads(body)
     except ValueError:
@@ -206,6 +207,11 @@ def run(candidate, node, net, mount, sha, run_id, attempt, digest):
         env = dict(PATH='/nonexistent', HOME='/tmp', TMPDIR='/tmp', NODE_ENV='production',
                    HOSTNAME='127.0.0.1', PORT='3100', ZIMAGE_LIFECYCLE_ENABLED='1',
                    ZIMAGE_BUILD_SHA=sha, NEXT_TELEMETRY_DISABLED='1',
+                   # Readiness passes through the formal Auth proxy even without
+                   # cookies. Validate configuration locally but do not grant
+                   # credentials or allow a real auth service/network.
+                   NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:1',
+                   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_rehearsal_only',
                    NODE_OPTIONS='--max-old-space-size=640', **environment)
         PHASE = 'immutable-next-inspection'
         app = nginx = None
@@ -307,6 +313,8 @@ if __name__ == '__main__':
             failure['reason'] = err.reason
             if type(err.status) is int and 100 <= err.status <= 599:
                 failure['status'] = err.status
+            if err.status == 503:
+                failure['maintenanceRetryHeader'] = err.maintenance_retry_header
             if getattr(err, 'hop', None) in ('nginx', 'upstream'):
                 failure['hop'] = err.hop
         print(json.dumps(failure), file=sys.stderr)

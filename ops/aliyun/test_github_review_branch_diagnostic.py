@@ -41,7 +41,9 @@ class BranchDiagnostic(unittest.TestCase):
         for required in ('socket.SO_PEERCRED', 'private_status', 'smoke.child_setup', '/usr/sbin/nginx',
                          'network_isolated', 'ingress-maintenance-maps.conf'):
             self.assertIn(required, gate)
-        for forbidden in ('github-paired-controller', 'www.zimage.store', 'GH_TOKEN', 'systemctl'):
+        self.assertIn("NEXT_PUBLIC_SUPABASE_URL='http://127.0.0.1:1'", gate)
+        self.assertIn("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_rehearsal_only'", gate)
+        for forbidden in ('github-paired-controller', 'www.zimage.store', 'GH_TOKEN', 'systemctl', 'SUPABASE_SECRET_KEY'):
             self.assertNotIn(forbidden, gate)
         runtime = (HERE / 'isolated-release-rehearsal.mjs').read_text()
         self.assertIn("server.listen(0, '127.0.0.1')", runtime)
