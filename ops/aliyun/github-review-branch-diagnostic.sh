@@ -57,5 +57,9 @@ if not (subject["namespace"] == sys.argv[2] and subject["allowedBackendReleases"
         and subject["acceptanceRequired"] is True):
     raise ValueError("Frontend is not an exact, nonpromotable acceptance subject")
 PY
+# Report verified release-input categories and file byte counts before any start.
+node apps/web/scripts/measure-dist.mjs --runtime-audit --json "$private/dist-bytes.json" > "$private/dist-bytes.log"
+tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf "$private/frontend-diagnostic.tgz" -C "$root/apps/frontend/dist" .
+python3 -I -B ops/aliyun/review-release-sizes.py "$GITHUB_SHA" "$private" "$root/apps/frontend/dist"
 node ops/aliyun/isolated-release-rehearsal.mjs "$private/app" "$root/apps/frontend/dist"
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$private/app" "$root/apps/frontend/dist"

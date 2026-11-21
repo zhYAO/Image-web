@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const branch = 'refs/heads/codex/zimage-github-actions-review-20261120';
 const repo = 'zhYAO/Image-web';
+let phase = 'runner-provenance';
 function requireCheck(value, message) {
   if (!value) throw new Error(message);
 }
@@ -38,8 +39,10 @@ async function run() {
     && e.GITHUB_EVENT_NAME === 'push' && e.GITHUB_REF === branch
     && e.GITHUB_WORKFLOW_REF === repo + '/.github/workflows/review-branch-diagnostic.yml@' + branch
     && /^[a-f0-9]{40}$/.test(sha ?? ''), 'Hosted exact review-branch context required');
-  const [backend, frontend, temp] = await Promise.all([process.argv[2], process.argv[3], e.TMPDIR].map(realpath));
+  phase = 'canonical-input-paths';
+  const [backend, frontend, temp] = await Promise.all([process.argv[2], process.argv[3], e.TMPDIR].map(item => realpath(item)));
   requireCheck(backend.startsWith(temp + '/') && frontend !== backend, 'Expected inspected backend under the private temporary directory');
+  phase = 'exact-input-identities';
   const namespace = 'rehearsal-' + sha + '-' + e.GITHUB_RUN_ID + '-' + e.GITHUB_RUN_ATTEMPT;
   const frontendMeta = JSON.parse(await readFile(path.join(frontend, '.release/candidate.json'), 'utf8'));
   requireCheck(frontendMeta.namespace === namespace && frontendMeta.sourceIdentity?.sourceSHA === sha
@@ -52,6 +55,7 @@ async function run() {
   let listener;
   let sealed = true;
   async function install(slot) {
+    phase = 'install-' + slot;
     const destination = path.join(root, slot);
     await mkdir(destination);
     await cp(backend, path.join(destination, 'backend'), { recursive: true, verbatimSymlinks: true });
@@ -63,6 +67,10 @@ async function run() {
     const child = spawn(process.execPath, ['server.js'], { cwd: app, stdio: 'ignore', env: {
       LANG: 'C.UTF-8', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
       HOSTNAME: '127.0.0.1', PORT: String(endpoint), ZIMAGE_BUILD_SHA: sha,
+      NEXT_PUBLIC_DATA_MODE: 'http', NEXT_PUBLIC_PHASE2_AUTH: 'true',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_rehearsal_only',
+      ZIMAGE_ALLOWED_ORIGINS: 'http://127.0.0.1:' + endpoint,
       NODE_USE_ENV_PROXY: '1', HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9',
       NO_PROXY: '127.0.0.1,localhost',
     } });
@@ -79,6 +87,7 @@ async function run() {
   }
 
   async function select(slot) {
+    phase = 'select-' + slot;
     requireCheck(sealed && slots.has(slot), 'Pair selection requires a sealed known slot');
     const next = path.join(root, 'current.next');
     await symlink(slot, next);
@@ -139,6 +148,7 @@ async function run() {
     await select('fault');
     await verify('fault');
     await stop(slots.get('fault').child);
+    phase = 'observe-injected-failure';
     const failed = await request(origin + '/api/health/ready');
     requireCheck(failed.status === 503 && failed.headers.get('x-fixture-slot') === 'fault'
       && (await write()).status === 503, 'Injected post-switch failure was not observed with writes sealed');
@@ -160,6 +170,8 @@ async function run() {
 try { console.log(JSON.stringify(await run())); }
 catch (error) {
   const controlled = error instanceof Error && /^[A-Za-z -]+$/.test(error.message);
-  console.error('Local publication rehearsal failed: ' + (controlled ? error.message : 'unexpected local prerequisite or verifier failure'));
+  const code = error instanceof Error && /^[A-Z0-9_]{1,40}$/.test(error.code ?? '') ? error.code : 'NO_CODE';
+  console.error('Local publication rehearsal failed at ' + phase + ' [' + code + ']: '
+    + (controlled ? error.message : 'unexpected local prerequisite or verifier failure'));
   process.exitCode = 1;
 }
