@@ -1,0 +1,48 @@
+name: ZImage exact original archives browser shadow diagnostic
+
+on:
+  push:
+    branches: [codex/zimage-exact-shadow-diagnostic-20261122]
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-release-rehearsal:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-exact-shadow-diagnostic-20261122'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - name: Prepare disposable VM
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test ! -e /opt/zimage && test ! -L /opt/zimage
+          sudo install -d -m 0755 /opt/zimage
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
+          export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
+          test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
+          corepack enable pnpm
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nginx
+      - name: Build once and boot frozen local diagnostic ZIPs
+        run: |
+          set -euo pipefail
+          private=$(mktemp -d "$RUNNER_TEMP/zimage-m6-runtime.XXXXXXXX")
+          trap 'rm -rf -- "$private"' EXIT
+          mkdir -m 700 -- "$private/home"
+          env -i PATH="$PATH" HOME="$private/home" TMPDIR="$private" \
+            COREPACK_HOME="$RUNNER_TEMP/zimage-corepack" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+            RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
+            GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-exact-shadow-diagnostic.sh
+          printf '%s\n' 'Original local ZIPs passed the shared hosted shadow extractor and no-M7 Chromium Auth. This did not exercise GitHub artifact APIs, protected-main admission or deployment.' >> "$GITHUB_STEP_SUMMARY"
