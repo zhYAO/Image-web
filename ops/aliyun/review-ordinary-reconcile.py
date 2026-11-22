@@ -187,7 +187,7 @@ def run(root, nginx):
         directory = root/'nginx'
         directory.mkdir()
         config = host.nginx_config(directory, system.paths.etc, nginx_port, app_port)
-        args = [nginx, '-e', 'stderr', '-p', str(directory) + '/', '-c', str(config)]
+        args = [nginx, '-p', str(directory) + '/', '-c', str(config)]
         log = children.enter_context((directory/'process.log').open('w+b'))
         options = dict(cwd=root, env=dict(PATH='/usr/bin:/bin', HOME=str(root), TMPDIR=str(root), LC_ALL='C'),
                        stdin=subprocess.DEVNULL, stdout=log, stderr=log)
