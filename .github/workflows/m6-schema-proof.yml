@@ -1,0 +1,89 @@
+name: ZImage M6-only database proof
+
+on:
+  push:
+    branches: [codex/zimage-m6-fixture-proof-20261122]
+
+permissions:
+  contents: read
+
+jobs:
+  local-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare an explicit local-only database fixture
+        env:
+          FIXTURE: ${{ runner.temp }}/zimage-m6-fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, os, re, shutil
+          from pathlib import Path
+          fixture = Path(os.environ['FIXTURE'])
+          assert not fixture.exists()
+          fixture.mkdir()
+          (fixture / 'supabase/migrations').mkdir(parents=True)
+          # Snapshot of the 43 verified migration names, not production data.
+          names = ["active_business_session_asset_reads","apparel_catalog","chat_usage_settlement","commerce_package_orders","commerce_reference_history","commerce_single_task_limits","commerce_tasks","commerce_xhs_poster","creative_batch_history_access","creative_batch_legacy_insert_schedule","creative_batch_progress_owner_access","creative_batch_review_progress","creative_batch_worker","credits","credits_safe_updates","doubao_edge_relay","durable_generation_rejections","ecommerce_workflows","isolated_provider_diagnostics","openai_chat_edge_relay","openai_models_disabled","phase1_advisor_hardening","phase1_chat","phase1_cleanup","phase1_cleanup_schedule","phase1_enabled_overrides_health","phase1_foundation","phase1_generation_emergency_stop","phase1_generation_queue","phase1_generation_schedule","phase1_modern_secret_key_scheduling","phase1_preview_guards","phase1_public_write_hardening","phase1_safety_audit","phase2_auth_accounts","phase2_auth_runtime_fixes","phase2_generation_reliability","retire_creative_batch_cron","retire_minimax_preserve_history","seedream_5_models","seedream_plan_only_image_admission","session_activity_summary","unknown_generation_health_once"]
+          expected = set(names)
+          skipped = 'verified_openai_chat_metering'
+          seen = set()
+          for src in sorted(Path('supabase/migrations').glob('*.sql')):
+              match = re.fullmatch(r'([0-9]{14})_([a-z0-9_]+)\.sql', src.name)
+              assert match, src.name
+              stamp, name = match.groups()
+              if name == skipped:
+                  continue
+              assert name in expected and name not in seen, src.name
+              seen.add(name)
+              body = src.read_bytes()
+              if name == 'isolated_provider_diagnostics':
+                  assert hashlib.sha256(body).hexdigest() == '7fc3d2c1144692d25d52e0f50e57b3ad05bf4b8131c0bc8545b2efee9c830923'
+                  stamp = '20261106123202'
+              if name == 'chat_usage_settlement':
+                  stamp = '20261106083858'
+              (fixture / 'supabase/migrations' / f'{stamp}_{name}.sql').write_bytes(body)
+          assert seen == expected
+          (fixture / 'expected-migration-names.txt').write_text('\n'.join(names) + '\n')
+          (fixture / 'supabase/config.toml').write_text('project_id = "zimage_m6_proof"\n\n[db]\nmajor_version = 17\n\n[db.seed]\nenabled = false\n')
+          legacy = Path('ops/aliyun/baseline-7a811b3-chat-usage.sql').read_bytes()
+          assert hashlib.sha1(b'blob ' + str(len(legacy)).encode() + b'\0' + legacy).hexdigest() == '6f13b7c7418ad9f4bd8b22c34177d4737d536001'
+          test = fixture / 'supabase/tests/database/baseline_chat_usage.test.sql'
+          test.parent.mkdir(parents=True)
+          test.write_bytes(legacy)
+          PY
+      - name: Test the isolated schema and baseline contract
+        env:
+          FIXTURE: ${{ runner.temp }}/zimage-m6-fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Full local Docker stack; no login, link, remote project, or secrets.
+          pnpm exec supabase start --workdir "$FIXTURE"
+          verify_ledger() {
+            docker exec supabase_db_zimage_m6_proof psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -Atc 'select name from supabase_migrations.schema_migrations;' | LC_ALL=C sort > "$FIXTURE/observed-migration-names.txt"
+            diff -u "$FIXTURE/expected-migration-names.txt" "$FIXTURE/observed-migration-names.txt"
+          }
+          verify_ledger
+          pnpm exec supabase test db --workdir "$FIXTURE" "$FIXTURE/supabase/tests/database"
+          verify_ledger
+      - name: Stop disposable stack
+        if: always()
+        env:
+          FIXTURE: ${{ runner.temp }}/zimage-m6-fixture
+        run: |
+          if test -f "$FIXTURE/supabase/config.toml"; then
+            pnpm exec supabase stop --workdir "$FIXTURE" --no-backup
+          fi
