@@ -2,7 +2,7 @@
 // Secretless runner: authenticated same-origin HTTP with a disposable Supabase
 // stack. This is neither a browser test nor a production acceptance receipt.
 import { spawn, spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
@@ -24,7 +24,30 @@ export function localStatus(record) {
   return { publishable: record.PUBLISHABLE_KEY, secret: record.SECRET_KEY };
 }
 
-export function disposableConfig(source, projectId) {
+export function validateM6Ledger(text) {
+  const entries = text.trimEnd().split('\n');
+  const versions = entries.map(row => row.split('|')[0]);
+  require(entries.length === 43 && new Set(entries).size === 43 && new Set(versions).size === 43
+    && entries.every(row => /^\d{14}\|[a-z0-9_]+$/.test(row))
+    && entries.join('\n') === [...entries].sort().join('\n')
+    && entries.includes('20261106083858|chat_usage_settlement')
+    && entries.includes('20261106123202|isolated_provider_diagnostics')
+    && !entries.some(row => row.endsWith('|verified_openai_chat_metering')),
+    'Invalid disposable M6 migration ledger');
+  return entries.join('\n');
+}
+
+function disableFixtureSection(text, section) {
+  const start = text.indexOf('[' + section + ']\n');
+  if (start < 0) return text.trimEnd() + '\n\n[' + section + ']\nenabled = false\n';
+  const end = text.indexOf('\n[', start + section.length + 3);
+  const before = text.slice(0, start);
+  const block = text.slice(start, end < 0 ? undefined : end);
+  require(block.match(/^enabled = (?:true|false)$/gm)?.length === 1, 'Unexpected fixture enabled setting');
+  return before + block.replace(/^enabled = (?:true|false)$/m, 'enabled = false') + (end < 0 ? '' : text.slice(end));
+}
+
+export function disposableConfig(source, projectId, fixtureProfile = false) {
   require(/^zimage_auth_[a-f0-9]{12}$/.test(projectId), 'Invalid disposable project id');
   require(source.match(/^project_id = "[A-Za-z0-9_-]+"$/gm)?.length === 1, 'Expected one local project entry');
   require(/^major_version = 17$/m.test(source) && /^port = 54321$/m.test(source), 'Local database/API target changed');
@@ -33,12 +56,13 @@ export function disposableConfig(source, projectId) {
   const disable = new Set(['edge_runtime', 'studio', 'analytics', 'realtime', 'storage.vector']);
   const lines = source.replace(/^project_id = "[A-Za-z0-9_-]+"$/m, `project_id = "${projectId}"`).split('\n');
   let section = '';
-  return lines.map(line => {
+  const output = lines.map(line => {
     const header = line.match(/^\[([a-z_.-]+)\]$/);
     if (header) section = header[1];
     if ((disable.has(section) || section.startsWith('functions.')) && /^enabled = (?:true|false)$/.test(line)) return 'enabled = false';
     return line;
   }).join('\n');
+  return fixtureProfile ? disableFixtureSection(disableFixtureSection(output, 'db.seed'), 'auth.captcha') : output;
 }
 
 export function storeCookies(jar, headers) {
@@ -57,23 +81,32 @@ async function regular(file) {
   return readFile(file);
 }
 
-async function prepare(project, scratch, id) {
+async function prepare(project, scratch, id, fixture) {
   const src = path.join(project, 'supabase'), dst = path.join(scratch, 'supabase');
   require((await lstat(src)).isDirectory(), 'Invalid local Supabase source directory');
   await mkdir(dst, { mode: 0o700 });
   const config = await regular(path.join(src, 'config.toml'));
-  await writeFile(path.join(dst, 'config.toml'), disposableConfig(config.toString(), id), { mode: 0o600, flag: 'wx' });
+  await writeFile(path.join(dst, 'config.toml'), disposableConfig(config.toString(), id, !!fixture), { mode: 0o600, flag: 'wx' });
+  let expectedLedger;
   for (const group of ['migrations', 'templates']) {
-    require((await lstat(path.join(src, group))).isDirectory(), 'Invalid local Supabase source member directory');
+    const fixtureMigrations = fixture && group === 'migrations';
+    const sourceGroup = fixtureMigrations ? path.join(fixture, 'supabase', group) : path.join(src, group);
+    require((await lstat(sourceGroup)).isDirectory(), 'Invalid local Supabase source member directory');
     await mkdir(path.join(dst, group), { mode: 0o700 });
-    const files = await readdir(path.join(src, group));
+    const files = await readdir(sourceGroup);
+    if (fixtureMigrations) {
+      expectedLedger = validateM6Ledger((await regular(path.join(fixture, 'expected-migration-ledger.txt'))).toString());
+      require(validateM6Ledger(files.sort().map(file => file.replace(/\.sql$/, '').replace('_', '|')).join('\n')) === expectedLedger,
+        'Fixture migration inputs differ from expected ledger');
+    }
     require(files.length > 0 && files.length <= 100, 'Incomplete migration or template set');
     for (const file of files) {
       require((group === 'migrations' ? /^\d{14}_[A-Za-z0-9_]+\.sql$/ : /^[a-z-]+\.html$/).test(file), 'Unexpected migration/template member');
-      await writeFile(path.join(dst, group, file), await regular(path.join(src, group, file)), { mode: 0o600, flag: 'wx' });
+      await writeFile(path.join(dst, group, file), await regular(path.join(sourceGroup, file)), { mode: 0o600, flag: 'wx' });
     }
   }
-  await writeFile(path.join(dst, 'seed.sql'), await regular(path.join(src, 'seed.sql')), { mode: 0o600, flag: 'wx' });
+  if (!fixture) await writeFile(path.join(dst, 'seed.sql'), await regular(path.join(src, 'seed.sql')), { mode: 0o600, flag: 'wx' });
+  return expectedLedger;
 }
 
 function command(file, args, cwd, env, timeout, name) {
@@ -98,9 +131,17 @@ async function request(origin, route, options = {}) {
 }
 
 async function run(args) {
-  require(process.platform === 'linux' && process.versions.node === '24.19.0' && args.length === 3, 'Requires pinned Linux Node and three absolute inspected input paths');
-  require(args.every(item => path.isAbsolute(item)), 'Expected absolute checkout and inspected artifact roots');
-  const [project, backend, frontend] = await Promise.all(args.map(x => realpath(x)));
+  const selected = args.length === 5 && args[3] === '--m6-diagnostics-no-m7';
+  require(process.platform === 'linux' && process.versions.node === '24.19.0' && (args.length === 3 || selected), 'Invalid isolated proof invocation');
+  const paths = selected ? [...args.slice(0, 3), args[4]] : args;
+  require(paths.every(item => path.isAbsolute(item)), 'Expected absolute checkout and inspected artifact roots');
+  const [project, backend, frontend, fixture] = await Promise.all(paths.map(x => realpath(x)));
+  if (selected) {
+    require(process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.RUNNER_OS === 'Linux' && process.env.TMPDIR, 'No M7 fixture requires disposable hosted Linux');
+    const base = await realpath(process.env.TMPDIR);
+    const rel = path.relative(base, fixture);
+    require(rel && !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('../'), 'No M7 fixture is outside private scratch');
+  }
   const app = path.join(backend, 'apps/web');
   const commit = (await regular(path.join(app, '.next/BUILD_ID'))).toString().trim();
   const candidate = JSON.parse(await regular(path.join(frontend, '.release/candidate.json')));
@@ -120,9 +161,17 @@ async function run(args) {
   let appProc;
   try {
     require(command(cli, ['--version'], project, cliEnv, 10000, 'Pinned Supabase CLI').trim() === CLI_VERSION, 'Supabase CLI differs from pinned workspace version');
-    await prepare(project, scratch, id);
+    const expectedLedger = await prepare(project, scratch, id, fixture);
     stackAttempted = true;
     command(cli, ['start', '--workdir', scratch], project, cliEnv, 12 * 60_000, 'Disposable Supabase start and migrations');
+    const verifyLedger = () => {
+      if (!expectedLedger) return;
+      const sql = 'select version || chr(124) || name from supabase_migrations.schema_migrations order by version;';
+      const actual = command('docker', ['exec', 'supabase_db_' + id, 'psql', '-X', '-U', 'postgres',
+        '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atc', sql], project, localEnvironment, 30_000, 'Disposable migration ledger verification');
+      require(validateM6Ledger(actual) === expectedLedger, 'Disposable migration ledger mismatch');
+    };
+    verifyLedger();
     const status = localStatus(JSON.parse(command(cli, ['status', '--output', 'json', '--workdir', scratch], project, cliEnv, 30_000, 'Local Supabase status')));
     const email = id + '@example.test', password = randomBytes(24).toString('base64url') + 'aA1!';
     const user = await request(LOCAL_API, '/auth/v1/admin/users', {
@@ -169,7 +218,10 @@ async function run(args) {
     storeCookies(jar, logout.headers);
     const signedOut = await request(origin, '/api/auth/session', { headers: { cookie: cookie() } });
     require(signedOut.status === 401, 'Logged-out replay cookie jar must not authorize');
-    return { commit, scope: 'loopback-http-only', browserUiTested: false, productionReady: false,
+    verifyLedger();
+    const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
+      migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
+    return { commit, ...dbEvidence, scope: 'loopback-http-only', browserUiTested: false, productionReady: false,
       credentialMode: 'synthetic', checks: ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied', 'password-login', 'live-session-rpc', 'logout'] };
   } finally {
     if (appProc && appProc.exitCode === null) appProc.kill('SIGTERM');
