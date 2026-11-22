@@ -126,3 +126,43 @@ PY
 env -i PATH="$PATH" HOME="$freeze/home" TMPDIR="$freeze" COREPACK_HOME="$COREPACK_HOME" \
   RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
   bash ops/aliyun/github-hosted-smoke.sh "$freeze" "$root" hosted-shadow
+if [[ ${ZIMAGE_ECS_BYTE_PROOF:-0} == 1 ]]; then
+  handoff="$RUNNER_TEMP/zimage-ecs-byte-proof"
+  mkdir -m 700 "$handoff"
+  python3 -I -B - "$freeze" "$handoff" >> "$ZIMAGE_ECS_OUTPUT" <<'PY'
+import hashlib, json, os, shutil, stat, sys
+from pathlib import Path
+src, dst = map(Path, sys.argv[1:])
+names = ('backend.zip', 'frontend.zip', 'pins.json', 'config.json')
+sizes = {}
+hashes = {}
+for name in names:
+    member = src / name
+    info = member.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size <= 0:
+        raise ValueError('Unexpected proof member')
+    sizes[name] = info.st_size
+if sum(sizes.values()) > 39_990_000:
+    raise ValueError('Diagnostic evidence exceeds size cap')
+for name in names:
+    with (src / name).open('rb') as f:
+        hashes[name] = hashlib.sha256(f.read()).hexdigest()
+    shutil.copyfile(src / name, dst / name)
+pins = json.loads((dst / 'pins.json').read_bytes())
+e = os.environ
+if (pins['commit'], pins['runId'], pins['attempt'], pins['lane']) != (e['GITHUB_SHA'], int(e['GITHUB_RUN_ID']), int(e['GITHUB_RUN_ATTEMPT']), 'browser-shadow'):
+    raise ValueError('Wrong exact byte proof identity')
+if any(pins[key]['artifactSha256'] != hashes[key + '.zip'] for key in ('backend', 'frontend')):
+    raise ValueError('Proof digest changed')
+statement = dict(schemaVersion=1, kind='nonpromotable-ecs-byte-proof', productionReady=False, repository=e['GITHUB_REPOSITORY'],
+                 workflow=e['GITHUB_WORKFLOW_REF'], commit=e['GITHUB_SHA'], runId=pins['runId'], attempt=pins['attempt'],
+                 browserShadowPassed=True, files={n: dict(bytes=sizes[n], sha256=hashes[n]) for n in names})
+body = (json.dumps(statement, sort_keys=True, separators=(',', ':')) + '\n').encode()
+if len(body) + sum(sizes.values()) > 40_000_000:
+    raise ValueError('Diagnostic evidence exceeds size cap')
+(dst / 'statement.json').write_bytes(body)
+for key, value in (('backend', hashes['backend.zip']), ('frontend', hashes['frontend.zip']),
+                   ('statement', hashlib.sha256(body).hexdigest()), ('attempt', str(pins['attempt']))):
+    print(key + '=' + value)
+PY
+fi

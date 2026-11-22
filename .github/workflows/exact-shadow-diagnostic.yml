@@ -12,6 +12,11 @@ jobs:
     if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-exact-shadow-diagnostic-20261122'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    outputs:
+      backend: ${{ steps.browser.outputs.backend }}
+      frontend: ${{ steps.browser.outputs.frontend }}
+      statement: ${{ steps.browser.outputs.statement }}
+      attempt: ${{ steps.browser.outputs.attempt }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -34,6 +39,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
       - name: Build once and boot frozen local diagnostic ZIPs
+        id: browser
+        env:
+          ZIMAGE_ECS_BYTE_PROOF: ${{ contains(github.event.head_commit.message, '[ecs-byte-proof]') && '1' || '0' }}
         run: |
           set -euo pipefail
           private=$(mktemp -d "$RUNNER_TEMP/zimage-m6-runtime.XXXXXXXX")
@@ -44,5 +52,59 @@ jobs:
             RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+            ZIMAGE_ECS_BYTE_PROOF="$ZIMAGE_ECS_BYTE_PROOF" ZIMAGE_ECS_OUTPUT="$GITHUB_OUTPUT" RUNNER_TEMP="$RUNNER_TEMP" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-exact-shadow-diagnostic.sh
           printf '%s\n' 'Original local ZIPs passed the shared hosted shadow extractor and no-M7 Chromium Auth. This did not exercise GitHub artifact APIs, protected-main admission or deployment.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain bounded byte proof only
+        if: contains(github.event.head_commit.message, '[ecs-byte-proof]')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ecs-byte-proof-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/zimage-ecs-byte-proof/backend.zip
+            ${{ runner.temp }}/zimage-ecs-byte-proof/frontend.zip
+            ${{ runner.temp }}/zimage-ecs-byte-proof/config.json
+            ${{ runner.temp }}/zimage-ecs-byte-proof/pins.json
+            ${{ runner.temp }}/zimage-ecs-byte-proof/statement.json
+  attest-byte-proof:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-exact-shadow-diagnostic-20261122' && contains(github.event.head_commit.message, '[ecs-byte-proof]')
+    needs: disposable-release-rehearsal
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Prepare bounded subjects without checkout
+        env:
+          BACKEND: ${{ needs.disposable-release-rehearsal.outputs.backend }}
+          FRONTEND: ${{ needs.disposable-release-rehearsal.outputs.frontend }}
+          STATEMENT: ${{ needs.disposable-release-rehearsal.outputs.statement }}
+          PRODUCER_ATTEMPT: ${{ needs.disposable-release-rehearsal.outputs.attempt }}
+        run: |
+          python3 -I -B - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          e = os.environ
+          if e['PRODUCER_ATTEMPT'] != e['GITHUB_RUN_ATTEMPT']:
+              raise ValueError('Wrong producer attempt')
+          for key in ('BACKEND', 'FRONTEND', 'STATEMENT'):
+              if re.fullmatch(r'[a-f0-9]{64}', e[key]) is None:
+                  raise ValueError('Invalid exact digest')
+          root = Path(e['RUNNER_TEMP']) / 'zimage-attestation'
+          root.mkdir(mode=0o700)
+          files = dict(zip(('backend.zip','frontend.zip','statement.json'), (e['BACKEND'],e['FRONTEND'],e['STATEMENT'])))
+          (root/'subjects.txt').write_text(''.join(f'{digest}  {name}\n' for name,digest in files.items()))
+          claim = dict(schemaVersion=1, kind='nonpromotable-ecs-byte-shadow', productionReady=False,
+                       commit=e['GITHUB_SHA'], runId=int(e['GITHUB_RUN_ID']), attempt=int(e['GITHUB_RUN_ATTEMPT']),
+                       workflow=e['GITHUB_WORKFLOW_REF'], repository=e['GITHUB_REPOSITORY'], subjects=files)
+          (root/'predicate.json').write_text(json.dumps(claim, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+      - uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-checksums: ${{ runner.temp }}/zimage-attestation/subjects.txt
+          predicate-path: ${{ runner.temp }}/zimage-attestation/predicate.json
+          predicate-type: https://github.com/zhYAO/Image-web/attestations/nonpromotable-ecs-byte-shadow/v1
