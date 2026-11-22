@@ -90,3 +90,29 @@ docker run --rm --pull never --platform linux/amd64 --network "$id" --ip "$peer"
   --env NODE_EXTRA_CA_CERTS=/fixture-ca.pem --env ZIMAGE_SYNTHETIC_NET_PROBE=1 \
   "$image" /node /proof.mjs "$bridge"
 printf '%s\n' 'Linux synthetic network boundary only; no candidate release, database, signing or deployment.'
+if [[ ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]; then
+  # Only these two known PID-owned mock processes are removed. Firewall and
+  # real TLS gateway remain in force from the just-completed boundary probe.
+  kill "$mock" "$tripwire"
+  wait "$mock" || true; mock=''
+  wait "$tripwire" || true; tripwire=''
+  kill -0 "$gateway"
+  frozen="$RUNNER_TEMP/zimage-frozen-92663"
+  test -d "$frozen" && test ! -L "$frozen" && test -d "$frozen/files" && test ! -L "$frozen/files"
+  test ! -e /opt/zimage && test ! -L /opt/zimage
+  sudo install -d -m 0755 /opt/zimage
+  sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
+  python3 -I -B ops/aliyun/prepare-92663-isolated-pair.py "$frozen/files" "$frozen/verified.json" \
+    "$scratch/prepared" /opt/zimage/layer-cache
+  chmod 0755 "$scratch/prepared/app" /opt/zimage/layer-cache
+  [[ "$(node --version)" == v24.19.0 && "$(pnpm --version)" == 11.19.0 ]]
+  pnpm install --frozen-lockfile
+  python3 -I -B ops/aliyun/prepare-m6-browser-fixture.py "$root/supabase/migrations" "$scratch/m6"
+  export PLAYWRIGHT_BROWSERS_PATH="$scratch/chromium"
+  driver=$(node --input-type=module -e 'import {playwrightPath} from "./ops/aliyun/isolated-auth-browser.mjs"; console.log(playwrightPath(process.cwd()))')
+  node "$(dirname "$driver")/cli.js" install --with-deps chromium
+  env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
+    PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+    node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$scratch/prepared/app" "$scratch/prepared/web" \
+      --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id"
+fi

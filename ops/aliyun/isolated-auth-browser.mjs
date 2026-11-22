@@ -12,9 +12,15 @@ export function playwrightPath(project) {
   return next.resolve('@playwright/test');
 }
 
-export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit, retained, shadow = false }) {
+export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit, retained, shadow = false, isolatedUpstream = false }) {
   const { chromium } = createRequire(import.meta.url)(playwrightPath(project));
   check((shadow ? /^[a-f0-9]{40}$/.test(commit) && namespace === 'release-' + commit.slice(0, 12) : /^rehearsal-[a-f0-9]{40}-[0-9]+-[0-9]+$/.test(namespace)) && /^[\w/.\-]+$/.test(scratch), 'Invalid disposable ingress paths');
+  check(typeof isolatedUpstream === 'boolean' && Number.isInteger(backendPort) && backendPort >= 1024 && backendPort <= 65535,
+    'Invalid fixture upstream port');
+  check(!isolatedUpstream || (shadow && !retained && backendPort === 3100 && process.platform === 'linux' &&
+    process.env.RUNNER_ENVIRONMENT === 'github-hosted' && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN),
+    'Container upstream requires isolated trusted host supervisor');
+  const host = isolatedUpstream ? '172.31.219.2' : '127.0.0.1';
   const site = path.join(scratch, 'browser-site');
   await mkdir(path.join(site, 'frontend-assets'), { recursive: true });
   await symlink(frontend, path.join(site, 'frontend-assets', namespace), 'dir');
@@ -26,7 +32,7 @@ export async function browserAuth({ project, frontend, scratch, namespace, backe
     await symlink(retained.frontend, front(retained.namespace), 'dir');
   }
   await symlink(front(namespace), current, 'dir');
-  await writeFile(upstream, `proxy_pass http://127.0.0.1:${backendPort};\n`, { flag: 'wx', mode: 0o600 });
+  await writeFile(upstream, `proxy_pass http://${host}:${backendPort};\n`, { flag: 'wx', mode: 0o600 });
   const config = path.join(scratch, 'nginx.conf');
   await writeFile(config, `pid ${scratch}/nginx.pid;
 error_log stderr crit;

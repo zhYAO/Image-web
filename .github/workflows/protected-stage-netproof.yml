@@ -8,11 +8,43 @@ jobs:
   network-boundary:
     if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-protected-stage-netproof-20261122'
     runs-on: ubuntu-22.04
-    timeout-minutes: 9
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Exercise fixed trusted TCP and filesystem probes
-        run: bash ops/aliyun/github-protected-stage-netproof.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: contains(github.event.head_commit.message, '[frozen-candidate]')
+        with:
+          node-version: 24.19.0
+      - name: Prepare trusted diagnostics tools
+        if: contains(github.event.head_commit.message, '[frozen-candidate]')
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          corepack enable pnpm
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nginx
+      - name: Download and independently verify exact signed inputs
+        if: contains(github.event.head_commit.message, '[frozen-candidate]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ops/aliyun/fetch-92663-frozen-proof.sh
+      - name: Exercise trusted boundary and optionally boot the signed candidate
+        env:
+          ZIMAGE_FROZEN_CANDIDATE: ${{ contains(github.event.head_commit.message, '[frozen-candidate]') && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          home=$(mktemp -d "$RUNNER_TEMP/zimage-trusted.XXXXXXXX")
+          trap 'rm -rf -- "$home" "$RUNNER_TEMP/zimage-frozen-92663"' EXIT
+          env -i PATH="$PATH" HOME="$home" RUNNER_TEMP="$RUNNER_TEMP" LANG=C.UTF-8 \
+            COREPACK_HOME="$home/corepack" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
+            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
+            GITHUB_REF="$GITHUB_REF" GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" GITHUB_SHA="$GITHUB_SHA" \
+            ZIMAGE_FROZEN_CANDIDATE="$ZIMAGE_FROZEN_CANDIDATE" \
+            bash ops/aliyun/github-protected-stage-netproof.sh
