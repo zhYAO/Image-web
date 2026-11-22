@@ -33,10 +33,10 @@ http {
   server {
     listen 127.0.0.1:${ingressPort};
     root ${site};
-    location = /home { alias ${site}/frontend-assets/${namespace}/home/index.html; }
-    location = /login { alias ${site}/frontend-assets/${namespace}/app.html; }
-    location = /workspace { alias ${site}/frontend-assets/${namespace}/app.html; }
-    location = /account { alias ${site}/frontend-assets/${namespace}/app.html; }
+    location = /home { default_type text/html; alias ${site}/frontend-assets/${namespace}/home/index.html; }
+    location = /login { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
+    location = /workspace { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
+    location = /account { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
     location /frontend-assets/${namespace}/assets/ { try_files $uri =404; }
     location /api/ {
       proxy_set_header Host $http_host;
@@ -54,7 +54,7 @@ http {
     let ready = false;
     for (let i = 0; i < 50; i++) {
       if (nginx.exitCode !== null) break;
-      if (await fetch(origin + '/home', { signal: AbortSignal.timeout(1000), redirect: 'error' }).then(x => x.ok, () => false)) { ready = true; break; }
+      if (await fetch(origin + '/home', { signal: AbortSignal.timeout(1000), redirect: 'error' }).then(x => x.ok && /text\/html/.test(x.headers.get('content-type') ?? ''), () => false)) { ready = true; break; }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     check(ready && nginx.exitCode === null, stage);
@@ -70,19 +70,46 @@ http {
     await ctx.routeWebSocket('**/*', socket => socket.close());
     const page = await ctx.newPage();
     page.setDefaultTimeout(15000);
-    stage = 'Signed out Home and login form failed';
-    const cta = target => page.locator('a[href="' + target + '"]').filter({ hasText: '开始创作' }).filter({ visible: true }).first();
+    const cta = target => page.locator('a[href="' + target + '"]').filter({ hasText: '开始创作', visible: true }).first();
     const session = () => page.evaluate(async () => { const r = await fetch('/api/auth/session'); return { status: r.status, body: r.ok ? await r.json() : null }; });
-    await page.goto(origin + '/home');
+    const scriptPrefix = origin + '/frontend-assets/' + namespace + '/assets/';
+    stage = 'Browser Home document failed';
+    const script = page.waitForResponse(r => r.url().startsWith(scriptPrefix) && r.request().resourceType() === 'script', { timeout: 15000 }).catch(() => null);
+    const document = await page.goto(origin + '/home', { waitUntil: 'domcontentloaded' });
+    check(document?.ok() && /text\/html/.test(document.headers()['content-type'] ?? ''), stage);
+    stage = 'Browser Home namespace JavaScript failed';
+    const module = await script;
+    check(module?.ok() && /javascript/.test(module.headers()['content-type'] ?? ''), stage);
+    const readJson = pathname => page.evaluate(async url => {
+      const r = await fetch(url, { cache: 'no-store', redirect: 'error' });
+      return { ok: r.ok, body: r.ok && /^application\/json/i.test(r.headers.get('content-type') ?? '') ? await r.json() : null };
+    }, pathname);
+    stage = 'Browser public config failed';
+    const config = await readJson('/api/public-config');
+    check(config.ok && config.body?.formalAuth === true && config.body?.dataMode === 'http', stage);
+    stage = 'Browser backend identity failed';
+    const homeMeta = await readJson('/api/meta');
+    check(homeMeta.ok && homeMeta.body?.backendRelease === commit, stage);
+    stage = 'Browser guest session failed';
     check((await session()).status === 401, stage);
-    await cta('/login?returnTo=%2Fworkspace').click();
-    await page.waitForURL(origin + '/login?returnTo=%2Fworkspace');
-    await page.getByLabel('邮箱', { exact: true }).fill(email);
-    await page.getByLabel('密码', { exact: true }).fill(password);
+    stage = 'Browser guest workspace link not visible';
+    const guestTarget = '/login?returnTo=%2Fworkspace';
+    const guest = cta(guestTarget);
+    await guest.waitFor({ state: 'visible' });
+    stage = 'Browser guest workspace link click failed';
+    await guest.click();
+    stage = 'Browser login route failed';
+    const isLogin = url => url.origin === origin && url.pathname === '/login' && url.searchParams.get('returnTo') === '/workspace';
+    await page.waitForURL(isLogin);
+    stage = 'Browser login form email field missing';
+    const loginForm = page.locator('form').filter({ has: page.locator('input[name=email]') });
+    await loginForm.locator('input[name=email][type=email]').fill(email);
+    stage = 'Browser login form password field missing';
+    await loginForm.locator('input[name=password][type=password]').fill(password);
     stage = 'Browser login or exact session failed';
     const [login] = await Promise.all([
       page.waitForResponse(r => r.url() === origin + '/api/auth/login' && r.request().method() === 'POST'),
-      page.locator('form button[type=submit]').click(),
+      loginForm.locator('button[type=submit]').click(),
     ]);
     check(login.ok(), stage);
     await page.waitForURL(origin + '/workspace');
@@ -110,7 +137,7 @@ http {
     check(logout.ok(), stage);
     await page.waitForURL(origin + '/home');
     check((await session()).status === 401, stage);
-    await cta('/login?returnTo=%2Fworkspace').waitFor();
+    await cta(guestTarget).waitFor();
   } catch {
     throw new Error(stage);
   } finally {
