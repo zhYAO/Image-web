@@ -217,3 +217,45 @@ accounting, regular files inside the assembled app directory (without following
 external cache links), and actual cold-transport gzip bytes. The frontend
 diagnostic gzip is a local archive of the built static folder, not a
 promotable package.
+
+## Ordinary staging binding (local prototype, not installed)
+
+The no-DDL binding joins the ordinary kernel to the persistent shared flock
+and journal and requires an independently scoped staging system. It rejects
+the production-bound implementation of ingress, readiness and frontend
+operations. Candidate selection starts only after the exact old process has
+drained and stopped. The candidate must pass the existing nonce/PID/timestamp
+receipt validator and the exact pair probe before an open intent is recorded.
+After any error under a durable intent the binding attempts to hold the same
+staging gate without rewinding either pointer; unresolved intent blocks the
+next participating writer, even when opening may have started.
+
+Local tests use actual temporary filesystem pointers and a Unix socket to
+distinct local child processes, but operation authority and the authenticated
+receipt are synthetic. The binding has no install/CLI entrypoint. A real
+stage still needs a protected Linux runner on an independent target, an audited
+staging path/service/ingress binding, individually verified runtime credentials
+and root-reviewed authority for current main/artifacts/database contract and
+the authentic read-only probe. Every legacy writer must honor the same
+unresolved journal under its shared lock before this can be installed.
+The staging bridge remains intake-only and cannot emit a promotion receipt.
+
+### Linux interrupted opening rehearsal
+
+From the checkout, run this as an unprivileged Linux user with Python 3 and
+Nginx already available in the system executable path.
+
+```sh
+python3 -I -B ops/aliyun/review-ordinary-reconcile.py
+```
+
+The rehearsal uses temporary gate files and release pointers, loopback
+listeners, synthetic approval, and a synthetic HTTP application. It reuses
+the hosted review's Nginx fixture and the repository's admission includes.
+After Nginx forwards a successful fixture write, the supervisor kills the
+paused publisher at the open checkpoint and confirms that only
+`writes-may-open` is durable. A separate process calls
+`StageBinding.reconcile_open`. The check then requires a maintenance 503
+from Nginx, draining from the application, and the same candidate pointers
+and Linux PID/start/boot identity. The rehearsal exercises a local Nginx gate
+with the synthetic application. Real Next, TLS and systemd are outside its scope.

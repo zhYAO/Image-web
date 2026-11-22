@@ -140,6 +140,25 @@ def marker(folder, name, attempt):
     temporary.replace(destination)
 
 
+def nginx_config(fixture, etc, port, upstream_port):
+    shutil.copyfile(HERE / 'ingress-maintenance-maps.conf', fixture / 'maps.conf')
+    rule = (HERE / 'ingress-maintenance-server.conf').read_text().replace('/etc/zimage/', str(etc) + '/')
+    (fixture / 'rules.conf').write_text(rule)
+    temp = '\n'.join(f'  {item}_temp_path {fixture}/{item};' for item in
+                     ('client_body', 'proxy', 'fastcgi', 'uwsgi', 'scgi'))
+    config = fixture / 'nginx.conf'
+    config.write_text(
+        f'pid {fixture}/nginx.pid; lock_file {fixture}/nginx.lock; '
+        'daemon off; master_process off; error_log stderr; events {}\n'
+        f"http {{ log_format codes '$status $upstream_status'; access_log {fixture}/codes.log codes; "
+        f"include {fixture}/maps.conf;\n{temp}\n"
+        f'  server {{ listen 127.0.0.1:{port}; include {fixture}/rules.conf;\n'
+        f'  location / {{ proxy_pass http://127.0.0.1:{upstream_port}; proxy_http_version 1.1; '
+        f'proxy_set_header Host 127.0.0.1:{upstream_port}; proxy_set_header Connection close; '
+        'proxy_next_upstream off; } } }\n')
+    return config
+
+
 def run(candidate, node, net, mount, sha, run_id, attempt, digest):
     global PHASE
     expected = smoke.identity(sha, int(run_id), int(attempt), digest)
@@ -237,20 +256,8 @@ def run(candidate, node, net, mount, sha, run_id, attempt, digest):
                 fixture = work / 'nginx'
                 fixture.mkdir(0o755)
                 os.chown(fixture, smoke.UID, smoke.UID)
-                shutil.copyfile(HERE / 'ingress-maintenance-maps.conf', fixture / 'maps.conf')
-                rule = (HERE / 'ingress-maintenance-server.conf').read_text().replace('/etc/zimage/', str(etc) + '/')
-                (fixture / 'rules.conf').write_text(rule)
-                temp = '\n'.join(f'  {item}_temp_path {fixture}/{item};' for item in
-                                ('client_body', 'proxy', 'fastcgi', 'uwsgi', 'scgi'))
-                (fixture / 'nginx.conf').write_text(
-                    f'pid {fixture}/nginx.pid; daemon off; master_process off; error_log stderr; events {{}}\n'
-                    f"http {{ log_format codes '$status $upstream_status'; access_log {fixture}/codes.log codes; "
-                    f"include {fixture}/maps.conf;\n{temp}\n"
-                    f'  server {{ listen 127.0.0.1:{PORT}; include {fixture}/rules.conf;\n'
-                    '  location / { proxy_pass http://127.0.0.1:3100; proxy_http_version 1.1; '
-                    'proxy_set_header Host 127.0.0.1:3100; proxy_set_header Connection close; '
-                    'proxy_next_upstream off; } } }\n')
-                args = ['/usr/sbin/nginx', '-p', str(fixture) + '/', '-c', str(fixture / 'nginx.conf')]
+                config_path = nginx_config(fixture, etc, PORT, 3100)
+                args = ['/usr/sbin/nginx', '-p', str(fixture) + '/', '-c', str(config_path)]
                 child_options = dict(env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C.UTF-8'}, stdin=subprocess.DEVNULL,
                     stdout=out, stderr=out, user=smoke.UID, group=smoke.UID, extra_groups=[])
                 if subprocess.run(['/usr/bin/test', '-r', str(etc / 'ingress-open.json')],

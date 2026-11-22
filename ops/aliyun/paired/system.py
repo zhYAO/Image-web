@@ -71,7 +71,10 @@ class SystemOps:
         return {key:self.maybe(getattr(self.paths,key)) for key in ('maintenance','checking','open','frontend_fence')}
 
     def marker_mode(self):
-        flags=self.markers();token=self.token()
+        return self._marker_mode(self.markers())
+
+    def _marker_mode(self,flags):
+        token=self.token()
         if flags['maintenance'] is None and flags['checking'] is None and flags['open'] is not None and flags['frontend_fence'] is None:return 'open'
         if flags['maintenance']==token and flags['open'] is None and flags['frontend_fence']==token:
             if flags['checking'] is None:return 'sealed'
@@ -88,12 +91,18 @@ class SystemOps:
         return self.c.digest({path:hashlib.sha256(self.raw(Path(path),1048576)).hexdigest() for path in paths})
 
     def snapshot(self):
+        state=self.persistent_snapshot()
+        process=state['process'];gate=state['nodeGate']
+        if process is not None:
+            observed=self.lifecycle.observed(state['backend'],pid=process['pid'])
+            if observed['admissionMode']!=gate['mode'] or (gate['mode']!='open' and observed['admissionEpoch']!=gate['operationId']):raise ValueError('Node has not observed persistent gate')
+        return state
+
+    def persistent_snapshot(self):
+        # During interrupted opening the live process can lag the disk gate.
         process=self.first.process();gate=self.read(self.paths.control,4096)
         self.c.exact(gate,{'schemaVersion','operationId','mode'})
         if type(gate['schemaVersion']) is not int or gate['schemaVersion']!=2 or gate['mode'] not in ('open','checking','draining'):raise ValueError('Invalid persistent Node gate')
-        if process is not None:
-            observed=self.lifecycle.observed(self.backend.current(),pid=process['pid'])
-            if observed['admissionMode']!=gate['mode'] or (gate['mode']!='open' and observed['admissionEpoch']!=gate['operationId']):raise ValueError('Node has not observed persistent gate')
         sequence=self.pub.read_json(self.paths.root/'frontend/sequence.json')
         self.c.exact(sequence,{'sequence'})
         flags=self.markers()
@@ -101,7 +110,7 @@ class SystemOps:
         manifest=self.pub.sealed(namespace)
         return {'backend':self.backend.current(),'frontend':self.pub.current(),'frontendSequence':sequence['sequence'],
                 'frontendArtifact':manifest['artifactId'],
-                'process':process,'nodeMode':gate['mode'],'ingressMode':self.marker_mode(),
+                'process':process,'nodeMode':gate['mode'],'ingressMode':self._marker_mode(flags),
                 'fence':self.p['operationId'] if flags['frontend_fence']==self.token() else (None if flags['frontend_fence'] is None else 'foreign'),
                 'configurationSha256':self.configuration_digest(),'ingressSha256':self.ingress_digest(),
                 'markers':flags,'nodeGate':gate}
