@@ -110,3 +110,20 @@ class TestOrdinaryJournal(unittest.TestCase):
         second_writer = self.gate()
         with second_writer.lock(), self.assertRaisesRegex(ValueError, 'reconcile'):
             second_writer.assert_no_unresolved()
+
+    def test_at_retention_ceiling_no_new_claim_or_write(self):
+        from unittest.mock import patch
+        g = self.gate()
+        with patch('ordinary_journal.MAX_RETAINED_OPERATIONS', 2):
+            for op in ('release-first', 'release-second'):
+                with g.lock():
+                    g.assert_clear(op)
+                    for phase in PHASES:
+                        self.append(g, phase, operation=op)
+            with g.lock():
+                self.assertEqual(g.assert_no_unresolved(), 2)
+                with self.assertRaisesRegex(ValueError, 'capacity reached'):
+                    g.assert_clear('release-third')
+                with self.assertRaises(ValueError):
+                    self.append(g, 'seal-intent', operation='release-third')
+            self.assertEqual({p.name for p in g.operations.iterdir()}, {'release-first', 'release-second'})

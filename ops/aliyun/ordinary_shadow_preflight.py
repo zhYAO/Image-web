@@ -15,6 +15,9 @@ def run(packet, *, gate, operation, expected_baseline, read_baseline, observe, v
     read_baseline must independently measure current root-owned active pair and
     evidence; expected_baseline belongs to the exact local challenge for operation.
     The observer separately validates that challenge against the signed file.
+    The installed supervisor must bound the whole verification process (including
+    read callbacks and digest work) and recheck freshness after it returns.
+    This read-only result does not reserve the operation or authorize a write.
     """
     try:
         parse(packet)
@@ -28,7 +31,7 @@ def run(packet, *, gate, operation, expected_baseline, read_baseline, observe, v
     ):
         return rejected("invalid-local-baseline")
     try:
-        with gate.lock():
+        with gate.lock(blocking=False):
             gate.assert_clear(operation)
             if read_baseline() != snapshot:
                 return rejected("live-baseline-mismatch")

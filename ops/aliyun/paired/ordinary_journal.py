@@ -56,14 +56,14 @@ class JournalGate:
         return (info.st_dev, info.st_ino, info.st_uid, info.st_mode, info.st_nlink)
 
     @contextmanager
-    def lock(self):
+    def lock(self, *, blocking=True):
         if self._fd is not None:
             raise ValueError('Ordinary lock cannot be nested')
         path = self.root / 'deploy.lock'
         initial = self._lock_stat(path.lstat())
         fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
             if not initial == self._lock_stat(os.fstat(fd)) == self._lock_stat(path.lstat()):
                 raise ValueError('Shared lock changed during acquisition')
             self._fd = fd
@@ -121,12 +121,15 @@ class JournalGate:
             prior, _, _ = self._previous(operation, self.core.Journal(path, owner_uid=self.uid))
             if prior['phase'] != 'opened':
                 raise ValueError('Unfinished ordinary journal; reconcile')
+        return len(directories)
 
     def assert_clear(self, operation):
         operation = exact_operation(operation)
-        self.assert_no_unresolved()
+        retained = self.assert_no_unresolved()
         if self._claim is not None or os.path.lexists(self.operations / operation):
             raise ValueError('Ordinary operation ID already used')
+        if retained >= MAX_RETAINED_OPERATIONS:
+            raise ValueError('Ordinary audit capacity reached; operator review required')
         # No persistent state before the first mutation intent.
         self._claim = operation
 

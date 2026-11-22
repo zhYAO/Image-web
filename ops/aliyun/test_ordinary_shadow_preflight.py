@@ -75,3 +75,12 @@ class PreflightTest(unittest.TestCase):
         self.read.side_effect = [self.data, dict(self.data, rollbackFrontendConfigFingerprint='c'*64)]
         self.assertEqual(self.check()['reason'], 'live-baseline-mismatch')
         self.assertFalse(list(self.history.iterdir()))
+
+    def test_contended_deployment_lock_does_not_wait_or_verify(self):
+        import fcntl
+        with (self.root / 'deploy.lock').open('rb') as holder:
+            fcntl.flock(holder, fcntl.LOCK_EX)
+            self.assertEqual(self.check()['reason'], 'ordinary-gate-unavailable')
+        self.read.assert_not_called()
+        self.observer.assert_not_called()
+        self.verifier.assert_not_called()
