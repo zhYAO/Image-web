@@ -125,4 +125,33 @@ if [[ ${ZIMAGE_REVIEW_RECONSTRUCTED_PAIR:-0} == 1 ]]; then
   bash ops/aliyun/reconstruct-7a-browser-fixture.sh "$baseline_checkout" "$private/reconstructed" "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
   export ZIMAGE_RECONSTRUCTED_PAIR="$private/reconstructed"
 fi
-node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist" --m6-diagnostics-no-m7 "$fixture"
+if [[ -z ${ZIMAGE_SHADOW_OUTPUT:-} ]]; then
+  node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist" --m6-diagnostics-no-m7 "$fixture"
+else
+  [[ ${ZIMAGE_REVIEW_RECONSTRUCTED_PAIR:-0} == 1 && -f "$ZIMAGE_SHADOW_OUTPUT" ]]
+  node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist" --m6-diagnostics-no-m7 "$fixture" > "$private/browser-result.json"
+  cat "$private/browser-result.json"
+  python3 -I -B - "$private" "$GITHUB_SHA" >> "$ZIMAGE_SHADOW_OUTPUT" <<'PY_PROOF'
+import hashlib, json, pathlib, re, sys
+private = pathlib.Path(sys.argv[1])
+result = json.loads((private / 'browser-result.json').read_bytes())
+expected = ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied',
+            'password-login', 'live-session-rpc', 'logout', 'browser-home-login-workspace-logout']
+if not (result['commit'] == sys.argv[2] and result['scope'] == 'loopback-nginx-browser-and-http'
+        and result['browserUiTested'] is True and result['productionReady'] is False
+        and result['credentialMode'] == 'synthetic' and result['dbProfile'] == 'm6-diagnostics-no-m7'
+        and result['migrationCount'] == 43 and result['checks'] == expected
+        and result['reconstructedBrowserRecovery'] is True
+        and result['reconstructedCommit'] == '7a811b326aa4b344cee08bc5a33c04e44a780fd4'
+        and re.fullmatch(r'[a-f0-9]{64}', result['migrationLedgerSha256'])):
+    raise ValueError('Missing verified shadow diagnostic results')
+for name, filename in (('backend','candidate/packed/transport.tgz'),
+                       ('frontend','candidate/frontend-diagnostic.tgz')):
+    with (private / filename).open('rb') as f:
+        print(name + '=' + hashlib.sha256(f.read()).hexdigest())
+print('ledger=' + result['migrationLedgerSha256'])
+import os
+for name in ('GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'):
+    print('proof_' + name.lower() + '=' + os.environ[name])
+PY_PROOF
+fi

@@ -12,6 +12,13 @@ jobs:
     if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-m6-runtime-proof-20261122'
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    outputs:
+      proof_github_run_attempt: ${{ steps.proof.outputs.proof_github_run_attempt }}
+      proof_github_run_id: ${{ steps.proof.outputs.proof_github_run_id }}
+      proof_github_sha: ${{ steps.proof.outputs.proof_github_sha }}
+      backend: ${{ steps.proof.outputs.backend }}
+      frontend: ${{ steps.proof.outputs.frontend }}
+      ledger: ${{ steps.proof.outputs.ledger }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -33,10 +40,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
       - name: Boot exact candidate on a disposable database and test auth
+        id: proof
         env:
-          ZIMAGE_REVIEW_RECONSTRUCTED_PAIR: ${{ contains(github.event.head_commit.message, '[reconstructed-browser]') && '1' || '0' }}
+          ZIMAGE_REVIEW_RECONSTRUCTED_PAIR: ${{ (contains(github.event.head_commit.message, '[reconstructed-browser]') || contains(github.event.head_commit.message, '[shadow-attestation]')) && '1' || '0' }}
+          ZIMAGE_SHADOW_ENABLED: ${{ contains(github.event.head_commit.message, '[shadow-attestation]') && '1' || '0' }}
         run: |
           set -euo pipefail
+          shadow_output=''
+          if [[ "$ZIMAGE_SHADOW_ENABLED" == 1 ]]; then shadow_output="$GITHUB_OUTPUT"; fi
           private=$(mktemp -d "$RUNNER_TEMP/zimage-m6-runtime.XXXXXXXX")
           trap 'rm -rf -- "$private"' EXIT
           mkdir -m 700 -- "$private/home"
@@ -46,5 +57,57 @@ jobs:
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
             ZIMAGE_REVIEW_RECONSTRUCTED_PAIR="$ZIMAGE_REVIEW_RECONSTRUCTED_PAIR" \
+            ZIMAGE_SHADOW_OUTPUT="$shadow_output" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-m6-runtime-proof.sh
           printf '%s\n' 'Disposable exact candidate and no-M7 HTTP and Chromium Auth via isolated Nginx passed. No production access, promotion or rollback proof.' >> "$GITHUB_STEP_SUMMARY"
+
+  shadow-attestation:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-m6-runtime-proof-20261122' && contains(github.event.head_commit.message, '[shadow-attestation]')
+    needs: disposable-release-rehearsal
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - name: Derive bounded shadow predicate without checkout
+        env:
+          PROOF_GITHUB_SHA: ${{ needs.disposable-release-rehearsal.outputs.proof_github_sha }}
+          PROOF_GITHUB_RUN_ID: ${{ needs.disposable-release-rehearsal.outputs.proof_github_run_id }}
+          PROOF_GITHUB_RUN_ATTEMPT: ${{ needs.disposable-release-rehearsal.outputs.proof_github_run_attempt }}
+          BACKEND_DIGEST: ${{ needs.disposable-release-rehearsal.outputs.backend }}
+          FRONTEND_DIGEST: ${{ needs.disposable-release-rehearsal.outputs.frontend }}
+          LEDGER_DIGEST: ${{ needs.disposable-release-rehearsal.outputs.ledger }}
+        run: |
+          python3 -I -B - <<'PY'
+          import hashlib, json, os, pathlib, re
+          e = os.environ
+          def get(key, pattern):
+              v = e[key]
+              if re.fullmatch(pattern, v) is None:
+                  raise ValueError('Invalid shadow input: ' + key)
+              return v
+          back, front, ledger = [get(key, r'[a-f0-9]{64}') for key in ('BACKEND_DIGEST','FRONTEND_DIGEST','LEDGER_DIGEST')]
+          if any(e['PROOF_' + k] != e[k] for k in ('GITHUB_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT')):
+              raise ValueError('Producer differs from this signer run or attempt')
+          proof = dict(schemaVersion=1, kind='nonpromotable-browser-shadow', productionReady=False,
+                       repository=e['GITHUB_REPOSITORY'], workflow=e['GITHUB_WORKFLOW_REF'],
+                       commit=get('GITHUB_SHA', r'[a-f0-9]{40}'), runId=get('GITHUB_RUN_ID', r'[1-9][0-9]{0,19}'),
+                       attempt=get('GITHUB_RUN_ATTEMPT', r'[1-9][0-9]{0,7}'), backendTransportSha256=back,
+                       frontendDiagnosticSha256=front, migrationLedgerSha256=ledger, migrationCount=43,
+                       diagnostics=['synthetic-credentials', 'no-m7', 'loopback-nginx-chromium', 'reconstructed-pair-recovery'])
+          dest = pathlib.Path(e['RUNNER_TEMP']) / 'zimage-shadow'
+          dest.mkdir(mode=0o700)
+          body = (json.dumps(proof, sort_keys=True, separators=(',', ':')) + '\n').encode()
+          (dest / 'predicate.json').write_bytes(body)
+          statement = hashlib.sha256(body).hexdigest()
+          (dest / 'subjects.txt').write_text(back + '  transport.tgz\n' + front + '  frontend-diagnostic.tgz\n'
+                                             + statement + '  nonpromotable-diagnostic-statement.json\n')
+          print('Nonpromotable diagnostic statement sha256: ' + statement)
+          PY
+      - name: Attest diagnostic subjects only
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-checksums: ${{ runner.temp }}/zimage-shadow/subjects.txt
+          predicate-path: ${{ runner.temp }}/zimage-shadow/predicate.json
+          predicate-type: https://github.com/zhYAO/Image-web/attestations/nonpromotable-browser-shadow/v1
