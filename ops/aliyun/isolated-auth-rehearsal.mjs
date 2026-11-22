@@ -38,7 +38,8 @@ export function validateM6Ledger(text) {
 }
 
 function disableFixtureSection(text, section) {
-  const start = text.indexOf('[' + section + ']\n');
+  const marker = '[' + section + ']\n';
+  const start = text.startsWith(marker) ? 0 : (text.indexOf('\n' + marker) + 1 || -1);
   if (start < 0) return text.trimEnd() + '\n\n[' + section + ']\nenabled = false\n';
   const end = text.indexOf('\n[', start + section.length + 3);
   const before = text.slice(0, start);
