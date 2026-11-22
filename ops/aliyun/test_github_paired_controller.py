@@ -94,6 +94,13 @@ class ProtectedController(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Diagnostic frontend'):
             m.dispatch('staging', dict(self.pins, frontendNamespace='rehearsal'), self.env, self.fail, now=self.at)
 
+    def test_lane_is_refused_before_any_staging_or_production_callback(self):
+        protected = self.production_env()
+        for value in ('browser-shadow', 'future-lane', '', None, False):
+            for phase, env in (('staging', self.env), ('production', protected)):
+                with self.subTest(value=value, phase=phase), self.assertRaisesRegex(ValueError, 'Only legacy release pins'):
+                    m.dispatch(phase, dict(self.pins, lane=value), env, self.fail, now=self.at)
+
     def test_production_declines_stale_foreign_and_missing_approval(self):
         env = self.production_env()
         for changed in ({'STAGE_PAIR_SHA256': 'f' * 64}, {'STAGE_CHECKED_AT': str(self.at - 7201)},

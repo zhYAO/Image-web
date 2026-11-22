@@ -58,6 +58,15 @@ class StagingBridge(unittest.TestCase):
                 bridge.route(args, io.BytesIO(self.frame()), self.intake, self.root)
         self.assertEqual(self.paths, [])
 
+    def test_lane_is_refused_even_with_correct_framing_and_digest(self):
+        for value in ('browser-shadow', 'future-lane', '', None, False):
+            self.pins['lane'] = value
+            digest = hashlib.sha256(data(self.pins)).hexdigest()
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'Only legacy release pins'):
+                bridge.route(['staging', digest], io.BytesIO(self.frame()), self.intake, self.root)
+        self.assertEqual(self.paths, [])
+        self.assertFalse(list(self.root.iterdir()))
+
     def test_bounds_version_truncation_and_trailing_bytes(self):
         for body in (b'wrong' + self.frame(), self.frame()[:-1], self.frame() + b'extra',
                      bridge.MAGIC + struct.pack('!Q', 65537)):

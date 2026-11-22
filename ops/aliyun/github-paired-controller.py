@@ -44,6 +44,7 @@ def sha(body):
 
 
 def validate_env(env, phase, pins):
+    require(type(pins) is dict and 'lane' not in pins, 'Only legacy release pins may enter protected operations')
     require(phase in ('staging', 'production'), 'Unknown protected phase')
     require(env.get('GITHUB_EVENT_NAME') == 'push' and env.get('GITHUB_REF') == 'refs/heads/main'
             and env.get('GITHUB_REF_PROTECTED') == 'true' and env.get('GITHUB_REPOSITORY') == REPO

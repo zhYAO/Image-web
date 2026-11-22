@@ -72,6 +72,8 @@ def route(argv, stream, intake, parent):
         request = Path(name)
         receive(stream, request)
         pins = intake.read_json(request / 'pins.json')
+        if type(pins) is not dict or 'lane' in pins:
+            raise ValueError('Only legacy release pins may enter protected operations')
         config = intake.read_json(request / 'config.json')
         canonical = (json.dumps(pins, sort_keys=True, separators=(',', ':'), allow_nan=False) + '\n').encode()
         if hashlib.sha256(canonical).hexdigest() != argv[1]:
