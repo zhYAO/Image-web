@@ -33,6 +33,18 @@ class ShadowMode(unittest.TestCase):
             self.assertNotEqual(run(**{key: value}).returncode, 0, key)
         self.assertNotEqual(run(('production',)).returncode, 0)
 
+    def test_hosted_extractor_requires_exact_namespace_and_lane(self):
+        sha = 'a' * 40
+        legacy = dict(commit=sha, runId=42, attempt=1, frontendNamespace=f'rehearsal-{sha}-42-1')
+        shadow = dict(legacy, frontendNamespace='release-' + sha[:12], lane='browser-shadow')
+        self.assertTrue(intake.hosted_namespace(shadow, 'hosted-shadow'))
+        self.assertFalse(intake.hosted_namespace(legacy, 'hosted-smoke'))
+        for pins, mode in ((legacy, 'hosted-shadow'), (shadow, 'hosted-smoke'),
+                           (dict(shadow, lane=None), 'hosted-shadow'),
+                           (dict(shadow, frontendNamespace='release-' + 'b' * 12), 'hosted-shadow')):
+            with self.subTest(mode=mode, pins=pins), self.assertRaises(ValueError):
+                intake.hosted_namespace(pins, mode)
+
     def test_receipt_kinds_are_not_interchangeable(self):
         digest = lambda data: hashlib.sha256(data).hexdigest()
         sha = 'a'*40

@@ -102,6 +102,19 @@ def extract_github_zip(source, destination, expected, names):
                 if stream.read(1):
                     raise ValueError('Oversized GitHub ZIP member')
 
+def hosted_namespace(pins, mode):
+    sha = pins["commit"]
+    if not isinstance(sha, str) or not re.fullmatch(r"[a-f0-9]{40}", sha):
+        raise ValueError("Invalid exact hosted fixture commit")
+    if mode == "hosted-shadow":
+        if pins.get("lane") != "browser-shadow" or pins.get("frontendNamespace") != "release-" + sha[:12]:
+            raise ValueError("Expected exact shadow lane and release namespace")
+        return True
+    if mode != "hosted-smoke" or "lane" in pins or pins.get("frontendNamespace") != f"rehearsal-{sha}-{pins['runId']}-{pins['attempt']}":
+        raise ValueError("Expected exact legacy diagnostic namespace")
+    return False
+
+
 def evaluate(pins, backend, frontend, public_config):
     fields = {'commit', 'runId', 'attempt', 'treeFingerprint', 'lockfileSha256', 'backend', 'frontend'}
     shadow = pins.get('lane') == 'browser-shadow'
