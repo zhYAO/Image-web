@@ -116,4 +116,13 @@ sha256sum "$candidate/packed/transport.tgz" "$candidate/frontend-diagnostic.tgz"
 export PLAYWRIGHT_BROWSERS_PATH="$private/chromium"
 driver=$(node --input-type=module -e 'import {playwrightPath} from "./ops/aliyun/isolated-auth-browser.mjs"; console.log(playwrightPath(process.cwd()))')
 node "$(dirname "$driver")/cli.js" install --with-deps chromium
+if [[ ${ZIMAGE_REVIEW_RECONSTRUCTED_PAIR:-0} == 1 ]]; then
+  baseline=7a811b326aa4b344cee08bc5a33c04e44a780fd4
+  baseline_checkout="$private/baseline-source"
+  git clone --quiet --no-checkout --filter=blob:none https://github.com/zhYAO/Image-web.git "$baseline_checkout"
+  git -C "$baseline_checkout" fetch --quiet --depth 1 origin "$baseline"
+  git -C "$baseline_checkout" checkout --quiet --detach "$baseline"
+  bash ops/aliyun/reconstruct-7a-browser-fixture.sh "$baseline_checkout" "$private/reconstructed" "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+  export ZIMAGE_RECONSTRUCTED_PAIR="$private/reconstructed"
+fi
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist" --m6-diagnostics-no-m7 "$fixture"

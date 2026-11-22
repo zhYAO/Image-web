@@ -160,7 +160,7 @@ async function run(args) {
   const cli = path.join(project, 'node_modules/.bin/supabase');
   const cliEnv = { ...localEnvironment, HOME: scratch, XDG_CONFIG_HOME: scratch, SUPABASE_TELEMETRY_DISABLED: '1' };
   let stackAttempted = false;
-  let appProc;
+  let appProc, retainedProc;
   try {
     require(command(cli, ['--version'], project, cliEnv, 10000, 'Pinned Supabase CLI').trim() === CLI_VERSION, 'Supabase CLI differs from pinned workspace version');
     const expectedLedger = await prepare(project, scratch, id, fixture);
@@ -223,13 +223,53 @@ async function run(args) {
     storeCookies(jar, logout.headers);
     const signedOut = await request(origin, '/api/auth/session', { headers: { cookie: cookie() } });
     require(signedOut.status === 401, 'Logged-out replay cookie jar must not authorize');
-    if (selected) await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit });
+    let retained;
+    if (selected && process.env.ZIMAGE_RECONSTRUCTED_PAIR) {
+      const base = await realpath(process.env.TMPDIR);
+      const reconstructed = await realpath(process.env.ZIMAGE_RECONSTRUCTED_PAIR);
+      require(reconstructed.startsWith(base + '/'), 'Reconstructed artifact is outside scratch');
+      const commit = '7a811b326aa4b344cee08bc5a33c04e44a780fd4';
+      const frontend = path.join(reconstructed, 'web');
+      const oldApp = path.join(reconstructed, 'app/apps/web');
+      const marker = (await regular(path.join(reconstructed, 'RECONSTRUCTION_ONLY'))).toString().trim().split('\n');
+      const old = JSON.parse((await regular(path.join(frontend, '.release/candidate.json'))).toString());
+      const digest = marker[2];
+      require(marker.length === 3 && marker[0] === 'source-reconstructed-nonpromotable' && marker[1] === commit
+        && /^[a-f0-9]{64}$/.test(digest) && (await regular(path.join(oldApp, '.next/BUILD_ID'))).toString().trim() === commit
+        && old.sourceIdentity?.sourceSHA === commit && old.sourceIdentity?.dirty === false
+        && old.allowedBackendReleases?.length === 1 && old.allowedBackendReleases[0] === commit
+        && /^rehearsal-7a811b326aa4b344cee08bc5a33c04e44a780fd4-[0-9]+-[0-9]+$/.test(old.namespace),
+        'Invalid nonpromotable reconstructed pair');
+      const oldPort = await freePort();
+      require(oldPort !== ingressPort && oldPort !== port, 'Reconstructed port collision');
+      retainedProc = spawn(process.execPath, ['server.js'], { cwd: oldApp, stdio: 'ignore', env: {
+        LANG: 'C.UTF-8', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
+        HOSTNAME: '127.0.0.1', PORT: String(oldPort),
+        NEXT_PUBLIC_SUPABASE_URL: LOCAL_API, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.publishable,
+        SUPABASE_SECRET_KEY: status.secret, AUTH_RATE_LIMIT_PEPPER: randomBytes(32).toString('hex'),
+        ZIMAGE_ALLOWED_ORIGINS: allowedOrigins, NODE_USE_ENV_PROXY: '1', NO_PROXY: '127.0.0.1,localhost',
+        HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9',
+        ZIMAGE_SHARED_FONT_DIR: path.join(reconstructed, 'resources', digest, 'fonts'),
+        ZIMAGE_STATIC_ASSET_SHA256: digest,
+      } });
+      let ready;
+      for (let i = 0; i < 40; i++) {
+        require(retainedProc.exitCode === null, 'Reconstructed candidate process exited');
+        ready = await request('http://127.0.0.1:' + oldPort, '/api/health/ready').catch(() => null);
+        if (ready?.ok) break;
+        await delay(250);
+      }
+      require(ready?.ok && (await ready.json()).version === commit, 'Reconstructed candidate readiness failed');
+      retained = { commit, frontend, port: oldPort, namespace: old.namespace };
+    }
+    if (selected) await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit, retained });
     verifyLedger();
     const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
       migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
     return { commit, ...dbEvidence, scope: selected ? 'loopback-nginx-browser-and-http' : 'loopback-http-only', browserUiTested: selected, productionReady: false,
-      credentialMode: 'synthetic', checks: ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied', 'password-login', 'live-session-rpc', 'logout', ...(selected ? ['browser-home-login-workspace-logout'] : [])] };
+      credentialMode: 'synthetic', ...(retained ? { reconstructedBrowserRecovery: true, reconstructedCommit: retained.commit } : {}), checks: ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied', 'password-login', 'live-session-rpc', 'logout', ...(selected ? ['browser-home-login-workspace-logout'] : [])] };
   } finally {
+    if (retainedProc && retainedProc.exitCode === null) retainedProc.kill('SIGTERM');
     if (appProc && appProc.exitCode === null) appProc.kill('SIGTERM');
     try {
       if (stackAttempted) command(cli, ['stop', '--no-backup', '--workdir', scratch], project, cliEnv, 120_000, 'Disposable Supabase cleanup');

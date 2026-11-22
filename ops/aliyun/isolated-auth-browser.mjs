@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { symlink, writeFile, mkdir } from 'node:fs/promises';
+import { symlink, writeFile, mkdir, rename } from 'node:fs/promises';
 import path from 'node:path';
 
 const check = (value, label) => { if (!value) throw new Error(label); };
@@ -12,12 +12,21 @@ export function playwrightPath(project) {
   return next.resolve('@playwright/test');
 }
 
-export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit }) {
+export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit, retained }) {
   const { chromium } = createRequire(import.meta.url)(playwrightPath(project));
   check(/^rehearsal-[a-f0-9]{40}-[0-9]+-[0-9]+$/.test(namespace) && /^[\w/.\-]+$/.test(scratch), 'Invalid disposable ingress paths');
   const site = path.join(scratch, 'browser-site');
   await mkdir(path.join(site, 'frontend-assets'), { recursive: true });
   await symlink(frontend, path.join(site, 'frontend-assets', namespace), 'dir');
+  const front = target => path.join(site, 'frontend-assets', target);
+  const current = path.join(site, 'current');
+  const upstream = path.join(scratch, 'upstream.conf');
+  if (retained) {
+    check(/^rehearsal-7a811b326aa4b344cee08bc5a33c04e44a780fd4-[0-9]+-[0-9]+$/.test(retained.namespace), 'Invalid reconstructed namespace');
+    await symlink(retained.frontend, front(retained.namespace), 'dir');
+  }
+  await symlink(front(namespace), current, 'dir');
+  await writeFile(upstream, `proxy_pass http://127.0.0.1:${backendPort};\n`, { flag: 'wx', mode: 0o600 });
   const config = path.join(scratch, 'nginx.conf');
   await writeFile(config, `pid ${scratch}/nginx.pid;
 error_log stderr crit;
@@ -33,15 +42,16 @@ http {
   server {
     listen 127.0.0.1:${ingressPort};
     root ${site};
-    location = /home { default_type text/html; alias ${site}/frontend-assets/${namespace}/home/index.html; }
-    location = /login { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
-    location = /workspace { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
-    location = /account { default_type text/html; alias ${site}/frontend-assets/${namespace}/app.html; }
+    location = /home { default_type text/html; alias ${current}/home/index.html; }
+    location = /login { default_type text/html; alias ${current}/app.html; }
+    location = /workspace { default_type text/html; alias ${current}/app.html; }
+    location = /account { default_type text/html; alias ${current}/app.html; }
     location /frontend-assets/${namespace}/assets/ { try_files $uri =404; }
+    ${retained ? `location /frontend-assets/${retained.namespace}/assets/ { try_files $uri =404; }` : ""}
     location /api/ {
       proxy_set_header Host $http_host;
       proxy_set_header X-Real-IP 127.0.0.1;
-      proxy_pass http://127.0.0.1:${backendPort};
+      include ${upstream};
     }
     location / { return 404; }
   }
@@ -128,6 +138,59 @@ http {
     check((await (await meta).json()).backendRelease === commit, stage);
     await page.locator('textarea').filter({ visible: true }).first().waitFor();
     check(scripts.length > 0 && (await session()).body?.id === userId, stage);
+    if (retained) {
+      const candidateScript = scripts[0];
+      const selectBackend = async (port, sha) => {
+        await writeFile(upstream + '.new', `proxy_pass http://127.0.0.1:${port};\n`, { mode: 0o600, flag: 'wx' });
+        await rename(upstream + '.new', upstream);
+        check(nginx.kill('SIGHUP'), stage);
+        for (let i = 0; i < 60; i++) {
+          const observed = await fetch(origin + '/api/meta', {
+            headers: { connection: 'close' }, redirect: 'error', signal: AbortSignal.timeout(1000),
+          }).then(async r => r.ok ? (await r.json()).backendRelease : null, () => null);
+          if (observed === sha) return;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error(stage);
+      };
+      const selectFrontend = async ns => {
+        await symlink(front(ns), current + '.new', 'dir');
+        await rename(current + '.new', current);
+      };
+      const freshWorkspace = async (ns, sha) => {
+        const tab = await ctx.newPage();
+        try {
+          const reads = Promise.all([
+            tab.waitForResponse(r => r.url() === origin + '/api/meta' && r.ok()),
+            tab.waitForResponse(r => r.ok() && r.url().startsWith(origin + '/frontend-assets/' + ns + '/assets/') &&
+              r.request().resourceType() === 'script' && /javascript/.test(r.headers()['content-type'] ?? '')),
+            tab.goto(origin + '/workspace'),
+          ]);
+          const [api, , doc] = await reads;
+          check(doc?.ok() && (await api.json()).backendRelease === sha, stage);
+          return tab;
+        } catch (error) { await tab.close(); throw error; }
+      };
+      stage = 'Reconstructed backend mismatch was not fenced';
+      await selectBackend(retained.port, retained.commit);
+      const mixed = await freshWorkspace(namespace, retained.commit);
+      await mixed.getByText('当前服务版本不兼容，请稍后再试。', { exact: true }).waitFor();
+      await mixed.close();
+      stage = 'Reconstructed authenticated pair failed';
+      await selectFrontend(retained.namespace);
+      const old = await freshWorkspace(retained.namespace, retained.commit);
+      await old.locator('textarea').filter({ visible: true }).first().waitFor();
+      const status = await old.evaluate(async url => {
+        const [session, previous] = await Promise.all([fetch('/api/auth/session'), fetch(url, { cache: 'no-store' })]);
+        return { id: session.ok ? (await session.json()).id : null,
+          previous: previous.ok && /javascript/.test(previous.headers.get('content-type') ?? '') };
+      }, candidateScript);
+      check(status.id === userId && status.previous, stage);
+      await old.close();
+      stage = 'Candidate restore after reconstructed check failed';
+      await selectBackend(backendPort, commit);
+      await selectFrontend(namespace);
+    }
     stage = 'Browser account sign out failed';
     await page.goto(origin + '/account');
     const [logout] = await Promise.all([
