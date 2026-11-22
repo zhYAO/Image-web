@@ -58,12 +58,12 @@ def read_json(path):
     return json.loads(path.read_bytes(), object_pairs_hook=unique)
 
 
-def closure_receipt(directory, component, expected, sha, run, attempt):
+def closure_receipt(directory, component, expected, sha, run, attempt, *, shadow=False):
     files = {'backend': (('transport.tgz', 'archiveSha256'),),
              'frontend': (('frontend-rehearsal.tgz', 'archiveSha256'), ('frontend-subject.json', 'subjectSha256'))}[component]
     exact_dir(directory, [name for name, _ in files] + ['rehearsal-receipt.json'])
     checked(directory / 'rehearsal-receipt.json', expected['receiptSha256'])
-    rec = dict(schema=1, kind='isolated-github-rehearsal', productionReady=False, repository='zhYAO/Image-web',
+    rec = dict(schema=1, kind=('isolated-github-browser-shadow' if shadow else 'isolated-github-rehearsal'), productionReady=False, repository='zhYAO/Image-web',
                workflow=WORKFLOW, commit=sha, runId=run, attempt=attempt, component=component)
     if component == 'frontend':
         rec['backendToEvaluate'] = sha
@@ -104,7 +104,9 @@ def extract_github_zip(source, destination, expected, names):
 
 def evaluate(pins, backend, frontend, public_config):
     fields = {'commit', 'runId', 'attempt', 'treeFingerprint', 'lockfileSha256', 'backend', 'frontend'}
-    if set(pins) not in (fields, fields | {'frontendNamespace'}):
+    shadow = pins.get('lane') == 'browser-shadow'
+    if (set(pins) != fields | {'frontendNamespace', 'lane'} if shadow else
+            set(pins) not in (fields, fields | {'frontendNamespace'})):
         raise ValueError('Missing independently supplied same-run pins')
     sha, run, attempt = (pins[k] for k in ('commit', 'runId', 'attempt'))
     if not isinstance(sha, str) or not re.fullmatch(r'[a-f0-9]{40}', sha) or any(type(n) is not int or n <= 0 for n in (run, attempt)):
@@ -113,7 +115,7 @@ def evaluate(pins, backend, frontend, public_config):
         raise ValueError('Expected clean source identity')
     rehearsal = f'rehearsal-{sha}-{run}-{attempt}'
     namespace = pins.get('frontendNamespace', rehearsal)
-    if namespace not in (rehearsal, 'release-' + sha[:12]):
+    if (namespace != 'release-' + sha[:12] if shadow else namespace not in (rehearsal, 'release-' + sha[:12])):
         raise ValueError('Unexpected exact frontend namespace')
     for component, extra in (('backend', 'manifestSha256'), ('frontend', 'subjectSha256')):
         pin = pins[component]
@@ -130,7 +132,7 @@ def evaluate(pins, backend, frontend, public_config):
         ):
             output[component] = root / component
             extract_github_zip(archive, output[component], pins[component]['artifactSha256'], names)
-            closure_receipt(output[component], component, pins[component], sha, run, attempt)
+            closure_receipt(output[component], component, pins[component], sha, run, attempt, shadow=shadow)
         store = root / 'store'
         ms = pins['backend']['manifestSha256']
         manifest, body, provided = transport.unpack_bundle(output['backend'] / 'transport.tgz', store, sha, ms)

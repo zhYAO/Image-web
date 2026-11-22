@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # This producer MUST NOT create a candidate.json, production receipt or approval.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/github-shadow-mode.sh"
+zimage_shadow_mode
 umask 077
 component=${1:-}
 [[ ( ${GITHUB_EVENT_NAME:-} == push || ${GITHUB_EVENT_NAME:-} == workflow_dispatch ) && ${GITHUB_REPOSITORY:-} == zhYAO/Image-web &&
@@ -52,11 +54,8 @@ if [[ "$component" == backend ]]; then
   cp -- "$private/backend/transport.tgz" "$delivery/transport.tgz"
   python3 -I -B ops/aliyun/github-rehearsal-receipt.py backend "$delivery" "$private/verify.json"
 else
-  if [[ "$GITHUB_EVENT_NAME" == push && ${ZIMAGE_PAIRED_BUILD_MODE:-} == true ]]; then
-    export ZIMAGE_ASSET_NAMESPACE="release-${GITHUB_SHA:0:12}"
-  else
-    export ZIMAGE_ASSET_NAMESPACE="rehearsal-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-  fi
+  export ZIMAGE_ASSET_NAMESPACE
+  ZIMAGE_ASSET_NAMESPACE=$(zimage_frontend_namespace)
   export ZIMAGE_FRONTEND_COMPATIBILITY
   ZIMAGE_FRONTEND_COMPATIBILITY=$(python3 -c 'import json,sys;print(json.dumps(dict(apiRequirements=dict(major=1,minMinor=0,capabilities=["runtime.public-config.v1","runtime.meta.v1"]),allowedBackendReleases=[sys.argv[1]])))' "$MATCH_BACKEND_SHA")
   pnpm build:frontend

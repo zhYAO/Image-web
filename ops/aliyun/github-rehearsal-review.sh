@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Verify artifacts; only the separate hosted smoke mode runs them locally.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/github-shadow-mode.sh"
+zimage_shadow_mode "${1:-}"
 [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main && "$GITHUB_REF_PROTECTED" == true ]] || { echo 'Protected main push required for pair review.' >&2; exit 1; }
 test "$GITHUB_REPOSITORY" = 'zhYAO/Image-web'
 [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]] || { echo 'Malformed workflow identity.' >&2; exit 1; }
@@ -17,7 +19,9 @@ for component in backend frontend; do
   else
     id=$FRONTEND_ID; digest=$FRONTEND_ARTIFACT_DIGEST
   fi
-  name="rehearsal-$component-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+  prefix=rehearsal
+  if [[ ${ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW:-false} == true ]]; then prefix=shadow-rehearsal; fi
+  name="$prefix-$component-$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
   gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" |
     python3 -c 'import json,sys; v=json.load(sys.stdin); i,name,digest,run,sha=sys.argv[1:]; binding=v.get("workflow_run") or {}; ok=(v.get("id")==int(i) and v.get("name")==name and v.get("digest")=="sha256:"+digest and v.get("expired") is False and binding.get("id")==int(run) and binding.get("head_branch")=="main" and binding.get("head_sha")==sha); sys.exit(0 if ok else "Mismatched, expired, or foreign rehearsal artifact.")' \
       "$id" "$name" "$digest" "$GITHUB_RUN_ID" "$GITHUB_SHA"
@@ -51,17 +55,16 @@ gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BACKEND_ID/zip" | head -c 10
 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$FRONTEND_ID/zip" | head -c 100000001 > "$private/frontend.zip"
 tree=$(git ls-tree -r --full-tree HEAD | sha256sum)
 lock=$(sha256sum pnpm-lock.yaml)
-python3 - "$private/pins.json" "${tree%% *}" "${lock%% *}" <<'PY_PINS'
+python3 - "$private/pins.json" "${tree%% *}" "${lock%% *}" "$(zimage_frontend_namespace)" <<'PY_PINS'
 import json, os,sys
 e = os.environ
 def pin(component, extra_name, extra_source):
     return dict(artifactSha256=e[f'{component}_ARTIFACT_DIGEST'], archiveSha256=e[f'{component}_ARCHIVE_SHA'],
                 receiptSha256=e[f'{component}_RECEIPT_SHA'], **{extra_name:e[extra_source]})
 with open(sys.argv[1], 'x') as stream:
-    namespace = ('release-' + e['GITHUB_SHA'][:12]) if e.get('ZIMAGE_PAIRED_BUILD_MODE') == 'true' else (
-        f"rehearsal-{e['GITHUB_SHA']}-{e['GITHUB_RUN_ID']}-{e['GITHUB_RUN_ATTEMPT']}")
-    json.dump(dict(commit=e['GITHUB_SHA'], runId=int(e['GITHUB_RUN_ID']), attempt=int(e['GITHUB_RUN_ATTEMPT']),
-                   frontendNamespace=namespace, treeFingerprint=sys.argv[2], lockfileSha256=sys.argv[3],
+    lane = {'lane': 'browser-shadow'} if e.get('ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW') == 'true' else {}
+    json.dump(dict(**lane, commit=e['GITHUB_SHA'], runId=int(e['GITHUB_RUN_ID']), attempt=int(e['GITHUB_RUN_ATTEMPT']),
+                   frontendNamespace=sys.argv[4], treeFingerprint=sys.argv[2], lockfileSha256=sys.argv[3],
                    backend=pin('BACKEND','manifestSha256','BACKEND_MANIFEST_SHA'),
                    frontend=pin('FRONTEND','subjectSha256','FRONTEND_SUBJECT_SHA')), stream)
 PY_PINS

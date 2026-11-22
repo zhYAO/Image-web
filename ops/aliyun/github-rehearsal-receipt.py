@@ -27,6 +27,8 @@ def write_receipt(component, delivery, source, env):
                'repository': 'zhYAO/Image-web', 'workflow': '.github/workflows/rehearsal-candidates.yml',
                'commit': sha, 'runId': int(env['GITHUB_RUN_ID']), 'attempt': int(env['GITHUB_RUN_ATTEMPT']),
                'component': component}
+    if env.get('ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW') == 'true':
+        receipt['kind'] = 'isolated-github-browser-shadow'
     if component == 'backend':
         result = json.loads(source.read_text())
         manifest = result['manifest']

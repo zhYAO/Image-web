@@ -40,13 +40,16 @@ jobs:
       - name: Build and verify the backend rehearsal transport
         id: build
         env:
+          ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW }}
+          ZIMAGE_PAIRED_PRODUCTION: ${{ vars.ZIMAGE_PAIRED_PRODUCTION }}
+          ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
           TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
           NEXT_TELEMETRY_DISABLED: '1'
         run: bash ops/aliyun/github-rehearsal.sh backend
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload
         with:
-          name: rehearsal-backend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW == 'true' && 'shadow-rehearsal' || 'rehearsal' }}-backend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/zimage-rehearsal/transport.tgz
             ${{ runner.temp }}/zimage-rehearsal/rehearsal-receipt.json
@@ -74,6 +77,8 @@ jobs:
       - name: Build isolated frontend and compute exact acceptance subject
         id: build
         env:
+          ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW }}
+          ZIMAGE_PAIRED_PRODUCTION: ${{ vars.ZIMAGE_PAIRED_PRODUCTION }}
           MATCH_BACKEND_SHA: ${{ inputs.backend_release }}
           REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
           ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
@@ -81,7 +86,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         id: upload
         with:
-          name: rehearsal-frontend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW == 'true' && 'shadow-rehearsal' || 'rehearsal' }}-frontend-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/zimage-rehearsal/frontend-rehearsal.tgz
             ${{ runner.temp }}/zimage-rehearsal/frontend-subject.json
@@ -118,10 +123,12 @@ jobs:
           FRONTEND_SUBJECT_SHA: ${{ needs.frontend.outputs.evidence_sha }}
           REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
           ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
+          ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW }}
+          ZIMAGE_PAIRED_PRODUCTION: ${{ vars.ZIMAGE_PAIRED_PRODUCTION }}
         run: bash ops/aliyun/github-rehearsal-review.sh
 
   isolated-runtime-rehearsal:
-    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_AUTOMATION != 'true' && vars.ZIMAGE_PAIRED_PRODUCTION != 'true'
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION != 'true' && vars.ZIMAGE_PAIRED_PRODUCTION != 'true'
     needs: [backend, frontend, same-run-review]
     runs-on: ubuntu-22.04
     timeout-minutes: 18
@@ -174,7 +181,7 @@ jobs:
           printf '%s\n' 'Disposable hosted runtime fixture passed. No approval or promotable evidence was produced.' >> "$GITHUB_STEP_SUMMARY"
 
   authenticated-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
     needs: [backend, frontend, same-run-review]
     environment: release-staging
     runs-on: [self-hosted, linux, x64, zimage-protected-staging]
@@ -216,7 +223,7 @@ jobs:
         run: bash ops/aliyun/github-rehearsal-review.sh staging
 
   approved-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_AUTOMATION == 'true' && vars.ZIMAGE_PAIRED_PRODUCTION == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true' && vars.ZIMAGE_PAIRED_PRODUCTION == 'true'
     needs: [backend, frontend, same-run-review, authenticated-staging]
     environment: production
     runs-on: [self-hosted, linux, x64, zimage-protected-production]
