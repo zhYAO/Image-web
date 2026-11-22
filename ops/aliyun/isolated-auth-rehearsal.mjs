@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Secretless runner: authenticated same-origin HTTP with a disposable Supabase
-// stack. This is neither a browser test nor a production acceptance receipt.
+// stack. The dedicated no-M7 diagnostic also runs a local-only browser check.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { browserAuth } from './isolated-auth-browser.mjs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -184,12 +185,15 @@ async function run(args) {
     require(typeof userId === 'string' && /^[a-f0-9-]{36}$/.test(userId), 'Synthetic user identity missing');
 
     const port = await freePort(), origin = 'http://127.0.0.1:' + port;
+    const ingressPort = selected ? await freePort() : null;
+    require(ingressPort !== port, 'Disposable ingress collided with backend');
+    const allowedOrigins = selected ? origin + ',http://127.0.0.1:' + ingressPort : origin;
     appProc = spawn(process.execPath, ['server.js'], { cwd: app, stdio: 'ignore', env: {
       LANG: 'C.UTF-8', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1',
       HOSTNAME: '127.0.0.1', PORT: String(port),
       NEXT_PUBLIC_SUPABASE_URL: LOCAL_API, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.publishable,
       SUPABASE_SECRET_KEY: status.secret, AUTH_RATE_LIMIT_PEPPER: randomBytes(32).toString('hex'),
-      ZIMAGE_ALLOWED_ORIGINS: origin, NODE_USE_ENV_PROXY: '1', NO_PROXY: '127.0.0.1,localhost',
+      ZIMAGE_ALLOWED_ORIGINS: allowedOrigins, NODE_USE_ENV_PROXY: '1', NO_PROXY: '127.0.0.1,localhost',
       HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9',
     } });
     let readiness;
@@ -219,11 +223,12 @@ async function run(args) {
     storeCookies(jar, logout.headers);
     const signedOut = await request(origin, '/api/auth/session', { headers: { cookie: cookie() } });
     require(signedOut.status === 401, 'Logged-out replay cookie jar must not authorize');
+    if (selected) await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit });
     verifyLedger();
     const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
       migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
-    return { commit, ...dbEvidence, scope: 'loopback-http-only', browserUiTested: false, productionReady: false,
-      credentialMode: 'synthetic', checks: ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied', 'password-login', 'live-session-rpc', 'logout'] };
+    return { commit, ...dbEvidence, scope: selected ? 'loopback-nginx-browser-and-http' : 'loopback-http-only', browserUiTested: selected, productionReady: false,
+      credentialMode: 'synthetic', checks: ['frontend-shell', 'candidate-health', 'anonymous-session-denied', 'wrong-password-denied', 'password-login', 'live-session-rpc', 'logout', ...(selected ? ['browser-home-login-workspace-logout'] : [])] };
   } finally {
     if (appProc && appProc.exitCode === null) appProc.kill('SIGTERM');
     try {

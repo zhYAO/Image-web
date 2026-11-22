@@ -30,6 +30,8 @@ jobs:
           export COREPACK_HOME="$RUNNER_TEMP/zimage-corepack"
           test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
           corepack enable pnpm
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends nginx
       - name: Boot exact candidate on a disposable database and test auth
         run: |
           set -euo pipefail
@@ -42,4 +44,4 @@ jobs:
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" GITHUB_REF="$GITHUB_REF" \
             GITHUB_SHA="$GITHUB_SHA" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" bash ops/aliyun/github-m6-runtime-proof.sh
-          printf '%s\n' 'Disposable exact candidate and no-M7 Auth passed. No production access, promotion or rollback proof.' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' 'Disposable exact candidate and no-M7 HTTP and Chromium Auth via isolated Nginx passed. No production access, promotion or rollback proof.' >> "$GITHUB_STEP_SUMMARY"

@@ -113,4 +113,7 @@ build_pair "$root" "$GITHUB_SHA" "$candidate" full
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf "$candidate/frontend-diagnostic.tgz" -C "$root/apps/frontend/dist" .
 printf 'Candidate %s in run %s attempt %s; non-promotable backend and frontend digests:\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
 sha256sum "$candidate/packed/transport.tgz" "$candidate/frontend-diagnostic.tgz"
+export PLAYWRIGHT_BROWSERS_PATH="$private/chromium"
+driver=$(node --input-type=module -e 'import {playwrightPath} from "./ops/aliyun/isolated-auth-browser.mjs"; console.log(playwrightPath(process.cwd()))')
+node "$(dirname "$driver")/cli.js" install --with-deps chromium
 node ops/aliyun/isolated-auth-rehearsal.mjs "$root" "$candidate/app" "$root/apps/frontend/dist" --m6-diagnostics-no-m7 "$fixture"
