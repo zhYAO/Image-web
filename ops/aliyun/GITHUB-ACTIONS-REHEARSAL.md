@@ -125,8 +125,17 @@ protected run, artifact name, namespace and signing identity checks.
   binds to that operation and packet. It includes a fresh read-only database
   contract observation, the live baseline and a digest-linked rollback drill
   with the retained pair's public readiness and route acceptance. Candidate
-  checks reuse the backend read-only receipt, including the exact live
-  PID, request nonce and authenticated GET results. Restored public acceptance
+  checks reuse the backend read-only receipt. The host issues separate private
+  `baseline-readonly-challenge.json`, `candidate-challenge.json`, and
+  `restoration-candidate-challenge.json` files for the exact running process.
+  The first probe verifies the live rollback baseline before the first switch
+  intent. Each response must match the host nonce, PID, start time and boot
+  identity within the available authorization window. `backend/verify.py`
+  reads the challenge over its existing bounded stdin or file interface and
+  returns only the batch-bound receipt with authenticated GET results. It
+  keeps its test credential and response bodies on the observing machine.
+  A reviewed transport must pass the challenges and install the independent
+  responses in the corresponding root-owned batch files. Restored public acceptance
   is checked against the exact prior pair and required routes before issuing a
   restoration receipt.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
@@ -178,13 +187,23 @@ protected run, artifact name, namespace and signing identity checks.
   frontend generation, and independently observed public failure. Under the
   same deploy lock it records intent before restoring the retained pair or
   reopening traffic. The SSH client checks the publication receipt against
-  the exact stage bytes and local failure observation before requesting restoration, and
-  checks that the reply binds the exact original release and rollback pair.
+  the exact stage bytes and local failure observation before requesting
+  restoration, and checks that the reply binds the exact original release
+  and rollback pair.
+  The independent observer can collect a witness with `github_pair_public.py
+  --capture-failure` for the exact candidate SHA. It records the failed route
+  check, HTTP metadata, and a bounded response-body digest. Probe errors that
+  yield no usable HTTP response do not produce a witness. The installed
+  authority requires the actual `failed-public-acceptance.json` bytes and
+  verifies their digest in `public-failure.json`, tied to the live process and
+  generation. Only the independent observer may supply these host records.
   The journal exposes a restoration receipt only after authenticated checks
   and an independent public check of the restored pair. An interrupted
-  restoration blocks the next writer. The review-only Linux workflow tests
-  the fixed frame, replay rejection and the durable journal without accessing
-  ECS. The production workflow still records only the failure observation.
+  restoration blocks the next writer. The review-only Linux workflow exercises
+  the first failed public response, the receipt-bound request, the fixed frame,
+  replay rejection and the durable journal. It checks the restored pair through
+  a separate public probe using fixture responses and a simulated SSH transport.
+  The production workflow still records only the failure observation.
 
 The review branch contains the workflow, fixed root receiver, root evidence
 reader, private staging, lifecycle adapter and durable restoration logic.

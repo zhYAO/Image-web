@@ -145,8 +145,16 @@ class PairSshTest(unittest.TestCase):
                 return SimpleNamespace(returncode=0)
 
             with patch.object(ssh.subprocess, 'run', side_effect=transport) as ssh_run:
+                failure.write_bytes(json.dumps(hint).encode())
+                with self.assertRaisesRegex(ValueError, 'original release'):
+                    request_restore()
+                hint['publicContractFailure'] = public.capture_failure(commit, fetch=lambda _: (503, 'text/html', 'no-store', b''))
                 failure.write_bytes(json.dumps(dict(hint, deploymentReceiptSha256='0' * 64)).encode())
                 with self.assertRaisesRegex(ValueError, 'original release'):
+                    request_restore()
+                bad_witness = dict(hint['publicContractFailure'], backendRelease='c' * 40)
+                failure.write_bytes(json.dumps(dict(hint, publicContractFailure=bad_witness)).encode())
+                with self.assertRaisesRegex(ValueError, 'exact published pair'):
                     request_restore()
                 ssh_run.assert_not_called()
                 failure.write_bytes(json.dumps(hint).encode())

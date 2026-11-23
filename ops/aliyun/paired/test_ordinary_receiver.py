@@ -99,6 +99,7 @@ class ReceiverTests(unittest.TestCase):
         self.assertIs(call.kwargs['handoff'], tools['github_pair_handoff'])
         self.assertIs(call.kwargs['host'].gate, tools['ordinary_journal'].JournalGate.return_value)
         self.assertIs(call.kwargs['host'].restore, tools['ordinary_restore'].restore)
+        self.assertIs(tools['ordinary_authority'].open_authority.call_args.kwargs['public'], tools['github_pair_public'])
         authority.lifecycle_policy.assert_called_once_with({'fixture': 'packet'}, {'fixture': 'approval'})
         packet = {'fixture': 'packet'}
         github = call.kwargs['host'].github

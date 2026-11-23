@@ -1,13 +1,14 @@
-"""Read independently provisioned host authority and release evidence.
+"""Read installed authority and exchange fixed read-only verifier challenges.
 
-This module never issues approval, obtains application credentials, queries a
-database, or writes evidence. The fixed receiver supplies its root-file reader.
+The fixed receiver supplies the root-file reader and atomic challenge writer.
+Authorization, application credentials and results remain independently held.
 """
 from copy import deepcopy
 import hashlib
 import os
 from pathlib import Path
 import re
+import secrets
 import time
 
 import ordinary
@@ -20,11 +21,11 @@ EVIDENCE = ETC / 'ordinary-evidence'
 PROJECT = 'klmiycyesxnpinxpeqep'
 MAX_RECORDS = 512
 MAX_AGE = 120
+VERIFY_WAIT = 110
 OPERATION = re.compile(r'zimage-release-([1-9][0-9]{0,18})-([1-9][0-9]{0,18})')
 LIFECYCLE = {'operationId', 'oldBackend', 'oldFrontend', 'newBackend', 'newFrontend',
              'oldFrontendArtifact', 'backendManifestSha256', 'frontendCandidateSha256',
              'frontendPayloadSha256', 'configurationSha256', 'ingressSha256'}
-PUBLIC_ROUTES = ['/', '/login', '/workspace', '/assets', '/account']
 
 
 def require(condition, message):
@@ -33,9 +34,12 @@ def require(condition, message):
 
 
 class Authority:
-    def __init__(self, *, core, tools, read, trusted, root, clock=time.time):
+    def __init__(self, *, core, tools, public, read, trusted, root, clock=time.time,
+                 monotonic=time.monotonic, sleep=time.sleep):
         self.core, self.tools, self.read, self.trusted, self.root = core, tools, read, trusted, root
+        self.public = public
         self.clock = clock
+        self.monotonic, self.sleep = monotonic, sleep
         self.batch = None
         config = core.parse(read(CONFIG, 65536))
         core.exact(config, {'schemaVersion', 'signerPolicy', 'mergePolicy', 'attestationDigests'})
@@ -160,47 +164,87 @@ class Authority:
                 and drill_digest == evidence['rollbackDrillSha256'] and drill['pair'] == approval['oldPair']
                 and drill['retainedArtifact'] == initial['frontendArtifact'], 'Actual rollback rehearsal evidence required')
         self._public_acceptance('rollback-public.json', drill['publicAcceptanceSha256'], approval['oldPair'])
+        self._candidate('baseline-readonly', initial['process'], self.batch['packet'], approval,
+                        approval['operation'], approval['oldPair']['backend'])
 
     def _public_acceptance(self, filename, expected, pair):
         self.core.hexid(expected)
         value, digest = self._record(self.batch['directory'] / filename)
         acceptance = dict(schemaVersion=1, backendRelease=pair['backend'], frontendRelease=pair['frontend'],
-                          health='ok', routes=PUBLIC_ROUTES, anonymousSessionStatus=401)
+                          health='ok', routes=list(self.public.ROUTES), anonymousSessionStatus=401)
         require(digest == expected and type(value) is dict and type(value.get('schemaVersion')) is int
                 and type(value.get('anonymousSessionStatus')) is int and value == acceptance,
                 'Independent public readiness, routes and release pair required')
 
-    def _candidate(self, filename, process, packet, approval, operation, release):
+    def _candidate(self, stage, process, packet, approval, operation, release):
         self._bound(packet, approval)
-        evidence, _ = self._evidence(filename, 'zimage-ordinary-candidate-v1', {'process', 'request', 'receipt'})
-        require(type(process) is dict and process == evidence['process'], 'Probe must match the exact live process')
-        self.tools.receipt.validate_receipt(evidence['receipt'], evidence['request'], operation=operation,
+        self.core.exact(process, {'pid', 'startTicks', 'bootId'})
+        require(type(process['startTicks']) is int and process['startTicks'] > 0
+                and type(process['bootId']) is str and re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',
+                                                                  process['bootId']), 'Exact live process required')
+        now = int(self.clock())
+        expires = min(now + MAX_AGE, approval['expiresAt'])
+        request = dict(schemaVersion=1, operationId=operation, backendRelease=release, pid=process['pid'],
+                       nonce=secrets.token_hex(32), createdAt=now, expiresAt=expires)
+        self.tools.receipt.validate_request(request, operation=operation, release=release, pid=process['pid'], now=now)
+        directory = self.batch['directory']
+        self.trusted(directory, True)
+        challenge = directory / (stage + '-challenge.json')
+        try:
+            self.read(challenge, 4096, private=True)
+        except FileNotFoundError:
+            pass
+        else:
+            raise ValueError('A challenge for this release phase already exists')
+        self.tools.transaction.atomic_json(challenge, dict(schemaVersion=1, kind='zimage-ordinary-readonly-challenge-v1',
+                                           packetSha256=approval['packetSha256'], operationId=approval['operation'],
+                                           process=deepcopy(process), request=deepcopy(request)))
+        deadline = self.monotonic() + min(VERIFY_WAIT, expires - now)
+        while True:
+            try:
+                evidence, _ = self._evidence(stage + '.json', 'zimage-ordinary-candidate-v1',
+                                             {'process', 'request', 'receipt'})
+                break
+            except FileNotFoundError:
+                left = min(deadline - self.monotonic(), expires - self.clock())
+                require(left > 0, 'Independent read-only verifier did not return a receipt in time')
+                self.sleep(min(left, 0.25))
+        require(self.monotonic() <= deadline and self.clock() < expires
+                and self.core.canonical([evidence['process'], evidence['request']]) == self.core.canonical([process, request]),
+                'Probe must match the fresh challenge and exact live process')
+        self.tools.receipt.validate_receipt(evidence['receipt'], request, operation=operation,
                                             release=release, pid=process['pid'], now=self.clock())
 
     def verify_candidate(self, process, packet, approval):
-        self._candidate('candidate.json', process, packet, approval, approval['operation'], packet['commit'])
+        self._candidate('candidate', process, packet, approval, approval['operation'], packet['commit'])
 
     def verify_restored_candidate(self, process, packet, approval):
         recovery = 'restore-' + ordinary.sha(dict(operation=approval['operation'], approval=ordinary.sha(approval)))[:48]
-        self._candidate('restoration-candidate.json', process, packet, approval, recovery, approval['oldPair']['backend'])
+        self._candidate('restoration-candidate', process, packet, approval, recovery, approval['oldPair']['backend'])
 
-    def _public(self, filename, packet, approval, snapshot, pair, status):
+    def _public_record(self, filename, packet, approval, snapshot, pair, status):
         self._bound(packet, approval)
         evidence, digest = self._evidence(filename, 'zimage-ordinary-public-v1',
                                           {'pair', 'snapshotSha256', 'status', 'checksSha256'})
         require(evidence['pair'] == pair and evidence['status'] == status
                 and evidence['snapshotSha256'] == self.core.digest(snapshot), 'Public evidence differs from the live pair')
         self.core.hexid(evidence['checksSha256'])
-        if status == 'passed':
-            self._public_acceptance('restored-public-acceptance.json', evidence['checksSha256'], pair)
-        return digest
+        return evidence['checksSha256'], digest
 
     def verify_public_failure(self, packet, approval, snapshot):
-        return self._public('public-failure.json', packet, approval, snapshot, approval['newPair'], 'failed')
+        pair = approval['newPair']
+        expected, digest = self._public_record('public-failure.json', packet, approval, snapshot, pair, 'failed')
+        witness, actual = self._record(self.batch['directory'] / 'failed-public-acceptance.json')
+        require(actual == expected, 'Public failure witness does not match the independent evidence digest')
+        self.public.validate_failure(witness, pair)
+        return digest
 
     def verify_public_restoration(self, packet, approval, snapshot):
-        return self._public('public-restored.json', packet, approval, snapshot, approval['oldPair'], 'passed')
+        pair = approval['oldPair']
+        expected, digest = self._public_record('public-restored.json', packet, approval, snapshot, pair, 'passed')
+        self._public_acceptance('restored-public-acceptance.json', expected, pair)
+        return digest
 
 
-def open_authority(*, core, tools, read, trusted, root):
-    return Authority(core=core, tools=tools, read=read, trusted=trusted, root=root)
+def open_authority(*, core, tools, public, read, trusted, root):
+    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root)

@@ -35,6 +35,7 @@ MODULES = (
     ('github_protected_merge_shadow', 'github_protected_merge_shadow.py'),
     ('github_protected_merge_observe', 'github_protected_merge_observe.py'),
     ('github_pair_handoff', 'github_pair_handoff.py'),
+    ('github_pair_public', 'github_pair_public.py'),
     ('ordinary_intake', 'github-rehearsal-intake.py'),
     ('ordinary_authority', 'ordinary-authority.py'),
 )
@@ -161,7 +162,8 @@ def main():
         lifecycle = cli.make_modules()
         installed_system = cli.load(BASE / 'system.py', 'ordinary_installed_system')
         authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle,
-                                                               read=read_installed, trusted=cli.trusted, root=cli.ROOT)
+                                                               public=tools['github_pair_public'], read=read_installed,
+                                                               trusted=cli.trusted, root=cli.ROOT)
         github = github_evidence(tools, authority, core)
         def system_for(packet, approval):
             policy = authority.lifecycle_policy(packet, approval)

@@ -25,6 +25,8 @@ CATALOG_PATH = '/api/credits/pricing'
 PROBE_HEADER, CATALOG_PROBE = 'x-zimage-readonly-probe', 'catalog-v1'
 PATHS = ('/api/health/ready', '/api/meta', '/api/auth/session', '/api/account', '/api/sessions', CATALOG_PATH)
 PROTOCOL = 'zimage-backend-readonly-v2'
+ORDINARY_CHALLENGE = 'zimage-ordinary-readonly-challenge-v1'
+REQUEST_FIELDS = {'schemaVersion', 'operationId', 'backendRelease', 'pid', 'nonce', 'createdAt', 'expiresAt'}
 
 
 def valid_uuid(value):
@@ -104,7 +106,7 @@ def request_digest(request):
 def verify(request, fetch, now=time.time):
     if type(request) is dict and request.get('verifierProtocol') == 'zimage-legacy-readonly-v1':
         return verify_legacy(request, fetch, now)
-    if (set(request) != {'schemaVersion', 'operationId', 'backendRelease', 'pid', 'nonce', 'createdAt', 'expiresAt'}
+    if (type(request) is not dict or set(request) != REQUEST_FIELDS
             or type(request['schemaVersion']) is not int or request['schemaVersion'] != 1
             or not re.fullmatch(r'[a-f0-9]{40}', request['backendRelease'])
             or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{6,79}', request['operationId'])
@@ -142,6 +144,36 @@ def verify(request, fetch, now=time.time):
             'operationId': request['operationId'], 'backendRelease': request['backendRelease'], 'pid': request['pid'],
             'nonce': request['nonce'], 'requestSha256': request_digest(request), 'checkedAt': now(),
             'checks': checks, 'authenticatedReadOnly': True, 'independentPublic': True, 'catalogReady': True}
+
+
+def verify_ordinary(challenge, fetch, now=time.time):
+    if (type(challenge) is not dict or set(challenge) != {'schemaVersion', 'kind', 'packetSha256', 'operationId',
+                                                         'process', 'request'}
+            or type(challenge['schemaVersion']) is not int or challenge['schemaVersion'] != 1
+            or challenge['kind'] != ORDINARY_CHALLENGE
+            or type(challenge['packetSha256']) is not str or not re.fullmatch(r'[a-f0-9]{64}', challenge['packetSha256'])
+            or type(challenge['operationId']) is not str
+            or not re.fullmatch(r'zimage-release-[1-9][0-9]{0,18}-[1-9][0-9]{0,18}', challenge['operationId'])):
+        raise ValueError('Exact ordinary release challenge required')
+    process, request = challenge['process'], challenge['request']
+    if (type(process) is not dict or set(process) != {'pid', 'startTicks', 'bootId'}
+            or type(process['pid']) is not int or not 0 < process['pid'] < 2**31
+            or type(process['startTicks']) is not int or process['startTicks'] <= 0 or not valid_uuid(process['bootId'])
+            or type(request) is not dict or set(request) != REQUEST_FIELDS or request['pid'] != process['pid']
+            or type(request.get('operationId')) is not str
+            or (request['operationId'] != challenge['operationId']
+                and not re.fullmatch(r'restore-[a-f0-9]{48}', request['operationId']))):
+        raise ValueError('Challenge must identify the exact release process')
+    result = verify(request, fetch, now=now)
+    return dict(schemaVersion=1, kind='zimage-ordinary-candidate-v1', packetSha256=challenge['packetSha256'],
+                operationId=challenge['operationId'], observedAt=int(result['checkedAt']),
+                process=process, request=request, receipt=result)
+
+
+def check_request(request, fetch, now=time.time):
+    if type(request) is dict and request.get('kind') == ORDINARY_CHALLENGE:
+        return verify_ordinary(request, fetch, now=now)
+    return verify(request, fetch, now=now)
 
 
 def verify_legacy(request, fetch, now=time.time):
@@ -209,7 +241,7 @@ def serve(source, destination, fetch, now=time.time):
             print(json.dumps({'schemaVersion': 1, 'verificationFailed': True}), file=destination, flush=True)
             return
         try:
-            receipt = verify(json.loads(line), fetch, now=now)
+            receipt = check_request(json.loads(line), fetch, now=now)
             print(json.dumps(receipt, sort_keys=True), file=destination, flush=True)
         except Exception:
             print(json.dumps({'schemaVersion': 1, 'verificationFailed': True}), file=destination, flush=True)
@@ -228,8 +260,10 @@ def main():
         serve(sys.stdin, sys.stdout, fetch)
         return
     if args.output is None: raise ValueError('A new receipt output path is required')
-    if args.request.stat().st_size > 4096: raise ValueError('Verification request exceeds bound')
-    result = verify(json.loads(args.request.read_text()), fetch)
+    with args.request.open('rb') as source:
+        body = source.read(4097)
+    if not 0 < len(body) <= 4096: raise ValueError('Verification request exceeds bound')
+    result = check_request(json.loads(body), fetch)
     # Never include the cookie, owner, email, token, or response bodies in evidence.
     descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, 'w') as stream:

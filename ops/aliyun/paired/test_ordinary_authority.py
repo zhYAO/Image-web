@@ -1,9 +1,15 @@
 import hashlib
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
+import stat
+import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import core
 import ordinary
@@ -20,6 +26,14 @@ def load(name, path):
 HERE = Path(__file__).resolve().parent
 authority = load('test_host_authority', HERE / 'ordinary-authority.py')
 receipt = load('test_backend_receipt', HERE.parent / 'backend/receipt.py')
+transaction = load('test_backend_transaction', HERE.parent / 'backend/transaction.py')
+with patch.object(sys, 'path', [str(HERE.parent), *sys.path]):
+    import github_pair_public as public_checks
+with patch.object(sys, 'path', [str(HERE.parent / 'backend'), *sys.path]):
+    import test_verify as backend_fixture
+
+
+PROCESS = {'pid': 202, 'startTicks': 11, 'bootId': '00000000-0000-4000-8000-000000000001'}
 
 
 class AuthorityTest(unittest.TestCase):
@@ -28,13 +42,17 @@ class AuthorityTest(unittest.TestCase):
         self.packet, self.approval = f.packet, f.a
         self.approval['operation'] = 'zimage-release-1-2'
         self.now = 130
+        self.elapsed = 0
         self.files = {authority.TOKEN: b'fixture-only\n'}
         self.read = Mock(side_effect=self.read_file)
         self.trusted = Mock()
+        self.writer = Mock(side_effect=self.publish_and_respond)
         self.put(authority.CONFIG, dict(schemaVersion=1, signerPolicy={'repositoryId': 15}, mergePolicy={},
                                          attestationDigests={}))
-        self.driver = authority.Authority(core=core, tools=SimpleNamespace(receipt=receipt), read=self.read,
-                                          trusted=self.trusted, root=Path('unused'), clock=lambda: self.now)
+        tools = SimpleNamespace(receipt=receipt, transaction=SimpleNamespace(atomic_json=self.writer))
+        self.driver = authority.Authority(core=core, tools=tools, public=public_checks, read=self.read,
+                                          trusted=self.trusted, root=Path('unused'), clock=lambda: self.now,
+                                          monotonic=lambda: self.elapsed, sleep=self.tick)
         self.directory = authority.EVIDENCE / '1-2'
         self.authorization = authority.AUTHORIZATIONS / '1-2.json'
         self.lifecycle = {field: 'e' * 64 for field in authority.LIFECYCLE}
@@ -54,6 +72,35 @@ class AuthorityTest(unittest.TestCase):
         data = core.canonical(value)
         self.files[path] = data
         return hashlib.sha256(data).hexdigest()
+
+    def tick(self, seconds):
+        self.elapsed += seconds
+
+    def publish_and_respond(self, path, challenge):
+        self.put(path, challenge)
+        response = self.verifier_response(challenge)
+        self.put(path.with_name(path.name.replace('-challenge', '')), response)
+
+    def verifier_response(self, challenge):
+        release = challenge['request']['backendRelease']
+        fixture = backend_fixture.VerifierTests()
+        fixture.setUp()
+
+        def fetch(path):
+            status, headers, body = fixture.fetch(path)
+            if path == '/api/health/ready':
+                body['version'] = release
+            elif path == '/api/meta':
+                body['backendRelease'] = release
+            return status, headers, body
+
+        output = io.StringIO()
+        backend_fixture.verifier.serve(io.StringIO(core.canonical(challenge).decode()), output, fetch, now=lambda: self.now)
+        ready, response = (json.loads(body) for body in output.getvalue().splitlines())
+        self.assertIs(ready['ready'], True)
+        self.assertEqual(fixture.seen, [*backend_fixture.verifier.PATHS, '/api/meta'])
+        self.assertNotIn('private@example.test', output.getvalue())
+        return response
 
     def authorize(self):
         self.put(self.authorization, dict(schemaVersion=1, approval=self.approval, sha256=ordinary.sha(self.approval),
@@ -106,7 +153,7 @@ class AuthorityTest(unittest.TestCase):
 
     def test_baseline_requires_the_drill_and_public_acceptance_for_the_retained_pair(self):
         old = self.approval['oldPair']
-        initial = dict(old, frontendArtifact='e' * 64, process={'pid': 101})
+        initial = dict(old, frontendArtifact='e' * 64, process=dict(PROCESS, pid=101))
         public = self.directory / 'rollback-public.json'
         acceptance = self.public(old)
         public_digest = self.put(public, acceptance)
@@ -119,6 +166,8 @@ class AuthorityTest(unittest.TestCase):
                                                                  rollbackDrillSha256=drill_digest)
         self.authorize()
         self.driver.verify_baseline(initial, self.approval)
+        challenge = core.parse(self.files[self.directory / 'baseline-readonly-challenge.json'])
+        self.assertEqual(challenge['request']['backendRelease'], old['backend'])
         with self.assertRaisesRegex(ValueError, 'Live baseline'):
             self.driver.verify_baseline(dict(initial, process={'pid': 102}), self.approval)
         self.put(public, dict(acceptance, routes=['/']))
@@ -128,26 +177,66 @@ class AuthorityTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.driver.verify_baseline(initial, self.approval)
 
-    def test_candidate_requires_existing_nonce_and_readonly_receipt_for_exact_process(self):
+    def test_candidate_and_restoration_get_distinct_host_challenges_for_exact_processes(self):
         self.authorize()
-        operation, release = self.approval['operation'], self.packet['commit']
-        process = dict(pid=202, start=11)
-        request = dict(schemaVersion=1, operationId=operation, backendRelease=release, pid=process['pid'],
-                       nonce='a' * 64, createdAt=125, expiresAt=150)
-        checks = [dict(path=path, status=200, noStore=True, authenticated=i >= 2)
-                  for i, path in enumerate(receipt.PATHS)]
-        response = dict(schemaVersion=1, verifierProtocol=receipt.PROTOCOL, operationId=operation,
-                        backendRelease=release, pid=process['pid'], nonce=request['nonce'],
-                        requestSha256=receipt.request_digest(request), checkedAt=129, checks=checks,
-                        authenticatedReadOnly=True, independentPublic=True, catalogReady=True)
-        self.evidence('candidate.json', 'zimage-ordinary-candidate-v1', process=process, request=request, receipt=response)
-        self.driver.verify_candidate(process, self.packet, self.approval)
-        with self.assertRaisesRegex(ValueError, 'exact live process'):
-            self.driver.verify_candidate(dict(process, start=12), self.packet, self.approval)
-        response['nonce'] = 'b' * 64
-        self.evidence('candidate.json', 'zimage-ordinary-candidate-v1', process=process, request=request, receipt=response)
-        with self.assertRaisesRegex(ValueError, 'nonce binding'):
-            self.driver.verify_candidate(process, self.packet, self.approval)
+        self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+        restored = dict(PROCESS, pid=303, startTicks=21)
+        self.driver.verify_restored_candidate(restored, self.packet, self.approval)
+        initial, recovery = [call.args[1] for call in self.writer.call_args_list]
+        self.assertEqual(initial['process'], PROCESS)
+        self.assertEqual(recovery['process'], restored)
+        self.assertEqual(recovery['request']['backendRelease'], self.approval['oldPair']['backend'])
+        self.assertNotEqual(initial['request']['nonce'], recovery['request']['nonce'])
+        self.assertEqual(recovery['request']['expiresAt'], self.approval['expiresAt'])
+        with self.assertRaisesRegex(ValueError, 'already exists'):
+            self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+        self.assertEqual(self.writer.call_count, 2)
+
+    def test_verifier_cannot_substitute_challenge_nonce_or_process_start(self):
+        self.authorize()
+        for change in ('nonce', 'process', 'receipt-nonce'):
+            def respond(path, challenge):
+                self.put(path, challenge)
+                response = self.verifier_response(challenge)
+                if change == 'nonce':
+                    response['request'] = dict(response['request'], nonce='d' * 64)
+                elif change == 'process':
+                    response['process'] = dict(response['process'], startTicks=12)
+                else:
+                    response['receipt'] = dict(response['receipt'], nonce='d' * 64)
+                self.put(path.with_name('candidate.json'), response)
+            self.files.pop(self.directory / 'candidate-challenge.json', None)
+            self.writer.side_effect = respond
+            message = 'nonce binding' if change == 'receipt-nonce' else 'fresh challenge and exact live process'
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
+                self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+
+    def test_missing_verifier_receipt_times_out_at_the_authorized_expiry(self):
+        self.authorize()
+        self.writer.side_effect = self.put
+        with self.assertRaisesRegex(ValueError, 'did not return a receipt in time'):
+            self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+        self.assertEqual(self.elapsed, 20)
+        self.writer.assert_called_once()
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires the actual POSIX challenge writer')
+    def test_live_challenge_crosses_a_private_file_boundary_before_receipt_acceptance(self):
+        self.authorize()
+        with tempfile.TemporaryDirectory(prefix='ordinary-challenge-fixture-') as tmp:
+            directory = Path(tmp)
+            self.driver.batch['directory'] = directory
+            self.driver.tools.transaction = transaction
+            self.driver.read = lambda path, limit, **_: path.read_bytes()
+
+            def independent_verifier(_):
+                challenge = directory / 'candidate-challenge.json'
+                self.assertEqual(stat.S_IMODE(challenge.stat().st_mode), 0o600)
+                response = self.verifier_response(core.parse(challenge.read_bytes()))
+                transaction.atomic_json(directory / 'candidate.json', response)
+
+            self.driver.sleep = Mock(side_effect=independent_verifier)
+            self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+            self.driver.sleep.assert_called_once()
 
     def test_restored_claim_requires_exact_public_check_document(self):
         self.authorize()
@@ -161,3 +250,29 @@ class AuthorityTest(unittest.TestCase):
         self.put(filename, self.public(self.approval['newPair']))
         with self.assertRaisesRegex(ValueError, 'public readiness'):
             self.driver.verify_public_restoration(self.packet, self.approval, snapshot)
+
+    def test_public_failure_requires_hash_linked_response_for_the_exact_opened_pair(self):
+        self.authorize()
+        pair = self.approval['newPair']
+        snapshot = dict(pair, process={'pid': 303})
+        filename = self.directory / 'failed-public-acceptance.json'
+        witness = public_checks.capture_failure(pair['backend'], fetch=lambda _: (503, 'text/html', 'no-store', b''))
+
+        def bind_witness(checks):
+            return self.evidence('public-failure.json', 'zimage-ordinary-public-v1', pair=pair,
+                                 snapshotSha256=core.digest(snapshot), status='failed', checksSha256=checks)
+
+        expected = bind_witness(core.digest(witness))
+        with self.assertRaises(FileNotFoundError):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)
+        self.put(filename, witness)
+        self.assertEqual(self.driver.verify_public_failure(self.packet, self.approval, snapshot), expected)
+        with self.assertRaisesRegex(ValueError, 'live pair'):
+            self.driver.verify_public_failure(self.packet, self.approval, dict(snapshot, process={'pid': 304}))
+        witness['check']['status'] = 200
+        tampered_digest = self.put(filename, witness)
+        with self.assertRaisesRegex(ValueError, 'digest'):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)
+        bind_witness(tampered_digest)
+        with self.assertRaisesRegex(ValueError, 'contradicts'):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)
