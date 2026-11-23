@@ -4,6 +4,7 @@ Wire schemas mirror packages/domain/src/runtime-contracts.ts. SHA256 proves
 integrity, not builder authorization; expected hashes must arrive independently.
 """
 import hashlib
+import importlib.util
 import gzip
 from html import unescape
 from html.parser import HTMLParser
@@ -34,6 +35,34 @@ INTERNAL = {'.release/manifest.json', '.release/file-index.json'}
 TEXT = {'.html', '.js', '.mjs', '.css', '.svg', '.json', '.md', '.txt'}
 RESOURCE = re.compile(r'\.(?:js|mjs|css|webp|png|jpe?g|gif|svg|ico|woff2?|otf|ttf|map)(?:[?#].*)?$', re.I)
 SECRETS = re.compile(r'SUPABASE_SERVICE_ROLE_KEY|SUPABASE_SECRET_KEY|DATABASE_URL|AUTH_RATE_LIMIT_PEPPER|SENTRY_AUTH_TOKEN|(?:OPENAI|ANTHROPIC|GEMINI|DEEPSEEK|PROVIDER)_API_KEY|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|sb_secret_[A-Za-z0-9_-]{16,}|sk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}|postgres(?:ql)?://[^\s"\x27]+|sourceMappingURL\s*=|__NEXT_DATA__|next/dist|require\(["\x27]sharp["\x27]\)')
+
+
+IMAGE_METADATA = 'public-image-contract.json'
+CAPTCHA_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+
+
+def image_contract(value):
+    # Trusted source companion; never import a file from the supplied artifact.
+    spec = importlib.util.spec_from_file_location('reviewed_public_images', Path(__file__).resolve().parent.parent / 'public-image-contract.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.validate(value)
+    return module
+
+
+def payload_images(files):
+    body = files.get(IMAGE_METADATA)
+    if body is None: return None
+    value = parse(body)
+    contract = image_contract(value)
+    if any(name.startswith('commerce/') for name in files):
+        raise ValueError('External frontend retains local commerce payload')
+    contract.reject_copies([{'path': name, 'sha256': digest(data)} for name, data in files.items() if data is not None and name != IMAGE_METADATA], value)
+    return value
+
+
+def config_fingerprint(config, images):
+    return digest(canonical(config if images is None else {'schemaVersion': 2, 'publicConfig': config, 'publicImages': images}))
 
 
 def forbidden_browser_marker(text):
@@ -191,7 +220,8 @@ def payload_path(name, internal=False):
 def safe_directory(path):
     path = Path(os.path.abspath(path))
     for parent in [*reversed(path.parents), path]:
-        if not stat.S_ISDIR(parent.lstat().st_mode):
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or is_reparse(info):
             raise ValueError('Expected real directory without symlink ancestors')
     return path
 
@@ -200,41 +230,107 @@ def signature(info):
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
-def read_regular(path, limit=MAX_FILE):
-    flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
-    before_path = Path(path).lstat()
-    if not stat.S_ISREG(before_path.st_mode) or before_path.st_nlink != 1:
+def is_reparse(info):
+    return bool(getattr(info, 'st_file_attributes', 0) & 0x400)
+
+
+def path_handle_signature(info, windows=None):
+    if windows is None: windows = os.name == 'nt'
+    if not windows: return signature(info)
+    # CPython's path and descriptor APIs can expose different Windows ctime
+    # semantics. Compare common identity here, but retain each API's original
+    # full ctime signature independently before/after the read below.
+    birth = getattr(info, 'st_birthtime_ns', None)
+    if not info.st_ino or not info.st_dev:
+        raise ValueError('Missing Windows file identity')
+    # Older supported Python versions lack birthtime. Retain the original
+    # strict comparison in that case; never omit a timestamp as a fallback.
+    if birth is None: return signature(info)
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, birth
+
+
+def open_readonly_no_follow(path):
+    if os.name != 'nt':
+        return os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+    import ctypes
+    from ctypes import wintypes
+    import msvcrt
+    api = ctypes.WinDLL('kernel32', use_last_error=True)
+    create = api.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                       wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    close = api.CloseHandle
+    close.argtypes = [wintypes.HANDLE]
+    close.restype = wintypes.BOOL
+    # Read-only; share reads, never writes/deletes. OPEN_REPARSE_POINT opens
+    # the final entry itself, whose attributes are checked before any read.
+    handle = create(str(Path(path).absolute()), 0x80000000, 1, None, 3, 0x00200000, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ValueError('Cannot open protected regular file')
+    try:
+        return msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+    except BaseException:
+        close(handle)
+        raise
+
+
+def checked_open(path, limit):
+    safe_directory(Path(path).parent)
+    original = Path(path).lstat()
+    if not stat.S_ISREG(original.st_mode) or original.st_nlink != 1 or is_reparse(original):
         raise ValueError('Expected single-link regular file')
-    fd = os.open(path, flags)
-    with os.fdopen(fd, 'rb') as stream:
-        before = os.fstat(stream.fileno())
-        if signature(before) != signature(before_path) or before.st_size > limit:
+    fd = open_readonly_no_follow(path)
+    try:
+        opened = os.fstat(fd)
+        current = Path(path).lstat()
+        if (not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or is_reparse(opened)
+                or is_reparse(current) or signature(current) != signature(original)
+                or path_handle_signature(opened) != path_handle_signature(original)
+                or opened.st_size > limit):
             raise ValueError('File changed or exceeds bound')
+        return fd, original, opened
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def check_read_finished(path, original, before, fd):
+    safe_directory(Path(path).parent)
+    after = os.fstat(fd)
+    current = Path(path).lstat()
+    if (not stat.S_ISREG(current.st_mode) or current.st_nlink != 1 or is_reparse(current)
+            or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1 or is_reparse(after)
+            or signature(original) != signature(current) or signature(before) != signature(after)
+            or path_handle_signature(current) != path_handle_signature(after)):
+        raise ValueError('File changed while reading')
+
+
+def read_regular(path, limit=MAX_FILE):
+    fd, original, before = checked_open(path, limit)
+    with os.fdopen(fd, 'rb') as stream:
         data = bytearray()
         for block in iter(lambda: stream.read(min(1024 * 1024, limit + 1 - len(data))), b''):
             data.extend(block)
             if len(data) > limit: raise ValueError('File exceeds bound')
-        if len(data) > limit or len(data) != before.st_size or signature(before) != signature(os.fstat(stream.fileno())):
+        if len(data) > limit or len(data) != before.st_size:
             raise ValueError('File changed while reading')
+        check_read_finished(path, original, before, stream.fileno())
     return bytes(data)
 
 
 def hash_regular(path):
     """Bounded-memory hashing for server media and whole-tree verification."""
-    before_path = Path(path).lstat()
-    if not stat.S_ISREG(before_path.st_mode) or before_path.st_nlink != 1 or before_path.st_size > MAX_FILE:
-        raise ValueError('Nonregular, linked or oversized payload')
-    fd = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+    fd, original, before = checked_open(path, MAX_FILE)
     with os.fdopen(fd, 'rb') as stream:
-        before = os.fstat(stream.fileno())
-        if signature(before) != signature(before_path): raise ValueError('Payload changed before hashing')
         hasher, total = hashlib.sha256(), 0
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             total += len(block)
             if total > before.st_size: raise ValueError('Payload grew while hashing')
             hasher.update(block)
-        if total != before.st_size or signature(before) != signature(os.fstat(stream.fileno())):
+        if total != before.st_size:
             raise ValueError('Payload changed while hashing')
+        check_read_finished(path, original, before, stream.fileno())
         return total, hasher.hexdigest()
 
 
@@ -287,11 +383,12 @@ def css_references(text):
     return [match[0] or match[1] for match in re.findall(r'url\(\s*["\x27]?([^"\x27)\s]+)["\x27]?\s*\)|@import\s+["\x27]([^"\x27]+)["\x27]', text)]
 
 
-def resource_target(value, owner, namespace):
+def resource_target(value, owner, namespace, images=None, image_urls=None):
     value = unescape(value)
     if not value or value.startswith(('#', 'data:', 'blob:')) or '${' in value: return None
     if not RESOURCE.search(value): return None
     if re.match(r'(?i)^(?:https?:|//)', value):
+        if value == CAPTCHA_SCRIPT or (images is not None and value in (image_urls if image_urls is not None else image_contract(images).urls(images))): return None
         raise ValueError('External static resource outside artifact closure')
     if re.search(r'%(?![a-fA-F0-9]{2})', value): raise ValueError('Invalid resource URL')
     value = unquote(value.split('?', 1)[0].split('#', 1)[0], errors='strict')
@@ -308,11 +405,12 @@ def resource_target(value, owner, namespace):
     return value
 
 
-def closure(files, namespace, scan=None):
+def closure(files, namespace, scan=None, images=None):
     if 'index.html' not in files: raise ValueError('Missing static homepage')
+    image_urls = image_contract(images).urls(images) if images is not None else None
     for name in files if scan is None else scan:
         body = files[name]
-        if name in INTERNAL: continue
+        if name in INTERNAL or name == IMAGE_METADATA: continue
         payload_path(name)
         suffix = Path(name).suffix.lower()
         if body is None or suffix not in TEXT: continue
@@ -328,10 +426,10 @@ def closure(files, namespace, scan=None):
         if suffix in {'.css', '.html', '.svg'}: references.extend(css_references(text))
         if suffix in {'.js', '.mjs', '.html', '.svg'}:
             # Vite imports, preload table, URL constructor and public constants.
-            references.extend(re.findall(r'["\x27]((?:\.{0,2}/|assets/)[^"\x27\n]+)["\x27]', text))
+            references.extend(re.findall(r'["\x27]((?:\.{0,2}/|assets/|https?://|//)[^"\x27\n]+)["\x27]', text, re.I))
             references.extend(re.findall(r'(?:\bimport\s*\(|\bfrom\s*|\bimport\s+|\bnew\s+URL\s*\()\s*["\x27]([^"\x27]+)["\x27]', text))
         for reference in references:
-            target = resource_target(reference, name, namespace)
+            target = resource_target(reference, name, namespace, images, image_urls)
             if target is not None and target not in files:
                 raise ValueError('Missing static resource in closure')
 
@@ -381,11 +479,18 @@ def verify(root, manifest_sha=None):
     version = parse(read_regular(root / 'version.json', MAX_JSON)) if 'version.json' in files else {}
     if version != {'schemaVersion': 1, 'frontendRelease': value['assetNamespace']}:
         raise ValueError('Public version marker mismatch')
+    images = None
+    if IMAGE_METADATA in files:
+        images = parse(read_regular(root / IMAGE_METADATA, MAX_JSON))
+        contract = image_contract(images)
+        if any(name.startswith('commerce/') for name in files):
+            raise ValueError('External frontend retains local commerce payload')
+        contract.reject_copies(records, images)
     for name in files:
         if name not in INTERNAL and Path(name).suffix.lower() in TEXT:
             scan_files = dict(files)
             scan_files[name] = read_regular(root / name, MAX_TEXT)
-            closure(scan_files, value['assetNamespace'], scan=[name])
+            closure(scan_files, value['assetNamespace'], scan=[name], images=images)
     return value
 
 
@@ -414,9 +519,10 @@ def candidate_files(dist, config):
     version = canonical({'schemaVersion': 1, 'frontendRelease': namespace})
     if 'version.json' in files and files['version.json'] != version: raise ValueError('Conflicting public version marker')
     files['version.json'] = version
-    closure(files, namespace)
+    images = payload_images(files)
+    closure(files, namespace, images=images)
     subject = {'schemaVersion': 1, 'candidateSha256': digest(body), 'payloadIndexSha256': digest(canonical(file_index(files))),
-               'publicConfigFingerprint': digest(canonical(config))}
+               'publicConfigFingerprint': config_fingerprint(config, images)}
     return files, candidate, subject
 
 
@@ -452,7 +558,7 @@ def pack(dist, output, options, config, evidence=None):
     index = file_index(files)
     index_body = canonical(index)
     if len(index_body) > MAX_JSON: raise ValueError('File index exceeds metadata budget')
-    build = dict(options['build'], publicConfigFingerprint=digest(canonical(config)))
+    build = dict(options['build'], publicConfigFingerprint=config_fingerprint(config, payload_images(files)))
     value = dict(options, schemaVersion=1, artifactId=artifact_identity(digest(index_body), build['publicConfigFingerprint']), build=build,
                  fileIndex={'path': '.release/file-index.json', 'sha256': digest(index_body), 'fileCount': len(index['files']), 'totalBytes': sum(x['bytes'] for x in index['files'])})
     validate_manifest(value)
@@ -481,7 +587,7 @@ def pack(dist, output, options, config, evidence=None):
 def extract_strict(archive, destination, validator=None, max_bytes=MAX_BYTES):
     archive = Path(archive)
     archive_info = archive.lstat()
-    if not stat.S_ISREG(archive_info.st_mode) or archive_info.st_nlink != 1 or archive_info.st_size > MAX_ARCHIVE:
+    if not stat.S_ISREG(archive_info.st_mode) or archive_info.st_nlink != 1 or is_reparse(archive_info) or archive_info.st_size > MAX_ARCHIVE:
         raise ValueError('Archive must be bounded single-link regular file')
     destination = Path(destination)
     destination.mkdir(mode=0o700)
@@ -490,9 +596,8 @@ def extract_strict(archive, destination, validator=None, max_bytes=MAX_BYTES):
     try:
         # Strict streaming USTAR: reject extension/link headers BEFORE any
         # tar library could allocate/read an unbounded GNU or PAX extension.
-        archive_fd = os.open(archive, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+        archive_fd, archive_info, archive_handle = checked_open(archive, MAX_ARCHIVE)
         with os.fdopen(archive_fd, 'rb') as compressed, gzip.GzipFile(fileobj=compressed, mode='rb') as tar:
-            if signature(archive_info) != signature(os.fstat(compressed.fileno())): raise ValueError('Archive changed before extraction')
             while True:
                 header = tar.read(512)
                 if header == b'\0' * 512:
@@ -532,7 +637,7 @@ def extract_strict(archive, destination, validator=None, max_bytes=MAX_BYTES):
                     os.fsync(out.fileno())
                 padding = tar.read((-size) % 512)
                 if len(padding) != (-size) % 512 or any(padding): raise ValueError('Invalid archive padding')
-            if signature(archive_info) != signature(os.fstat(compressed.fileno())): raise ValueError('Archive changed during extraction')
+            check_read_finished(archive, archive_info, archive_handle, compressed.fileno())
         return destination
     except (tarfile.TarError, EOFError, OSError, UnicodeError) as exc:
         raise ValueError('Invalid or truncated archive') from exc

@@ -21,9 +21,6 @@
   --rim: rgba(255, 255, 255, 0.95);
   --shadow: 0 10px 40px rgba(40, 27, 62, 0.045), 0 2px 8px rgba(40, 27, 62, 0.025);
   --ease: var(--z-ease);
-  --font:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", sans-serif;
   --sidebar-width: 244px;
 }
 @media (prefers-color-scheme: dark) {
@@ -40,9 +37,6 @@
   --rim: rgba(239, 222, 255, 0.15);
   --shadow: 0 10px 40px #05020924, 0 2px 8px #05020914;
 }
-.zl-root {
-  font-family: var(--font);
-}
 .zl-root svg {
   display: block;
   width: 20px;
@@ -54,7 +48,7 @@
   stroke-linejoin: round;
 }
 .zl-root :is(button, input, select, textarea) {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
 }
 .zl-root button {
   cursor: pointer;

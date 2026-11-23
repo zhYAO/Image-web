@@ -16,7 +16,7 @@ const taskId = '20000000-0000-4000-8000-000000000001';
 const requestId = '30000000-0000-4000-8000-000000000001';
 const generationId = '40000000-0000-4000-8000-000000000001';
 const context = { params: Promise.resolve({ id: taskId }) };
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nKsAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==', 'base64');
 function request(origin: string | null = 'https://app.test', body: unknown = { requestId, generationId }) {
   return new Request(`https://app.test/api/creative-tasks/${taskId}/promote`, {
     method: 'POST', headers: { ...(origin ? { origin } : {}), 'content-type': 'application/json' }, body: JSON.stringify(body),

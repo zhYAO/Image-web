@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import sharp from 'sharp';
+import { solid, rgb } from './raster-fixture';
 import { POST } from '@/app/api/creative-tasks/[id]/download/route';
 import { safeExportIds as ids, safeExportTask } from './commerce-safe-export-fixtures';
 
@@ -13,14 +13,14 @@ vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => ({
   functions: { invoke: boundary.invoke },
 }) }));
 
-describe('authorized EC03 safe download (local RPC/Storage mocks, real Sharp)', () => {
+describe('authorized EC03 safe download (local RPC/Storage mocks, real WASM codecs)', () => {
   let task = safeExportTask();
   let source: Buffer;
   let fetcher: ReturnType<typeof vi.fn>;
   beforeEach(async () => {
     vi.clearAllMocks();
     task = safeExportTask();
-    source = await sharp({ create: { width: 300, height: 400, channels: 3, background: '#123456' } }).png().toBuffer();
+    source = await solid(300, 400, '#123456');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://synthetic.invalid');
     boundary.verified.mockResolvedValue({ data: ids.user, error: null });
     boundary.rpc.mockImplementation(async (name, args) => {
@@ -53,7 +53,7 @@ describe('authorized EC03 safe download (local RPC/Storage mocks, real Sharp)', 
     expect(response.headers.get('content-type')).toBe('image/png');
     expect(response.headers.get('content-disposition')).toContain('safe');
     expect(response.headers.get('cache-control')).toBe('private, no-store');
-    const { data, info } = await sharp(new Uint8Array(await response.arrayBuffer())).raw().toBuffer({ resolveWithObject: true });
+    const { data, info } = await rgb(new Uint8Array(await response.arrayBuffer()));
     expect([info.width, info.height]).toEqual([300, 400]);
     expect([...data.subarray(0, 3)]).toEqual([255, 255, 255]);
     expect(fetcher).toHaveBeenCalledTimes(1);

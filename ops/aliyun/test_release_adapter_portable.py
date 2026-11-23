@@ -159,7 +159,7 @@ class AdapterClosure(fixture.PortableFixture):
         self.op.verify_retained_layered.side_effect = None
         self.op.rollback(sha)
         self.op.verify_retained_layered.assert_called_with(target, sha)
-        self.op.legacy.activate.assert_called_once_with(target, restore_previous_on_failure=False)
+        self.op.legacy.activate.assert_called_once_with(target, restore_previous_on_failure=False, preflight=self.op.activation_preflight)
         self.assertTrue((target / '.three-layer-release.json').is_file())
 
     def test_cache_recheck_hashes_actual_runtime_and_original_resource_manifest(self):

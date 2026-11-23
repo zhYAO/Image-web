@@ -1,7 +1,7 @@
 /* React Bits GlideSelect / David Haz (2026), MIT + Commons Clause.
    Pinned visual source and license attribution are in GlideSelect.tsx. */
 .glide-select { position:relative; display:inline-block; min-width:0; max-width:100%; --gs-ease:cubic-bezier(.23,1,.32,1); }
-.glide-select__trigger { display:inline-flex; align-items:center; gap:8px; width:100%; min-width:0; height:36px; padding:0 10px; border:1px solid #e3e0e9; border-radius:10px; background:#fff; color:#292633; font:inherit; font-size:12px; line-height:1; text-align:left; cursor:pointer; touch-action:manipulation; transition:background-color 100ms,transform 160ms var(--gs-ease); }
+.glide-select__trigger { display:inline-flex; align-items:center; gap:8px; width:100%; min-width:0; height:36px; padding:0 10px; border:1px solid #e3e0e9; border-radius:10px; background:#fff; color:#292633; font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit; font-size:12px; line-height:1; text-align:left; cursor:pointer; touch-action:manipulation; transition:background-color 100ms,transform 160ms var(--gs-ease); }
 .glide-select__trigger:not(:disabled):hover,.glide-select__trigger[aria-expanded='true'] { background:#f5f2f9; }
 .glide-select__trigger:not(:disabled):active { transform:scale(.97); }
 .glide-select__trigger:focus-visible { outline:2px solid #78659e; outline-offset:3px; }

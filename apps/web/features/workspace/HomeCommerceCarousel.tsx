@@ -3,7 +3,7 @@
 import { publicAssetUrl } from "@/lib/public-assets";
 
 import { COMMERCE_SCENES, COMMERCE_PRIMARY_SCENE_IDS } from "@zimage/domain";
-import Image from "next/image";
+import Image from "@/features/commerce/PublicExampleImage";
 import { ArrowUpRight, ArrowLeft, ArrowRight } from "lucide-react";
 import { scenes } from "@/features/brand/scenes";
 import Link from "next/link";

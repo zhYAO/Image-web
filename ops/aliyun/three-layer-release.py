@@ -23,11 +23,56 @@ rename_no_replace = _tools.no_replace_directory
 MAX_RAW, MAX_ENTRIES = _tools.MAX_RAW, _tools.MAX_ENTRIES
 KINDS = ('code', 'runtime', 'assets')
 PUBLIC, FONTS = 'apps/web/public/', 'apps/web/server/apparel/fonts/'
+MODEL_ONLY_PROFILE = 'model-only-jsquash'
 FONT_FILES = {'fonts/' + n for n in ('NotoSansCJKsc-Regular.otf', 'NotoSansCJKsc-Bold.otf', 'LICENSE.txt', 'README.md')}
 SHA = re.compile(r'[a-f0-9]{64}')
 CACHE_ROOT = '/opt/zimage/layer-cache'
 PACKAGE_MANAGER = 'pnpm@11.19.0'
 CONFIG_SOURCES = ('apps/web/next.config.ts', 'apps/web/build/static-assets-config.mjs')
+
+
+def config_sources(schema):
+    return CONFIG_SOURCES if schema != 3 else CONFIG_SOURCES + (
+        'apps/web/build/public-image-base.mjs', 'apps/web/build/public-image-build.mjs',
+        'apps/web/features/commerce/public-image-paths.json', 'ops/aliyun/public-images.json')
+
+
+def image_tools():
+    spec = importlib.util.spec_from_file_location('trusted_layer_public_images', Path(__file__).with_name('public-image-contract.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def compiled_public_images(config):
+    env = config.get('env', {})
+    if not isinstance(env, dict) or not isinstance(env.get('ZIMAGE_PUBLIC_IMAGE_CONTRACT'), str):
+        raise ValueError('Missing compiled public image contract')
+    images = parse(env['ZIMAGE_PUBLIC_IMAGE_CONTRACT'].encode('utf-8'))
+    image_tools().validate(images)
+    expected = [{'protocol': 'https', 'hostname': 'www.zimage.store', 'port': '',
+                 'pathname': '/static-assets/' + images['manifestSha256'] + '/commerce/**', 'search': ''}]
+    if (env.get('ZIMAGE_PUBLIC_IMAGE_BASE_URL') != images['baseUrl']
+            or env.get('NEXT_PUBLIC_STATIC_ASSET_BASE_URL') not in (None, '', images['baseUrl'])
+            or config.get('images', {}).get('remotePatterns') != expected):
+        raise ValueError('Compiled public image base/pattern/legacy conflict')
+    return images
+
+
+def reject_image_copies(entries, images):
+    records = [{'path': item['path'][len(PUBLIC):] if item['path'].startswith(PUBLIC) else item['path'],
+                'sha256': item['sha256']} for item in entries if item['type'] == 'file']
+    image_tools().reject_copies(records, images)
+
+
+def validate_image_assets(metadata, entries, images):
+    if images is None:
+        if 'publicImages' in metadata: raise ValueError('Image-only resource metadata requires schema 3')
+        return
+    image_tools().validate(images)
+    if metadata.get('publicImages') != images:
+        raise ValueError('Resource/image identities differ')
+    reject_image_copies(entries, images)
 
 
 def absolute(value):
@@ -189,9 +234,29 @@ def classify(name):
     return 'runtime' if 'node_modules' in PurePosixPath(name).parts else 'code'
 
 
-def resource_entries(body):
+def validate_release_profile(config, profile, entries):
+    env = config.get('env', {})
+    engine = env.get('ZIMAGE_IMAGE_ENGINE')
+    if profile is None:
+        if engine == 'jsquash':
+            raise ValueError('Model-only build requires an explicit fontless resource profile')
+        return
+    if (profile != MODEL_ONLY_PROFILE or engine != 'jsquash' or env.get('ZIMAGE_APPAREL_TEXT_MODE') != 'model-only'
+            or config.get('images', {}).get('unoptimized') is not True):
+        raise ValueError('Compiled model-only runtime profile mismatch')
+    for entry in entries:
+        name = entry['path']
+        if (name == FONTS.rstrip('/') or name.startswith(FONTS) or name.lower().endswith(('.otf', '.ttf', '.woff', '.woff2', '.eot'))
+                or any(re.match(r'^(?:sharp(?:$|[.@-])|@img[+]sharp|libvips)', part, re.I) for part in name.split('/'))):
+            raise ValueError('Legacy font or native image engine in model-only release: ' + name)
+
+
+def resource_entries(body, profile=None):
     manifest = parse(body)
-    if manifest.get('schema') != 1 or manifest.get('productionReady') is not False:
+    if (manifest.get('schema') != (2 if profile == MODEL_ONLY_PROFILE else 1)
+            or manifest.get('productionReady') is not False
+            or ('runtimeProfile' in manifest) != (profile is not None)
+            or manifest.get('runtimeProfile') != profile):
         raise ValueError('Unsupported asset manifest')
     entries, names = [], set()
     for item in manifest['files']:
@@ -199,13 +264,15 @@ def resource_entries(body):
         safe_name(name)
         if name == 'asset-manifest.json' or item['kind'] not in ('public', 'font') or (item['kind'] == 'font') != name.startswith('fonts/'):
             raise ValueError('Invalid asset kind/path')
+        if profile is not None and (item['kind'] != 'public' or name.lower().endswith(('.otf', '.ttf', '.woff', '.woff2', '.eot'))):
+            raise ValueError('Font in model-only asset manifest')
         if item['kind'] == 'font' and name not in FONT_FILES:
             raise ValueError('Unknown asset font')
         if not isinstance(item.get('mime'), str):
             raise ValueError('Missing asset MIME')
         entries.append({'path': name, 'type': 'file', 'bytes': item['bytes'], 'sha256': item['sha256'], 'mode': 0o644})
         names.add(name)
-    if not FONT_FILES.issubset(names):
+    if profile is None and not FONT_FILES.issubset(names):
         raise ValueError('Asset fonts/license/provenance are missing')
     validate_entries(entries)
     return entries, manifest
@@ -320,17 +387,23 @@ def dependency_resolution(config, roots=()):
 
 def layer_binding(manifest, kind):
     if kind == 'runtime':
-        return (manifest['runtimeBinding'] if manifest['schema'] == 2 else
+        return (manifest['runtimeBinding'] if manifest['schema'] in (2, 3) else
                 {'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime']})
     binding = {'distDir': manifest['distDir'], 'assetsVersion': manifest['assetsVersion']}
-    if manifest['schema'] == 2:
-        binding.update(schema=2, assetDeliveryMode=manifest['assetDeliveryMode'], compiledAssetBaseUrl=manifest.get('compiledAssetBaseUrl'))
+    if manifest['schema'] in (2, 3):
+        binding.update(schema=manifest['schema'], assetDeliveryMode=manifest['assetDeliveryMode'], compiledAssetBaseUrl=manifest.get('compiledAssetBaseUrl'))
+    if 'runtimeProfile' in manifest:
+        binding['runtimeProfile'] = manifest['runtimeProfile']
+    if manifest['schema'] == 3:
+        binding['publicImageContractSha256'] = digest(canonical(manifest['publicImages']))
     return binding
 
 
 def validate_manifest(manifest):
     """Validate versioned metadata without checking local native runtime or files."""
-    if (type(manifest.get('schema')) is not int or manifest['schema'] not in (1, 2) or
+    if 'runtimeProfile' in manifest and (manifest.get('schema') != 3 or manifest['runtimeProfile'] != MODEL_ONLY_PROFILE):
+        raise ValueError('Unknown layered release runtime profile')
+    if (type(manifest.get('schema')) is not int or manifest['schema'] not in (1, 2, 3) or
             set(manifest.get('layers', {})) != set(KINDS) or manifest.get('productionReady') is not False or
             not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,100}', manifest.get('releaseId', '')) or
             not SHA.fullmatch(manifest.get('lockSha256', '')) or not SHA.fullmatch(manifest.get('assetsVersion', ''))):
@@ -338,17 +411,24 @@ def validate_manifest(manifest):
     valid_runtime(manifest['runtime'])
     if manifest['distDir'] not in ('.next', '.next-build-qa'):
         raise ValueError('Unsupported build directory')
-    if manifest['schema'] == 2:
+    if manifest['schema'] in (2, 3):
         validate_target_shape(manifest['target'])
         fingerprint = manifest['configFingerprint']
-        binding = {'schema': 2, 'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime'],
+        binding = {'schema': manifest['schema'], 'lockSha256': manifest['lockSha256'], 'runtime': manifest['runtime'],
                    'toolchain': manifest['target']['toolchain'], 'configSha256': digest(canonical(fingerprint))}
+        if ('runtimeProfile' in fingerprint) != ('runtimeProfile' in manifest) or fingerprint.get('runtimeProfile') != manifest.get('runtimeProfile'):
+            raise ValueError('Runtime profile/config binding mismatch')
         if (manifest['runtime'] != manifest['target']['runtime'] or manifest['assemblyCacheRoot'] != CACHE_ROOT or
-                manifest['runtimeBinding'] != binding or set(fingerprint.get('sources', {})) != set(CONFIG_SOURCES) or
+                manifest['runtimeBinding'] != binding or set(fingerprint.get('sources', {})) != set(config_sources(manifest['schema'])) or
                 any(not isinstance(sha, str) or not SHA.fullmatch(sha) for sha in fingerprint['sources'].values())):
             raise ValueError('Runtime/config/toolchain binding mismatch')
         mode, base = manifest.get('assetDeliveryMode'), manifest.get('compiledAssetBaseUrl')
-        if mode not in ('same-origin-public', 'remote') or (mode == 'same-origin-public' and base is not None) or (mode == 'remote' and not isinstance(base, str)):
+        if manifest['schema'] == 3:
+            images = manifest.get('publicImages')
+            image_tools().validate(images)
+            if mode != 'public-images' or base != images['baseUrl'] or fingerprint.get('publicImages') != images:
+                raise ValueError('Invalid independent public image/config binding')
+        elif mode not in ('same-origin-public', 'remote') or (mode == 'same-origin-public' and base is not None) or (mode == 'remote' and not isinstance(base, str)):
             raise ValueError('Invalid asset delivery mode/base binding')
         public_target = CACHE_ROOT + '/assets/' + manifest['assetsVersion']
         if manifest['generatedPublicLink'] != {'path': 'apps/web/public', 'target': public_target, 'bytes': len(public_target.encode())}:
@@ -356,6 +436,11 @@ def validate_manifest(manifest):
 
 
 def asset_delivery(config, asset_sha, mode, schema):
+    if schema == 3:
+        if mode != 'public-images': raise ValueError('Schema 3 requires explicit public-images mode')
+        return compiled_public_images(config)['baseUrl']
+    if config.get('env', {}).get('ZIMAGE_PUBLIC_IMAGE_CONTRACT') or config.get('env', {}).get('ZIMAGE_PUBLIC_IMAGE_BASE_URL'):
+        raise ValueError('Independent public image identity requires schema 3')
     base = validate_compiled_assets(config, asset_sha)
     if schema == 2:
         if mode == 'same-origin-public' and base is not None:
@@ -417,9 +502,9 @@ def finish_manifest(manifest):
 def pack(source, store, project, assets, release_id, budget=None, sample_label=None, source_commit=None, assembly_cache_root=None, *, target=None, schema=2, asset_delivery_mode='same-origin-public'):
     source, project, assets = map(root_path, (source, project, assets))
     store = ancestors_safe(store)
-    if type(schema) is not int or schema not in (1, 2):
+    if type(schema) is not int or schema not in (1, 2, 3):
         raise ValueError('Unsupported release schema')
-    if schema == 2:
+    if schema in (2, 3):
         if target is None:
             raise ValueError('Explicit --target JSON is required for schema 2')
         validate_target_shape(target)
@@ -469,11 +554,17 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
     if assets.name != asset_sha:
         raise ValueError('Wrong asset version directory')
     compiled_asset_base = asset_delivery(config, asset_sha, asset_delivery_mode, schema)
-    asset_entries, asset_manifest = resource_entries(asset_body)
+    profile = MODEL_ONLY_PROFILE if schema == 3 and config.get('env', {}).get('ZIMAGE_IMAGE_ENGINE') == 'jsquash' else None
+    asset_entries, asset_manifest = resource_entries(asset_body, profile)
+    public_images = compiled_public_images(config) if schema == 3 else None
+    validate_image_assets(asset_manifest, asset_entries, public_images)
     manifest_entry = {'path': 'asset-manifest.json', 'type': 'file', 'mode': 0o644, 'bytes': len(asset_body), 'sha256': asset_sha}
     verify_tree(assets, asset_entries + [manifest_entry], label='asset input')
     entries, omitted = inspect_source(source, dist)
-    if schema == 2:
+    validate_release_profile(config, profile, entries)
+    if public_images is not None:
+        reject_image_copies(entries, public_images)
+    if schema in (2, 3):
         validate_native_files(source, entries, runtime)
     indexed_assets = {e['path']: e for e in asset_entries}
     grouped = {'code': [], 'runtime': []}
@@ -496,7 +587,7 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
     if not grouped['runtime']:
         raise ValueError('Runtime layer is empty')
     marker = config.get('env', {}).get('ZIMAGE_BUILD_SHA')
-    public_target = (assembly_cache_root + '/assets/' + asset_sha if schema == 2 else str(assembly_cache_root / 'assets' / asset_sha))
+    public_target = (assembly_cache_root + '/assets/' + asset_sha if schema in (2, 3) else str(assembly_cache_root / 'assets' / asset_sha))
     manifest = {'schema': schema, 'releaseId': release_id, 'productionReady': False,
                 'sampleLabel': sample_label or 'Local unactivated prototype', 'distDir': dist,
                 'budgetBytes': budget, 'budgetPassed': None,
@@ -508,11 +599,18 @@ def pack(source, store, project, assets, release_id, budget=None, sample_label=N
                           'sourceCommit': source_commit, 'markerMatchesSourceCommit': bool(source_commit and marker == source_commit)},
                 'inputRoots': {'source': str(source), 'project': str(project), 'assets': str(assets)},
                 'retainedBuildMetadata': {'files': len(omitted), 'rawBytes': sum(e['bytes'] for e in omitted), 'location': 'Original staged input, unchanged; excluded from runtime delivery'}, 'layers': {}}
-    if schema == 2:
-        fingerprint = {'sources': {name: digest(read_regular(project / name)) for name in CONFIG_SOURCES},
+    if profile is not None:
+        manifest['runtimeProfile'] = profile
+    if schema in (2, 3):
+        fingerprint = {'sources': {name: digest(read_regular(project / name)) for name in config_sources(schema)},
                        'dependencyResolution': dependency_resolution(config, (project, source))}
+        if profile is not None:
+            fingerprint['runtimeProfile'] = profile
+        if schema == 3:
+            fingerprint['publicImages'] = public_images
+            manifest['publicImages'] = public_images
         manifest.update(target=target, assetDeliveryMode=asset_delivery_mode, configFingerprint=fingerprint)
-        manifest['runtimeBinding'] = {'schema': 2, 'lockSha256': lock_sha, 'runtime': runtime,
+        manifest['runtimeBinding'] = {'schema': schema, 'lockSha256': lock_sha, 'runtime': runtime,
                                      'toolchain': {'packageManager': package_manager}, 'configSha256': digest(canonical(fingerprint))}
     directory(store / 'layers')
     for kind in KINDS:
@@ -683,6 +781,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         ancestors_safe(store / child)
     for child in ('runtime', 'assets'):
         ancestors_safe(cache / child)
+    profile = manifest.get('runtimeProfile')
     indexes, archives, raw_assets = {}, {}, None
     for kind in KINDS:
         layer = manifest['layers'][kind]
@@ -695,7 +794,8 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         index_file = checked_store_file(store, layer['index'], identity, layer['indexBytes'])
         index_body = read_regular(index_file)
         if kind == 'assets':
-            entries, _ = resource_entries(index_body)
+            entries, asset_metadata = resource_entries(index_body, profile)
+            validate_image_assets(asset_metadata, entries, manifest.get('publicImages') if manifest['schema'] == 3 else None)
             if identity != manifest['assetsVersion']:
                 raise ValueError('Wrong asset version')
             raw_assets = index_body
@@ -715,6 +815,8 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         indexes[kind] = entries
         archives[kind] = checked_store_file(store, layer['archive'], layer['archiveSha256'], layer['archiveBytes'])
     combined = indexes['code'] + indexes['runtime']
+    if manifest['schema'] == 3:
+        reject_image_copies(combined, manifest['publicImages'])
     validate_entries(combined)
     if sum(e.get('bytes', 0) for e in combined + indexes['assets']) > MAX_RAW:
         raise ValueError('Assembled raw size exceeds limit')
@@ -753,7 +855,7 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
                 reused['copiedFiles'] += 1
         create_links(staging, links)
         verify_tree(staging, combined, label='assembled app')
-        if manifest['schema'] == 2:
+        if manifest['schema'] in (2, 3):
             validate_native_files(staging, combined, manifest['runtime'])
         for name in ('apps/web/server.js', f'apps/web/{manifest["distDir"]}/BUILD_ID', f'apps/web/{manifest["distDir"]}/required-server-files.json'):
             if not (staging / name).is_file() or (staging / name).is_symlink():
@@ -761,12 +863,15 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
         restored_config = parse(read_regular(staging / f'apps/web/{manifest["distDir"]}/required-server-files.json'))['config']
         if restored_config.get('distDir', '').removeprefix('./') != manifest['distDir']:
             raise ValueError('Assembled config.distDir mismatch')
+        validate_release_profile(restored_config, profile, combined)
         compiled_base = asset_delivery(restored_config, manifest['assetsVersion'], manifest.get('assetDeliveryMode'), manifest['schema'])
+        if manifest['schema'] == 3 and compiled_public_images(restored_config) != manifest['publicImages']:
+            raise ValueError('Assembled public image contract mismatch')
         # Older local manifests lack this metadata field; actual config is still
         # checked independently. New manifests must also agree with their record.
         if 'compiledAssetBaseUrl' in manifest and manifest['compiledAssetBaseUrl'] != compiled_base:
             raise ValueError('Assembled compiled asset base metadata mismatch')
-        if manifest['schema'] == 2 and dependency_resolution(restored_config, manifest['inputRoots'].values()) != manifest['configFingerprint']['dependencyResolution']:
+        if manifest['schema'] in (2, 3) and dependency_resolution(restored_config, manifest['inputRoots'].values()) != manifest['configFingerprint']['dependencyResolution']:
             raise ValueError('Assembled compiled dependency resolution mismatch')
         # This one external link is generated solely from the trusted, fully
         # verified asset cache binding. No archive may supply an external link.
@@ -789,7 +894,8 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
     return {'destination': str(destination), 'manifestSha256': expected_digest, 'releaseId': manifest['releaseId'], 'activated': False, 'productionReady': False,
             'raw': manifest['raw'], 'budgetBytes': budget, 'budgetPassed': None if budget is None else True, 'cache': cached, 'runtimeReuse': reused,
             'filesystemAccounting': filesystem_accounting([destination, Path(cached['runtime']['directory']), Path(cached['assets']['directory'])]),
-            'environment': {'ZIMAGE_SHARED_FONT_DIR': str(Path(cached['assets']['directory']) / 'fonts'), 'ZIMAGE_STATIC_ASSET_SHA256': manifest['assetsVersion']}}
+            'environment': {'ZIMAGE_STATIC_ASSET_SHA256': manifest['assetsVersion'],
+                            **({'ZIMAGE_SHARED_FONT_DIR': str(Path(cached['assets']['directory']) / 'fonts')} if profile is None else {})}}
 
 
 def main():
@@ -806,8 +912,8 @@ def main():
     build.add_argument('--source-commit')
     build.add_argument('--assembly-cache-root')
     build.add_argument('--target', type=Path, help='Explicit JSON target runtime/toolchain/cache contract (required for schema 2)')
-    build.add_argument('--schema', type=int, choices=(1, 2), default=2, help='Schema 1 is an explicit legacy compatibility mode')
-    build.add_argument('--asset-delivery-mode', choices=('same-origin-public', 'remote'), default='same-origin-public')
+    build.add_argument('--schema', type=int, choices=(1, 2, 3), default=2, help='Schema 1 is an explicit legacy compatibility mode')
+    build.add_argument('--asset-delivery-mode', choices=('same-origin-public', 'remote', 'public-images'), default='same-origin-public')
     restore = commands.add_parser('assemble')
     restore.add_argument('manifest', type=Path)
     restore.add_argument('store', type=Path)

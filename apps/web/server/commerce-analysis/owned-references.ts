@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import sharp from 'sharp';
+import { decodeRaster, fitInsideRaster, orientRaster, RASTER_LIMITS, withRasterWork, writeRaster } from '../images/raster-engine';
+import type { RasterFormat } from '../images/raster-header';
 import { assertActiveBusinessSession } from '../session-access';
 import { commerceAnalysisRequestSchema } from '@zimage/domain';
 export async function loadOwnedAnalysisReferences(admin:SupabaseClient,userId:string,request:ReturnType<typeof commerceAnalysisRequestSchema.parse>) {
@@ -13,11 +14,15 @@ export async function loadOwnedAnalysisReferences(admin:SupabaseClient,userId:st
   const source=await admin.storage.from('uploads').download(row.storage_path);
   if(source.error || !source.data || source.data.size>10*1024*1024) throw Error('reference_unavailable');
   total+=source.data.size; if(total>30*1024*1024) throw Error('analysis_input_too_large');
-  const bytes=await sharp(new Uint8Array(await source.data.arrayBuffer()),{limitInputPixels:36_000_000}).rotate().resize({width:2048,height:2048,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+  const file = source.data;
+  const bytes = await withRasterWork(async () => {
+   const { pixels, meta } = await decodeRaster(new Uint8Array(await file.arrayBuffer()), { ...RASTER_LIMITS, maxBytes:10*1024*1024, expectedFormat:row.mime_type.slice(6) as RasterFormat });
+   return writeRaster(fitInsideRaster(orientRaster(pixels,meta.orientation),2048,2048,false),'png');
+  });
   normalized+=bytes.length;
   if(normalized>16*1024*1024)throw Error('analysis_input_too_large');
   if(bytes.length>4*1024*1024) throw Error('analysis_image_too_large');
-  results.push({...ref,dataUrl:`data:image/png;base64,${bytes.toString('base64')}`});
+  results.push({...ref,dataUrl:`data:image/png;base64,${Buffer.from(bytes).toString('base64')}`});
  }
  return results;
 }

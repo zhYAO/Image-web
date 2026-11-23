@@ -29,7 +29,6 @@
       "next/dynamic": ["./src/platform/dynamic.tsx"],
       "lucide-react": ["./node_modules/lucide-react"],
       "@testing-library/react": ["./node_modules/@testing-library/react"],
-      "@sentry/browser": ["./node_modules/@sentry/browser"],
       "zod": ["./node_modules/zod"],
       "zustand": ["./node_modules/zustand"],
       "react-markdown": ["./node_modules/react-markdown"],
@@ -38,7 +37,7 @@
       "shiki": ["./node_modules/shiki"],
       "shiki/core": ["./node_modules/shiki/dist/core.d.mts"],
       "shiki/engine/javascript": ["./node_modules/shiki/dist/engine-javascript.d.mts"],
-      "shiki/langs": ["./node_modules/shiki/dist/langs.d.mts"],
+      "shiki/langs/*": ["./node_modules/shiki/dist/langs/*"],
       "shiki/themes/*": ["./node_modules/shiki/dist/themes/*"]
     }
   },

@@ -96,7 +96,7 @@ class SystemOps:
         cache = getattr(self, '_framework_contracts', {})
         if release not in cache:
             target = ROOT / 'releases' / release
-            self.adapter.verify_retained_layered(target, release)
+            self.adapter.verify_retained_layered(target, release, run_probe=False)
             helper = Path(__file__).with_name('http-admission.cjs')
             catalog = helper.with_name('next-source-profiles.json')
             owned(helper); owned(catalog)
@@ -192,7 +192,7 @@ class SystemOps:
         target = ROOT / 'releases' / release
         # This intentionally accepts only the retained layered protocol, never
         # an unverified source directory or a pure frontend artifact.
-        self.adapter.verify_retained_layered(target, release)
+        self.adapter.verify_retained_layered(target, release, run_probe=False)
         policy = self.policy()['backends'][release]
         actual = self.legacy.get('http://127.0.0.1:3100/api/meta')
         if actual[0] != 200: raise RuntimeError('Current backend metadata unavailable')
@@ -208,7 +208,9 @@ class SystemOps:
         subprocess.run(['/usr/bin/systemctl', 'start', 'zimage.service'], check=True)
 
     def native(self, release):
-        self.legacy.font_preflight(ROOT / 'releases' / release)
+        if not HEX40.fullmatch(release):
+            raise ValueError('Native probe requires exact managed release')
+        self.adapter.activation_preflight(ROOT / 'releases' / release)
 
     def select(self, release, expected):
         if self.current() != expected: raise RuntimeError('Backend current changed before exact selection')
@@ -313,7 +315,7 @@ def main():
     with bridge.safe_node_environment():
         # Native probe is deferred until the old API has safely drained/stopped;
         # all existing layer/cache/ELF/font closure validation stays enabled.
-        adapter = bridge.Adapter(ROOT, layers, legacy, native_check=lambda *_: None)
+        adapter = bridge.Adapter(ROOT, layers, legacy)
         if args.command == 'accept-receipt':
             # The release transaction holds deploy.lock while waiting for the
             # verifier. This independent narrow lock serializes receipt installs

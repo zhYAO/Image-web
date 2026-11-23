@@ -2,7 +2,7 @@
 
 import { publicAssetUrl } from "@/lib/public-assets";
 
-import Image from "next/image";
+import Image from "@/features/commerce/PublicExampleImage";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";

@@ -974,7 +974,7 @@ export class MockWorkspaceGateway implements WorkspaceGateway {
     ];
     const [background = '#eef2ff', foreground = '#6366f1'] = colors[index % colors.length] ?? [];
     const safePrompt = prompt.replaceAll(/[<>&]/g, '').slice(0, 18);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720"><rect width="720" height="720" rx="48" fill="${background}"/><circle cx="360" cy="300" r="150" fill="${foreground}" opacity=".2"/><path d="M240 390c80-120 160-120 240 0l80 120H160z" fill="${foreground}" opacity=".75"/><text x="360" y="610" text-anchor="middle" font-family="Arial" font-size="28" fill="#312e81">${safePrompt}</text></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720"><rect width="720" height="720" rx="48" fill="${background}"/><circle cx="360" cy="300" r="150" fill="${foreground}" opacity=".2"/><path d="M240 390c80-120 160-120 240 0l80 120H160z" fill="${foreground}" opacity=".75"/><text x="360" y="610" text-anchor="middle" font-size="28" fill="#312e81">${safePrompt}</text></svg>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }
 }

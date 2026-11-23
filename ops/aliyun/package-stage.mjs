@@ -1,7 +1,8 @@
-import { preflightCandidate } from './package-preflight.mjs';
+import { preflightCandidate, probeCandidateWasm } from './package-preflight.mjs';
 import { cp, mkdir, readdir, lstat, readFile, open, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { compiledPublicImageContract, verifyPublicImageSources } from '../../apps/web/build/public-image-build.mjs';
 
 const { excludedSourceFiles, generatedSourcemapRoots, generatedBuildTraceRoots } = JSON.parse(
   await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
@@ -31,15 +32,23 @@ export async function stageCandidate({ dist, destination, project = process.cwd(
   destination = path.resolve(destination);
   const config = JSON.parse(await readFile(path.join(dist, 'required-server-files.json'), 'utf8')).config;
   if (config?.distDir !== '.next') throw new Error('Deployment requires the canonical .next distDir');
+  const imageEngine = config.env?.ZIMAGE_IMAGE_ENGINE;
+  if (imageEngine !== undefined && (imageEngine !== 'jsquash' || config.env?.ZIMAGE_APPAREL_TEXT_MODE !== 'model-only' || config.images?.unoptimized !== true)) {
+    throw new Error('Invalid compiled image engine contract');
+  }
+  const images = compiledPublicImageContract(config);
+  if (images) await verifyPublicImageSources(path.join(project, 'apps/web/public'), images);
+  const imagePaths = new Set(images?.files.map(file => `apps/web/public/${file.path}`));
   await mustNotExist(destination);
   await mkdir(destination);
   const safe = source => !path.basename(source).startsWith('.env');
   const standalone = path.join(dist, 'standalone');
   const publicRoot = path.join(project, 'apps/web/public');
   await cp(standalone, destination, { recursive: true, verbatimSymlinks: true,
-    filter: source => safe(source) && !excluded.has(relative(standalone, source)) });
+    filter: source => safe(source) && !excluded.has(relative(standalone, source)) && !imagePaths.has(relative(standalone, source)) });
   await cp(publicRoot, path.join(destination, 'apps/web/public'), { recursive: true,
-    filter: source => safe(source) && !excluded.has(`apps/web/public/${relative(publicRoot, source)}`) });
+    filter: source => safe(source) && !excluded.has(`apps/web/public/${relative(publicRoot, source)}`)
+      && !imagePaths.has(`apps/web/public/${relative(publicRoot, source)}`) });
   await cp(path.join(dist, 'static'), path.join(destination, 'apps/web/.next/static'), {
     recursive: true, filter: safe,
   });
@@ -50,6 +59,8 @@ export async function stageCandidate({ dist, destination, project = process.cwd(
       const full = path.join(directory, name), entry = relative(destination, full);
       if (entry.startsWith('apps/web/server/apparel/fonts/') || /NotoSansCJKsc-(Regular|Bold)\.otf$/.test(entry))
         throw new Error('Application packages require external font resources; rebuild without traced apparel fonts.');
+      if (imageEngine === 'jsquash' && entry.split('/').some(part => /^(?:sharp(?:$|[.@-])|@img[+]sharp|libvips)/i.test(part)))
+        throw new Error('Legacy native image dependency in model-only release: ' + entry);
       if (excluded.has(entry)) throw new Error('Excluded source image in release');
       const stat = await lstat(full);
       if (stat.isDirectory()) await inspect(full);
@@ -63,7 +74,9 @@ export async function stageCandidate({ dist, destination, project = process.cwd(
   await inspect(destination);
   // Check the graph after diagnostics are omitted, then load the candidate's
   // own Sharp closure. Every format uses this mandatory gate.
-  const nativeReport = await preflightCandidate(destination, [...maps, ...traces]);
+  const nativeReport = imageEngine === 'jsquash'
+    ? await probeCandidateWasm(destination, [...maps, ...traces])
+    : await preflightCandidate(destination, [...maps, ...traces]);
   return { destination, maps, traces, nativeReport };
 }
 

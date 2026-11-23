@@ -230,7 +230,7 @@ class Host:
     def prepare(self, tmp, new, meta):
         sha, namespace = new
         archive = tmp/'backend.tgz'
-        self.adapter.prepare_archive(archive, sha, self.bridge.sha_file(archive), meta['manifest'])
+        self.adapter.prepare_archive(archive, sha, self.bridge.sha_file(archive), meta['manifest'], run_probe=False)
         front = tmp/'frontend'
         candidate = json.loads((front/'.release/candidate.json').read_text())
         require(candidate['sourceIdentity']['sourceSHA'] == sha and candidate['sourceIdentity']['dirty'] is False
@@ -368,7 +368,7 @@ def main():
     require(0 < proof_size <= 1024*1024 and 0 < size <= MAX_PAIR, 'Transfer exceeds bound')
     with bridge.safe_node_environment(), tempfile.TemporaryDirectory(dir=ROOT) as name:
         layers, legacy = bridge.load_tools(strict=True)
-        adapter = bridge.Adapter(ROOT, layers, legacy, native_check=lambda *_: None)
+        adapter = bridge.Adapter(ROOT, layers, legacy)
         with adapter.locked():
             tmp = Path(name)
             require(shutil.disk_usage(ROOT).free >= 2*size + proof_size + 64*1024*1024, 'Insufficient transfer space')

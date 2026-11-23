@@ -188,7 +188,7 @@ class FirstOps(r.SystemOps):
         else: raise ValueError('First-window coordinator cannot open ingress')
     def validate_first_candidate(self, release, policy):
         target = r.ROOT / 'releases' / release
-        self.adapter.verify_retained_layered(target, release)
+        self.adapter.verify_retained_layered(target, release, run_probe=False)
         # The adapter retains Linux target/runtime/ABI/glibc/ELF and font checks.
         # Candidate metadata is checked only after start, never demanded of B0.
         r.owned(target / '.manifest-sha256')
@@ -345,7 +345,7 @@ def main():
     bridge = r.load(r.TOOLS / 'release-three-layer.py', 'first_window_layers')
     layers, legacy = bridge.load_tools(strict=True)
     with bridge.safe_node_environment():
-        adapter = bridge.Adapter(r.ROOT, layers, legacy, native_check=lambda *_: None)
+        adapter = bridge.Adapter(r.ROOT, layers, legacy)
         ops = FirstOps(adapter, legacy)
         if args.command == 'accept-receipt': accept(args, ops); return
         with adapter.locked():

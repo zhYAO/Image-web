@@ -13,7 +13,7 @@
   background:
     radial-gradient(ellipse 750px 420px at 84% 4%, #eae3f64a, transparent 78%),
     radial-gradient(ellipse 700px 500px at 6% 24%, #eae4f029, transparent 75%);
-  font-family: var(--font);
+
 }
 .library * {
 box-sizing: border-box;
@@ -22,7 +22,7 @@ box-sizing: border-box;
 .library select,
 .library input,
 .library a {
-font: inherit;
+font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   -webkit-tap-highlight-color: transparent;
 }
 .library button,
