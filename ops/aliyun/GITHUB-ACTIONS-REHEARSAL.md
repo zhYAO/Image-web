@@ -105,31 +105,43 @@ protected run, artifact name, namespace and signing identity checks.
   command with SSH forwarding, PTY and user RC disabled. Its only privileged
   executable is `/usr/local/libexec/zimage-paired-release/receive-ordinary-pair`
   with zero arguments. The status-only key has its own separate authorization.
-- The SSH request consists of a fixed magic header and six bounded,
+- The SSH request consists of a fixed version-two magic header and seven bounded,
   length-prefixed members. It carries only the stage subject and bundle, the
-  exact candidate descriptor and both outer ZIPs. The server independently
+  exact candidate descriptor, both outer ZIPs and the publicly observed prior
+  pair. The public pair is compared against separately authorized and locally
+  verified rollback evidence before mutation. The server independently
   checks protected main, the real attempt and signer, the archive bytes and
   the same-run pair. The release key supplies no path, credentials, root
   approval, rollback selection or executable to the root controller.
-- The installed controller must supply an approved host adapter to
-  `paired/ordinary_ssh.py`. The adapter must verify the root approval, retained
-  packages, live rollback drill on the exact old pair, and authenticated
-  checks of the candidate. It must use the existing deploy lock and durable
-  journal against all legacy and ordinary writers. No migration operation
-  is part of this path.
-- The workflow checks the public rollback pair named in
-  `ZIMAGE_PAIR_ROLLBACK_SHA` before sending the request. After a successful
+- `paired/ordinary_ssh.py` routes an approved request through
+  `paired/ordinary_system.py` and the existing service and ingress tools.
+  Under the common deploy lock, it requires independent protected-merge and
+  required-check evidence and checks the active pair and rollback evidence
+  before creating the first intent. It drains the old backend, switches
+  both components behind the fence, and checks the candidate process before
+  reopening. The installed host must provide the independent evidence and
+  private staging and exclude unresolved legacy writers under the same lock.
+  No migration operation is part of this path.
+- The workflow measures the live public pair anew before each request. The
+  next successful release therefore uses the immediately previous pair as
+  its rollback target. After a successful
   SSH reply it uploads the exact deployment receipt, then independently
   checks the public backend version, frontend release, readiness and route
   shells. The receipt must identify the same commit, run, attempt, digests,
   operation and tested rollback target. Authenticated workspace acceptance
   must also be observed before recording the release as complete.
+- Failed public acceptance produces a separate observation linked to the
+  deployment receipt digest. Even if the previous pair is visible again,
+  the result stays unverified until a root-controlled restoration receipt
+  proves the recovery. This observation issues no restore command.
 
 The review-branch implementation contains the workflow, receiver admission,
-fixed SSH invocation and transaction integration. The root command and its
-concrete ECS adapter still require installation and live validation. Keep
-paired publication disabled until that installation, approval gate and
-rollback evidence have been verified. A failed or interrupted SSH response
+fixed SSH invocation and lifecycle adaptation. The fixed root command,
+production evidence and staging providers, and loopback validation still
+require ECS integration. The intended trigger is the maintainer's manual PR
+merge into protected main. Keep paired publication disabled until the
+installed authority can validate the exact merged PR and required check
+independently and the rollback evidence has been verified. A failed or interrupted SSH response
 requires read-only reconciliation through the existing status interface
 before any further write.
 
