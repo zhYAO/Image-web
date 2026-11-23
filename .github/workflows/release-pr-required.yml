@@ -20,6 +20,7 @@ jobs:
           import unittest
           names = [
               'test_github_protected_merge_shadow',
+              'test_github_protected_merge_observe',
               'test_github_hosted_stage_shadow',
               'test_github_shadow_head',
               'test_github_shadow_stage_build',
