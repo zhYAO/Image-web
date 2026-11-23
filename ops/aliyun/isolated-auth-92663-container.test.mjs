@@ -23,3 +23,25 @@ test('readiness categorizes only fixed state or numeric HTTP status', async () =
   assert.equal(readinessOutcome({status: 200}, {version: 'wrong', status: 'ok'}, 'sha'), 'wrong exact response identity');
   assert.equal(readinessOutcome({status: 200}, {version: 'sha', status: 'ok'}, 'sha'), 'exact ready');
 });
+
+test('protected Docker teardown distinguishes absence, ownership and infrastructure failure', async () => {
+  const { removeOwnedContainer } = await import('./isolated-auth-92663-container.mjs');
+  const name = 'zimage_auth_123456789abc', full = 'a'.repeat(64);
+  const ok = (stdout = '') => ({ status: 0, stdout });
+  const calls = [];
+  const run = (...responses) => args => {
+    calls.push(args);
+    assert.ok(responses.length);
+    return responses.shift();
+  };
+  removeOwnedContainer(name, run(ok()));
+  assert.deepEqual(calls.map(c => c[0]), ['ps']);
+  calls.length = 0;
+  removeOwnedContainer(name, run(ok(full), ok(name), ok(), ok()));
+  assert.deepEqual(calls.map(c => c[0]), ['ps', 'inspect', 'rm', 'ps']);
+  assert.equal(calls[2][2], full);
+  assert.throws(() => removeOwnedContainer(name, run({status: 1, stdout: ''})), /inventory failed/);
+  assert.throws(() => removeOwnedContainer(name, run(ok(full), ok('foreign'))), /ownership/);
+  assert.throws(() => removeOwnedContainer(name, run(ok(full), ok(name), {status: 1})), /removal failed/);
+  assert.throws(() => removeOwnedContainer(name, run(ok(full), ok(name), ok(), ok(full))), /still present/);
+});

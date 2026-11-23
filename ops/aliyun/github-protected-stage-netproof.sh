@@ -69,9 +69,76 @@ id='' mock='' gateway='' tripwire='' denied=0 allowed=0 reply_allowed=0
 reply_rule=(-i "$iface" -s "$peer" -d "$bridge" -p tcp --sport 3100
   -m conntrack --ctstate ESTABLISHED --ctdir REPLY
   --ctorigsrc "$bridge" --ctorigdst "$peer" --ctorigdstport 3100 -j ACCEPT)
+# wait is safe only after the owned asynchronous child is no longer live.
+stop_protected_child() {
+  local pid=$1 i
+  [[ -n "$pid" ]] || return 0
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || ! kill -0 "$pid" 2>/dev/null || return 1
+    for ((i=0; i<30; i++)); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep .1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -KILL "$pid" 2>/dev/null || ! kill -0 "$pid" 2>/dev/null || return 1
+      for ((i=0; i<30; i++)); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep .1
+      done
+    fi
+  fi
+  ! kill -0 "$pid" 2>/dev/null || return 1
+  wait "$pid" 2>/dev/null || true
+}
+
+protected_cleanup() {
+  local pid links
+  local failed=0
+  for pid in "$gateway" "$tripwire" "$mock"; do
+    stop_protected_child "$pid" || failed=1
+  done
+
+  # Never delete the egress deny while the sandbox bridge may still exist.
+  if [[ -n "$id" ]]; then
+    [[ "$id" =~ ^[a-f0-9]{64}$ ]] || return 1
+    timeout -k 2s 15s docker network rm "$id" >/dev/null || return 1
+    links=$(timeout -k 2s 5s ip -o link show) || return 1
+    if grep -Eq "^[0-9]+: ${iface}(@[^:]+)?:" <<<"$links"; then return 1; fi
+  fi
+  if [[ "$reply_allowed" == 1 ]]; then
+    timeout -k 2s 8s sudo -n iptables -w 3 -D INPUT "${reply_rule[@]}" || failed=1
+  fi
+  if [[ "$allowed" == 1 ]]; then
+    timeout -k 2s 8s sudo -n iptables -w 3 -D INPUT -i "$iface" -s "$peer" -d "$bridge" -p tcp --dport 8443 -j ACCEPT || failed=1
+  fi
+  if [[ "$denied" == 1 ]]; then
+    timeout -k 2s 8s sudo -n iptables -w 3 -D INPUT -i "$iface" -s "$peer" -j REJECT || failed=1
+  fi
+  return "$failed"
+}
 cleanup() {
   status=$?
   set +e
+  if [[ "$mode" == protected-measurement ]]; then
+    teardown=0
+    protected_cleanup || teardown=1
+    # Read the host observation before removing its private scratch; publish it
+    # only after *all* cleanup commands, including scratch removal, succeeded.
+    if [[ "$status" == 0 && "$teardown" == 0 ]]; then
+      observation=$(<"$scratch/browser-observation.json")
+      [[ -n "$observation" ]] || teardown=1
+    fi
+    timeout -k 2s 15s rm -rf -- "$scratch" || teardown=1
+    if [[ "$teardown" != 0 ]]; then
+      echo 'Protected host teardown unverified; suppressing observation.' >&2
+      exit 1
+    fi
+    if [[ "$status" == 0 ]]; then
+      echo 'Protected host teardown verified.' || exit 1
+      printf '%s\n' "$observation" || exit 1
+    fi
+    exit "$status"
+  fi
   if [[ -n "$gateway" ]]; then kill "$gateway"; wait "$gateway"; fi
   if [[ -n "$tripwire" ]]; then kill "$tripwire"; wait "$tripwire"; fi
   if [[ -n "$mock" ]]; then kill "$mock"; wait "$mock"; fi
@@ -147,10 +214,16 @@ if [[ "$mode" == protected-measurement || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]];
   # Never reuse Supabase API or database ports for the mock. Only restart
   # the owned diagnostic gateway to switch its fixed upstream; keep TLS,
   # exact bridge, firewall and container isolation unchanged.
-  kill "$mock" "$tripwire" "$gateway"
-  wait "$mock" || true; mock=''
-  wait "$tripwire" || true; tripwire=''
-  wait "$gateway" || true; gateway=''
+  if [[ "$mode" == protected-measurement ]]; then
+    stop_protected_child "$mock" || exit 1; mock=''
+    stop_protected_child "$tripwire" || exit 1; tripwire=''
+    stop_protected_child "$gateway" || exit 1; gateway=''
+  else
+    kill "$mock" "$tripwire" "$gateway"
+    wait "$mock" || true; mock=''
+    wait "$tripwire" || true; tripwire=''
+    wait "$gateway" || true; gateway=''
+  fi
   python3 -I -B - <<'PY_PORT'
 import socket
 ports=(54320,54321,54322,54323,54324,54329)
@@ -223,8 +296,11 @@ PY_COMMIT
     [[ ${#baseline_args[@]} == 1 ]]
     echo 'Unattested protected shadow observation only; not release evidence.'
   fi
+  exec 3>&1
+  if [[ "$mode" == protected-measurement ]]; then exec 3>"$scratch/browser-observation.json"; fi
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
     ZIMAGE_ISOLATED_OBSERVATION_MODE="$mode" ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
     node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$prepared/app" "$prepared/web" \
-      --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}"
+      --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}" >&3 3>&-
+  exec 3>&-
 fi
