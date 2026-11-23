@@ -1,0 +1,104 @@
+name: ZImage exact local-only pair pack rehearsal
+
+on:
+  push:
+    branches: [codex/zimage-pair-packages-diagnostic-20261123-e37460b]
+    paths: ['.github/workflows/diagnostic-zimage-pair-packages-e37460b.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  scratch-pair:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-pair-packages-diagnostic-20261123-e37460b'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - name: Build and verify an exact non-promotable pair in scratch
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$RUNNER_ENVIRONMENT" == github-hosted && "$RUNNER_OS" == Linux ]]
+          [[ "$GITHUB_REF" == refs/heads/codex/zimage-pair-packages-diagnostic-20261123-e37460b ]]
+          [[ "$GITHUB_SHA" == "$(git rev-parse HEAD)" && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]]
+          candidate=0dc160b23996c3b417699478c405e2ea4c8fb82e
+          test "$(git rev-parse HEAD^)" = "$candidate"
+          test "$(git show -s --format=%T "$candidate")" = 'e37460ba535fa74053a58b4f15e46fb4569ab9b6'
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/diagnostic-zimage-pair-packages-e37460b.yml'
+          private=$(mktemp -d "$RUNNER_TEMP/zimage-exact-pair.XXXXXXXX")
+          trap 'rm -rf -- "$private"' EXIT
+          mkdir -m 700 -- "$private/home" "$private/bin"
+          git -c core.hooksPath=/dev/null clone --local --no-hardlinks --no-checkout -- "$GITHUB_WORKSPACE" "$private/source"
+          env -i PATH="$PATH" HOME="$private/home" TMPDIR="$private" COREPACK_HOME="$private/corepack" LANG=C.UTF-8 \
+            NEXT_TELEMETRY_DISABLED=1 bash -s -- "$private" "$candidate" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'BASH'
+          set -euo pipefail
+          root=$1
+          sha=$2
+          run=$3
+          attempt=$4
+          cd "$root/source"
+          git -c core.hooksPath=/dev/null checkout --detach "$sha"
+          test "$(git rev-parse HEAD)" = "$sha"
+          test -z "$(git status --porcelain)"
+          test "$(node --version)" = v24.19.0
+          test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
+          corepack enable --install-directory "$root/bin" pnpm
+          export PATH="$root/bin:$PATH"
+          test "$(pnpm --version)" = 11.19.0
+          # Exact target shape used by the reviewed Ubuntu 22.04 diagnostic; the
+          # stock checker compares against actual runner glibc/Node/ABI/arch.
+          # The fixed runtime cache path is only metadata here: never create it.
+          printf '%s\n' '{"schema":1,"runtime":{"node":"24.19.0","abi":"137","platform":"linux","arch":"x64","libc":"glibc-2.35"},"toolchain":{"packageManager":"pnpm@11.19.0"},"assemblyCacheRoot":"/opt/zimage/layer-cache"}' > "$root/target.json"
+          printf '%s\n' '{"schemaVersion":1,"formalAuth":true,"dataMode":"http","captchaSiteKey":null,"approvedLegalVersion":null,"registrationEnabled":false}' > "$root/config.json"
+          node ops/aliyun/package-release.mjs --check-target --target "$root/target.json"
+          policy=$(node --input-type=module -e 'import{readPinnedPublicImages}from"./apps/web/build/public-image-build.mjs"; process.stdout.write(readPinnedPublicImages().manifestSha256)')
+          [[ "$policy" =~ ^[a-f0-9]{64}$ ]]
+          export ZIMAGE_PUBLIC_IMAGE_BASE_URL="https://www.zimage.store/static-assets/$policy"
+          pnpm install --frozen-lockfile --store-dir "$root/pnpm-store"
+          NEXT_PUBLIC_DATA_MODE=http NEXT_PUBLIC_PHASE2_AUTH=true ZIMAGE_DEPLOYMENT_ENV=production \
+            NODE_OPTIONS=--max-old-space-size=4096 ZIMAGE_BUILD_SHA="$sha" ZIMAGE_BUILD_SLIM=1 ZIMAGE_BUILD_CPUS=1 \
+            pnpm --filter @zimage/web exec next build --webpack
+          node ops/aliyun/package-static-assets.mjs --runtime-profile model-only-jsquash --output "$root/resources" > "$root/assets.json"
+          assets=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["versionDirectory"])' "$root/assets.json")
+          node ops/aliyun/package-release.mjs apps/web/.next "$root/backend" --assets "$assets" --release-id "$sha" --target "$root/target.json" > "$root/pack.json"
+          manifest=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pack"]["manifestSha256"])' "$root/pack.json")
+          python3 -I -B ops/aliyun/release-transport.py unpack "$root/backend/transport.tgz" "$root/store" \
+            --release-sha "$sha" --manifest-sha256 "$manifest" > "$root/backend-verified.json"
+          python3 -I -B ops/aliyun/release-transport.py request "$root/store" "$root/store/releases/$sha.json" \
+            --manifest-sha256 "$manifest" > "$root/required.json"
+          export ZIMAGE_ASSET_NAMESPACE="rehearsal-$sha-$run-$attempt"
+          export ZIMAGE_FRONTEND_COMPATIBILITY
+          ZIMAGE_FRONTEND_COMPATIBILITY=$(python3 -c 'import json,sys; print(json.dumps(dict(apiRequirements=dict(major=1,minMinor=0,capabilities=["runtime.public-config.v1","runtime.meta.v1"]),allowedBackendReleases=[sys.argv[1]])))' "$sha")
+          pnpm build:frontend
+          python3 -I -B ops/aliyun/frontend/pack.py --dist apps/frontend/dist --public-config "$root/config.json" --subject-only > "$root/frontend-subject.json"
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -czf "$root/frontend-diagnostic.tgz" -C apps/frontend/dist .
+          python3 -I -B - "$root" "$sha" "$manifest" "$ZIMAGE_ASSET_NAMESPACE" <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          root, candidate, manifest, namespace = Path(sys.argv[1]), *sys.argv[2:]
+          backend = json.loads((root / "backend-verified.json").read_text())
+          frontend = json.loads((root / "frontend-subject.json").read_text())
+          m = backend["manifest"]
+          if not (m["schema"] == 3 and m["releaseId"] == candidate and m["runtimeProfile"] == "model-only-jsquash"
+                  and m["productionReady"] is False and len(backend["provided"]) == 7
+                  and frontend["namespace"] == namespace and frontend["acceptanceRequired"] is True
+                  and frontend["allowedBackendReleases"] == [candidate]
+                  and frontend["sourceIdentity"]["sourceSHA"] == candidate and frontend["sourceIdentity"]["dirty"] is False):
+              raise SystemExit("Expected exact non-promotable same-source pair")
+          files = {}
+          for label, p in (("backend", root / "backend/transport.tgz"), ("frontend", root / "frontend-diagnostic.tgz"),
+                           ("frontendSubject", root / "frontend-subject.json")):
+              with p.open("rb") as stream:
+                  files[label] = dict(sha256=hashlib.sha256(stream.read()).hexdigest(), bytes=p.stat().st_size)
+          print(json.dumps(dict(kind="scratch-pair-diagnostic", sourceSHA=candidate, backendManifestSha256=manifest,
+                                productionReady=False, files=files), sort_keys=True))
+          PY
+          BASH
+          printf '%s\n' 'Same-source backend transport and rehearsal frontend validated in runner scratch only. No uploaded artifacts, signing, runtime startup, or production acceptance.' >> "$GITHUB_STEP_SUMMARY"
