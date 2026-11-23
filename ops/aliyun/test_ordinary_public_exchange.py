@@ -116,16 +116,15 @@ class WireTests(unittest.TestCase):
 
 
 def hosted(state):
-    """Unique GitHub-hosted rehearsal. Probe the current public pair read-only."""
-    current = public.capture()
-    old = current['backendRelease']
+    """Exercise actual GitHub signing with a fixture batch and responses."""
     commit = os.environ['GITHUB_SHA']
     gh = Path(shutil.which('gh')).resolve()
 
     def make_reply(challenge, deadline):
-        subject = wire.observe(challenge)
-        with (state / 'observation.json').open('xb') as output:
+        subject = wire.observe(challenge, fetch=responses(OLD))
+        with (state / 'observation.tmp').open('xb') as output:
             output.write(wire.encode(subject))
+        (state / 'observation.tmp').rename(state / 'observation.json')
         while time.monotonic() < deadline:
             if (state / 'bundle.jsonl').exists():
                 return wire.reply(subject, (state / 'bundle.jsonl').read_bytes())
@@ -144,9 +143,9 @@ def hosted(state):
                 continue
             raise AssertionError('Unexpected GitHub workflow identity accepted')
 
-    result = connection('restored', make_reply, verify, release_batch=batch(old=old, new=commit), limit=116)
-    if result != current:
-        raise ValueError('Public pair changed during read-only rehearsal')
+    result = connection('restored', make_reply, verify, limit=116)
+    if result['backendRelease'] != OLD:
+        raise ValueError('Fixture restored pair differs')
     (state / 'passed').write_text(hashlib.sha256(wire.encode(result)).hexdigest(), encoding='ascii')
 
 
