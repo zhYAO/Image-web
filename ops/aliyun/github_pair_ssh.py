@@ -12,6 +12,7 @@ import tempfile
 from github_hosted_stage_shadow import _unique
 from github_pair_handoff import (COMMAND, COMMIT, REPO, WORKFLOW, file_sha, rollback_pair, send,
                                  send_restoration, validate_restoration)
+from github_pair_public import validate_failure
 
 SSH = '/usr/bin/ssh'
 USER = 'zimage-release'
@@ -123,10 +124,13 @@ def request_restore(request, deployment, failure, receipt, *, host, known_hosts,
     expected = dict(schemaVersion=1, operationId=released['operationId'], candidate=released['commit'],
                     rollbackTarget=rollback, recoveryVerified=False,
                     deploymentReceiptSha256=hashlib.sha256(deployed_bytes).hexdigest())
-    if (type(failure_hint) is not dict or set(failure_hint) != expected.keys() | {'publicRollbackObservation'}
+    if (type(failure_hint) is not dict or set(failure_hint) != expected.keys() | {'publicRollbackObservation',
+                                                                              'publicContractFailure'}
             or any(type(failure_hint[key]) is not type(value) or failure_hint[key] != value
                    for key, value in expected.items())):
         raise ValueError('Public failure observation does not identify the original release')
+    validate_failure(failure_hint['publicContractFailure'], dict(backend=released['backendRelease'],
+                                                              frontend=released['frontendRelease']))
     packet = {name: released[name] for name in ('commit', 'runId', 'attempt', 'backendManifestSha256',
                                                'frontendSubjectSha256')}
     packet.update(repository=REPO, workflow=WORKFLOW)

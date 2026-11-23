@@ -111,9 +111,24 @@ def capture_failure(commit, fetch=request):
     try:
         verify(commit, fetch=fetch)
     except ContractFailure as error:
-        return dict(schemaVersion=1, kind=FAILURE_KIND, backendRelease=commit,
-                    frontendRelease='release-' + commit[:12], check=error.facts)
+        return failure_witness(commit, error)
     raise ValueError('Public verification passed; no failed response to record')
+
+
+def failure_witness(commit, error):
+    return dict(schemaVersion=1, kind=FAILURE_KIND, backendRelease=commit,
+                frontendRelease='release-' + commit[:12], check=error.facts)
+
+
+def verify_with_witness(commit, witness, fetch=request):
+    """Save the exact failed response from the initial probe, without probing twice."""
+    try:
+        return verify(commit, fetch=fetch)
+    except ContractFailure as error:
+        with witness.open('x', encoding='utf-8', newline='\n') as stream:
+            json.dump(failure_witness(commit, error), stream, sort_keys=True)
+            stream.write('\n')
+        raise
 
 
 def validate_failure(witness, pair):
@@ -160,6 +175,14 @@ def observe_after_failure(commit, deployment, baseline, fetch=request):
             'rollbackTarget': previous, 'publicRollbackObservation': observation, 'recoveryVerified': False}
 
 
+def verify_restored(commit, receipt, fetch=request):
+    if (receipt['kind'] != 'zimage-ordinary-restoration-v1' or receipt['status'] != 'restored'
+            or receipt['commit'] != commit):
+        raise ValueError('A successful restoration receipt for this publication is required')
+    pair = rollback_pair(receipt['restoredPair'], commit)
+    return verify(pair['backend'], fetch=fetch)
+
+
 def small_json(path):
     with path.open('rb') as stream:
         raw = stream.read(16385)
@@ -174,10 +197,19 @@ if __name__ == '__main__':
             evidence = capture()
         elif sys.argv[1:] == ['--capture-failure']:
             evidence = capture_failure(os.environ['GITHUB_SHA'])
-        elif len(sys.argv) == 4 and sys.argv[1] == '--observe-failed-public':
-            deployment, baseline = map(Path, sys.argv[2:])
-            evidence = observe_after_failure(os.environ['GITHUB_SHA'], small_json(deployment), small_json(baseline))
+        elif len(sys.argv) == 3 and sys.argv[1] == '--record-failure':
+            evidence = verify_with_witness(os.environ['GITHUB_SHA'], Path(sys.argv[2]))
+        elif len(sys.argv) in (4, 5) and sys.argv[1] == '--observe-failed-public':
+            commit = os.environ['GITHUB_SHA']
+            deployment, baseline = map(Path, sys.argv[2:4])
+            evidence = observe_after_failure(commit, small_json(deployment), small_json(baseline))
             evidence['deploymentReceiptSha256'] = file_sha(deployment)
+            if len(sys.argv) == 5:
+                witness = small_json(Path(sys.argv[4]))
+                validate_failure(witness, dict(backend=commit, frontend='release-' + commit[:12]))
+                evidence['publicContractFailure'] = witness
+        elif len(sys.argv) == 3 and sys.argv[1] == '--verify-restored':
+            evidence = verify_restored(os.environ['GITHUB_SHA'], small_json(Path(sys.argv[2])))
         elif len(sys.argv) == 1:
             evidence = verify(os.environ['GITHUB_SHA'])
         else:

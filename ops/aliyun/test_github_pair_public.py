@@ -115,6 +115,32 @@ class PublicPairTest(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError, 'No HTTPS response'):
             public.capture_failure(self.sha, fetch=timeout)
 
+    def test_workflow_records_original_failed_response_and_rechecks_only_the_restored_pair(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'failure.json'
+            public.verify_with_witness(self.sha, path, fetch=self.response.__getitem__)
+            self.assertFalse(path.exists())
+            probes = []
+
+            def fail_once(route):
+                probes.append(route)
+                return 503, 'text/html', 'no-store', b''
+
+            with self.assertRaises(public.ContractFailure):
+                public.verify_with_witness(self.sha, path, fetch=fail_once)
+            self.assertEqual(probes, ['/api/health/ready'])
+            self.assertEqual(public.small_json(path)['check']['status'], 503)
+
+        old = 'b' * 40
+        receipt = dict(kind='zimage-ordinary-restoration-v1', status='restored', commit=self.sha,
+                       restoredPair=dict(backend=old, frontend='release-' + old[:12]))
+        report = public.verify_restored(self.sha, receipt, fetch=public_responses(old).__getitem__)
+        self.assertEqual(report['backendRelease'], old)
+        with self.assertRaises(public.ContractFailure):
+            public.verify_restored(self.sha, receipt, fetch=self.response.__getitem__)
+        with self.assertRaisesRegex(ValueError, 'this publication'):
+            public.verify_restored(self.sha, dict(receipt, commit='c' * 40), fetch=self.response.__getitem__)
+
     @unittest.skipUnless(shutil.which('openssl'), 'Local HTTPS fixture requires openssl')
     def test_https_probe_captures_empty_service_unavailable_response(self):
         class Unavailable(BaseHTTPRequestHandler):
