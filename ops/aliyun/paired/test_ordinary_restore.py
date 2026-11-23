@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -128,13 +129,16 @@ class RestoreTest(unittest.TestCase):
         self.reverse.seal.assert_not_called()
 
     @unittest.skipUnless(os.name == 'posix', 'Requires a real POSIX deployment lock')
-    def test_fixed_restoration_frame_requires_independent_failure_and_durably_confirms_recovery(self):
+    def test_public_failure_to_recovery_receipt_uses_fixed_frame_and_durable_journal(self):
         import core
         from ordinary_journal import JournalGate, PHASES
 
         # The host installs both directories in one pinned import closure.
         with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1]), *sys.path]):
             import github_pair_handoff as handoff
+            import github_pair_public as public
+            import github_pair_ssh as ssh
+            from test_github_pair_public import public_responses
 
         packet, approval = self.f.packet, self.f.a
         operation, digest = approval['operation'], ordinary.sha(approval)
@@ -168,10 +172,50 @@ class RestoreTest(unittest.TestCase):
                 dispatch()
             self.reverse.seal.assert_not_called()
             self.authority.verify_public_failure.side_effect = None
-            result = dispatch()
+
+            request = root / 'client'
+            request.mkdir()
+            commit, run, attempt = (packet[field] for field in ('commit', 'runId', 'attempt'))
+            (request / 'pins.json').write_bytes(core.canonical(dict(commit=commit, runId=run, attempt=attempt,
+                backend={'manifestSha256': packet['backendManifestSha256']},
+                frontend={'subjectSha256': packet['frontendSubjectSha256']})))
+            (request / 'stage.json').write_bytes(b'non-production fixture stage')
+            deployment, witness, baseline, observation, restored = [root / (name + '.json') for name in
+                ('deployment', 'failure-witness', 'baseline', 'observation', 'restored')]
+            opened_receipt = dict(schemaVersion=1, kind='zimage-ordinary-pair-v1', status='opened',
+                operationId=operation, commit=commit, runId=run, attempt=attempt, backendRelease=commit,
+                frontendRelease=self.new['frontend'], backendManifestSha256=packet['backendManifestSha256'],
+                frontendSubjectSha256=packet['frontendSubjectSha256'], stageSha256=handoff.file_sha(request / 'stage.json'),
+                rootApprovalSha256=digest, rollbackPair=self.old, rollbackAcceptanceSha256=approval['baselineAcceptanceSha256'])
+            deployment.write_bytes(core.canonical(opened_receipt))
+            baseline.write_bytes(core.canonical(public.capture(fetch=public_responses(self.old['backend']).__getitem__)))
+            responses = public_responses(commit)
+            responses['/workspace'] = (503, 'text/html', 'no-store', b'')
+            with self.assertRaises(public.ContractFailure):
+                public.verify_with_witness(commit, witness, fetch=responses.__getitem__)
+            result_observation = public.record_failure_observation(commit, deployment, baseline, witness,
+                                                                   fetch=responses.__getitem__)
+            self.assertIs(result_observation['recoveryVerified'], False)
+            observation.write_bytes(core.canonical(result_observation))
+
+            def fixture_transport(argv, *, stdin, stdout, **_):
+                self.assertEqual(argv[-1], handoff.COMMAND)
+                received = ordinary_ssh.run(stdin, scratch=root, host=host, handoff=handoff, ordinary=ordinary)
+                stdout.write(core.canonical(received))
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(ssh.subprocess, 'run', side_effect=fixture_transport) as transport:
+                ssh.request_restore(request, deployment, observation, restored, public_baseline=baseline,
+                                    host='nonproduction.invalid', known_hosts='nonproduction.invalid ssh-ed25519 ' + 'A' * 68,
+                                    key='-----BEGIN OPENSSH PRIVATE KEY-----\nfixture\n')
+            transport.assert_called_once()
+            result = public.small_json(restored)
             self.assertEqual(result['restoredPair'], self.old)
             with gate.lock():
                 self.assertEqual(gate.restoration_receipt(operation, digest), result)
+            restored_public = public.verify_restored(commit, result, fetch=public_responses(self.live['backend']).__getitem__)
+            self.assertEqual(restored_public['backendRelease'], self.old['backend'])
+            self.assertEqual(restored_public['frontendRelease'], self.old['frontend'])
             with self.assertRaisesRegex(ValueError, 'eligible for restoration'):
                 dispatch()
             self.reverse.seal.assert_called_once()

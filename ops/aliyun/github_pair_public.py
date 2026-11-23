@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from github_hosted_stage_shadow import _unique
-from github_pair_handoff import COMMIT, DIGEST, file_sha, rollback_pair
+from github_pair_handoff import COMMIT, DIGEST, rollback_pair
 
 HOST = 'www.zimage.store'
 ROUTES = ('/', '/login', '/workspace', '/assets', '/account')
@@ -183,12 +183,28 @@ def verify_restored(commit, receipt, fetch=request):
     return verify(pair['backend'], fetch=fetch)
 
 
-def small_json(path):
+def read_document(path):
     with path.open('rb') as stream:
         raw = stream.read(16385)
     if not 0 < len(raw) <= 16384:
         raise ValueError('Bounded local receipt required')
-    return json.loads(raw, object_pairs_hook=_unique)
+    return raw
+
+
+def small_json(path):
+    return json.loads(read_document(path), object_pairs_hook=_unique)
+
+
+def record_failure_observation(commit, deployment, baseline, witness=None, *, fetch=request):
+    deployed_bytes = read_document(deployment)
+    receipt = json.loads(deployed_bytes, object_pairs_hook=_unique)
+    evidence = observe_after_failure(commit, receipt, small_json(baseline), fetch=fetch)
+    evidence['deploymentReceiptSha256'] = hashlib.sha256(deployed_bytes).hexdigest()
+    if witness is not None:
+        recorded = small_json(witness)
+        validate_failure(recorded, dict(backend=commit, frontend='release-' + commit[:12]))
+        evidence['publicContractFailure'] = recorded
+    return evidence
 
 
 if __name__ == '__main__':
@@ -200,14 +216,7 @@ if __name__ == '__main__':
         elif len(sys.argv) == 3 and sys.argv[1] == '--record-failure':
             evidence = verify_with_witness(os.environ['GITHUB_SHA'], Path(sys.argv[2]))
         elif len(sys.argv) in (4, 5) and sys.argv[1] == '--observe-failed-public':
-            commit = os.environ['GITHUB_SHA']
-            deployment, baseline = map(Path, sys.argv[2:4])
-            evidence = observe_after_failure(commit, small_json(deployment), small_json(baseline))
-            evidence['deploymentReceiptSha256'] = file_sha(deployment)
-            if len(sys.argv) == 5:
-                witness = small_json(Path(sys.argv[4]))
-                validate_failure(witness, dict(backend=commit, frontend='release-' + commit[:12]))
-                evidence['publicContractFailure'] = witness
+            evidence = record_failure_observation(os.environ['GITHUB_SHA'], *map(Path, sys.argv[2:]))
         elif len(sys.argv) == 3 and sys.argv[1] == '--verify-restored':
             evidence = verify_restored(os.environ['GITHUB_SHA'], small_json(Path(sys.argv[2])))
         elif len(sys.argv) == 1:

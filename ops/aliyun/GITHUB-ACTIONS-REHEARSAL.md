@@ -190,9 +190,11 @@ protected run, artifact name, namespace and signing identity checks.
   generation. Only the independent observer may supply these host records.
   The journal exposes a restoration receipt only after authenticated checks
   and an independent public check of the restored pair. An interrupted
-  restoration blocks the next writer. The review-only Linux workflow tests
-  the fixed frame, replay rejection and the durable journal without accessing
-  ECS. The production workflow still records only the failure observation.
+  restoration blocks the next writer. The review-only Linux workflow exercises
+  the first failed public response, the receipt-bound request, the fixed frame,
+  replay rejection and the durable journal. It checks the restored pair through
+  a separate public probe using fixture responses and a simulated SSH transport.
+  The production workflow still records only the failure observation.
 
 The review branch contains the workflow, fixed root receiver, root evidence
 reader, private staging, lifecycle adapter and durable restoration logic.
