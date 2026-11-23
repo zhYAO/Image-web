@@ -81,4 +81,23 @@ jobs:
           persist-credentials: false
       - name: Measure the actual public pair with the unchanged anonymous HTTPS verifier
         working-directory: ops/aliyun
-        run: python3 -B -c 'import github_pair_public as p; p.capture()'
+        run: |
+          set -euo pipefail
+          if python3 -B -c 'import github_pair_public as p; p.capture()'; then
+            exit 0
+          fi
+          # A transport comparison only. Its output cannot satisfy the acceptance gate.
+          target='https://www.zimage.store/api/health/ready'
+          probe() {
+            local label="$1"
+            shift
+            printf '%s\n' "$label"
+            curl -q --silent --show-error --noproxy '*' --proto '=https' \
+              --connect-timeout 5 --max-time 8 --output /dev/null \
+              --write-out 'address=%{remote_ip} tcp=%{time_connect} tls=%{time_appconnect} status=%{http_code}\n' \
+              "$@" "$target" || printf 'curl_exit=%s\n' "$?"
+          }
+          probe 'IPv4 stock TLS' --ipv4
+          probe 'IPv4 TLS 1.2 only' --ipv4 --tlsv1.2 --tls-max 1.2
+          probe 'IPv6 stock TLS' --ipv6
+          exit 1
