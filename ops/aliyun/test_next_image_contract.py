@@ -132,11 +132,11 @@ class NextImages(PortableFixture):
         self.set_config()
         with self.assertRaisesRegex(ValueError, 'Unsupported asset manifest'): self.new_pack()
 
-    def test_old_schema1_and_2_manifest_bytes_match_original_d3117ac_implementation(self):
+    def test_old_schema1_and_2_manifest_bytes_match_protected_main_before_optimization(self):
         self.config = self.legacy_config; self.set_config(); self.assets = self.legacy_assets
         baseline = self.root / 'old-tools'; baseline.mkdir()
         for name in ['three-layer-release.py', 'release-layers.py', 'release-public-policy.json']:
-            body = subprocess.check_output(['git', '-C', str(HERE.parents[1]), 'show', 'd3117ac:' + 'ops/aliyun/' + name])
+            body = subprocess.check_output(['git', '-C', str(HERE.parents[1]), 'show', 'a3f43a6a43a76142782e5a2de126611d73bf96a8:ops/aliyun/' + name])
             (baseline / name).write_bytes(body)
         spec = importlib.util.spec_from_file_location('old_image_layers', baseline / 'three-layer-release.py')
         old = importlib.util.module_from_spec(spec); spec.loader.exec_module(old)

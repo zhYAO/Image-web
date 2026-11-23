@@ -136,6 +136,15 @@ class RootThreeLayerAdapter(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.adapter.model_probe(self.host / 'candidate', environment, runner=runner)
 
+    def test_paired_prepare_defers_probe_but_activation_requires_it(self):
+        target, _ = self.operation.prepare_archive(
+            self.bundle, SHA, self.transport['outerSha256'], self.packed['manifestSha256'], run_probe=False)
+        self.native.assert_not_called()
+        self.native.side_effect = RuntimeError('retained runtime probe failed')
+        with self.assertRaisesRegex(RuntimeError, 'retained runtime probe failed'):
+            self.operation.activation_preflight(target)
+        self.activate.assert_not_called()
+
     def test_local_bundle_and_deploy_publish_without_rewriting_manifest(self):
         with tarfile.open(self.bundle, 'r:gz') as archive:
             self.assertEqual(len(archive.getmembers()), 7)
