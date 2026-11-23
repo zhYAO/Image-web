@@ -64,7 +64,7 @@ class SystemTest(unittest.TestCase):
         return deepcopy(self.live)
 
     def frontend(self, record, approval):
-        self.assertEqual(record['candidateProcess'], {'pid': 202})
+        self.assertEqual(record['candidateProcess'], self.live['process'])
         self.live.update(frontend=self.system.p['newFrontend'], frontendSequence=self.live['frontendSequence'] + 1)
         return deepcopy(self.live)
 
@@ -125,6 +125,7 @@ class SystemTest(unittest.TestCase):
                     original, opened = held.claim_restoration(operation, ordinary.sha(self.fixture.a))
                 self.assertEqual({key: original['initial'][key] for key in old}, old)
                 self.assertEqual(opened['pairSequence'], 7 + run)
+                self.assertEqual(opened['process'], {'pid': 201 + run})
 
     def test_refuses_missing_recovery_evidence_before_first_intent(self):
         self.authority.verify_baseline.side_effect = ValueError('rollback proof missing')
