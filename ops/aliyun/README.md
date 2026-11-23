@@ -1,5 +1,7 @@
 # 阿里云单机部署
 
+当前受保护 main 合并后的前后端成对发布、安装条件与故障处理见[生产发布说明](production/README.md)。下文各日期小节保留当时的运维记录。
+
 目标：`www.zimage.store` → `47.100.222.24`，Next.js standalone 由 systemd 运行，Nginx 代理到 `127.0.0.1:3100`。
 
 ## 路径

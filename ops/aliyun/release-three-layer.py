@@ -426,6 +426,56 @@ class Adapter:
         finally:
             pending.unlink(missing_ok=True)
 
+    def prepare_archive(self, archive, sha, outer_sha, manifest_sha):
+        """Assemble a privately held, verified transport under the caller's deploy lock."""
+        for name in ('layer-store', 'layer-cache', 'releases'):
+            self.managed_directory(self.root / name)
+        mutable = self.layers.ancestors_safe(self.root / 'cache')
+        if not mutable.is_dir():
+            raise ValueError('Existing managed mutable Next cache is missing')
+        with tempfile.TemporaryDirectory(prefix='.three-prepare-', dir=self.root) as temporary:
+            protected = Path(temporary)
+            unpacked = protected / 'unpacked'
+            manifest, body, provided = unpack_outer(archive, unpacked, sha, manifest_sha, self.layers)
+            self.validate_manifest(manifest, sha)
+            self.target_check(manifest)
+            store = self.root / 'layer-store'
+            self.merge_transport(unpacked, manifest, body, provided, sha, manifest_sha)
+            entries = []
+            for kind in ('code', 'runtime'):
+                index = self.layers.parse(self.layers.read_regular(store / manifest['layers'][kind]['index']))
+                for entry in index['entries']:
+                    name = entry['path']
+                    if (name in ('.release-sha', '.archive-sha256', '.manifest-sha256', '.runtime-assets.env')
+                            or name == 'apps/web/.next/cache' or name.startswith('apps/web/.next/cache/')):
+                        raise ValueError('Incoming archive claims reserved adapter/cache path')
+                entries.extend(index['entries'])
+            candidate_parent = Path(tempfile.mkdtemp(prefix='.three-candidate-', dir=self.root / 'releases'))
+            candidate_parent.chmod(0o755)
+            candidate = candidate_parent / 'app'
+            try:
+                assembled = self.layers.assemble(store / f'releases/{sha}.json', store, candidate, self.root / 'layer-cache', manifest_sha, True)
+                self.cache_ownership(assembled)
+                environment = assembled['environment']
+                cache = candidate / 'apps/web/.next/cache'
+                cache.symlink_to(mutable, target_is_directory=True)
+                self.validate_candidate(candidate, manifest, sha, entries)
+                self.metadata(candidate, sha, outer_sha, manifest_sha, environment)
+                self.native_check(candidate, environment)
+                target = self.root / 'releases' / sha
+                reused = os.path.lexists(target)
+                if reused:
+                    if target.is_symlink():
+                        raise ValueError('Existing release target must not be a symlink')
+                    self.compare_retained(target, candidate)
+                else:
+                    self.layers.rename_no_replace(candidate, target)
+            finally:
+                self.layers.remove_owned(candidate_parent)
+        self.verify_store_closure(manifest, body, sha, manifest_sha)
+        self.recheck_caches(manifest)
+        return target, reused
+
     def deploy(self, sha, outer_sha, manifest_sha, run, initial=False):
         if not HEX40.fullmatch(sha) or not HEX64.fullmatch(outer_sha) or not HEX64.fullmatch(manifest_sha) or not re.fullmatch(r'[0-9]{1,20}', run):
             raise ValueError('Invalid fixed deployment arguments')
@@ -445,55 +495,10 @@ class Adapter:
                 if int(run) < int(previous) or (int(run) == int(previous) and (old is None or old.name != sha)):
                     raise ValueError('Refusing an older or reused deployment run')
             self.service_check()
-            for name in ('layer-store', 'layer-cache', 'releases'):
-                self.managed_directory(self.root / name)
-            mutable = self.layers.ancestors_safe(self.root / 'cache')
-            if not mutable.is_dir():
-                raise ValueError('Existing managed mutable Next cache is missing')
             with tempfile.TemporaryDirectory(prefix='.three-incoming-', dir=self.root) as incoming:
-                protected = Path(incoming)
-                archive = protected / 'transport.tgz'
+                archive = Path(incoming) / 'transport.tgz'
                 copy_incoming(self.root, sha, archive, outer_sha)
-                unpacked = protected / 'unpacked'
-                manifest, body, provided = unpack_outer(archive, unpacked, sha, manifest_sha, self.layers)
-                self.validate_manifest(manifest, sha)
-                self.target_check(manifest)
-                store = self.root / 'layer-store'
-                self.merge_transport(unpacked, manifest, body, provided, sha, manifest_sha)
-                entries = []
-                for kind in ('code', 'runtime'):
-                    index = self.layers.parse(self.layers.read_regular(store / manifest['layers'][kind]['index']))
-                    for entry in index['entries']:
-                        name = entry['path']
-                        if (name in ('.release-sha', '.archive-sha256', '.manifest-sha256', '.runtime-assets.env')
-                                or name == 'apps/web/.next/cache' or name.startswith('apps/web/.next/cache/')):
-                            raise ValueError('Incoming archive claims reserved adapter/cache path')
-                    entries.extend(index['entries'])
-                candidate_parent = Path(tempfile.mkdtemp(prefix='.three-candidate-', dir=self.root / 'releases'))
-                candidate_parent.chmod(0o755)
-                candidate = candidate_parent / 'app'
-                try:
-                    assembled = self.layers.assemble(store / f'releases/{sha}.json', store, candidate, self.root / 'layer-cache', manifest_sha, True)
-                    self.cache_ownership(assembled)
-                    environment = assembled['environment']
-                    cache = candidate / 'apps/web/.next/cache'
-                    cache.symlink_to(mutable, target_is_directory=True)
-                    self.validate_candidate(candidate, manifest, sha, entries)
-                    self.metadata(candidate, sha, outer_sha, manifest_sha, environment)
-                    self.native_check(candidate, environment)
-                    target = self.root / 'releases' / sha
-                    reused = os.path.lexists(target)
-                    if reused:
-                        if target.is_symlink():
-                            raise ValueError('Existing release target must not be a symlink')
-                        self.compare_retained(target, candidate)
-                    else:
-                        self.layers.rename_no_replace(candidate, target)
-                finally:
-                    self.layers.remove_owned(candidate_parent)
-            # The old target is captured under exactly the same lock as legacy deploy.
-            self.verify_store_closure(manifest, body, sha, manifest_sha)
-            self.recheck_caches(manifest)
+                target, reused = self.prepare_archive(archive, sha, outer_sha, manifest_sha)
             if initial:
                 for name in ('current', 'previous', 'last-deployment-run'):
                     if os.path.lexists(self.root / name):
