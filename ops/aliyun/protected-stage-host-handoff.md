@@ -1,0 +1,10 @@
+# Protected shadow host observer (not an attestation or deployment)
+Run only inside a disposable Ubuntu 22.04 GitHub-hosted job pinned to a separately reviewed tooling commit, with both production switches explicitly false. The legacy diagnostic invocation takes no arguments and retains its separate branch gate/output.
+
+The actual caller must independently verify current protected main, successful exact-attempt producer jobs and artifact IDs/ZIP digests, then invoke the reviewed materializer before the test. Do this with a read-only token in a separate step, verify the tooling checkout SHA out-of-band, and remove all tokens between steps. The private prepared pair contains the already verified materializer's `app` and `web`; it must be within `RUNNER_TEMP` but not in the trusted checkout. Provision the exact private `/opt/zimage/layer-cache` for this one job only. The browser job must not check out, run host package scripts from, or use tools compiled from the candidate checkout.
+
+In the clean tooling checkout, with the known GitHub caller identity passed explicitly through a cleaned environment and pinned host Node/pnpm/Nginx provisioned, invoke:
+
+    bash ops/aliyun/github-protected-stage-netproof.sh --prepared-protected-shadow PREPARED_ROOT TRUSTED_SOURCE_SHA TRUSTED_TOOLS_SHA
+
+This path independently compares the sealed host preparation marker, runtime BUILD_ID and frontend metadata to the trusted caller's source SHA. It runs the existing Docker/Nginx isolated network denial and read-only mount probes, then synthetic Supabase 43/no-M7 and real Chromium with reconstructed pinned public 7a baseline. The baseline is mandatory. Neither candidate nor baseline touches production or signs anything. The reconstruction rebuilds only the old baseline; the already-prepared candidate is not rebuilt. The observer emits only unattested observations; a pinned reusable caller and protected report signer are separate later work. No workflow or live flag is enabled by this patch.

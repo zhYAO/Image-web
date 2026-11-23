@@ -171,6 +171,9 @@ function dockerState(name, project) {
 }
 
 async function run(args) {
+  const observation = process.env.ZIMAGE_ISOLATED_OBSERVATION_MODE ?? 'diagnostic';
+  require(observation === 'diagnostic' || (observation === 'protected-measurement' && args.length === 9),
+    'Protected observation requires reconstructed isolated baseline');
   const selected = (args.length === 8 || args.length === 9) && args[3] === '--protected-main-shadow';
   require(process.platform === 'linux' && process.versions.node === '24.19.0' && selected && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN, 'Invalid isolated proof invocation');
   const paths = [...args.slice(0, 3), args[4], args[5], args[6]];
@@ -322,7 +325,7 @@ async function run(args) {
     verifyLedger();
     const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
       migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
-    return { commit, ...dbEvidence, scope: 'isolated-container-browser-only', browserUiTested: true,
+    return { commit, ...dbEvidence, scope: observation === 'diagnostic' ? 'isolated-container-browser-only' : 'unattested-protected-browser-observation', browserUiTested: true,
       productionReady: false, credentialMode: 'synthetic', ...(baseline ? { reconstructedIsolatedPairRecovery: true, reconstructedCommit: oldSha } : {}), checks: ['candidate-health', 'browser-home-login-workspace-logout'] };
   } catch (error) {
     failed = true;

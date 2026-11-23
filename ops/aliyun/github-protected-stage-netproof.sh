@@ -1,16 +1,62 @@
 #!/usr/bin/env bash
-# Disposable hosted diagnostic only. No application, real credential, or signing.
+# Disposable hosted diagnostic or pinned prepared-pair observation. No signing or release.
 set -euo pipefail
 umask 077
-ref=refs/heads/codex/zimage-protected-stage-netproof-20261122
-[[ ${GITHUB_REPOSITORY:-} == zhYAO/Image-web && ${GITHUB_EVENT_NAME:-} == push &&
-   ${GITHUB_REF:-} == "$ref" && ${GITHUB_WORKFLOW_REF:-} == "zhYAO/Image-web/.github/workflows/protected-stage-netproof.yml@$ref" &&
-   ${RUNNER_ENVIRONMENT:-} == github-hosted && ${RUNNER_OS:-} == Linux && "$(uname -m)" == x86_64 &&
-   -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} &&
-   ${GITHUB_SHA:-} =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-[[ "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.35' ]]
-[[ ${ZIMAGE_FROZEN_BASELINE:-0} != 1 || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]
 root=$(pwd -P)
+mode=diagnostic
+[[ ${RUNNER_ENVIRONMENT:-} == github-hosted && ${RUNNER_OS:-} == Linux && "$(uname -m)" == x86_64 &&
+   -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} && -z ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-} &&
+   -z ${ACTIONS_RUNTIME_TOKEN:-} && "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.35' &&
+   ${GITHUB_SHA:-} =~ ^[a-f0-9]{40}$ && -n ${RUNNER_TEMP:-} ]] || { echo 'Expected token-free exact hosted task' >&2; exit 1; }
+if [[ $# == 0 ]]; then
+  ref=refs/heads/codex/zimage-protected-stage-netproof-20261122
+  [[ ${GITHUB_REPOSITORY:-} == zhYAO/Image-web && ${GITHUB_EVENT_NAME:-} == push &&
+     ${GITHUB_REF:-} == "$ref" && ${GITHUB_WORKFLOW_REF:-} == "zhYAO/Image-web/.github/workflows/protected-stage-netproof.yml@$ref" &&
+     "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || exit 1
+  [[ ${ZIMAGE_FROZEN_BASELINE:-0} != 1 || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]] || exit 1
+else
+  [[ "$#" == 4 && "$1" == --prepared-protected-shadow ]] || exit 1
+  mode=protected-measurement
+  prepared=$2
+  trusted_commit=$3
+  tools_sha=$4
+  [[ ${GITHUB_REPOSITORY:-} == zhYAO/Image-web && ${GITHUB_REPOSITORY_ID:-} == 1329578390 &&
+     ${GITHUB_EVENT_NAME:-} == push && ${GITHUB_REF:-} == refs/heads/main && ${GITHUB_REF_PROTECTED:-} == true &&
+     ${GITHUB_WORKFLOW_REF:-} == 'zhYAO/Image-web/.github/workflows/rehearsal-candidates.yml@refs/heads/main' &&
+     ${ZIMAGE_PAIRED_AUTOMATION:-} == false && ${ZIMAGE_PAIRED_PRODUCTION:-} == false &&
+     ${ZIMAGE_FROZEN_CANDIDATE:-0} == 0 && ${ZIMAGE_FROZEN_BASELINE:-0} == 0 &&
+     "$trusted_commit" == "$GITHUB_SHA" && "$tools_sha" =~ ^[a-f0-9]{40}$ &&
+     "$(git rev-parse HEAD)" == "$tools_sha" && -z "$(git status --porcelain)" ]] || { echo 'Protected shadow caller refused' >&2; exit 1; }
+  # Only the pinned, independently checked-out supervisor is used on host.
+  # Artifacts were assembled by trusted intake in a separate read-only-token step.
+  python3 -I -B - "$prepared" "$RUNNER_TEMP" "$trusted_commit" "$root" <<'PY_PAIR' || exit 1
+import json, os, stat, sys
+from pathlib import Path
+pair, temp, commit, tools = sys.argv[1:]
+pair, temp, tools = map(Path, (pair,temp,tools))
+cache = Path('/opt/zimage/layer-cache')
+if (cache.resolve(strict=True) != cache or not cache.is_dir() or cache.stat().st_uid != os.getuid()
+        or cache.stat().st_mode & 0o077 or not any(cache.iterdir())):
+    raise ValueError('Expected already assembled private cache')
+if (not pair.is_absolute() or pair.resolve(strict=True) != pair or temp not in pair.parents
+        or pair == tools or tools in pair.parents or pair in tools.parents
+        or pair.stat().st_uid != os.getuid() or pair.stat().st_mode & 0o077):
+    raise ValueError('Expected separately prepared private pair')
+marker=pair/'app/.three-layer-release.json'
+if (not stat.S_ISREG(marker.lstat().st_mode) or marker.stat().st_size > 100_000
+        or marker.resolve(strict=True) != marker):
+    raise ValueError('Expected exact assembled marker')
+manifest=json.loads(marker.read_bytes())
+if manifest.get('releaseId') != commit or manifest.get('schema') != 3 or manifest.get('productionReady') is not False:
+    raise ValueError('Prepared pair does not bind reviewed source')
+for child in ('app','web'):
+    d=pair/child
+    if not d.is_dir() or d.resolve(strict=True)!=d:
+        raise ValueError('Missing prepared pair component')
+PY_PAIR
+fi
+[[ ${GITHUB_RUN_ID:-} =~ ^[1-9][0-9]*$ && ${GITHUB_RUN_ATTEMPT:-} =~ ^[1-9][0-9]*$ ]] ||
+  [[ "$mode" == diagnostic && ${ZIMAGE_FROZEN_CANDIDATE:-0} != 1 ]] || exit 1
 scratch=$(mktemp -d "$RUNNER_TEMP/zimage-netproof.XXXXXXXX")
 image=docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
 network=zimage-staging-internal
@@ -97,7 +143,7 @@ docker run --rm --pull never --platform linux/amd64 --network "$id" --ip "$peer"
   --env NODE_EXTRA_CA_CERTS=/fixture-ca.pem --env ZIMAGE_SYNTHETIC_NET_PROBE=1 \
   "$image" /node /proof.mjs "$bridge"
 printf '%s\n' 'Linux synthetic network boundary only; no candidate release, database, signing or deployment.'
-if [[ ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]; then
+if [[ "$mode" == protected-measurement || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]; then
   # Never reuse Supabase API or database ports for the mock. Only restart
   # the owned diagnostic gateway to switch its fixed upstream; keep TLS,
   # exact bridge, firewall and container isolation unchanged.
@@ -128,14 +174,15 @@ PY_PORT
   done
   kill -0 "$gateway"
   ss -ltn | grep -F "$bridge:8443" >/dev/null
-  frozen="$RUNNER_TEMP/zimage-frozen-92663"
-  test -d "$frozen" && test ! -L "$frozen" && test -d "$frozen/files" && test ! -L "$frozen/files"
-  test ! -e /opt/zimage && test ! -L /opt/zimage
-  sudo install -d -m 0755 /opt/zimage
-  sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
-  python3 -I -B ops/aliyun/prepare-92663-isolated-pair.py "$frozen/files" "$frozen/verified.json" \
-    "$scratch/prepared" /opt/zimage/layer-cache > "$scratch/preparation.json"
-  trusted_commit=$(python3 -I -B - "$scratch/preparation.json" <<'PY_COMMIT'
+  if [[ "$mode" == diagnostic ]]; then
+    frozen="$RUNNER_TEMP/zimage-frozen-92663"
+    test -d "$frozen" && test ! -L "$frozen" && test -d "$frozen/files" && test ! -L "$frozen/files"
+    test ! -e /opt/zimage && test ! -L /opt/zimage
+    sudo install -d -m 0755 /opt/zimage
+    sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
+    python3 -I -B ops/aliyun/prepare-92663-isolated-pair.py "$frozen/files" "$frozen/verified.json" \
+      "$scratch/prepared" /opt/zimage/layer-cache > "$scratch/preparation.json"
+    trusted_commit=$(python3 -I -B - "$scratch/preparation.json" <<'PY_COMMIT'
 import json, re, sys
 verified = json.load(open(sys.argv[1]))
 if verified['applicationStarted'] is not False or verified['productionReady'] is not False or not re.fullmatch('[a-f0-9]{40}', verified['commit']):
@@ -143,8 +190,10 @@ if verified['applicationStarted'] is not False or verified['productionReady'] is
 print(verified['commit'])
 PY_COMMIT
 )
-  cat "$scratch/preparation.json"
-  chmod 0755 "$scratch/prepared/app" /opt/zimage/layer-cache
+    cat "$scratch/preparation.json"
+    prepared="$scratch/prepared"
+  fi
+  chmod 0755 "$prepared/app" /opt/zimage/layer-cache
   [[ "$(node --version)" == v24.19.0 && "$(pnpm --version)" == 11.19.0 ]]
   pnpm install --frozen-lockfile
   python3 -I -B ops/aliyun/prepare-m6-browser-fixture.py "$root/supabase/migrations" "$scratch/m6"
@@ -157,7 +206,7 @@ PY_COMMIT
   reply_allowed=1
   sudo iptables -C INPUT "${reply_rule[@]}"
   baseline_args=()
-  if [[ ${ZIMAGE_FROZEN_BASELINE:-0} == 1 ]]; then
+  if [[ "$mode" == protected-measurement || ${ZIMAGE_FROZEN_BASELINE:-0} == 1 ]]; then
     old_sha=7a811b326aa4b344cee08bc5a33c04e44a780fd4
     old_source="$scratch/baseline-source"
     git init -q "$old_source"
@@ -170,8 +219,12 @@ PY_COMMIT
     find "$scratch/baseline/app" "$scratch/baseline/resources" -type f -exec chmod a+r {} +
     baseline_args+=("$scratch/baseline")
   fi
+  if [[ "$mode" == protected-measurement ]]; then
+    [[ ${#baseline_args[@]} == 1 ]]
+    echo 'Unattested protected shadow observation only; not release evidence.'
+  fi
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
-    ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
-    node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$scratch/prepared/app" "$scratch/prepared/web" \
+    ZIMAGE_ISOLATED_OBSERVATION_MODE="$mode" ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+    node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$prepared/app" "$prepared/web" \
       --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}"
 fi
