@@ -2,6 +2,8 @@
 """Host-only preparation of already downloaded proof; never starts the app."""
 import importlib.util
 import json
+import shutil
+import tempfile
 import os
 from pathlib import Path
 import sys
@@ -30,32 +32,25 @@ def main():
             or out.parent.stat().st_mode & 0o077 or os.path.lexists(out)):
         raise ValueError('Expected new private output')
     verifier = load('signed_input', HERE / 'verify-92663-isolated-input.py')
-    verifier.verify(proof, verified)
-    intake = load('immutable_pair', HERE / 'github-rehearsal-intake.py')
-    pins = intake.read_json(proof / 'pins.json')
-    sha = verifier.SHA
-    if (pins['commit'], pins['runId'], pins['attempt']) != (sha, verifier.RUN, 1) or not intake.hosted_namespace(pins, 'hosted-shadow'):
-        raise ValueError('Expected exact signed artifact scope')
-    result = intake.evaluate(pins, proof / 'backend.zip', proof / 'frontend.zip', intake.read_json(proof / 'config.json'))
-    if (result.get('productionReady') is not False or result.get('immutablePairVerified') is not True
-            or result.get('status') != 'blocked'):
-        raise ValueError('Immutable diagnostic pair not verified')
-    out.mkdir(mode=0o700)
-    for name, allowed in (('backend',['transport.tgz','rehearsal-receipt.json']),
-                          ('frontend',['frontend-rehearsal.tgz','frontend-subject.json','rehearsal-receipt.json'])):
-        directory = out/name
-        intake.extract_github_zip(proof/(name+'.zip'), directory, pins[name]['artifactSha256'], allowed)
-        intake.closure_receipt(directory, name, pins[name], sha, verifier.RUN, 1, shadow=True)
-    store = out/'store'
-    transport = intake.load('exact_transport', HERE/'release-transport.py')
-    transport.unpack_bundle(out/'backend/transport.tgz', store, sha, pins['backend']['manifestSha256'])
-    manifest = intake.load('exact_frontend', HERE/'frontend/manifest.py')
-    manifest.extract_strict(out/'frontend/frontend-rehearsal.tgz', out/'web',
-                            validator=lambda n: None if n=='.release/candidate.json' else manifest.payload_path(n),
-                            max_bytes=100_000_000)
-    assembler = intake.load('exact_assembler', HERE/'three-layer-release.py')
-    assembler.assemble(store/'releases'/(sha+'.json'), store, out/'app', cache, pins['backend']['manifestSha256'], True)
-    print(json.dumps(dict(commit=sha, namespace=pins['frontendNamespace'], applicationStarted=False, productionReady=False)))
+    exact = verifier.verify(proof, verified)
+    if (exact['files']['backend.zip']['sha256'] != verifier.BACKEND_ZIP
+            or exact['files']['frontend.zip']['sha256'] != verifier.FRONTEND_ZIP):
+        raise ValueError('Signed files differ from independent outer ZIP digests')
+    materialize = load('generic_hosted_pair', HERE / 'prepare-hosted-shadow-pair.py')
+    # Generic entrypoint deliberately rejects extra attestation members.
+    # Copy only four verified files to fresh 0700 sibling; generic intake
+    # independently rechecks the resulting ZIPs against fixed digests.
+    with tempfile.TemporaryDirectory(prefix='verified-originals-', dir=out.parent) as name:
+        inputs = Path(name)
+        for n in verifier.FILES:
+            shutil.copyfile(proof / n, inputs / n)
+            (inputs / n).chmod(0o400)
+            if verifier.read(inputs / n, 40_000_000 if n.endswith('.zip') else 16384)[0] != exact['files'][n]:
+                raise ValueError('Copied original changed after verification')
+        materialize.run(inputs, out, cache, materialize.module(), commit=verifier.SHA, run_id=verifier.RUN,
+                        attempt=1, backend_sha256=verifier.BACKEND_ZIP, frontend_sha256=verifier.FRONTEND_ZIP)
+    print(json.dumps(dict(commit=verifier.SHA, namespace='release-' + verifier.SHA[:12],
+                          applicationStarted=False, productionReady=False)))
 
 
 if __name__ == '__main__':

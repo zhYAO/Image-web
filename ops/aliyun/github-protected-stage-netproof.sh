@@ -134,7 +134,16 @@ PY_PORT
   sudo install -d -m 0755 /opt/zimage
   sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /opt/zimage/layer-cache
   python3 -I -B ops/aliyun/prepare-92663-isolated-pair.py "$frozen/files" "$frozen/verified.json" \
-    "$scratch/prepared" /opt/zimage/layer-cache
+    "$scratch/prepared" /opt/zimage/layer-cache > "$scratch/preparation.json"
+  trusted_commit=$(python3 -I -B - "$scratch/preparation.json" <<'PY_COMMIT'
+import json, re, sys
+verified = json.load(open(sys.argv[1]))
+if verified['applicationStarted'] is not False or verified['productionReady'] is not False or not re.fullmatch('[a-f0-9]{40}', verified['commit']):
+    raise ValueError('Trusted materializer output invalid')
+print(verified['commit'])
+PY_COMMIT
+)
+  cat "$scratch/preparation.json"
   chmod 0755 "$scratch/prepared/app" /opt/zimage/layer-cache
   [[ "$(node --version)" == v24.19.0 && "$(pnpm --version)" == 11.19.0 ]]
   pnpm install --frozen-lockfile
@@ -162,7 +171,7 @@ PY_PORT
     baseline_args+=("$scratch/baseline")
   fi
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
-    PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+    ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
     node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$scratch/prepared/app" "$scratch/prepared/web" \
       --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}"
 fi

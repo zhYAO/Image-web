@@ -199,7 +199,8 @@ async function run(args) {
   const app = path.join(backend, 'apps/web');
   const commit = (await regular(path.join(app, '.next/BUILD_ID'))).toString().trim();
   const candidate = JSON.parse(await regular(path.join(frontend, '.release/candidate.json')));
-  require(commit === '92663c46ffa483319ad8d7cd9318ac41f258aa12' && candidate.sourceIdentity?.sourceSHA === commit && candidate.sourceIdentity?.dirty === false
+  const trustedCommit = process.env.ZIMAGE_TRUSTED_ARCHIVE_COMMIT;
+  require(ARCHIVE_ROOT.test(trustedCommit ?? '') && commit === trustedCommit && candidate.sourceIdentity?.sourceSHA === commit && candidate.sourceIdentity?.dirty === false
     && candidate.namespace === 'release-' + commit.slice(0, 12)
     && candidate.allowedBackendReleases?.length === 1 && candidate.allowedBackendReleases[0] === commit, 'Not an exact paired release');
   require((await regular(path.join(frontend, 'app.html'))).includes(Buffer.from('/frontend-assets/' + candidate.namespace + '/')),

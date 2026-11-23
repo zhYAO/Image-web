@@ -9,6 +9,8 @@ import sys
 
 SHA = '92663c46ffa483319ad8d7cd9318ac41f258aa12'
 RUN = 45083109340
+BACKEND_ZIP = '5e9e05c52126ccc62d2416385b0375c07b365edb167d7645df9abbb211c4565e'
+FRONTEND_ZIP = '6b7ab161a14e34ae2db1c37a74bb43689e48bb8e8529309b16286c592c369cbf'
 REF = 'refs/heads/codex/zimage-exact-shadow-diagnostic-20261122'
 REPO = 'zhYAO/Image-web'
 URI = 'https://github.com/' + REPO
