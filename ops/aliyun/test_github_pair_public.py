@@ -1,4 +1,5 @@
 import hashlib
+from http.client import HTTPSConnection
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
@@ -7,8 +8,9 @@ import ssl
 import subprocess
 import tempfile
 from threading import Thread
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import github_pair_public as public
 
@@ -137,12 +139,15 @@ class PublicPairTest(unittest.TestCase):
             server.socket = server_context.wrap_socket(server.socket, server_side=True)
             server.timeout = 3
             client_context = ssl.create_default_context(cafile=str(cert))
-            https = public.http.client.HTTPSConnection
+            def connect_local(_host, timeout):
+                return HTTPSConnection('localhost', server.server_port, timeout=timeout, context=client_context)
+
+            connect = Mock(side_effect=connect_local)
+            http = SimpleNamespace(client=SimpleNamespace(HTTPSConnection=connect))
             worker = Thread(target=server.handle_request, daemon=True)
             worker.start()
             try:
-                with patch.object(public.http.client, 'HTTPSConnection', side_effect=lambda host, timeout: https(
-                        'localhost', server.server_port, timeout=timeout, context=client_context)) as connect:
+                with patch.object(public, 'http', http):
                     probe = public.capture_failure(self.sha)
                 connect.assert_called_once_with(public.HOST, timeout=10)
                 self.assertEqual((probe['check']['path'], probe['check']['status'], probe['check']['bodyBytes']),
