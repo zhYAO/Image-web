@@ -92,6 +92,7 @@ class ReceiverTests(unittest.TestCase):
                 patch.object(receiver, 'source', side_effect=lambda name, *_: tools[name]), \
                 patch.object(receiver, 'SPOOL', spool), patch.object(receiver.sys, 'stdin', stdin), \
                 patch.object(receiver, 'observer_client', return_value=None), \
+                patch.object(receiver, 'github_get', return_value=None), \
                 patch.object(receiver, 'BoundedInput') as bounded:
             self.assertEqual(receiver.main(), core.canonical(expected))
         bounded.assert_called_once_with(27)
@@ -131,6 +132,59 @@ class ReceiverTests(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             github.get('/repos/zhYAO/Image-web/branches/main')
         tools['ordinary_github'].read_only.assert_not_called()
+
+
+    def test_github_vpc_dns_requires_explicit_owner_only_valid_config(self):
+        tools = {name: Mock() for name, _ in receiver.MODULES}
+        authority = Mock(github_read_token='fake-read-token')
+        gh = tools['ordinary_github']
+        original_connector = gh.vpc_connection
+        # Use the actual approved-address check without performing DNS.
+        import ordinary_github
+        original_connector.side_effect = ordinary_github.vpc_connection
+
+        def read(path, limit, *, private=False):
+            self.assertTrue(private)
+            if path == receiver.GITHUB_VPC_DNS:
+                self.assertEqual(limit, 512)
+                return raw
+            self.assertEqual(path, receiver.GITHUB_TLS / 'client.json')
+            raise FileNotFoundError
+
+        raw = b'{"schemaVersion":1,"resolver":"100.100.2.136"}'
+        self.assertIs(receiver.github_get(tools, authority, test_core, read), gh.read_only.return_value)
+        original_connector.assert_called_once_with('100.100.2.136')
+        self.assertEqual(gh.read_only.call_args.args, ('fake-read-token',))
+        self.assertIsNotNone(gh.read_only.call_args.kwargs['connect'])
+
+        for raw in (b'{"schemaVersion":true,"resolver":"100.100.2.136"}',
+                    b'{"schemaVersion":1,"resolver":"8.8.8.8"}',
+                    b'{"schemaVersion":1,"resolver":"100.100.2.136","fallback":true}',
+                    b'{"schemaVersion":1,"resolver":"100.100.2.136","resolver":"100.100.2.138"}'):
+            with self.subTest(raw=raw), self.assertRaises((ValueError, OSError)):
+                gh.read_only.reset_mock()
+                receiver.github_get(tools, authority, test_core, read)
+            gh.read_only.assert_not_called()
+
+    def test_github_vpc_dns_and_relay_are_exclusive_and_fail_closed(self):
+        tools = {name: Mock() for name, _ in receiver.MODULES}
+        authority = Mock(github_read_token='irrelevant')
+        bad_config = Mock(side_effect=PermissionError('not owner-only'))
+        with patch.object(receiver, 'observer_client') as relay:
+            with self.assertRaises(PermissionError):
+                receiver.github_get(tools, authority, test_core, bad_config)
+            relay.assert_not_called()
+            both = Mock(return_value=b'{"schemaVersion":1,"resolver":"100.100.2.136"}')
+            with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+                receiver.github_get(tools, authority, test_core, both)
+            self.assertEqual([call.args[0] for call in both.call_args_list],
+                             [receiver.GITHUB_VPC_DNS, receiver.GITHUB_TLS / 'client.json'])
+            relay.assert_not_called()
+            absent = Mock(side_effect=FileNotFoundError)
+            self.assertIs(receiver.github_get(tools, authority, test_core, absent), relay.return_value)
+            relay.assert_called_once_with(tools['ordinary_github_relay'], test_core, absent, receiver.GITHUB_TLS)
+        tools['ordinary_github'].read_only.assert_not_called()
+
 
     @unittest.skipIf(sys.platform == 'win32', 'Linux pipe readiness')
     def test_bounded_wire_reads_short_chunks_eof_and_deadline(self):

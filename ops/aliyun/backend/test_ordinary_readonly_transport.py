@@ -10,6 +10,7 @@ import ssl
 import subprocess
 import sys
 import tempfile
+from threading import Event
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -155,6 +156,58 @@ class ObserverTransportTest(unittest.TestCase):
             with self.subTest(query=query), self.assertRaises(ValueError):
                 relay.answer(query, get)
         get.assert_not_called()
+
+    def test_full_protected_merge_verifier_reads_bound_rules_through_native_tls(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github as gh
+            import ordinary_github_relay as relay
+            import test_ordinary_github as merge_fixture
+
+        scenario = merge_fixture.ObserveTests()
+        scenario.setUp()
+        verify_check = scenario.full_check_records()
+        provider = Mock(side_effect=scenario.read)
+        stop = Event()
+        with socket.socket() as listener, ThreadPoolExecutor(max_workers=1) as worker:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen(1)
+            listener.settimeout(0.1)
+            server = transport.tls_context(self.cert('publisher'), self.cert('localhost'), self.key('localhost'), server=True)
+            client = relay.client(dict(schemaVersion=1, address='127.0.0.1', port=listener.getsockname()[1],
+                                       serverName='localhost', peerSha256=self.pin('localhost')),
+                                  ca=self.cert('localhost'), cert=self.cert('publisher'), key=self.key('publisher'))
+
+            def serve():
+                while not stop.is_set():
+                    try:
+                        raw, _ = listener.accept()
+                    except TimeoutError:
+                        continue
+                    with raw:
+                        relay.serve_one(raw, context=server, peer=self.pin('publisher'), get=provider,
+                                        deadline=time.monotonic() + 4)
+
+            future = worker.submit(serve)
+
+            def verify():
+                return gh.observe(scenario.packet, get=client, policy=scenario.policy, verify_check=verify_check)
+
+            try:
+                evidence = verify()
+                self.assertEqual((evidence['pullRequest'], evidence['checkRunId'], evidence['ruleSuiteId']), (22, 35, 41))
+                observed = {call.args[0] for call in provider.call_args_list}
+                self.assertIn(gh.BASE + '/rulesets/rule-suites/41', observed)
+                self.assertIn(gh.BASE + '/actions/runs/38/attempts/2/jobs?per_page=100', observed)
+                scenario.execution['rule_evaluations'][0]['result'] = 'fail'
+                with self.assertRaises(ValueError):
+                    verify()
+                scenario.execution['rule_evaluations'][0]['result'] = 'pass'
+                scenario.sources[f'/commits/{scenario.head}']['commit']['tree']['sha'] = 'e' * 40
+                with self.assertRaises(ValueError):
+                    verify()
+            finally:
+                stop.set()
+            future.result(timeout=5)
 
     def test_github_probe_requires_rule_history_and_exact_workflow_bytes(self):
         with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):

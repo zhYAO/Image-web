@@ -20,6 +20,7 @@ VERIFIER = BASE / 'bin/gh'
 SIGSTORE_ROOT = Path('/etc/zimage/ordinary-sigstore-roots.jsonl')
 OBSERVER_TLS = Path('/etc/zimage/ordinary-observer-tls')
 GITHUB_TLS = Path('/etc/zimage/ordinary-github-tls')
+GITHUB_VPC_DNS = Path('/etc/zimage/ordinary-github-vpc-dns.json')
 SHA = re.compile('[a-f0-9]{64}')
 MODULES = (
     ('ordinary', 'ordinary.py'),
@@ -155,6 +156,28 @@ def observer_client(transport, core, read, directory=OBSERVER_TLS):
     return transport.client(core.parse(config), **files)
 
 
+def github_get(tools, authority, core, read):
+    """Select exactly one separately installed GitHub evidence route."""
+    try:
+        vpc_config = read(GITHUB_VPC_DNS, 512, private=True)
+    except FileNotFoundError:
+        # Preserve previous relay or system-DNS direct policy; no automatic VPC fallback.
+        return observer_client(tools['ordinary_github_relay'], core, read, GITHUB_TLS)
+    try:
+        read(GITHUB_TLS / 'client.json', 4096, private=True)
+    except FileNotFoundError:
+        pass
+    else:
+        raise ValueError('GitHub VPC DNS and mTLS relay are mutually exclusive')
+    config = core.parse(vpc_config)
+    core.exact(config, {'schemaVersion', 'resolver'})
+    require(type(config['schemaVersion']) is int and config['schemaVersion'] == 1,
+            'Invalid GitHub VPC DNS configuration')
+    gh = tools['ordinary_github']
+    return gh.read_only(authority.github_read_token, connect=gh.vpc_connection(config['resolver']))
+
+
+
 def main():
     invocation(sys.argv, script=__file__, uid=os.geteuid(), isolated=sys.flags.isolated)
     sys.dont_write_bytecode = True
@@ -181,7 +204,7 @@ def main():
         authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle,
                                                                public=tools['github_pair_public'], read=read_installed,
                                                                trusted=cli.trusted, root=cli.ROOT, observe=observe)
-        get = observer_client(tools['ordinary_github_relay'], core, read_installed, GITHUB_TLS)
+        get = github_get(tools, authority, core, read_installed)
         github = github_evidence(tools, authority, core, get=get)
         def system_for(packet, approval):
             policy = authority.lifecycle_policy(packet, approval)
