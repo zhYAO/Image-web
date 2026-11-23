@@ -29,7 +29,7 @@ MAX_REPLY = 90000
 LENGTH = struct.Struct('!I')
 CHALLENGE = 'zimage-ordinary-public-challenge-v1'
 OBSERVATION = 'zimage-ordinary-public-observation-v1'
-BATCH = {'commit', 'runId', 'attempt', 'packetSha256', 'rootApprovalSha256', 'rollbackPair'}
+BATCH = {'commit', 'runId', 'attempt', 'packetSha256', 'rootApprovalSha256', 'rollbackPair', 'snapshotSha256'}
 FIELDS = BATCH | {'schemaVersion', 'kind', 'command', 'phase', 'nonce', 'expiresAt'}
 SIGNER = '.github/workflows/review-ordinary-public.yml'
 PREDICATE = 'https://zimage.store/attestations/rehearsal-public-observation/v1'
@@ -61,7 +61,7 @@ def validate(challenge, now):
             and challenge['kind'] == CHALLENGE and challenge['command'] == COMMAND
             and challenge['phase'] in ('candidate', 'restored')
             and match(COMMIT, challenge['commit'])
-            and all(match(DIGEST, challenge[k]) for k in ('nonce', 'packetSha256', 'rootApprovalSha256'))
+            and all(match(DIGEST, challenge[k]) for k in ('nonce', 'packetSha256', 'rootApprovalSha256', 'snapshotSha256'))
             and all(type(challenge[k]) is int and 0 < challenge[k] < 2**63 for k in ('runId', 'attempt'))
             and type(challenge['expiresAt']) is int and now < challenge['expiresAt'] <= now + LIFETIME,
             'Invalid or expired public observation challenge')
@@ -98,7 +98,10 @@ class Frames:
     def write(self, value, cap):
         body = encode(value)
         require(0 < len(body) <= cap, 'Observer frame exceeds bound')
-        frame = memoryview(LENGTH.pack(len(body)) + body)
+        self.write_bytes(LENGTH.pack(len(body)) + body)
+
+    def write_bytes(self, body):
+        frame = memoryview(body)
         while frame:
             self._ready(write=True)
             try:
@@ -107,6 +110,10 @@ class Frames:
                 continue
             require(count > 0, 'Observer frame write failed')
             frame = frame[count:]
+
+    def assert_eof(self):
+        self._ready()
+        require(os.read(self.reader, 1) == b'', 'Unframed bytes after observer receipt')
 
 
 def target(challenge):
@@ -150,6 +157,11 @@ def reply(subject, bundle):
 
 
 def receive_observation(frames, *, batch, phase, verify):
+    proof = receive_signed_observation(frames, batch=batch, phase=phase, verify=verify)
+    return proof['subject']['public']
+
+
+def receive_signed_observation(frames, *, batch, phase, verify):
     """Finish one live challenge. A new call generates a new unpredictable nonce."""
     require(type(batch) is dict and batch.keys() == BATCH, 'Exact authorized batch required')
     challenge = dict(batch, schemaVersion=1, kind=CHALLENGE, command=COMMAND, phase=phase,
@@ -166,10 +178,10 @@ def receive_observation(frames, *, batch, phase, verify):
         raise ValueError('Invalid GitHub bundle encoding') from None
     require(0 < len(subject) <= MAX_SUBJECT and 0 < len(bundle) <= MAX_BUNDLE,
             'Observer response exceeds signed evidence bounds')
-    result = verify_subject(response['subject'], challenge)
+    verify_subject(response['subject'], challenge)
     verify(subject, bundle)
     validate(challenge, int(time.time()))
-    return result
+    return response
 
 
 def verify_github(subject, bundle, *, gh, roots, signer_sha, source_ref, source_sha, run, attempt):

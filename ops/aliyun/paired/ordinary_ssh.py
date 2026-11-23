@@ -9,7 +9,7 @@ import tempfile
 from ordinary_system import OrdinarySystem
 
 
-def restore_pair(selector, *, host, ordinary, handoff):
+def restore_pair(selector, *, host, ordinary, handoff, observe_public=None):
     ordinary.exact(selector, {'packet', 'approvalSha256'})
     packet = selector['packet']
     ordinary.exact(packet, ordinary.PACKET)
@@ -19,6 +19,8 @@ def restore_pair(selector, *, host, ordinary, handoff):
     approval, digest = authorization['approval'], authorization['sha256']
     ordinary.inputs(packet, approval, digest, host.clock())
     ordinary.valid(selector['approvalSha256'] == digest, 'Requested release approval differs from the installed batch')
+    if observe_public is not None:
+        host.authority.bind_public_session(observe_public)
     result = host.restore(packet, approval, digest, system=host.system_for(packet, approval), gate=host.gate,
                           authority=host.authority, ordinary=ordinary, clock=host.clock)
     return handoff.validate_restoration(result, dict(operationId=approval['operation'], commit=packet['commit'],
@@ -27,7 +29,7 @@ def restore_pair(selector, *, host, ordinary, handoff):
                                         rollbackAcceptanceSha256=approval['baselineAcceptanceSha256']))
 
 
-def run(stream, *, scratch, host, handoff, ordinary):
+def run(stream, *, scratch, host, handoff, ordinary, observe_public=None):
     """Consume one request; only a completed publication or restoration yields a receipt.
 
     ``host`` is the reviewed, root-owned integration boundary, including the
@@ -37,9 +39,10 @@ def run(stream, *, scratch, host, handoff, ordinary):
     """
     with tempfile.TemporaryDirectory(prefix='ordinary-pair-', dir=scratch) as temp:
         request = Path(temp)
-        selector = handoff.receive(stream, request)
+        selector = handoff.receive(stream, request, interactive=observe_public is not None)
         if selector is not None:
-            return restore_pair(selector, host=host, ordinary=ordinary, handoff=handoff)
+            return restore_pair(selector, host=host, ordinary=ordinary, handoff=handoff, observe_public=observe_public)
+        ordinary.valid(observe_public is None, 'Interactive publication is not admitted by this receiver')
         evidence = handoff.admit(request, policy=host.policy, get=host.github.get, verify=host.github.verify,
                                  intake=host.intake, now=host.clock(), seen=host.seen())
         packet = evidence['packet']

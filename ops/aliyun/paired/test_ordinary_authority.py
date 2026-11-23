@@ -313,3 +313,27 @@ class AuthorityTest(unittest.TestCase):
         bind_witness(tampered_digest)
         with self.assertRaisesRegex(ValueError, 'contradicts'):
             self.driver.verify_public_failure(self.packet, self.approval, snapshot)
+
+    def test_attested_public_session_persists_the_exact_snapshot_bound_proof(self):
+        authorized = self.authorize()
+        released = dict(self.approval['newPair'], process={'pid': 303}, frontendSequence=8)
+        restored = dict(self.approval['oldPair'], process={'pid': 304}, frontendSequence=9)
+        witness = public_checks.capture_failure(released['backend'], fetch=lambda _: (503, 'text/html', 'no-store', b''))
+        proofs = [dict(subject={'public': witness}, bundle='fixture-a'),
+                  dict(subject={'public': self.public(self.approval['oldPair'])}, bundle='fixture-b')]
+        observe = Mock(side_effect=proofs)
+        self.writer.side_effect = self.put
+        self.driver.bind_public_session(observe)
+        with self.assertRaisesRegex(ValueError, 'exactly one public evidence session'):
+            self.driver.bind_public_session(Mock())
+
+        phases = [('candidate', released, self.driver.verify_public_failure),
+                  ('restored', restored, self.driver.verify_public_restoration)]
+        for (phase, snapshot, verify), proof in zip(phases, proofs):
+            digest = verify(self.packet, self.approval, snapshot)
+            observe.assert_called_with(phase=phase, batch=dict(rootApprovalSha256=authorized['sha256'],
+                rollbackPair=self.approval['oldPair'], snapshotSha256=core.digest(snapshot),
+                packetSha256=self.approval['packetSha256'], commit=self.packet['commit'],
+                runId=self.packet['runId'], attempt=self.packet['attempt']))
+            self.assertEqual(digest, core.digest(proof))
+            self.assertEqual(self.files[self.directory / f'{phase}-public-{digest}.json'], core.canonical(proof))

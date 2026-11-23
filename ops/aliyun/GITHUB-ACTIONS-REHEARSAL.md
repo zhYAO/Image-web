@@ -298,6 +298,15 @@ rehearsal produces a `fixture` measurement. The receiver rejects this mode and
 the earlier unsigned database record. Production still requires an approved
 independent observer workflow, DB principal and evidence handoff.
 
+The opt-in interactive restoration adapters store both signed observations in
+the authorized batch evidence directory. Each filename contains the SHA-256
+of its canonical proof, including the signature bundle. The fixed client
+checks that the final restoration receipt binds both proofs. The first
+challenge names the opened snapshot and requires a witnessed public contract
+failure. The second names the restored snapshot and requires the full public
+pair acceptance. The installed command must explicitly provision the observer
+and select this protocol before any interactive restoration can run.
+
 ### Independent GitHub evidence connection
 
 The receiver can use an explicitly authorized observer when direct GitHub

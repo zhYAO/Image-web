@@ -22,7 +22,7 @@ NEW = 'b' * 40
 
 def batch(old=OLD, new=NEW):
     return dict(commit=new, runId=10, attempt=2, packetSha256='c' * 64, rootApprovalSha256='d' * 64,
-                rollbackPair=dict(backend=old, frontend='release-' + old[:12]))
+                rollbackPair=dict(backend=old, frontend='release-' + old[:12]), snapshotSha256='e' * 64)
 
 
 def responses(commit):
@@ -87,7 +87,8 @@ class WireTests(unittest.TestCase):
         connection('candidate', lambda *args: self.response(*args, commit=NEW), self.attest)
         recorded = self.verified[0]
         for key, value in [('nonce', recorded['challenge']['nonce']), ('attempt', 3),
-                           ('rootApprovalSha256', 'f' * 64), ('packetSha256', 'e' * 64), ('phase', 'restored')]:
+                           ('rootApprovalSha256', 'f' * 64), ('packetSha256', 'e' * 64),
+                           ('snapshotSha256', 'f' * 64), ('phase', 'restored')]:
             with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'exact observer challenge'):
                 def mismatched(challenge, _):
                     subject = wire.observe(challenge, fetch=responses(NEW))

@@ -1,10 +1,14 @@
 from contextlib import nullcontext
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+import hashlib
 import io
 import os
 from pathlib import Path
+import socket
 import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -127,6 +131,88 @@ class RestoreTest(unittest.TestCase):
             self.run_restore()
         self.authority.verify_public_failure.assert_not_called()
         self.reverse.seal.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires POSIX stream descriptors')
+    def test_interactive_restore_receipt_names_both_persisted_signed_observations(self):
+        import core
+        from ordinary_journal import JournalGate, PHASES
+        from test_ordinary_authority import AuthorityTest
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1]), *sys.path]):
+            import github_pair_handoff as handoff
+            import github_pair_ssh as ssh
+            import ordinary_public_exchange as wire
+            from test_github_pair_public import public_responses
+
+        fixture = AuthorityTest()
+        fixture.setUp()
+        self.f.a = fixture.approval
+        self.policy['operationId'] = self.f.a['operation']
+        fixture.writer.side_effect = fixture.put
+        authority = fixture.driver
+        authority.database_digest = self.authority.database_digest
+        authority.assert_other_writers_clear = self.authority.assert_other_writers_clear
+        authority.verify_restored_candidate = self.authority.verify_restored_candidate
+        packet, approval = fixture.packet, fixture.approval
+        digest = ordinary.sha(approval)
+        operation = approval['operation']
+        host = Mock(clock=lambda: self.f.time, authority=authority, restore=ordinary_restore.restore)
+
+        def authorize(request):
+            self.assertEqual(request, packet)
+            return fixture.authorize()
+
+        host.authorization.side_effect = authorize
+        host.system_for.return_value = self.system
+        selector = dict(packet=packet, approvalSha256=digest)
+        raw = io.BytesIO()
+        handoff.send_restoration(selector, raw, interactive=True)
+        responses = public_responses(self.old['backend'])
+
+        def fetch(path):
+            if self.live['backend'] == self.new['backend']:
+                return 503, 'text/html', 'no-store', b''
+            return responses[path]
+
+        def sign(subject, *, deadline):
+            return hashlib.sha256(subject).digest()
+
+        def verify(subject, bundle):
+            self.assertEqual(bundle, sign(subject, deadline=None))
+
+        left, right = socket.socketpair()
+        with left, right, tempfile.TemporaryDirectory() as scratch, ThreadPoolExecutor(max_workers=1) as workers:
+            root = Path(scratch).resolve()
+            (root / 'deploy.lock').touch(mode=0o600)
+            (root / 'ordinary-operations').mkdir(0o700)
+            host.gate = JournalGate(root, core, owner_uid=os.getuid())
+            original, generation = self.gate.claim_restoration.return_value
+            evidence = {'seal-intent': original, 'writes-may-open': generation}
+            with host.gate.lock():
+                host.gate.assert_clear(operation)
+                for phase in PHASES:
+                    host.gate.journal(dict(operation=operation, rootApprovalSha256=digest, phase=phase),
+                                      evidence=evidence.get(phase))
+            deadline = time.monotonic() + 10
+            host_frames = wire.Frames(left.fileno(), left.fileno(), deadline=deadline)
+            client_frames = wire.Frames(right.fileno(), right.fileno(), deadline=deadline)
+
+            def dispatch():
+                result = ordinary_ssh.run(SimpleNamespace(read=host_frames.read_bytes), scratch=scratch, host=host,
+                    handoff=handoff, ordinary=ordinary,
+                    observe_public=lambda **options: wire.receive_signed_observation(host_frames, verify=verify, **options))
+                host_frames.write(result, 16384)
+                return result
+
+            client_frames.write_bytes(raw.getvalue())
+            pending = workers.submit(dispatch)
+            received = ssh.observe_restoration(client_frames, selector=selector, rollback=self.old, sign=sign, fetch=fetch)
+            result = pending.result()
+            with host.gate.lock():
+                self.assertEqual(host.gate.restoration_receipt(operation, digest), result)
+        self.assertEqual(wire.decode(received), result)
+        self.assertEqual(result['restoredPair'], self.old)
+        for phase, field in [('candidate', 'publicFailureSha256'), ('restored', 'publicRestorationSha256')]:
+            self.assertIn(fixture.directory / f'{phase}-public-{result[field]}.json', fixture.files)
 
     @unittest.skipUnless(os.name == 'posix', 'Requires a real POSIX deployment lock')
     def test_public_failure_to_recovery_receipt_uses_fixed_frame_and_durable_journal(self):

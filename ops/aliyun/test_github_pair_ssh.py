@@ -2,9 +2,10 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import github_pair_handoff as handoff
 import github_pair_public as public
@@ -37,6 +38,51 @@ class PairSshTest(unittest.TestCase):
             with self.subTest(host=host, key=key), self.assertRaises(ValueError):
                 with ssh.invocation(host, key, self.identity):
                     self.fail('Unexpected SSH invocation')
+
+    def test_interactive_restoration_binds_both_signed_observations_to_receipt(self):
+        from test_ordinary_public_exchange import fixture_selector, batch, OLD
+        wire = ssh.observer
+        selector = fixture_selector()
+        pinned = dict(batch(), packetSha256=hashlib.sha256(wire.encode(selector['packet']) + b'\n').hexdigest())
+        first = dict(pinned, schemaVersion=1, kind=wire.CHALLENGE, command=handoff.COMMAND,
+                     phase='candidate', nonce='0' * 64, expiresAt=int(time.time()) + 100)
+        second = dict(first, phase='restored', nonce='1' * 64, snapshotSha256='2' * 64)
+
+        for mismatch in ('none', 'batch', 'snapshot', 'receipt', 'tls'):
+            with self.subTest(mismatch=mismatch):
+                frames = Mock(deadline=time.monotonic() + 50)
+                sign = Mock(return_value=b'fixture-bundle')
+                first_challenge = dict(first, runId=11) if mismatch == 'batch' else first
+                second_challenge = dict(second, snapshotSha256=first['snapshotSha256']) if mismatch == 'snapshot' else second
+
+                def steps():
+                    yield first_challenge
+                    yield second_challenge
+                    names = ('publicFailureSha256', 'publicRestorationSha256')
+                    proof = {name: hashlib.sha256(wire.encode(call.args[0]) + b'\n').hexdigest()
+                             for name, call in zip(names, frames.write.call_args_list)}
+                    if mismatch == 'receipt':
+                        proof[names[0]] = 'f' * 64
+                    yield proof
+
+                frames.read.side_effect = steps()
+
+                def fetch(path):
+                    if mismatch == 'tls':
+                        raise ConnectionResetError('fixture TLS transport failed')
+                    if frames.read.call_count == 1:
+                        return 503, 'text/html', 'no-store', b''
+                    return public_responses(OLD)[path]
+
+                options = dict(selector=selector, rollback=pinned['rollbackPair'], sign=sign, fetch=fetch)
+                if mismatch == 'none':
+                    result = json.loads(ssh.observe_restoration(frames, **options))
+                    self.assertEqual(set(result), {'publicFailureSha256', 'publicRestorationSha256'})
+                    self.assertEqual(sign.call_count, 2)
+                else:
+                    with self.assertRaises(ConnectionResetError if mismatch == 'tls' else ValueError):
+                        ssh.observe_restoration(frames, **options)
+                    self.assertEqual(sign.call_count, {'batch': 0, 'snapshot': 1, 'receipt': 2, 'tls': 0}[mismatch])
 
     def test_receipt_must_bind_open_pair_run_stage_and_tested_recovery(self):
         commit, rollback = 'a' * 40, 'b' * 40

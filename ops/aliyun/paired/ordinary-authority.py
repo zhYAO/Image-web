@@ -43,6 +43,7 @@ class Authority:
         self.observe = observe
         self.verify_database = verify_database
         self.database_proof = None
+        self.observe_public = None
         self.clock = clock
         self.monotonic, self.sleep = monotonic, sleep
         self.batch = None
@@ -66,6 +67,7 @@ class Authority:
     def authorization(self, packet):
         self.batch = None
         self.database_proof = None
+        self.observe_public = None
         ordinary.exact(packet, ordinary.PACKET)
         for key in ('runId', 'attempt'):
             require(type(packet[key]) is int and 0 < packet[key] < 2**63, 'Invalid release batch')
@@ -207,9 +209,13 @@ class Authority:
     def _public_acceptance(self, filename, expected, pair):
         self.core.hexid(expected)
         value, digest = self._record(self.batch['directory'] / filename)
+        require(digest == expected, 'Independent public readiness, routes and release pair required')
+        self._verify_public_pair(value, pair)
+
+    def _verify_public_pair(self, value, pair):
         acceptance = dict(schemaVersion=1, backendRelease=pair['backend'], frontendRelease=pair['frontend'],
                           health='ok', routes=list(self.public.ROUTES), anonymousSessionStatus=401)
-        require(digest == expected and type(value) is dict and type(value.get('schemaVersion')) is int
+        require(type(value) is dict and type(value.get('schemaVersion')) is int
                 and type(value.get('anonymousSessionStatus')) is int and value == acceptance,
                 'Independent public readiness, routes and release pair required')
 
@@ -269,6 +275,27 @@ class Authority:
         recovery = 'restore-' + ordinary.sha(dict(operation=approval['operation'], approval=ordinary.sha(approval)))[:48]
         self._candidate('restoration-candidate', process, packet, approval, recovery, approval['oldPair']['backend'])
 
+    def bind_public_session(self, observe):
+        require(self.batch is not None and self.observe_public is None and callable(observe),
+                'An authorized batch must bind exactly one public evidence session')
+        self.observe_public = observe
+
+    def _attested_public(self, packet, approval, snapshot, phase):
+        self._bound(packet, approval)
+        full_batch = dict(commit=packet['commit'], runId=packet['runId'], attempt=packet['attempt'],
+                          rootApprovalSha256=self.batch['digest'], packetSha256=approval['packetSha256'],
+                          rollbackPair=deepcopy(approval['oldPair']), snapshotSha256=self.core.digest(snapshot))
+        proof = self.observe_public(batch=full_batch, phase=phase)
+        self.core.exact(proof, {'subject', 'bundle'})
+        if phase == 'candidate':
+            self.public.validate_failure(proof['subject']['public'], approval['newPair'])
+        else:
+            self._verify_public_pair(proof['subject']['public'], approval['oldPair'])
+        digest = self.core.digest(proof)
+        path = self.batch['directory'] / f'{phase}-public-{digest}.json'
+        self.tools.transaction.atomic_json(path, proof)
+        return digest
+
     def _public_record(self, filename, packet, approval, snapshot, pair, status):
         self._bound(packet, approval)
         evidence, digest = self._evidence(filename, 'zimage-ordinary-public-v1',
@@ -279,6 +306,8 @@ class Authority:
         return evidence['checksSha256'], digest
 
     def verify_public_failure(self, packet, approval, snapshot):
+        if self.observe_public is not None:
+            return self._attested_public(packet, approval, snapshot, 'candidate')
         pair = approval['newPair']
         expected, digest = self._public_record('public-failure.json', packet, approval, snapshot, pair, 'failed')
         witness, actual = self._record(self.batch['directory'] / 'failed-public-acceptance.json')
@@ -287,6 +316,8 @@ class Authority:
         return digest
 
     def verify_public_restoration(self, packet, approval, snapshot):
+        if self.observe_public is not None:
+            return self._attested_public(packet, approval, snapshot, 'restored')
         pair = approval['oldPair']
         expected, digest = self._public_record('public-restored.json', packet, approval, snapshot, pair, 'passed')
         self._public_acceptance('restored-public-acceptance.json', expected, pair)

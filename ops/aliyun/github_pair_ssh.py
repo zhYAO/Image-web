@@ -1,6 +1,7 @@
 """Run the one fixed SSH publication command using a pinned ECS host key."""
 from contextlib import contextmanager
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -8,11 +9,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 from github_hosted_stage_shadow import _unique
 from github_pair_handoff import (COMMAND, COMMIT, REPO, WORKFLOW, file_sha, rollback_pair, send,
                                  send_restoration, validate_restoration)
 from github_pair_public import validate_failure
+import ordinary_public_exchange as observer
 
 SSH = '/usr/bin/ssh'
 USER = 'zimage-release'
@@ -114,7 +117,60 @@ def publish(request, receipt, *, host, known_hosts, key, public_baseline):
     return hashlib.sha256(body).hexdigest()
 
 
-def request_restore(request, deployment, failure, receipt, *, host, known_hosts, key, public_baseline):
+def observe_restoration(frames, *, selector, rollback, sign, fetch):
+    packet = selector['packet']
+    expected = {k: packet[k] for k in ('commit', 'runId', 'attempt')}
+    expected.update(rollbackPair=rollback, rootApprovalSha256=selector['approvalSha256'],
+                    packetSha256=hashlib.sha256(observer.encode(packet) + b'\n').hexdigest())
+    failed = None
+    proofs = {}
+    for phase in ('candidate', 'restored'):
+        challenge = frames.read(observer.MAX_SUBJECT)
+        observer.validate(challenge, int(time.time()))
+        if (challenge['phase'] != phase or any(challenge[name] != value for name, value in expected.items())
+                or (failed is not None and (challenge['nonce'] == failed['nonce']
+                                            or challenge['snapshotSha256'] == failed['snapshotSha256']))):
+            raise ValueError('Public challenge differs from the exact restoration session')
+        measured = observer.observe(challenge, fetch=fetch)
+        if phase == 'candidate':
+            validate_failure(measured['public'], observer.target(challenge))
+            failed = challenge
+        subject = observer.encode(measured)
+        deadline = min(frames.deadline, time.monotonic() + challenge['expiresAt'] - time.time())
+        bundle = sign(subject, deadline=deadline)
+        observer.validate(challenge, int(time.time()))
+        response = observer.reply(measured, bundle)
+        frames.write(response, observer.MAX_REPLY)
+        name = 'publicFailureSha256' if phase == 'candidate' else 'publicRestorationSha256'
+        proofs[name] = hashlib.sha256(observer.encode(response) + b'\n').hexdigest()
+    receipt = frames.read(16384)
+    if type(receipt) is not dict or any(receipt.get(name) != digest for name, digest in proofs.items()):
+        raise ValueError('Restoration receipt differs from the signed observations')
+    return observer.encode(receipt)
+
+
+def exchange_restore(selector, *, rollback, sign, fetch, host, known_hosts, key):
+    with invocation(host, known_hosts, key) as argv, subprocess.Popen(
+            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0,
+            env={'PATH': '/usr/bin:/bin', 'LANG': 'C'}) as peer:
+        frames = observer.Frames(peer.stdout.fileno(), peer.stdin.fileno(), deadline=time.monotonic() + 900)
+        try:
+            request = io.BytesIO()
+            send_restoration(selector, request, interactive=True)
+            frames.write_bytes(request.getvalue())
+            body = observe_restoration(frames, selector=selector, rollback=rollback, sign=sign, fetch=fetch)
+            peer.stdin.close()
+            if peer.wait(timeout=5):
+                raise ValueError('Interactive ECS restoration did not return an exact successful receipt')
+            frames.assert_eof()
+            return body
+        finally:
+            if peer.poll() is None:
+                peer.kill()
+
+
+def request_restore(request, deployment, failure, receipt, *, host, known_hosts, key, public_baseline,
+                    sign_observation=None, fetch_observation=observer.public.request):
     rollback = measured_rollback(request, public_baseline)
     deployed_bytes = read_bounded(deployment, 16384)
     released = validate_receipt(deployed_bytes, request, rollback['backend'])
@@ -134,8 +190,12 @@ def request_restore(request, deployment, failure, receipt, *, host, known_hosts,
     packet = {name: released[name] for name in ('commit', 'runId', 'attempt', 'backendManifestSha256',
                                                'frontendSubjectSha256')}
     packet.update(repository=REPO, workflow=WORKFLOW)
-    body = exchange(send_restoration, dict(packet=packet, approvalSha256=released['rootApprovalSha256']),
-                    host=host, known_hosts=known_hosts, key=key)
+    selector = dict(packet=packet, approvalSha256=released['rootApprovalSha256'])
+    if sign_observation is None:
+        body = exchange(send_restoration, selector, host=host, known_hosts=known_hosts, key=key)
+    else:
+        body = exchange_restore(selector, rollback=rollback, sign=sign_observation, fetch=fetch_observation,
+                                host=host, known_hosts=known_hosts, key=key)
     validate_restoration(json.loads(body, object_pairs_hook=_unique), released)
     write_private(receipt, body)
     return hashlib.sha256(body).hexdigest()
