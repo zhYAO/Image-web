@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tarfile
 
-SHA = "f3b04b73a2ac2c13cbc3077af10051f9785181dd"
+SHA = "bbf3aae0de1f65b484a85092c7674f91e50d1137"
 BASE = "/usr/local/libexec/zimage-paired-release"
 RECEIVER = BASE + "/receive-ordinary-pair"
 PREFIXES = (BASE + "/", "/usr/local/libexec/zimage-backend/",
@@ -31,7 +31,7 @@ def bundle(repo):
     ns = {"__name__": "reviewed_inventory"}
     exec(compile(script, "<reviewed-inventory>", "exec"), ns)
     plan = ns["build"](ns["CommittedTree"](Path(repo), SHA))
-    assert plan["commit"] == SHA and len(plan["files"]) == 49
+    assert plan["commit"] == SHA and len(plan["files"]) == 50
     data = io.BytesIO()
     with tarfile.open(fileobj=data, mode="w") as archive:
         for dest, item in plan["files"].items():

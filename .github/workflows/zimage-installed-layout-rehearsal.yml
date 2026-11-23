@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     env:
-      BASE_SHA: f3b04b73a2ac2c13cbc3077af10051f9785181dd
+      BASE_SHA: bbf3aae0de1f65b484a85092c7674f91e50d1137
       GUEST_IMAGE: docker.io/library/python@sha256:e8c69d86735f6df3efa06b324694fe51f0422785f83a3bd463052636c2421944
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
