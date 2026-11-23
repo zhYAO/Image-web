@@ -12,23 +12,33 @@ HERE = Path(__file__).resolve().parent
 
 
 class GithubRehearsal(unittest.TestCase):
-    def test_main_push_has_two_jobs_and_same_run_review_without_production(self):
-        text = WORKFLOW.read_text()
+    def test_main_push_signs_exact_pair_before_the_only_publication_job(self):
+        text = WORKFLOW.read_text(encoding='utf-8')
         self.assertIn('  push:\n    branches: [main]', text)
         self.assertEqual(text.count("(github.event_name == 'push' || inputs.component =="), 2)
         self.assertIn('needs: [backend, frontend]', text)
         self.assertIn('MATCH_BACKEND_SHA="$GITHUB_SHA"', (HERE / 'github-rehearsal.sh').read_text())
+        measurement, publish = text.split('\n  publish-pair:\n', 1)
         for value in ('secrets.', 'pull_request_target', 'candidate_run_id'):
-            self.assertNotIn(value, text)
-        self.assertIn('needs: [backend, frontend, same-run-review, authenticated-staging]', text)
-        self.assertIn("vars.ZIMAGE_PAIRED_PRODUCTION == 'true'", text)
-        self.assertIn('group: zimage-production-release', text)
+            self.assertNotIn(value, measurement)
+        self.assertIn('needs: [backend, frontend, hosted-shadow]', measurement)
+        self.assertRegex(measurement, r'attest-stage\.yml@[a-f0-9]{40}')
+        self.assertIn('needs: [backend, frontend, hosted-shadow, attest-stage]', publish)
+        self.assertIn("vars.ZIMAGE_PAIRED_SSH_RELEASE == 'true'", publish)
+        self.assertIn('group: zimage-production-release', publish)
+        self.assertIn('steps.report.outputs.artifact-id', measurement)
+        self.assertIn('steps.descriptor.outputs.artifact-id', measurement)
+        self.assertIn('secrets.ZIMAGE_PAIR_SSH_KEY', publish)
+        self.assertNotIn('secrets.DEPLOY_SSH_KEY', publish)
+        self.assertLess(publish.index('Verify the exact public pair selected for rollback'),
+                        publish.index('Publish through the fixed ECS command'))
+        self.assertLess(publish.index('Publish through the fixed ECS command'),
+                        publish.index('Verify the new pair through public HTTPS'))
 
-    def test_only_staging_expands_its_queue_without_canceling_running_jobs(self):
+    def test_publish_and_legacy_jobs_share_a_non_canceling_queue(self):
         # Concurrency is repository-wide and group names are case-insensitive.
         expected = {
-            ('rehearsal-candidates.yml', 'authenticated-staging'): 'zimage-release-staging',
-            ('rehearsal-candidates.yml', 'approved-production'): 'zimage-production-release',
+            ('rehearsal-candidates.yml', 'publish-pair'): 'zimage-production-release',
             ('ci.yml', 'deploy'): 'zimage-production-release',
             ('ci.yml', 'rollback'): 'zimage-production-release',
         }
@@ -36,7 +46,7 @@ class GithubRehearsal(unittest.TestCase):
         for path in sorted(WORKFLOW.parent.iterdir()):
             if path.suffix not in ('.yml', '.yaml'):
                 continue
-            lines = path.read_text().splitlines()
+            lines = path.read_text(encoding='utf-8').splitlines()
             job = None
             for index, line in enumerate(lines):
                 if re.fullmatch(r'  [a-zA-Z0-9_-]+:', line):
@@ -57,40 +67,15 @@ class GithubRehearsal(unittest.TestCase):
                     continue
                 self.assertEqual(indent, 4, 'release concurrency must be job-level')
                 policy = {'group': group, 'cancel-in-progress': 'false'}
-                if group == 'zimage-release-staging':
-                    policy['queue'] = 'max'
                 self.assertEqual(fields, policy)
                 found[(path.name, job)] = group
         self.assertEqual(found, expected)
 
-    def test_out_of_order_builds_do_not_displace_newest_main_in_staging(self):
-        # Offline model of staging under GitHub's documented pending policy, not a hosted
-        # scheduler test. The real review controller below decides eligibility.
-        def pending_after_ready(arrivals, queue):
-            pending = []
-            for ready in arrivals:
-                if queue == 'single':
-                    pending.clear()
-                pending.append(ready)
-            return pending
-
-        self.assertEqual(pending_after_ready(('C', 'B'), 'single'), ['B'])
-        for arrivals in (('C', 'B'), ('B', 'C')):
-            with self.subTest(arrivals=arrivals):
-                # A is already running. Both pending entries must survive.
-                self.assertCountEqual(pending_after_ready(arrivals, 'max'), ('B', 'C'))
-                eligible = []
-                for run in arrivals:
-                    result, summary = self.review(stale=(run == 'B'))
-                    if run == 'B':
-                        self.assertNotEqual(result.returncode, 0)
-                        self.assertIn('Stale main run', result.stderr)
-                        self.assertIsNone(summary)
-                    else:
-                        self.assertEqual(result.returncode, 0, result.stderr)
-                        self.assertIn('no production approval', summary)
-                        eligible.append(run)
-                self.assertEqual(eligible, ['C'])
+    def test_legacy_deploy_and_rollback_are_ineligible_in_pair_mode(self):
+        text = (WORKFLOW.parent / 'ci.yml').read_text(encoding='utf-8')
+        for job in ('deploy', 'rollback'):
+            block = text.split(f'\n  {job}:\n', 1)[1]
+            self.assertIn("vars.ZIMAGE_PAIRED_SSH_RELEASE != 'true'", block.splitlines()[1])
 
     def review(self, *, branch='refs/heads/main', event='push', stale=False, wrong_attempt=False, wrong_digest=False,
                wrong_run=False, wrong_sha=False):

@@ -241,7 +241,7 @@ jobs:
 
   deploy:
     environment: production
-    if: github.ref == 'refs/heads/main' && inputs.action == 'deploy'
+    if: github.ref == 'refs/heads/main' && inputs.action == 'deploy' && vars.ZIMAGE_PAIRED_SSH_RELEASE != 'true'
     permissions:
       contents: read
       actions: read
@@ -336,7 +336,7 @@ jobs:
 
   rollback:
     environment: production
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback' && vars.ZIMAGE_PAIRED_SSH_RELEASE != 'true'
     runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
     concurrency:
       group: zimage-production-release

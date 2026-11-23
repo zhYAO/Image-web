@@ -188,6 +188,9 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      report_id: ${{ steps.report.outputs.artifact-id }}
+      descriptor_id: ${{ steps.descriptor.outputs.artifact-id }}
     steps:
       # Pin trusted intake and runtime independently of any candidate commit.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -259,7 +262,7 @@ jobs:
           marker=$(/usr/bin/python3 -E -s -B "$GITHUB_WORKSPACE/trusted-report/ops/aliyun/github_shadow_measure_run.py" freeze)
           [[ "$marker" =~ ^[a-f0-9]{64}$ ]]
           printf 'admitted_marker_sha256=%s\n' "$marker" >> "$GITHUB_OUTPUT"
-      - name: Measure exact pair and write only an unsigned private report
+      - name: Measure and clean up the exact pair before handing off the report
         env:
           BACKEND_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
           FRONTEND_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
@@ -273,85 +276,107 @@ jobs:
             /usr/bin/python3 -E -s -B trusted-report/ops/aliyun/github_shadow_measure_run.py measure
           test -s "$RUNNER_TEMP/zimage-report-handoff/stage-report.json"
           printf '%s\n' 'Protected shadow verified and cleaned up. Report remains unsigned and no release is authorized.' >> "$GITHUB_STEP_SUMMARY"
-
-  authenticated-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
-    needs: [backend, frontend, same-run-review]
-    environment: release-staging
-    runs-on: [self-hosted, linux, x64, zimage-protected-staging]
-    timeout-minutes: 18
-    permissions:
-      contents: read
-      actions: read
-    concurrency:
-      group: zimage-release-staging
-      cancel-in-progress: false
-      queue: max
-    outputs:
-      stage_receipt_sha: ${{ steps.controller.outputs.stage_receipt_sha }}
-      stage_pair_sha: ${{ steps.controller.outputs.stage_pair_sha }}
-      stage_checked_at: ${{ steps.controller.outputs.stage_checked_at }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: report
         with:
-          persist-credentials: false
-      - name: Verify same-run pair with isolated staging
-        id: controller
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BACKEND_ID: ${{ needs.backend.outputs.artifact_id }}
-          BACKEND_ARTIFACT_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
-          BACKEND_ARCHIVE_SHA: ${{ needs.backend.outputs.archive_sha }}
-          BACKEND_RECEIPT_SHA: ${{ needs.backend.outputs.receipt_sha }}
-          BACKEND_MANIFEST_SHA: ${{ needs.backend.outputs.evidence_sha }}
-          FRONTEND_ID: ${{ needs.frontend.outputs.artifact_id }}
-          FRONTEND_ARTIFACT_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
-          FRONTEND_ARCHIVE_SHA: ${{ needs.frontend.outputs.archive_sha }}
-          FRONTEND_RECEIPT_SHA: ${{ needs.frontend.outputs.receipt_sha }}
-          FRONTEND_SUBJECT_SHA: ${{ needs.frontend.outputs.evidence_sha }}
-          REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
-          ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
-          ZIMAGE_PAIRED_ROLE: ${{ vars.ZIMAGE_PAIRED_ROLE }}
-          ZIMAGE_PAIRED_ENABLED: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
-          ZIMAGE_PAIRED_BRIDGE_SHA256: ${{ vars.ZIMAGE_PAIRED_BRIDGE_SHA256 }}
-        run: bash ops/aliyun/github-rehearsal-review.sh staging
+          name: shadow-stage-report-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zimage-report-handoff/stage-report.json
+          if-no-files-found: error
+          retention-days: 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: descriptor
+        if: vars.ZIMAGE_PAIRED_SSH_RELEASE == 'true'
+        with:
+          name: shadow-pair-descriptor-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/zimage-hosted-shadow/pins.json
+            ${{ runner.temp }}/zimage-hosted-shadow/config.json
+          if-no-files-found: error
+          retention-days: 2
 
-  approved-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true' && vars.ZIMAGE_PAIRED_PRODUCTION == 'true'
-    needs: [backend, frontend, same-run-review, authenticated-staging]
-    environment: production
-    runs-on: [self-hosted, linux, x64, zimage-protected-production]
-    timeout-minutes: 18
+  attest-stage:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected
+    needs: [backend, frontend, hosted-shadow]
+    uses: zhYAO/Image-web/.github/workflows/attest-stage.yml@f45bb63634706d74f0b1fccc3b44f1abb7bef857
     permissions:
       contents: read
       actions: read
+      id-token: write
+      attestations: write
+    with:
+      backend-id: ${{ needs.backend.outputs.artifact_id }}
+      frontend-id: ${{ needs.frontend.outputs.artifact_id }}
+      report-id: ${{ needs.hosted-shadow.outputs.report_id }}
+
+  publish-pair:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PAIRED_SSH_RELEASE == 'true'
+    needs: [backend, frontend, hosted-shadow, attest-stage]
+    environment: production
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+      attestations: read
     concurrency:
       group: zimage-production-release
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: f60b5916dbc0ef1c01c0bbddb4990b13d4cf1e00
           persist-credentials: false
-      - name: Recheck same-run pair after approval and publish through root controller
-        id: controller
+      - name: Recheck the production approval gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/zhYAO/Image-web/environments/production |
+            jq -e '.can_admins_bypass == false and ([.protection_rules[] | select(.type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length > 0))] | length == 1)' >/dev/null
+      - name: Freeze the signed same-run publication handoff
         env:
           GH_TOKEN: ${{ github.token }}
           BACKEND_ID: ${{ needs.backend.outputs.artifact_id }}
-          BACKEND_ARTIFACT_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
-          BACKEND_ARCHIVE_SHA: ${{ needs.backend.outputs.archive_sha }}
-          BACKEND_RECEIPT_SHA: ${{ needs.backend.outputs.receipt_sha }}
-          BACKEND_MANIFEST_SHA: ${{ needs.backend.outputs.evidence_sha }}
           FRONTEND_ID: ${{ needs.frontend.outputs.artifact_id }}
-          FRONTEND_ARTIFACT_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
-          FRONTEND_ARCHIVE_SHA: ${{ needs.frontend.outputs.archive_sha }}
-          FRONTEND_RECEIPT_SHA: ${{ needs.frontend.outputs.receipt_sha }}
-          FRONTEND_SUBJECT_SHA: ${{ needs.frontend.outputs.evidence_sha }}
-          REHEARSAL_PUBLIC_CONFIG: ${{ vars.ZIMAGE_REHEARSAL_PUBLIC_CONFIG_JSON }}
-          ZIMAGE_PAIRED_BUILD_MODE: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
-          ZIMAGE_PAIRED_ROLE: ${{ vars.ZIMAGE_PAIRED_ROLE }}
-          ZIMAGE_PAIRED_ENABLED: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
-          ZIMAGE_PAIRED_BRIDGE_SHA256: ${{ vars.ZIMAGE_PAIRED_BRIDGE_SHA256 }}
-          STAGE_RECEIPT_SHA256: ${{ needs.authenticated-staging.outputs.stage_receipt_sha }}
-          STAGE_PAIR_SHA256: ${{ needs.authenticated-staging.outputs.stage_pair_sha }}
-          STAGE_CHECKED_AT: ${{ needs.authenticated-staging.outputs.stage_checked_at }}
-        run: bash ops/aliyun/github-rehearsal-review.sh production
+          STAGE_ID: ${{ needs.attest-stage.outputs.artifact-id }}
+          DESCRIPTOR_ID: ${{ needs.hosted-shadow.outputs.descriptor_id }}
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 -E -s -B ops/aliyun/github_pair_client.py "$RUNNER_TEMP/zimage-pair"
+          gh attestation verify "$RUNNER_TEMP/zimage-pair/stage.json" --repo zhYAO/Image-web \
+            --bundle "$RUNNER_TEMP/zimage-pair/stage.bundle.jsonl" \
+            --signer-workflow zhYAO/Image-web/.github/workflows/attest-stage.yml \
+            --signer-digest f45bb63634706d74f0b1fccc3b44f1abb7bef857 \
+            --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1 >/dev/null
+      - name: Verify the exact public pair selected for rollback
+        env:
+          EXPECTED_ROLLBACK: ${{ vars.ZIMAGE_PAIR_ROLLBACK_SHA }}
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$EXPECTED_ROLLBACK" /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py > "$RUNNER_TEMP/zimage-rollback-public.json"
+      - name: Publish through the fixed ECS command and validate its receipt
+        id: publish
+        env:
+          ZIMAGE_PAIR_SSH_HOST: ${{ vars.ZIMAGE_PAIR_SSH_HOST }}
+          ZIMAGE_PAIR_SSH_KNOWN_HOSTS: ${{ vars.ZIMAGE_PAIR_SSH_KNOWN_HOSTS }}
+          ZIMAGE_PAIR_SSH_KEY: ${{ secrets.ZIMAGE_PAIR_SSH_KEY }}
+          ZIMAGE_PAIR_ROLLBACK_SHA: ${{ vars.ZIMAGE_PAIR_ROLLBACK_SHA }}
+        run: /usr/bin/python3 -E -s -B ops/aliyun/github_pair_ssh.py "$RUNNER_TEMP/zimage-pair" "$RUNNER_TEMP/zimage-pair-receipt.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pair-deployment-receipt-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/zimage-pair-receipt.json
+            ${{ runner.temp }}/zimage-rollback-public.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Verify the new pair through public HTTPS
+        run: /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py > "$RUNNER_TEMP/zimage-public.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pair-public-verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zimage-public.json
+          if-no-files-found: error
+          retention-days: 30

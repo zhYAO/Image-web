@@ -73,96 +73,65 @@ production routing, credentials, or rollback. App/runtime failures and
 unsupported fixture prerequisites are failures, not green auth results.
 See [Supabase local Auth testing](https://supabase.com/docs/guides/auth/testing-auth-flows).
 
-## Protected staging and production (not provisioned)
+## Protected main signature and paired publishing
 
-The same workflow defines the staging job and a downstream GitHub environment
-`production` job. Neither starts without explicit repository opt-ins
-`ZIMAGE_PAIRED_AUTOMATION` and (for production) `ZIMAGE_PAIRED_PRODUCTION`.
-Do not set either before separately reviewing and provisioning all boundaries.
-The main event still selects the exact commit automatically. An opted-in build
-uses the canonical `release-<backend-SHA12>` frontend namespace. Diagnostics
-remain unpromotable.
+On a protected `main` push, the hosted stage tests the two exact GitHub ZIP
+artifacts in isolation. It rebuilds the 7a fixture, checks the browser
+workspace and finishes teardown before uploading its report. The reusable
+`attest-stage.yml` is pinned by commit. It reads GitHub's workflow, attempt,
+job and artifact APIs itself, then signs one statement that binds both ZIP
+digests to the same repository, commit, run and attempt. The resulting
+attestation is stage evidence. Production approval is a separate decision.
 
-- Establish independently isolated staging. An application cache on the same
-  production ECS is not staging. Use dedicated trusted runner groups restricted
-  to this exact workflow, not generic self-hosted runners shared with pull
-  requests. The labels identify roles but are not a security boundary.
-- The protected environments have independent reviewers, branch restriction to
-  protected main, no self-review and no bypass where available. All three jobs
-  that recalculate the frontend subject need the same reviewed public config
-  value. No credentials or authenticated read receipts are uploaded as artifacts.
-- Separately review and install `paired/github-bridge` as
-  `/usr/local/libexec/zimage-paired-release/github-bridge` on a **dedicated
-  independent staging runner**. It runs as the named non-root runner UID, with
-  no sudo and no credentials. Install its exact reviewed Python/JSON tool
-  inventory under the same root-owned directory, preserving relative names.
-  A root-owned `/etc/zimage/ci-staging-bridge.json` must specify
-  `schemaVersion: 1`, `mode: "intake-only"`, numeric `runnerUid`, and a
-  `tools` mapping of every listed source path to its independently reviewed
-  SHA-256. Assign the expected binary hash and role via the protected
-  `ZIMAGE_PAIRED_BRIDGE_SHA256` and `ZIMAGE_PAIRED_ROLE`. Hashes are never
-  learned from a request.
-- Intake protocol v1 permits only `staging PAIR_SHA256`. Request input is
-  bounded stdin: magic `ZIMAGE-CI-STAGE\x01`, then four ordered records with
-  8-byte unsigned big-endian lengths and bytes for pins, backend ZIP, frontend
-  ZIP, and config. No filenames or paths can be supplied by the caller. Output
-  is a sanitized blocked intake report and exit 3, never an authenticated
-  receipt. `authorization`, `production`, alternative commands and all
-  caller-selected paths are refused. The repository client also rejects live
-  production operations with this interface.
-- Staging must independently authenticate the candidate backend with the
-  existing nonce/PID/release receipt and exercise actual frontend acceptance
-  against that exact backend, config and candidate subject. It returns no auth
-  cookies or reports to the workflow, only fixed run/pair/evidence digests.
-  Staging fixture output never grants production authority. The production
-  controller must independently verify the staging evidence and exact reviewed
-  root approval in its own custody before returning `authorization`, then
-  verify the same bytes again under the real common lock before mutation. Neither
-  deployment reviewers nor operators choose a version in the normal run.
-- The old `paired/cli.py` requires a *different database fingerprint* and real
-  migration approval; it cannot be called for a no-DDL release. The new ordinary
-  coordinator kernel orders exact preflight, seal/drain, backend, frontend,
-  authenticated health and open, and rejects unknown/replayed or uncertain
-  states. A real root adapter still must wire these callbacks to the reviewed
-  Linux lifecycle/publisher tools, same shared deploy.lock plus cross-entrypoint
-  unfinished journal checks, exact old/new pair and genuine recoverable
-  prior state. Test actual rollback independently before enabling: that is
-  not equivalent to merely observing the current SHA or a mock state.
-- Existing legacy receiver/rollbacks are unchanged. The new production job
-  shares their GitHub concurrency group and never cancels an in-progress
-  operation. The root lock and journal must still protect both old and new
-  helpers. The workflow checks current main and every digest again after
-  the approval wait. A genuine production controller must also check current
-  main while holding the lock and before reopening traffic.
+The workflow uses the browser stage with `ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW`
+set to `true` and both legacy flags `ZIMAGE_PAIRED_AUTOMATION` and
+`ZIMAGE_PAIRED_PRODUCTION` set explicitly to `false`. The artifact object
+hosts under `ZIMAGE_ARTIFACT_OBJECT_HOSTS` must be the reviewed exact GitHub
+storage hostnames. The frontend public config and backend target must match
+the admitted artifact bytes. Review-branch artifacts cannot satisfy the
+protected run, artifact name, namespace and signing identity checks.
 
-  In staging only, use `queue: max` without canceling the running job. Under
-  GitHub's default single pending slot, if A is active, current C queues first,
-  and stale B finishes building last, B could replace C before the SHA checks
-  run. The expanded staging queue retains both in this example; the existing
-  current-main check rejects B. Queue order is not commit order; the limit is
-  100 pending jobs. The shared production queue is unchanged, including the
-  legacy manual deploy and rollback jobs; the default single pending slot
-  does not guarantee rollback priority or retain every eligible candidate.
-  Before changing production policy, verify candidate retention and the time
-  to reach an emergency rollback under backlog on the actual runner.
-  See the [GitHub concurrency contract](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+### Production SSH entry
 
-No live staging/controller was verified or installed here. Minimum to run the
-hosted intake job: nominate an independent Linux staging machine and a dedicated
-non-root runner account; authorize and review the runner/group and bridge setup,
-and supply the reviewed staging public config and exact backend target
-fingerprint. This is not enough to go live: authenticated staging additionally
-needs a staging-only test account and a real audited runtime adapter; production
-also needs separate root approval custody, protected settings and a real
-rollback drill. Enabling repository
-flags, installing a privileged adapter, or validating real session credentials
-requires separately authorized operation. The offline tests use fixture
-controllers; they do not create acceptance, approve artifacts or deploy anything.
+- `publish-pair` is the sole production job in the paired workflow. It uses
+  the `production` environment with a main-only branch policy, independent
+  required approval, self-review disabled and administrator bypass disabled.
+  Enabling `ZIMAGE_PAIRED_SSH_RELEASE` also disables the legacy standalone
+  backend deploy and rollback jobs in GitHub Actions.
+- A dedicated `ZIMAGE_PAIR_SSH_KEY` is scoped to the production environment.
+  The client connects as `zimage-release` using the exact
+  `ZIMAGE_PAIR_SSH_HOST` and `ZIMAGE_PAIR_SSH_KNOWN_HOSTS` pin. The matching
+  server key is restricted to the root-owned `paired/ssh-publish` forced
+  command with SSH forwarding, PTY and user RC disabled. Its only privileged
+  executable is `/usr/local/libexec/zimage-paired-release/receive-ordinary-pair`
+  with zero arguments. The status-only key has its own separate authorization.
+- The SSH request consists of a fixed magic header and six bounded,
+  length-prefixed members. It carries only the stage subject and bundle, the
+  exact candidate descriptor and both outer ZIPs. The server independently
+  checks protected main, the real attempt and signer, the archive bytes and
+  the same-run pair. The release key supplies no path, credentials, root
+  approval, rollback selection or executable to the root controller.
+- The installed controller must supply an approved host adapter to
+  `paired/ordinary_ssh.py`. The adapter must verify the root approval, retained
+  packages, live rollback drill on the exact old pair, and authenticated
+  checks of the candidate. It must use the existing deploy lock and durable
+  journal against all legacy and ordinary writers. No migration operation
+  is part of this path.
+- The workflow checks the public rollback pair named in
+  `ZIMAGE_PAIR_ROLLBACK_SHA` before sending the request. After a successful
+  SSH reply it uploads the exact deployment receipt, then independently
+  checks the public backend version, frontend release, readiness and route
+  shells. The receipt must identify the same commit, run, attempt, digests,
+  operation and tested rollback target. Authenticated workspace acceptance
+  must also be observed before recording the release as complete.
 
-References: [secure use](https://docs.github.com/en/actions/reference/security/secure-use),
-[protected environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments),
-[deployment controls](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments),
-[artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data).
+The review-branch implementation contains the workflow, receiver admission,
+fixed SSH invocation and transaction integration. The root command and its
+concrete ECS adapter still require installation and live validation. Keep
+paired publication disabled until that installation, approval gate and
+rollback evidence have been verified. A failed or interrupted SSH response
+requires read-only reconciliation through the existing status interface
+before any further write.
 
 ## Fixed review-branch diagnostic, without merging main
 

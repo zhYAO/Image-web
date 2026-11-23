@@ -19,8 +19,7 @@ class HostedRehearsal(unittest.TestCase):
         self.assertIn('needs: [backend, frontend, same-run-review]', smoke)
         for forbidden in ('environment:', 'outputs:', 'secrets.', 'upload-artifact', 'self-hosted'):
             self.assertNotIn(forbidden, smoke)
-        self.assertNotIn('isolated-runtime-rehearsal', jobs['authenticated-staging'])
-        self.assertNotIn('isolated-runtime-rehearsal', jobs['approved-production'])
+        self.assertNotIn('isolated-runtime-rehearsal', jobs['publish-pair'])
         before, runtime = smoke.split('name: Test exact release in a disposable local fixture', 1)
         self.assertIn('GH_TOKEN:', before)
         self.assertNotIn('GH_TOKEN', runtime)
@@ -34,7 +33,8 @@ class HostedRehearsal(unittest.TestCase):
                           '"${ZIMAGE_PAIRED_PRODUCTION:-}" != true'):
             self.assertIn(condition, branch)
         launcher = (HERE / 'github-hosted-smoke.sh').read_text()
-        self.assertIn('Fixture must never consume a production-shaped candidate', launcher)
+        self.assertIn('shadow = intake.hosted_namespace(pins, mode)', launcher)
+        self.assertIn('Exact shadow bytes have not passed nonpromotable intake', launcher)
         self.assertNotIn('github-paired-controller', launcher)
         self.assertNotIn('GITHUB_OUTPUT', launcher)
 
