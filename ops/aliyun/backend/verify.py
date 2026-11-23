@@ -252,9 +252,23 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--request', type=Path)
     mode.add_argument('--stdio', action='store_true')
+    mode.add_argument('--ordinary-listen', type=Path)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     fetch = public_fetch(os.environ.get('ZIMAGE_AUTH_COOKIE', ''))
+    if args.ordinary_listen is not None:
+        if args.output is not None: raise ValueError('Listener has no local receipt output')
+        spec = importlib.util.spec_from_file_location('ordinary_observer_transport',
+                                                      Path(__file__).with_name('ordinary_readonly_transport.py'))
+        transport = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(transport)
+        with args.ordinary_listen.open('rb') as source:
+            policy = source.read(4097)
+        if not 0 < len(policy) <= 4096: raise ValueError('Observer policy exceeds bound')
+        directory = args.ordinary_listen.parent
+        transport.listen(json.loads(policy), ca=directory / 'ca.pem', cert=directory / 'server.pem',
+                         key=directory / 'server.key', verify=lambda challenge: verify_ordinary(challenge, fetch))
+        return
     if args.stdio:
         if args.output is not None: raise ValueError('Stdio verification keeps cookies only in memory')
         serve(sys.stdin, sys.stdout, fetch)

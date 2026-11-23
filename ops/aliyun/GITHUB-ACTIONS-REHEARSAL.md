@@ -134,8 +134,17 @@ protected run, artifact name, namespace and signing identity checks.
   reads the challenge over its existing bounded stdin or file interface and
   returns only the batch-bound receipt with authenticated GET results. It
   keeps its test credential and response bodies on the observing machine.
-  A reviewed transport must pass the challenges and install the independent
-  responses in the corresponding root-owned batch files. Restored public acceptance
+  The receiver can use a dedicated mutual TLS connection to the independent
+  verifier. Its root-owned `/etc/zimage/ordinary-observer-tls/client.json`
+  pins the observer address, certificate hostname and leaf SHA-256. The
+  adjacent `ca.pem`, `client.pem` and owner-only `client.key` are local to the
+  release host. The observer's `verify.py --ordinary-listen` uses its own
+  trust material and pins the release host's leaf certificate. Only one
+  bounded challenge and redacted receipt cross each connection. The receiver
+  validates the reply before installing its root-owned batch receipt. A
+  configured connection failure stops that check without using a local
+  receipt. Sites with a separately reviewed root file transport can keep using
+  the private challenge and receipt files. Restored public acceptance
   is checked against the exact prior pair and required routes before issuing a
   restoration receipt.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
@@ -215,6 +224,34 @@ independent read-only GitHub observer must verify a real protected merge and
 the exact required check, and rollback evidence must match the retained pair.
 A failed or interrupted SSH response requires read-only reconciliation through
 the existing status interface before any further write.
+
+On 2026-11-23, read-only Cloud Assistant invocations `t-sh073yb4uhspczk` and
+`t-sh073yb8bp4zbpc` verified the current production pair
+`7a811b326aa4b344cee08bc5a33c04e44a780fd4` / `release-7a811b326aa4`.
+The legacy paired CLI, backend receipt validator and kernel process reader
+are root-owned. The ordinary receiver, pinned verifier, ordinary rollback and
+candidate/restoration challenge producer are absent at their reviewed
+installation paths. No fresh records existed in the ordinary evidence tree.
+The planned isolated receiver environment resolved `api.github.com`, then
+timed out connecting to IPv4 TCP 443 before TLS. No production components
+were installed by these checks.
+
+An ECS attribute query identified one attached basic security group with no
+explicit outbound rules. Cloud Assistant invocation `t-sh073ybpdq3xfk0`
+confirmed a gateway route, an `ACCEPT` iptables `OUTPUT` policy, and no
+direct rule rejecting TCP 443 in that chain. The inspected nftables output
+chains had no drop policy. These checks did not establish the cause of the
+TCP timeout.
+
+`paired/ordinary_install_inventory.py <reviewed-commit>` prints both exact
+code digest maps and their corresponding Git source files. Use `--section
+receiver` for the expected receiver inventory, or `--section paired` for
+the shared lifecycle inventory. It reads committed regular-file blobs and
+does not install files, create authorization, or open either release path.
+The review CI authenticates and imports the exact locked sources and checks
+the lifecycle inventory against the native paired CLI. Installed bytes,
+ownership, credentials, network reachability and host policy still require
+an independently authorized ECS preflight.
 
 ## Fixed review-branch diagnostic, without merging main
 

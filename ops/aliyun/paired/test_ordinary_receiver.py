@@ -91,6 +91,7 @@ class ReceiverTests(unittest.TestCase):
                 patch.object(receiver, 'authenticate', return_value=(self.pins, self.bodies)), \
                 patch.object(receiver, 'source', side_effect=lambda name, *_: tools[name]), \
                 patch.object(receiver, 'SPOOL', spool), patch.object(receiver.sys, 'stdin', stdin), \
+                patch.object(receiver, 'observer_client', return_value=None), \
                 patch.object(receiver, 'BoundedInput') as bounded:
             self.assertEqual(receiver.main(), core.canonical(expected))
         bounded.assert_called_once_with(27)
@@ -110,6 +111,15 @@ class ReceiverTests(unittest.TestCase):
         github.verify(payload=b'fixture')
         tools['github_shadow_offline'].verify.assert_called_once_with(payload=b'fixture', gh_path=receiver.VERIFIER,
             gh_sha256='a' * 64, trusted_root_path=receiver.SIGSTORE_ROOT, trusted_root_sha256='b' * 64)
+
+    def test_observer_key_and_policy_require_owner_only_reads(self):
+        read = Mock(return_value=test_core.canonical({'schemaVersion': 1}))
+        transport = Mock()
+        self.assertIs(receiver.observer_client(transport, test_core, read), transport.client.return_value)
+        read.assert_any_call(receiver.OBSERVER_TLS / 'client.json', 4096, private=True)
+        read.assert_any_call(receiver.OBSERVER_TLS / 'client.key', 65536, private=True)
+        transport.client.assert_called_once_with({'schemaVersion': 1}, ca=receiver.OBSERVER_TLS / 'ca.pem',
+                                                 cert=receiver.OBSERVER_TLS / 'client.pem', key=receiver.OBSERVER_TLS / 'client.key')
 
     @unittest.skipIf(sys.platform == 'win32', 'Linux pipe readiness')
     def test_bounded_wire_reads_short_chunks_eof_and_deadline(self):

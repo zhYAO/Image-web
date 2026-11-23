@@ -2,8 +2,10 @@ import base64
 from copy import deepcopy
 import hashlib
 import json
+from pathlib import Path
+import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import ordinary_github as gh
 
@@ -62,6 +64,33 @@ class ObserveTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.observe()
         self.verify.assert_not_called()
+
+    def test_real_check_observer_requires_exact_tested_tree_after_rule_suite_passes(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1]), *sys.path]):
+            from github_protected_merge_observe import observe as verify_check
+
+        rules = [dict(type=name) for name in ('pull_request', 'deletion', 'non_fast_forward')]
+        rules.append(dict(type='required_status_checks', parameters=dict(strict_required_status_checks_policy=True,
+                         required_status_checks=[dict(context=gh.CHECK_NAME, integration_id=gh.CHECK_APP_ID)])))
+        self.rules.update(target='branch', rules=rules, conditions=dict(ref_name=dict(include=[gh.MAIN_REF], exclude=[])))
+        self.sources.update({
+            '/branches/main': dict(name='main', protected=True, commit=dict(sha=self.commit)),
+            '/rules/branches/main': [dict(rule, ruleset_id=gh.RULESET_ID) for rule in rules],
+            '/actions/runs/38': dict(id=38, path=gh.CHECK_WORKFLOW, workflow_id=40, repository={'id': gh.REPO_ID},
+                event='pull_request', status='completed', conclusion='success', pull_requests=[dict(number=22, base={'ref': 'main'})],
+                run_attempt=2, check_suite_id=36),
+            '/actions/runs/38/attempts/2/jobs?per_page=100': dict(total_count=1, jobs=[dict(name=gh.CHECK_NAME,
+                run_id=38, run_attempt=2, status='completed', conclusion='success', head_sha=self.head,
+                check_run_url='https://api.github.com' + gh.BASE + '/check-runs/35')]),
+            '/check-runs/35': self.check,
+            f'/commits/{self.commit}': dict(sha=self.commit, commit={'tree': {'sha': 'c' * 40}}),
+            f'/commits/{self.head}': dict(sha=self.head, commit={'tree': {'sha': 'c' * 40}}),
+        })
+        evidence = gh.observe(self.packet, get=self.read, policy=self.policy, verify_check=verify_check)
+        self.assertEqual(evidence['ruleSuiteId'], 41)
+        self.sources[f'/commits/{self.head}']['commit']['tree']['sha'] = 'e' * 40
+        with self.assertRaises(ValueError):
+            gh.observe(self.packet, get=self.read, policy=self.policy, verify_check=verify_check)
 
     def test_bypass_or_changed_policy_or_wrong_actor_are_rejected(self):
         for obj, key, changed in ((self.execution, 'result', 'bypass'), (self.execution, 'actor_id', 2),

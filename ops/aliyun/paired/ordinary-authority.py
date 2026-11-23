@@ -34,10 +34,11 @@ def require(condition, message):
 
 
 class Authority:
-    def __init__(self, *, core, tools, public, read, trusted, root, clock=time.time,
+    def __init__(self, *, core, tools, public, read, trusted, root, observe=None, clock=time.time,
                  monotonic=time.monotonic, sleep=time.sleep):
         self.core, self.tools, self.read, self.trusted, self.root = core, tools, read, trusted, root
         self.public = public
+        self.observe = observe
         self.clock = clock
         self.monotonic, self.sleep = monotonic, sleep
         self.batch = None
@@ -132,6 +133,10 @@ class Authority:
     def _evidence(self, filename, kind, fields):
         require(self.batch is not None, 'No exact batch for host evidence')
         value, digest = self._record(self.batch['directory'] / filename)
+        self._check_evidence(value, kind, fields)
+        return value, digest
+
+    def _check_evidence(self, value, kind, fields):
         self.core.exact(value, {'schemaVersion', 'kind', 'packetSha256', 'operationId', 'observedAt'} | fields)
         checked, now = value['observedAt'], self.clock()
         require(type(value['schemaVersion']) is int and value['schemaVersion'] == 1 and value['kind'] == kind
@@ -139,7 +144,6 @@ class Authority:
                 and value['packetSha256'] == self.batch['approval']['packetSha256']
                 and type(checked) is int and 0 <= now - checked <= MAX_AGE,
                 'Host evidence is stale or belongs to a different batch')
-        return value, digest
 
     def database_digest(self):
         evidence, _ = self._evidence('database.json', 'zimage-ordinary-database-v1',
@@ -196,24 +200,34 @@ class Authority:
             pass
         else:
             raise ValueError('A challenge for this release phase already exists')
-        self.tools.transaction.atomic_json(challenge, dict(schemaVersion=1, kind='zimage-ordinary-readonly-challenge-v1',
-                                           packetSha256=approval['packetSha256'], operationId=approval['operation'],
-                                           process=deepcopy(process), request=deepcopy(request)))
+        payload = dict(schemaVersion=1, kind='zimage-ordinary-readonly-challenge-v1', packetSha256=approval['packetSha256'],
+                       operationId=approval['operation'], process=deepcopy(process), request=deepcopy(request))
+        self.tools.transaction.atomic_json(challenge, payload)
         deadline = self.monotonic() + min(VERIFY_WAIT, expires - now)
-        while True:
-            try:
-                evidence, _ = self._evidence(stage + '.json', 'zimage-ordinary-candidate-v1',
-                                             {'process', 'request', 'receipt'})
-                break
-            except FileNotFoundError:
-                left = min(deadline - self.monotonic(), expires - self.clock())
-                require(left > 0, 'Independent read-only verifier did not return a receipt in time')
-                self.sleep(min(left, 0.25))
+        filename = stage + '.json'
+        evidence = self._candidate_response(filename, payload, deadline, expires)
         require(self.monotonic() <= deadline and self.clock() < expires
                 and self.core.canonical([evidence['process'], evidence['request']]) == self.core.canonical([process, request]),
                 'Probe must match the fresh challenge and exact live process')
         self.tools.receipt.validate_receipt(evidence['receipt'], request, operation=operation,
                                             release=release, pid=process['pid'], now=self.clock())
+        if self.observe is not None:
+            self.tools.transaction.atomic_json(directory / filename, evidence)
+
+    def _candidate_response(self, filename, challenge, deadline, expires):
+        kind, fields = 'zimage-ordinary-candidate-v1', {'process', 'request', 'receipt'}
+        if self.observe is not None:
+            evidence = self.observe(challenge, deadline=deadline)
+            self._check_evidence(evidence, kind, fields)
+            return evidence
+        while True:
+            try:
+                evidence, _ = self._evidence(filename, kind, fields)
+                return evidence
+            except FileNotFoundError:
+                left = min(deadline - self.monotonic(), expires - self.clock())
+                require(left > 0, 'Independent read-only verifier did not return a receipt in time')
+                self.sleep(min(left, 0.25))
 
     def verify_candidate(self, process, packet, approval):
         self._candidate('candidate', process, packet, approval, approval['operation'], packet['commit'])
@@ -246,5 +260,5 @@ class Authority:
         return digest
 
 
-def open_authority(*, core, tools, public, read, trusted, root):
-    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root)
+def open_authority(*, core, tools, public, read, trusted, root, observe):
+    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root, observe=observe)
