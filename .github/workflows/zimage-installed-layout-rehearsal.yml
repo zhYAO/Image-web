@@ -1,0 +1,38 @@
+name: ZImage isolated installed-layout rehearsal
+on:
+  push:
+    branches: [codex/zimage-installed-layout-rehearsal-20261123]
+permissions:
+  contents: read
+jobs:
+  installed-layout:
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-installed-layout-rehearsal-20261123'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    env:
+      BASE_SHA: f3b04b73a2ac2c13cbc3077af10051f9785181dd
+      GUEST_IMAGE: docker.io/library/python@sha256:e8c69d86735f6df3efa06b324694fe51f0422785f83a3bd463052636c2421944
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify reviewed ancestry and local image
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$BASE_SHA" HEAD
+          [[ "$GUEST_IMAGE" =~ ^docker\.io/library/python@sha256:[a-f0-9]{64}$ ]]
+          docker --host unix:///var/run/docker.sock pull --platform linux/amd64 "$GUEST_IMAGE"
+          docker --host unix:///var/run/docker.sock image inspect \
+            --format '{{.Os}}/{{.Architecture}}' "$GUEST_IMAGE" | grep -Fx linux/amd64
+          docker --host unix:///var/run/docker.sock run --rm --pull=never --network=none --cap-drop=ALL \
+            --security-opt=no-new-privileges --entrypoint /usr/local/bin/python3 "$GUEST_IMAGE" -I --version
+      - name: Verify isolated installed layout
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u PYTHONOPTIMIZE /usr/bin/python3 -I \
+            ops/aliyun/paired/installed-layout-rehearsal.py "$GITHUB_WORKSPACE" "$GUEST_IMAGE"
