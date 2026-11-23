@@ -288,7 +288,10 @@ used the existing D1M GitHub CLI session behind the listener. It established
 the read and framing behavior in D1M. The target probe must return the same
 check and run for that head and `releaseAuthority: false`. A later release
 still requires the actual protected merge, rule-suite execution and the
-original same-attempt artifact signature checks on ECS.
+original same-attempt artifact signature checks on ECS. Review CI sends a
+complete synthetic merge fixture through native mutual TLS to exercise the
+actual receiver verifier. It rejects a failed rule evaluation and a tested
+tree that differs from the merged tree.
 
 ## Fixed review-branch diagnostic, without merging main
 

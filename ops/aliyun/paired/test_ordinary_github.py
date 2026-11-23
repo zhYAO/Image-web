@@ -65,7 +65,7 @@ class ObserveTests(unittest.TestCase):
             self.observe()
         self.verify.assert_not_called()
 
-    def test_real_check_observer_requires_exact_tested_tree_after_rule_suite_passes(self):
+    def full_check_records(self):
         with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1]), *sys.path]):
             from github_protected_merge_observe import observe as verify_check
 
@@ -86,6 +86,10 @@ class ObserveTests(unittest.TestCase):
             f'/commits/{self.commit}': dict(sha=self.commit, commit={'tree': {'sha': 'c' * 40}}),
             f'/commits/{self.head}': dict(sha=self.head, commit={'tree': {'sha': 'c' * 40}}),
         })
+        return verify_check
+
+    def test_real_check_observer_requires_exact_tested_tree_after_rule_suite_passes(self):
+        verify_check = self.full_check_records()
         evidence = gh.observe(self.packet, get=self.read, policy=self.policy, verify_check=verify_check)
         self.assertEqual(evidence['ruleSuiteId'], 41)
         self.sources[f'/commits/{self.head}']['commit']['tree']['sha'] = 'e' * 40
