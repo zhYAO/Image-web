@@ -6,14 +6,16 @@ scope, approval, verifier or rollback target may be supplied over SSH.
 from pathlib import Path
 import tempfile
 
+from ordinary_system import OrdinarySystem
+
 
 def run(stream, *, scratch, host, handoff, ordinary):
     """Consume one request; only a successfully opened pair yields a receipt.
 
     ``host`` is the reviewed, root-owned integration boundary, including the
-    independent GitHub/TLS client, pinned verifier, root approval reader and
-    ordinary SystemOps. SystemOps rechecks approved bytes and replay state
-    under the common deploy lock, including the real rollback evidence.
+    independent GitHub/TLS client, pinned verifier, root approval reader,
+    lifecycle tools and evidence authority. OrdinarySystem uses the common
+    deployment lock and checks real rollback evidence before the first intent.
     """
     with tempfile.TemporaryDirectory(prefix='ordinary-pair-', dir=scratch) as temp:
         request = Path(temp)
@@ -27,8 +29,10 @@ def run(stream, *, scratch, host, handoff, ordinary):
                        'Installed authorization does not name the verified stage')
         approval, digest = authorization['approval'], authorization['sha256']
         ordinary.inputs(packet, approval, digest, host.clock())
+        ordinary.valid(evidence['rollbackPair'] == approval['oldPair'],
+                       'Observed public rollback pair differs from installed authorization')
 
-        ops = host.operations(request, evidence)
+        ops = OrdinarySystem(host.system, host.gate, host.authority, request, evidence)
         result = ordinary.transition(packet, approval, digest, ops, clock=host.clock)
         ordinary.valid(result == {'operation': approval['operation'], 'phase': 'opened',
                                   'pair': approval['newPair']}, 'Unconfirmed production result')

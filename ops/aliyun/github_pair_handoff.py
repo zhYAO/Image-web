@@ -10,11 +10,12 @@ import github_hosted_stage_shadow as stage
 import github_shadow_pins as policy_pins
 from github_shadow_signer_intake import REPO, REPO_ID, WORKFLOW
 
-MAGIC = b'ZIMAGE-CI-PAIR\x01'
+MAGIC = b'ZIMAGE-CI-PAIR\x02'
 LENGTH = struct.Struct('!Q')
 MEMBERS = (('stage.json', 4096), ('stage.bundle.jsonl', 1024 * 1024),
            ('pins.json', 65536), ('config.json', 65536),
            ('backend.zip', 100_000_000), ('frontend.zip', 100_000_000))
+WIRE_MEMBERS = (*MEMBERS, ('rollback.json', 4096))
 COMMAND = 'zimage-publish-pair-v1'
 API = '/repos/' + REPO
 COMMIT = re.compile('[a-f0-9]{40}')
@@ -32,7 +33,7 @@ def receive(stream, request):
     """Receive into a new private directory owned by the installed supervisor."""
     if exact(stream, len(MAGIC)) != MAGIC:
         raise ValueError('Unknown pair handoff protocol')
-    for name, cap in MEMBERS:
+    for name, cap in WIRE_MEMBERS:
         remaining, = LENGTH.unpack(exact(stream, LENGTH.size))
         if not 0 < remaining <= cap:
             raise ValueError('Invalid pair handoff member size')
@@ -47,7 +48,7 @@ def receive(stream, request):
 
 def send(request, out):
     out.write(MAGIC)
-    for name, cap in MEMBERS:
+    for name, cap in WIRE_MEMBERS:
         path = request / name
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 0 < info.st_size <= cap:
@@ -77,6 +78,16 @@ def file_sha(path):
     return digest.hexdigest()
 
 
+def rollback_pair(value, candidate):
+    if type(value) is not dict or set(value) != {'backend', 'frontend'}:
+        raise ValueError('Exact rollback pair required')
+    backend = value['backend']
+    if (type(backend) is not str or not COMMIT.fullmatch(backend) or backend == candidate
+            or value['frontend'] != 'release-' + backend[:12]):
+        raise ValueError('Rollback must be a distinct same-commit pair')
+    return dict(value)
+
+
 def admit(request, *, policy, get, verify, intake, now, seen):
     """Verify bytes under independently installed policy; grant no switch authority.
 
@@ -91,6 +102,7 @@ def admit(request, *, policy, get, verify, intake, now, seen):
     if (not COMMIT.fullmatch(commit) or not intake.hosted_namespace(candidate, 'hosted-shadow')
             or any(type(n) is not int or not 0 < n < 2**63 for n in (run_id, attempt))):
         raise ValueError('Protected same-run candidate required')
+    rollback = rollback_pair(intake.read_json(request / 'rollback.json'), commit)
     release = dict(sourceSHA=commit, runId=run_id, attempt=attempt)
     for name in ('backend', 'frontend'):
         digest = file_sha(request / (name + '.zip'))
@@ -116,7 +128,8 @@ def admit(request, *, policy, get, verify, intake, now, seen):
     return {'packet': dict(repository=REPO, workflow=WORKFLOW, commit=commit, runId=run_id, attempt=attempt,
                            backendManifestSha256=candidate['backend']['manifestSha256'],
                            frontendSubjectSha256=candidate['frontend']['subjectSha256']),
-            'stageSha256': hashlib.sha256(subject).hexdigest(), 'replayKey': proof['replayKey']}
+            'stageSha256': hashlib.sha256(subject).hexdigest(), 'replayKey': proof['replayKey'],
+            'rollbackPair': rollback}
 
 
 if __name__ == '__main__':

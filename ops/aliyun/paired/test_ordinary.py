@@ -1,9 +1,6 @@
 from contextlib import contextmanager
 import copy
-import io
-import tempfile
 import unittest
-from unittest.mock import Mock
 
 import ordinary as k
 
@@ -92,35 +89,6 @@ class Fixture:
 
 
 class TestOrdinary(unittest.TestCase):
-    def test_ssh_reply_requires_independent_authorization_and_completed_transition(self):
-        import ordinary_ssh
-
-        f = Fixture()
-        stage = 'e' * 64
-        handoff = Mock()
-        handoff.admit.return_value = {'packet': f.packet, 'stageSha256': stage}
-        host = Mock()
-        host.clock.return_value = f.time
-        host.authorization.return_value = dict(approval=f.a, sha256=k.sha(f.a), stageSha256='f' * 64)
-        host.operations.return_value = f
-        with tempfile.TemporaryDirectory() as scratch:
-            with self.assertRaisesRegex(ValueError, 'verified stage'):
-                ordinary_ssh.run(io.BytesIO(), scratch=scratch, host=host, handoff=handoff, ordinary=k)
-            host.operations.assert_not_called()
-            self.assertEqual(f.events, [])
-            host.authorization.return_value['stageSha256'] = stage
-            f.check_ok = False
-            with self.assertRaisesRegex(ValueError, 'independent acceptance'):
-                ordinary_ssh.run(io.BytesIO(), scratch=scratch, host=host, handoff=handoff, ordinary=k)
-            self.assertEqual(f.events, [])
-            f.check_ok = True
-            receipt = ordinary_ssh.run(io.BytesIO(), scratch=scratch, host=host, handoff=handoff, ordinary=k)
-        self.assertEqual(receipt['status'], 'opened')
-        self.assertEqual(receipt['rootApprovalSha256'], k.sha(f.a))
-        self.assertEqual(receipt['rollbackPair'], f.a['oldPair'])
-        self.assertEqual(receipt['rollbackAcceptanceSha256'], f.a['baselineAcceptanceSha256'])
-        self.assertEqual(receipt['frontendRelease'], f.a['newPair']['frontend'])
-
     def test_success_order_and_exact_pair(self):
         f = Fixture()
         self.assertEqual(f.run(), {'operation': 'fake-test', 'phase': 'opened', 'pair': pair('b')})

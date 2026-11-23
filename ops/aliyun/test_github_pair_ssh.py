@@ -3,8 +3,13 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import github_pair_handoff as handoff
+import github_pair_public as public
 import github_pair_ssh as ssh
+from test_github_pair_public import public_responses
 
 
 class PairSshTest(unittest.TestCase):
@@ -54,3 +59,45 @@ class PairSshTest(unittest.TestCase):
                                ('rollbackPair', dict(backend=commit, frontend='release-' + commit[:12]))):
                 with self.subTest(key=key), self.assertRaises((ValueError, TypeError)):
                     ssh.validate_receipt(json.dumps(dict(receipt, **{key: value})).encode(), request, rollback)
+
+    def test_two_simulated_releases_each_capture_and_bind_the_immediately_previous_pair(self):
+        live = 'a' * 40
+        previous_releases = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for batch, next_commit in enumerate(('b' * 40, 'c' * 40), 1):
+                request = root / f'request-{batch}'
+                request.mkdir()
+                for name, _ in handoff.MEMBERS:
+                    (request / name).write_bytes(b'fixture')
+                pins = dict(commit=next_commit, runId=batch, attempt=1, backend={'manifestSha256': '2' * 64},
+                            frontend={'subjectSha256': '3' * 64})
+                (request / 'pins.json').write_bytes(json.dumps(pins).encode())
+                before = public.capture(public_responses(live).__getitem__)
+                baseline = root / f'old-public-{batch}.json'
+                baseline.write_bytes(json.dumps(before).encode())
+                receipt = root / f'receipt-{batch}.json'
+
+                def nonproduction_transport(argv, *, stdin, stdout, **kwargs):
+                    nonlocal live
+                    incoming = root / f'wire-{batch}'
+                    incoming.mkdir()
+                    handoff.receive(stdin, incoming)
+                    old = json.loads((incoming / 'rollback.json').read_bytes())
+                    self.assertEqual(old, dict(backend=live, frontend='release-' + live[:12]))
+                    previous_releases.append(old['backend'])
+                    live = next_commit
+                    stdout.write(json.dumps(dict(schemaVersion=1, kind='zimage-ordinary-pair-v1', status='opened',
+                                                 operationId=f'fixture-release-{batch}', commit=live, runId=batch, attempt=1,
+                                                 backendRelease=live, frontendRelease='release-' + live[:12],
+                                                 backendManifestSha256='2' * 64, frontendSubjectSha256='3' * 64,
+                                                 stageSha256=handoff.file_sha(incoming / 'stage.json'), rootApprovalSha256='4' * 64,
+                                                 rollbackPair=old, rollbackAcceptanceSha256='5' * 64)).encode())
+                    return SimpleNamespace(returncode=0)
+
+                with patch.object(ssh.subprocess, 'run', side_effect=nonproduction_transport):
+                    ssh.publish(request, receipt, host=self.host, known_hosts=self.host_key,
+                                key=self.identity, public_baseline=baseline)
+                self.assertEqual(public.verify(next_commit, fetch=public_responses(live).__getitem__)['backendRelease'], live)
+                self.assertEqual(json.loads(receipt.read_bytes())['rollbackPair']['backend'], before['backendRelease'])
+        self.assertEqual(previous_releases, ['a' * 40, 'b' * 40])

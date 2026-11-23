@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 from github_hosted_stage_shadow import _unique
-from github_pair_handoff import COMMAND, COMMIT, file_sha, send
+from github_pair_handoff import COMMAND, COMMIT, file_sha, rollback_pair, send
 
 SSH = '/usr/bin/ssh'
 USER = 'zimage-release'
@@ -68,11 +68,20 @@ def validate_receipt(body, request, rollback):
     return receipt
 
 
-def publish(request, receipt, *, host, known_hosts, key, rollback):
+def publish(request, receipt, *, host, known_hosts, key, public_baseline):
     # Freeze the bounded stream before attempting the one remote operation.
     # An uncertain SSH exit requires reading status, never automatic replay.
-    if not COMMIT.fullmatch(rollback):
-        raise ValueError('Exact approved rollback SHA required before publication')
+    with public_baseline.open('rb') as stream:
+        body = stream.read(4097)
+    if not 0 < len(body) <= 4096:
+        raise ValueError('Bounded public rollback evidence required')
+    baseline = json.loads(body, object_pairs_hook=_unique)
+    pins = json.loads((request / 'pins.json').read_bytes(), object_pairs_hook=_unique)
+    if baseline['schemaVersion'] != 1 or baseline['health'] != 'ok':
+        raise ValueError('Healthy public rollback evidence required')
+    rollback = rollback_pair(dict(backend=baseline['backendRelease'], frontend=baseline['frontendRelease']),
+                             pins['commit'])
+    write_private(request / 'rollback.json', json.dumps(rollback, sort_keys=True).encode())
     with tempfile.TemporaryFile() as packet, tempfile.TemporaryFile() as result:
         send(request, packet)
         packet.seek(0)
@@ -83,19 +92,19 @@ def publish(request, receipt, *, host, known_hosts, key, rollback):
         body = result.read(16385)
     if proc.returncode:
         raise ValueError('ECS publication returned no bounded successful receipt; inspect status before retry')
-    validate_receipt(body, request, rollback)
+    validate_receipt(body, request, rollback['backend'])
     write_private(receipt, body)
     return hashlib.sha256(body).hexdigest()
 
 
 if __name__ == '__main__':
     try:
-        if len(sys.argv) != 3:
-            raise ValueError('One local handoff directory and receipt path required')
+        if len(sys.argv) != 4:
+            raise ValueError('Handoff directory, receipt path and public rollback evidence required')
         secret = os.environ.pop('ZIMAGE_PAIR_SSH_KEY')
         digest = publish(Path(sys.argv[1]), Path(sys.argv[2]), host=os.environ['ZIMAGE_PAIR_SSH_HOST'],
                          known_hosts=os.environ['ZIMAGE_PAIR_SSH_KNOWN_HOSTS'], key=secret,
-                         rollback=os.environ['ZIMAGE_PAIR_ROLLBACK_SHA'])
+                         public_baseline=Path(sys.argv[3]))
         print(digest)
     except (KeyError, TypeError, OSError, ValueError, subprocess.TimeoutExpired):
         sys.exit('Pair publication refused or returned uncertain status')

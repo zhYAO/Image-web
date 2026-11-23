@@ -44,6 +44,8 @@ class HandoffTest(unittest.TestCase):
             self.candidate[name] = {'artifactSha256': hashlib.sha256(raw).hexdigest(), field: 'e' * 64}
         (self.request / 'pins.json').write_text(json.dumps(self.candidate), encoding='utf-8')
         (self.request / 'config.json').write_bytes(b'{}')
+        self.rollback = dict(backend='b' * 40, frontend='release-' + 'b' * 12)
+        (self.request / 'rollback.json').write_bytes(json.dumps(self.rollback).encode())
         self.expected = {k: self.policy[k] for k in ('repositoryId', 'workflow', 'signerWorkflow',
                                                       'signerSHA', 'baselineSHA', 'migrationLedgerSha256')}
         self.expected.update(repository=handoff.REPO, sourceRef='refs/heads/main', event='push',
@@ -92,11 +94,18 @@ class HandoffTest(unittest.TestCase):
         self.verify.assert_called_once_with(payload=self.subject, bundle=b'test-bundle', expected=self.expected)
         self.assertEqual(result['packet']['commit'], self.release)
         self.assertEqual(result['replayKey'], (handoff.REPO_ID, 10, 2))
+        self.assertEqual(result['rollbackPair'], self.rollback)
         self.assertEqual(self.get.call_args.args, (handoff.API + '/branches/main',))
 
     def test_tampered_archive_rejected_before_signer(self):
         (self.request / 'frontend.zip').write_bytes(b'wrong archive')
         with self.assertRaises(ValueError):
+            self.admit()
+        self.verify.assert_not_called()
+
+    def test_mixed_public_rollback_pair_is_rejected_before_signer(self):
+        (self.request / 'rollback.json').write_bytes(json.dumps(dict(self.rollback, frontend='release-other')).encode())
+        with self.assertRaisesRegex(ValueError, 'distinct same-commit pair'):
             self.admit()
         self.verify.assert_not_called()
 

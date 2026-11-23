@@ -569,7 +569,8 @@ def pack(dist, output, options, config, evidence=None):
     # Snapshot bytes used for validation are exactly the bytes archived.
     try:
         with output.open('xb') as raw:
-            with tarfile.open(fileobj=raw, mode='w:gz', format=tarfile.USTAR_FORMAT) as archive:
+            with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed, \
+                    tarfile.open(fileobj=compressed, mode='w', format=tarfile.USTAR_FORMAT) as archive:
                 for name, body in sorted(files.items()):
                     item = tarfile.TarInfo(name)
                     item.size, item.mode, item.uid, item.gid, item.mtime = len(body), 0o644, 0, 0, 0
