@@ -141,3 +141,67 @@ class ReaderTests(unittest.TestCase):
         headers['Link'] = '<https://api.github.com/next>; rel="next"'
         with self.assertRaises(ValueError):
             read(path)
+
+
+class VpcConnectionTests(unittest.TestCase):
+    def test_fixed_route_retains_tls_hostname_without_system_resolution(self):
+        import ssl
+        with patch.object(gh, 'vpc_ipv4', return_value=('140.82.112.6',)) as dns, \
+             patch.object(gh.socket, 'socket') as make, \
+             patch.object(gh.socket, 'getaddrinfo', side_effect=AssertionError('system DNS used')):
+            tls = Mock(check_hostname=True, verify_mode=ssl.CERT_REQUIRED)
+            client = gh.vpc_connection('100.100.2.136')(gh.API_HOST, timeout=5, context=tls)
+            self.assertEqual(client.host, 'api.github.com')
+            client.connect()
+            make.return_value.connect.assert_called_once_with(('140.82.112.6', 443))
+            tls.wrap_socket.assert_called_once_with(make.return_value, server_hostname='api.github.com')
+            dns.assert_called_once_with('100.100.2.136', 2.5)
+
+    def test_rejects_configured_public_resolver_and_unsafe_tls(self):
+        import ssl
+        with self.assertRaises(ValueError):
+            gh.vpc_connection('8.8.8.8')
+        connect = gh.vpc_connection('100.100.2.138')
+        tls = Mock(check_hostname=False, verify_mode=ssl.CERT_NONE)
+        with self.assertRaises(ValueError):
+            connect('api.github.com', timeout=5, context=tls)
+        tls = ssl.create_default_context()
+        with self.assertRaises(ValueError):
+            connect('example.org', timeout=5, context=tls)
+
+
+    def test_strict_dns_framing_and_synthetic_rejection(self):
+        import socket
+        import struct
+
+        def answer(ip='140.82.112.6', tx=77, flags=0x8180, owner=b'\xc0\x0c'):
+            return (struct.pack('!6H', tx, flags, 1, 1, 0, 0) + gh.DNS_QUESTION
+                    + owner + struct.pack('!HHIH', 1, 1, 18, 4) + socket.inet_aton(ip))
+
+        self.assertEqual(gh.dns_answers(answer(), 77), ('140.82.112.6',))
+        for bad in (b'', answer('198.18.0.1'), answer('224.0.0.1'), answer(tx=78),
+                    answer(flags=0x8380), answer(flags=0x8183), answer(owner=b'\xc0\x0d'),
+                    answer()[:-1], answer() + b'x'):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                gh.dns_answers(bad, 77)
+
+        packet = answer()
+        with patch.object(gh.os, 'urandom', return_value=b'\x00M'), \
+             patch.object(gh.socket, 'socket') as factory:
+            sock = factory.return_value.__enter__.return_value
+            # Size and body arrive in several chunks.
+            sock.recv.side_effect = [b'\x00', bytes([len(packet)]), packet[:17], packet[17:]]
+            self.assertEqual(gh.vpc_ipv4('100.100.2.136', 2), ('140.82.112.6',))
+            sock.connect.assert_called_once_with(('100.100.2.136', 53))
+            query = sock.sendall.call_args.args[0]
+            self.assertEqual(query[2:4], b'\x00M')
+            self.assertTrue(query.endswith(gh.DNS_QUESTION))
+
+    def test_timeout_does_not_use_system_dns(self):
+        import ssl
+        with patch.object(gh, 'vpc_ipv4', side_effect=TimeoutError), \
+             patch.object(gh.socket, 'socket') as make:
+            client = gh.vpc_connection('100.100.2.136')(gh.API_HOST, timeout=5, context=ssl.create_default_context())
+            with self.assertRaises(TimeoutError):
+                client.connect()
+            make.assert_not_called()

@@ -293,6 +293,22 @@ complete synthetic merge fixture through native mutual TLS to exercise the
 actual receiver verifier. It rejects a failed rule evaluation and a tested
 tree that differs from the merged tree.
 
+
+#### Receiver-scoped Alibaba VPC DNS (alternative to the GitHub relay)
+
+When ECS system DNS produces synthetic addresses but direct public TLS has been
+verified, an explicitly installed root-owned, owner-only
+/etc/zimage/ordinary-github-vpc-dns.json may select the private VPC DNS route.
+The exact JSON is `{"schemaVersion":1,"resolver":"100.100.2.136"}` (or
+`100.100.2.138`). Do not also install `ordinary-github-tls/client.json`.
+No system resolver or VPN setting is changed. The receiver resolves only
+`api.github.com` and verifies the same stock-CA TLS hostname/SNI before any
+HTTP request. Failure is terminal for the GitHub evidence read; neither relay
+nor system DNS is used as fallback. Without the optional file, the previous
+route is unchanged. This does not replace the independent stage and rollback
+observer or authorize publication.
+
+
 ## Fixed review-branch diagnostic, without merging main
 
 `review-branch-diagnostic.yml` runs only for a push to the exact
