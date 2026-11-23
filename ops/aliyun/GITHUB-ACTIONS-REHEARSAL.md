@@ -108,14 +108,27 @@ protected run, artifact name, namespace and signing identity checks.
 - The receiver checks the exact rooted source inventory in
   `/etc/zimage/ordinary-receiver-tools.json` before consuming SSH input. Its
   private spool is `/opt/zimage/ordinary-requests` with mode `0700`. The
-  separately reviewed `ordinary-runtime/ordinary-authority.py` must provide
-  the host policies, a local read-only GitHub observer credential, Sigstore
-  trust digests and live baseline and candidate evidence. The receiver uses
-  its fixed offline verifier and its own GET-only client for `api.github.com`.
+  `paired/ordinary-authority.py` is installed at
+  `ordinary-runtime/ordinary-authority.py`. It reads the trust policies and
+  Sigstore digests from `/etc/zimage/ordinary-authority.json` and a root-only
+  GitHub observer credential from `/etc/zimage/ordinary-github-observer.token`.
+  The receiver uses its fixed offline verifier and its own GET-only client
+  for `api.github.com`.
   Missing authority code or any changed digest causes refusal before the
   first request byte.
   Lifecycle policy is resolved for the authenticated batch and its current
   rollback pair after admission, then checked again under the shared lock.
+- The authority reads `/etc/zimage/ordinary-authorizations/<runId>-<attempt>.json`
+  for the exact batch and its signed stage digest. It checks the lifecycle
+  digest and requires the operation identity `zimage-release-<runId>-<attempt>`.
+  Independent evidence under `/etc/zimage/ordinary-evidence/<runId>-<attempt>/`
+  binds to that operation and packet. It includes a fresh read-only database
+  contract observation, the live baseline and a digest-linked rollback drill
+  with the retained pair's public readiness and route acceptance. Candidate
+  checks reuse the backend read-only receipt, including the exact live
+  PID, request nonce and authenticated GET results. Restored public acceptance
+  is checked against the exact prior pair and required routes before issuing a
+  restoration receipt.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
   length-prefixed members. It carries only the stage subject and bundle, the
   exact candidate descriptor, both outer ZIPs and the publicly observed prior
@@ -167,15 +180,16 @@ protected run, artifact name, namespace and signing identity checks.
   restoration blocks the next writer. The review-only Linux workflow tests
   this journal and its lock without accessing ECS.
 
-The review branch contains the workflow, fixed root receiver, private staging,
-lifecycle adapter and durable restoration logic. The trusted authority
-implementation, reviewed host installation and live validation still
-require ECS integration. The intended trigger is the maintainer's manual PR
-merge into protected main. Keep paired publication disabled until the
-installed authority can validate the exact merged PR and required check
-independently and the rollback evidence has been verified. A failed or interrupted SSH response
-requires read-only reconciliation through the existing status interface
-before any further write.
+The review branch contains the workflow, fixed root receiver, root evidence
+reader, private staging, lifecycle adapter and durable restoration logic.
+The intended trigger is the maintainer's manual PR merge into protected main.
+Keep paired publication disabled until the reviewed host installation, the
+independent machine that produces batch authorization and live observations,
+and the restricted restoration invocation have been exercised together. The
+independent read-only GitHub observer must verify a real protected merge and
+the exact required check, and rollback evidence must match the retained pair.
+A failed or interrupted SSH response requires read-only reconciliation through
+the existing status interface before any further write.
 
 ## Fixed review-branch diagnostic, without merging main
 

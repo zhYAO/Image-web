@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - name: Verify private staging, the shared POSIX lock and paired restoration journal
         working-directory: ops/aliyun/paired
-        run: python3 -B -m unittest -v test_ordinary test_ordinary_journal test_ordinary_stage test_ordinary_system test_ordinary_restore test_ordinary_receiver test_ordinary_github
+        run: python3 -B -m unittest -v test_ordinary test_ordinary_journal test_ordinary_stage test_ordinary_system test_ordinary_restore test_ordinary_receiver test_ordinary_github test_ordinary_authority
       - name: Exercise private frontend sealing on the Linux filesystem
         working-directory: ops/aliyun/frontend
         run: python3 -B -m unittest -v test_frontend_release.ReleaseTests.test_private_archive_seals_without_using_upload_directory test_frontend_release.ReleaseTests.test_private_archive_digest_mismatch_creates_no_sealed_release

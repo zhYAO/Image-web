@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 from copy import deepcopy
 import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ from unittest.mock import Mock, patch
 import ordinary
 import ordinary_ssh
 from ordinary_system import OrdinarySystem
-from test_ordinary import Fixture
+from test_ordinary import Fixture, pair
 
 
 class SystemTest(unittest.TestCase):
@@ -59,12 +60,12 @@ class SystemTest(unittest.TestCase):
     def start(self, record, release):
         self.assertEqual(record['phase'], 'backend_select_intent')
         self.assertEqual(self.live['backend'], release)
-        self.live.update(ingressMode='checking', nodeMode='checking', process={'pid': 202})
+        self.live.update(ingressMode='checking', nodeMode='checking', process={'pid': 201 + self.fixture.packet['runId']})
         return deepcopy(self.live)
 
     def frontend(self, record, approval):
         self.assertEqual(record['candidateProcess'], {'pid': 202})
-        self.live.update(frontend=self.system.p['newFrontend'], frontendSequence=8)
+        self.live.update(frontend=self.system.p['newFrontend'], frontendSequence=self.live['frontendSequence'] + 1)
         return deepcopy(self.live)
 
     def run_release(self):
@@ -95,6 +96,35 @@ class SystemTest(unittest.TestCase):
         self.prepare.assert_not_called()
         self.gate.journal.assert_not_called()
         self.system.seal.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires a real POSIX deployment lock')
+    def test_two_successive_transactions_retain_the_immediately_prior_pair(self):
+        import core
+        from ordinary_journal import JournalGate
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'deploy.lock').touch(mode=0o600)
+            (root / 'ordinary-operations').mkdir(0o700)
+            for run, old, new in ((1, pair('a'), pair('b')), (2, pair('b'), pair('c'))):
+                operation = f'zimage-release-{run}-2'
+                self.fixture.packet.update(runId=run, commit=new['backend'])
+                self.fixture.a.update(operation=operation, oldPair=old, newPair=new,
+                                      packetSha256=ordinary.sha(self.fixture.packet))
+                self.system.p.update(operationId=operation, oldBackend=old['backend'], oldFrontend=old['frontend'],
+                                     newBackend=new['backend'], newFrontend=new['frontend'])
+                self.github.merge.return_value = {'commit': new['backend'], 'pullRequest': run, 'ruleSuiteId': run}
+                self.system.pub.sealed.return_value['sourceSHA'] = old['backend']
+                self.system.pub.checked_meta.return_value = old['backend']
+                gate = JournalGate(root, core, owner_uid=os.getuid())
+                self.ops = OrdinarySystem(self.system, gate, self.authority, Path('private-request'),
+                                          {'stageSha256': '6' * 64}, intake=Mock(), github=self.github)
+                self.assertEqual(self.run_release()['pair'], new)
+                held = JournalGate(root, core, owner_uid=os.getuid())
+                with held.lock():
+                    original, opened = held.claim_restoration(operation, ordinary.sha(self.fixture.a))
+                self.assertEqual({key: original['initial'][key] for key in old}, old)
+                self.assertEqual(opened['pairSequence'], 7 + run)
 
     def test_refuses_missing_recovery_evidence_before_first_intent(self):
         self.authority.verify_baseline.side_effect = ValueError('rollback proof missing')
