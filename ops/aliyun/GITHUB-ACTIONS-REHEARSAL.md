@@ -125,8 +125,17 @@ protected run, artifact name, namespace and signing identity checks.
   binds to that operation and packet. It includes a fresh read-only database
   contract observation, the live baseline and a digest-linked rollback drill
   with the retained pair's public readiness and route acceptance. Candidate
-  checks reuse the backend read-only receipt, including the exact live
-  PID, request nonce and authenticated GET results. Restored public acceptance
+  checks reuse the backend read-only receipt. The host issues separate private
+  `baseline-readonly-challenge.json`, `candidate-challenge.json`, and
+  `restoration-candidate-challenge.json` files for the exact running process.
+  The first probe verifies the live rollback baseline before the first switch
+  intent. Each response must match the host nonce, PID, start time and boot
+  identity within the available authorization window. `backend/verify.py`
+  reads the challenge over its existing bounded stdin or file interface and
+  returns only the batch-bound receipt with authenticated GET results. It
+  keeps its test credential and response bodies on the observing machine.
+  A reviewed transport must pass the challenges and install the independent
+  responses in the corresponding root-owned batch files. Restored public acceptance
   is checked against the exact prior pair and required routes before issuing a
   restoration receipt.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
