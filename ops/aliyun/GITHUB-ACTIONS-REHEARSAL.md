@@ -288,7 +288,8 @@ public HTTPS. Its result cannot be inferred from the fixture job.
    responses and anonymous HTTPS observations cannot satisfy this DB gate.
 
 The isolated receiver expects `/etc/zimage/ordinary-database-observer.json`
-with the exact observer workflow SHA and reviewed query SHA-256. Its batch
+with the exact observer workflow SHA, reviewed query SHA-256 and existing
+approved observer role name. Its batch
 evidence directory must contain `database.json` and `database.bundle.jsonl`.
 The subject must match the approved project, role, contract, release packet and
 operation. The offline verifier additionally pins the database workflow path,

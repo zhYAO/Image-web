@@ -49,7 +49,7 @@ class DatabaseProbeTest(unittest.TestCase):
         socket = Path(os.environ['ZIMAGE_OBSERVER_FIXTURE_SOCKET'])
         psql = Path(os.environ['ZIMAGE_OBSERVER_FIXTURE_PSQL'])
         contract = observer.sha(EXPECTED)
-        args = dict(mode='fixture', operation='zimage-release-1-1', packet_sha256='a' * 64,
+        args = dict(mode='fixture', role='zimage_release_observer', operation='zimage-release-1-1', packet_sha256='a' * 64,
                     expected_contract=contract)
         evidence = observer.measure(psql, socket, **args)
         self.assertEqual(evidence['mode'], 'fixture')

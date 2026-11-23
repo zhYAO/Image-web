@@ -15,11 +15,11 @@ import time
 PROJECT = 'klmiycyesxnpinxpeqep'
 QUERY = (Path(__file__).resolve().parents[2] / 'doc/separation/20261106-paired-preflight/before-snapshot.sql')
 QUERY_SHA256 = '09d2e7e36376569768d0b8d1005bb7cc3ed0e45748c625abd66884bb1b6509f5'
-ROLE = 'zimage_release_observer'
+ROLE_NAME = re.compile('[a-z_][a-z_0-9]{0,62}')
 DIGEST = re.compile('[0-9a-f]{64}')
 OPERATION = re.compile(r'zimage-release-[1-9][0-9]{0,18}-[1-9][0-9]{0,18}')
 COMMON = dict(PATH='/usr/bin:/bin', LANG='C', PGCONNECT_TIMEOUT='5', PGCLIENTENCODING='UTF8',
-              PGUSER=ROLE, PGOPTIONS='-c default_transaction_read_only=on')
+              PGOPTIONS='-c default_transaction_read_only=on')
 
 
 def require(condition, message):
@@ -62,8 +62,9 @@ def parse_unique(pairs):
     return value
 
 
-def measure(psql, connection, *, mode, operation, packet_sha256, expected_contract, clock=time.time):
+def measure(psql, connection, *, role, mode, operation, packet_sha256, expected_contract, clock=time.time):
     require(mode in ('fixture', 'supabase') and type(operation) is str and OPERATION.fullmatch(operation)
+            and type(role) is str and ROLE_NAME.fullmatch(role)
             and all(type(value) is str and DIGEST.fullmatch(value) for value in (packet_sha256, expected_contract)),
             'Exact independent DB observation policy required')
     require(psql.is_absolute() and psql.is_file(), 'Locally trusted psql path required')
@@ -79,7 +80,8 @@ def measure(psql, connection, *, mode, operation, packet_sha256, expected_contra
         env = dict(PGHOST=str(connection), PGPORT='5432', PGDATABASE='zimage_observer_fixture', PGPASSFILE='/dev/null')
     argv = [str(psql), '-X', '-w', '-qAt', '-v', 'ON_ERROR_STOP=1']
     try:
-        result = subprocess.run(argv, input=script(), capture_output=True, env=COMMON | env, timeout=12, check=False)
+        result = subprocess.run(argv, input=script(), capture_output=True, env=dict(COMMON | env, PGUSER=role),
+                                timeout=12, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise ValueError('Read-only database observer could not query the pinned session') from None
     require(result.returncode == 0 and 0 < len(result.stdout) <= 1_048_576,
@@ -88,7 +90,7 @@ def measure(psql, connection, *, mode, operation, packet_sha256, expected_contra
     require(observed != {'m6Present': True}, 'The reviewed M5 contract requires M6 absent')
     require(type(observed) is dict and set(observed) == {'role', 'sessionRole', 'readOnly', 'repeatableRead',
                                                         'privileged', 'snapshot'}
-            and observed['role'] == observed['sessionRole'] == ROLE and observed['readOnly'] is True
+            and observed['role'] == observed['sessionRole'] == role and observed['readOnly'] is True
             and observed['repeatableRead'] is True and observed['privileged'] is False,
             'Independent unprivileged read-only DB session required')
     snapshot = observed['snapshot']
@@ -105,4 +107,4 @@ def measure(psql, connection, *, mode, operation, packet_sha256, expected_contra
             'Database observation timestamp is stale or invalid')
     return dict(schemaVersion=1, kind='zimage-ordinary-db-observation-v1', mode=mode,
                 operationId=operation, packetSha256=packet_sha256, projectRef=PROJECT, contractSha256=expected_contract,
-                querySha256=QUERY_SHA256, observedAt=int(timestamp.timestamp()), role=ROLE, readOnly=True)
+                querySha256=QUERY_SHA256, observedAt=int(timestamp.timestamp()), role=role, readOnly=True)

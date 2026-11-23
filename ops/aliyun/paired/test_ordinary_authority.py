@@ -141,9 +141,10 @@ class AuthorityTest(unittest.TestCase):
 
     def test_database_observation_requires_exact_project_packet_and_freshness(self):
         self.authorize()
-        self.put(authority.DATABASE_POLICY, dict(schemaVersion=1, signerSha='a' * 40, querySha256='e' * 64))
+        role = 'fixture_db_observer'
+        self.put(authority.DATABASE_POLICY, dict(schemaVersion=1, signerSha='a' * 40, querySha256='e' * 64, role=role))
         fields = dict(projectRef=authority.PROJECT, contractSha256=self.approval['databaseSha256'], readOnly=True,
-                      mode='supabase', role=authority.DATABASE_ROLE, querySha256='e' * 64)
+                      mode='supabase', role=role, querySha256='e' * 64)
         self.evidence('database.json', 'zimage-ordinary-db-observation-v1', **fields)
         with self.assertRaises(FileNotFoundError):
             self.driver.database_digest()

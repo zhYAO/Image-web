@@ -20,7 +20,7 @@ TOKEN = ETC / 'ordinary-github-observer.token'
 AUTHORIZATIONS = ETC / 'ordinary-authorizations'
 EVIDENCE = ETC / 'ordinary-evidence'
 PROJECT = 'klmiycyesxnpinxpeqep'
-DATABASE_ROLE = 'zimage_release_observer'
+DATABASE_ROLE = re.compile('[a-z_][a-z_0-9]{0,62}')
 MAX_RECORDS = 512
 MAX_AGE = 120
 VERIFY_WAIT = 110
@@ -157,8 +157,9 @@ class Authority:
         require(self.batch is not None and self.verify_database is not None,
                 'Independent database attestations are unavailable')
         policy, policy_sha = self._record(DATABASE_POLICY)
-        self.core.exact(policy, {'schemaVersion', 'signerSha', 'querySha256'})
-        require(type(policy['schemaVersion']) is int and policy['schemaVersion'] == 1,
+        self.core.exact(policy, {'schemaVersion', 'signerSha', 'querySha256', 'role'})
+        require(type(policy['schemaVersion']) is int and policy['schemaVersion'] == 1
+                and type(policy['role']) is str and DATABASE_ROLE.fullmatch(policy['role']),
                 'Unknown database observer policy schema')
         self.core.hexid(policy['signerSha'], 40)
         self.core.hexid(policy['querySha256'])
@@ -170,7 +171,7 @@ class Authority:
         self._check_evidence(evidence, kind, fields)
         expected = self.batch['approval']['databaseSha256']
         require(evidence['projectRef'] == PROJECT and evidence['readOnly'] is True
-                and evidence['mode'] == 'supabase' and evidence['role'] == DATABASE_ROLE
+                and evidence['mode'] == 'supabase' and evidence['role'] == policy['role']
                 and evidence['querySha256'] == policy['querySha256'] and evidence['contractSha256'] == expected,
                 'Independent read-only database observation differs from policy')
         bundle = self.read(directory / 'database.bundle.jsonl', 65536)
