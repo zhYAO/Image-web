@@ -1,14 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
+import json
 from pathlib import Path
 import shutil
 import socket
 import ssl
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import ordinary_readonly_transport as transport
 import receipt
@@ -99,3 +101,55 @@ class ObserverTransportTest(unittest.TestCase):
                 self.assertIsInstance(result, (OSError, ValueError))
                 self.assertIsInstance(error, (OSError, ValueError))
         self.verify.assert_not_called()
+
+    def test_scoped_github_read_over_mutual_tls(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github as github
+            import ordinary_github_relay as relay
+
+        path = github.BASE + '/branches/main'
+        record = dict(name='main', protected=True, commit={'sha': 'd' * 40})
+        upstream = Mock()
+        response = upstream.return_value.getresponse.return_value
+        response.status = 200
+        response.getheader.side_effect = lambda _, default: default
+        response.read.return_value = json.dumps(record).encode()
+        github_get = github.read_only('non-production-only', connect=upstream)
+        with socket.socket() as listener, ThreadPoolExecutor(max_workers=1) as worker:
+            listener.bind(('127.0.0.1', 0))
+            listener.listen(1)
+            listener.settimeout(4)
+            server = transport.tls_context(self.cert('publisher'), self.cert('localhost'), self.key('localhost'), server=True)
+            client = relay.client(dict(schemaVersion=1, address='127.0.0.1', port=listener.getsockname()[1],
+                                       serverName='localhost', peerSha256=self.pin('localhost')),
+                                  ca=self.cert('localhost'), cert=self.cert('publisher'), key=self.key('publisher'))
+            with self.assertRaises(ValueError):
+                client(github.BASE + '/actions/secrets')
+            upstream.assert_not_called()
+
+            def observe():
+                raw, _ = listener.accept()
+                with raw:
+                    relay.serve_one(raw, context=server, peer=self.pin('publisher'), get=github_get,
+                                    deadline=time.monotonic() + 4)
+
+            future = worker.submit(observe)
+            self.assertEqual(client(path), record)
+            future.result(timeout=5)
+        self.assertEqual(upstream.call_args.args, ('api.github.com',))
+        self.assertEqual(upstream.return_value.request.call_args.args, ('GET', path))
+
+    def test_github_relay_refuses_foreign_hosts_headers_and_query_paths(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github_relay as relay
+
+        get = Mock()
+        expected = dict(kind=relay.QUERY, path='/repos/zhYAO/Image-web/branches/main', nonce='a' * 32)
+        for query in (dict(expected, path='https://api.github.com' + expected['path']),
+                      dict(expected, path=expected['path'] + '?ref=other'),
+                      dict(expected, path='/repos/zhYAO/Image-web/actions/secrets'),
+                      dict(expected, authorization='not-accepted'), dict(expected, kind='CONNECT'),
+                      dict(expected, nonce='a' * 31)):
+            with self.subTest(query=query), self.assertRaises(ValueError):
+                relay.answer(query, get)
+        get.assert_not_called()

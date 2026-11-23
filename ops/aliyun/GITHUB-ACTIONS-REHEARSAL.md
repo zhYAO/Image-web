@@ -253,6 +253,33 @@ the lifecycle inventory against the native paired CLI. Installed bytes,
 ownership, credentials, network reachability and host policy still require
 an independently authorized ECS preflight.
 
+### Independent GitHub evidence connection
+
+The receiver can use an explicitly authorized observer when direct GitHub
+egress is unavailable. Root-owned `/etc/zimage/ordinary-github-tls/client.json`
+selects a single address and port with a pinned hostname and leaf certificate.
+The observer authenticates the receiver's leaf certificate. The protocol
+accepts only the receiver's existing GitHub evidence paths for `zhYAO/Image-web`.
+It has no forwarding mode, HTTP CONNECT, caller headers or destination URL.
+The observer makes fresh GET requests to `api.github.com` using its own local
+read-only `github.token`. The ECS receiver still evaluates all merge,
+required-check, ruleset-execution and artifact signature evidence. The
+observer is trusted to return the authenticated GitHub responses. A failed
+connection in this mode ends the proof check.
+
+On the explicitly approved observer host, keep the listener policy, private
+token and TLS identity in its own protected directory. Use a dedicated peer
+identity for this protocol. For the ECS readiness test, run the committed
+`ordinary_github_relay.py` with the client policy and `--probe HEAD RUN_ID`
+as the same UID and in the same network context as the planned receiver.
+For the observed draft head `48900922262c256af1132cc3c773b9c4b0a6f9f0`,
+run `45124137190` returned check `137524481164` and main `a3f43a6a43a7…`
+through the existing D1M GitHub session. The target probe must return the
+same check and run for that head and `releaseAuthority: false`. A later
+release still requires the actual protected merge, rule-suite execution and
+the original same-attempt artifact signature checks on ECS. The probe
+makes no production changes.
+
 ## Fixed review-branch diagnostic, without merging main
 
 `review-branch-diagnostic.yml` runs only for a push to the exact

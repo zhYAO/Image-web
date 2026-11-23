@@ -19,6 +19,7 @@ SPOOL = Path('/opt/zimage/ordinary-requests')
 VERIFIER = BASE / 'bin/gh'
 SIGSTORE_ROOT = Path('/etc/zimage/ordinary-sigstore-roots.jsonl')
 OBSERVER_TLS = Path('/etc/zimage/ordinary-observer-tls')
+GITHUB_TLS = Path('/etc/zimage/ordinary-github-tls')
 SHA = re.compile('[a-f0-9]{64}')
 MODULES = (
     ('ordinary', 'ordinary.py'),
@@ -38,6 +39,7 @@ MODULES = (
     ('github_pair_handoff', 'github_pair_handoff.py'),
     ('github_pair_public', 'github_pair_public.py'),
     ('ordinary_readonly_transport', 'ordinary_readonly_transport.py'),
+    ('ordinary_github_relay', 'ordinary_github_relay.py'),
     ('ordinary_intake', 'github-rehearsal-intake.py'),
     ('ordinary_authority', 'ordinary-authority.py'),
 )
@@ -119,12 +121,13 @@ class BoundedInput:
         return bytes(body)
 
 
-def github_evidence(tools, authority, core):
+def github_evidence(tools, authority, core, get=None):
     attestation = authority.attestation_digests
     core.exact(attestation, {'ghSha256', 'trustedRootSha256'})
     for digest in attestation.values():
         core.hexid(digest)
-    get = tools['ordinary_github'].read_only(authority.github_read_token)
+    if get is None:
+        get = tools['ordinary_github'].read_only(authority.github_read_token)
 
     def verify(**evidence):
         return tools['github_shadow_offline'].verify(**evidence, gh_path=VERIFIER,
@@ -141,12 +144,12 @@ def github_evidence(tools, authority, core):
     return SimpleNamespace(get=get, verify=verify, merge=merge, assert_main=assert_main)
 
 
-def observer_client(transport, core, read):
+def observer_client(transport, core, read, directory=OBSERVER_TLS):
     try:
-        config = read(OBSERVER_TLS / 'client.json', 4096, private=True)
+        config = read(directory / 'client.json', 4096, private=True)
     except FileNotFoundError:
         return None
-    files = dict(ca=OBSERVER_TLS / 'ca.pem', cert=OBSERVER_TLS / 'client.pem', key=OBSERVER_TLS / 'client.key')
+    files = dict(ca=directory / 'ca.pem', cert=directory / 'client.pem', key=directory / 'client.key')
     for name, path in files.items():
         read(path, 65536, private=name == 'key')
     return transport.client(core.parse(config), **files)
@@ -178,7 +181,8 @@ def main():
         authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle,
                                                                public=tools['github_pair_public'], read=read_installed,
                                                                trusted=cli.trusted, root=cli.ROOT, observe=observe)
-        github = github_evidence(tools, authority, core)
+        get = observer_client(tools['ordinary_github_relay'], core, read_installed, GITHUB_TLS)
+        github = github_evidence(tools, authority, core, get=get)
         def system_for(packet, approval):
             policy = authority.lifecycle_policy(packet, approval)
             return installed_system.SystemOps(policy, core, lifecycle)

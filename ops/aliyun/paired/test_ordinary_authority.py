@@ -118,6 +118,7 @@ class AuthorityTest(unittest.TestCase):
                     health='ok', routes=['/', '/login', '/workspace', '/assets', '/account'], anonymousSessionStatus=401)
 
     def test_authority_is_root_local_and_matches_one_batch_and_lifecycle(self):
+        self.assertEqual(self.driver.github_read_token, 'fixture-only')
         self.read.assert_any_call(authority.TOKEN, 1024, private=True)
         self.assertEqual(self.authorize()['stageSha256'], 'f' * 64)
         self.assertEqual(self.driver.lifecycle_policy(self.packet, self.approval), self.lifecycle)
