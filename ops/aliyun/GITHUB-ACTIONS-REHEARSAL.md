@@ -236,6 +236,23 @@ The planned isolated receiver environment resolved `api.github.com`, then
 timed out connecting to IPv4 TCP 443 before TLS. No production components
 were installed by these checks.
 
+An ECS attribute query identified one attached basic security group with no
+explicit outbound rules. Cloud Assistant invocation `t-sh073ybpdq3xfk0`
+confirmed a gateway route, an `ACCEPT` iptables `OUTPUT` policy, and no
+direct rule rejecting TCP 443 in that chain. The inspected nftables output
+chains had no drop policy. These checks did not establish the cause of the
+TCP timeout.
+
+`paired/ordinary_install_inventory.py <reviewed-commit>` prints both exact
+code digest maps and their corresponding Git source files. Use `--section
+receiver` for the expected receiver inventory, or `--section paired` for
+the shared lifecycle inventory. It reads committed regular-file blobs and
+does not install files, create authorization, or open either release path.
+The review CI authenticates and imports the exact locked sources and checks
+the lifecycle inventory against the native paired CLI. Installed bytes,
+ownership, credentials, network reachability and host policy still require
+an independently authorized ECS preflight.
+
 ## Fixed review-branch diagnostic, without merging main
 
 `review-branch-diagnostic.yml` runs only for a push to the exact
