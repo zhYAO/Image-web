@@ -1,5 +1,6 @@
 """Fixed SSH handoff for the exact protected-main pair and its stage proof."""
 import hashlib
+import json
 from pathlib import Path
 import re
 import stat
@@ -11,6 +12,8 @@ import github_shadow_pins as policy_pins
 from github_shadow_signer_intake import REPO, REPO_ID, WORKFLOW
 
 MAGIC = b'ZIMAGE-CI-PAIR\x02'
+RESTORE_MAGIC = b'ZIMAGE-CI-PAIR\x03'
+RESTORE_CAP = 2048
 LENGTH = struct.Struct('!Q')
 MEMBERS = (('stage.json', 4096), ('stage.bundle.jsonl', 1024 * 1024),
            ('pins.json', 65536), ('config.json', 65536),
@@ -19,6 +22,7 @@ WIRE_MEMBERS = (*MEMBERS, ('rollback.json', 4096))
 COMMAND = 'zimage-publish-pair-v1'
 API = '/repos/' + REPO
 COMMIT = re.compile('[a-f0-9]{40}')
+DIGEST = re.compile('[a-f0-9]{64}')
 BLOCK = 1024 * 1024
 
 
@@ -30,8 +34,17 @@ def exact(stream, count):
 
 
 def receive(stream, request):
-    """Receive into a new private directory owned by the installed supervisor."""
-    if exact(stream, len(MAGIC)) != MAGIC:
+    """Receive publication files or return the exact bounded restoration selector."""
+    magic = exact(stream, len(MAGIC))
+    if magic == RESTORE_MAGIC:
+        size, = LENGTH.unpack(exact(stream, LENGTH.size))
+        if not 0 < size <= RESTORE_CAP:
+            raise ValueError('Invalid restoration selector size')
+        selector = json.loads(exact(stream, size), object_pairs_hook=stage._unique)
+        if type(selector) is not dict or stream.read(1):
+            raise ValueError('Invalid restoration selector or trailing bytes')
+        return selector
+    if magic != MAGIC:
         raise ValueError('Unknown pair handoff protocol')
     for name, cap in WIRE_MEMBERS:
         remaining, = LENGTH.unpack(exact(stream, LENGTH.size))
@@ -62,6 +75,30 @@ def send(request, out):
                 remaining -= len(data)
             if stream.read(1):
                 raise ValueError('Local pair handoff input changed')
+
+
+def send_restoration(selector, out):
+    body = json.dumps(selector, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('ascii')
+    if not 0 < len(body) <= RESTORE_CAP:
+        raise ValueError('Invalid restoration selector size')
+    out.write(RESTORE_MAGIC + LENGTH.pack(len(body)) + body)
+
+
+def validate_restoration(receipt, release):
+    """Check the completed restoration against the original opened release."""
+    operation, approval = release['operationId'], release['rootApprovalSha256']
+    identity = json.dumps(dict(operation=operation, approval=approval), sort_keys=True, separators=(',', ':')) + '\n'
+    expected = {name: release[name] for name in ('operationId', 'commit', 'runId', 'attempt', 'rootApprovalSha256',
+                                                'rollbackAcceptanceSha256')}
+    expected.update(schemaVersion=1, kind='zimage-ordinary-restoration-v1', status='restored',
+                    restorationOperationId='restore-' + hashlib.sha256(identity.encode()).hexdigest()[:48],
+                    restoredPair=release['rollbackPair'])
+    digests = {'publicFailureSha256', 'publicRestorationSha256'}
+    if (type(receipt) is not dict or set(receipt) != expected.keys() | digests
+            or any(type(receipt[key]) is not type(value) or receipt[key] != value for key, value in expected.items())
+            or any(type(receipt[key]) is not str or not DIGEST.fullmatch(receipt[key]) for key in digests)):
+        raise ValueError('Restoration did not return the exact completed receipt')
+    return receipt
 
 
 def assert_main(get, commit):

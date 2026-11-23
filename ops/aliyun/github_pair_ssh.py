@@ -10,7 +10,8 @@ import sys
 import tempfile
 
 from github_hosted_stage_shadow import _unique
-from github_pair_handoff import COMMAND, COMMIT, file_sha, rollback_pair, send
+from github_pair_handoff import (COMMAND, COMMIT, REPO, WORKFLOW, file_sha, rollback_pair, send,
+                                 send_restoration, validate_restoration)
 
 SSH = '/usr/bin/ssh'
 USER = 'zimage-release'
@@ -68,22 +69,28 @@ def validate_receipt(body, request, rollback):
     return receipt
 
 
-def publish(request, receipt, *, host, known_hosts, key, public_baseline):
-    # Freeze the bounded stream before attempting the one remote operation.
-    # An uncertain SSH exit requires reading status, never automatic replay.
-    with public_baseline.open('rb') as stream:
-        body = stream.read(4097)
-    if not 0 < len(body) <= 4096:
-        raise ValueError('Bounded public rollback evidence required')
+def read_bounded(path, limit):
+    with path.open('rb') as stream:
+        body = stream.read(limit + 1)
+    if not 0 < len(body) <= limit:
+        raise ValueError('Bounded local evidence required')
+    return body
+
+
+def measured_rollback(request, public_baseline):
+    body = read_bounded(public_baseline, 4096)
     baseline = json.loads(body, object_pairs_hook=_unique)
     pins = json.loads((request / 'pins.json').read_bytes(), object_pairs_hook=_unique)
     if baseline['schemaVersion'] != 1 or baseline['health'] != 'ok':
         raise ValueError('Healthy public rollback evidence required')
-    rollback = rollback_pair(dict(backend=baseline['backendRelease'], frontend=baseline['frontendRelease']),
-                             pins['commit'])
-    write_private(request / 'rollback.json', json.dumps(rollback, sort_keys=True).encode())
+    return rollback_pair(dict(backend=baseline['backendRelease'], frontend=baseline['frontendRelease']), pins['commit'])
+
+
+def exchange(frame, payload, *, host, known_hosts, key):
+    # Freeze one frame before calling the fixed endpoint. An uncertain exit
+    # requires reconciliation through status before any further request.
     with tempfile.TemporaryFile() as packet, tempfile.TemporaryFile() as result:
-        send(request, packet)
+        frame(payload, packet)
         packet.seek(0)
         with invocation(host, known_hosts, key) as argv:
             proc = subprocess.run(argv, stdin=packet, stdout=result, stderr=subprocess.DEVNULL,
@@ -91,20 +98,57 @@ def publish(request, receipt, *, host, known_hosts, key, public_baseline):
         result.seek(0)
         body = result.read(16385)
     if proc.returncode:
-        raise ValueError('ECS publication returned no bounded successful receipt; inspect status before retry')
+        raise ValueError('ECS did not return a successful receipt; inspect status before any further request')
+    if not 0 < len(body) <= 16384:
+        raise ValueError('Exact ECS receipt required')
+    return body
+
+
+def publish(request, receipt, *, host, known_hosts, key, public_baseline):
+    rollback = measured_rollback(request, public_baseline)
+    write_private(request / 'rollback.json', json.dumps(rollback, sort_keys=True).encode())
+    body = exchange(send, request, host=host, known_hosts=known_hosts, key=key)
     validate_receipt(body, request, rollback['backend'])
+    write_private(receipt, body)
+    return hashlib.sha256(body).hexdigest()
+
+
+def request_restore(request, deployment, failure, receipt, *, host, known_hosts, key, public_baseline):
+    rollback = measured_rollback(request, public_baseline)
+    deployed_bytes = read_bounded(deployment, 16384)
+    released = validate_receipt(deployed_bytes, request, rollback['backend'])
+    failure_hint = json.loads(read_bounded(failure, 16384), object_pairs_hook=_unique)
+    # This local hint identifies a failed verification session. The receiver
+    # independently validates its own failure evidence before any mutation.
+    expected = dict(schemaVersion=1, operationId=released['operationId'], candidate=released['commit'],
+                    rollbackTarget=rollback, recoveryVerified=False,
+                    deploymentReceiptSha256=hashlib.sha256(deployed_bytes).hexdigest())
+    if (type(failure_hint) is not dict or set(failure_hint) != expected.keys() | {'publicRollbackObservation'}
+            or any(type(failure_hint[key]) is not type(value) or failure_hint[key] != value
+                   for key, value in expected.items())):
+        raise ValueError('Public failure observation does not identify the original release')
+    packet = {name: released[name] for name in ('commit', 'runId', 'attempt', 'backendManifestSha256',
+                                               'frontendSubjectSha256')}
+    packet.update(repository=REPO, workflow=WORKFLOW)
+    body = exchange(send_restoration, dict(packet=packet, approvalSha256=released['rootApprovalSha256']),
+                    host=host, known_hosts=known_hosts, key=key)
+    validate_restoration(json.loads(body, object_pairs_hook=_unique), released)
     write_private(receipt, body)
     return hashlib.sha256(body).hexdigest()
 
 
 if __name__ == '__main__':
     try:
-        if len(sys.argv) != 4:
-            raise ValueError('Handoff directory, receipt path and public rollback evidence required')
-        secret = os.environ.pop('ZIMAGE_PAIR_SSH_KEY')
-        digest = publish(Path(sys.argv[1]), Path(sys.argv[2]), host=os.environ['ZIMAGE_PAIR_SSH_HOST'],
-                         known_hosts=os.environ['ZIMAGE_PAIR_SSH_KNOWN_HOSTS'], key=secret,
-                         public_baseline=Path(sys.argv[3]))
+        connection = dict(host=os.environ['ZIMAGE_PAIR_SSH_HOST'], known_hosts=os.environ['ZIMAGE_PAIR_SSH_KNOWN_HOSTS'],
+                          key=os.environ.pop('ZIMAGE_PAIR_SSH_KEY'))
+        if len(sys.argv) == 7 and sys.argv[1] == '--restore':
+            request, deployment, failure, receipt, baseline = map(Path, sys.argv[2:])
+            digest = request_restore(request, deployment, failure, receipt, public_baseline=baseline, **connection)
+        elif len(sys.argv) == 4:
+            request, receipt, baseline = map(Path, sys.argv[1:])
+            digest = publish(request, receipt, public_baseline=baseline, **connection)
+        else:
+            raise ValueError('Fixed publication or restoration invocation required')
         print(digest)
     except (KeyError, TypeError, OSError, ValueError, subprocess.TimeoutExpired):
-        sys.exit('Pair publication refused or returned uncertain status')
+        sys.exit('Pair operation refused or returned uncertain status')

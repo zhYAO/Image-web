@@ -170,22 +170,28 @@ protected run, artifact name, namespace and signing identity checks.
   deployment receipt digest. Even if the previous pair is visible again,
   the result stays unverified until a root-controlled restoration receipt
   proves the recovery. This observation issues no restore command.
-- `paired/ordinary_restore.py` is the host-side restoration routine. It
-  requires an independently verified public failure for an exact completed
-  operation. Under the same deploy lock, it matches the published PID and
-  frontend generation and reuses the fenced writer to restore the retained
-  pair. It records intent before changing pointers or reopening traffic.
+- The same SSH forced command and key accept one bounded restoration frame.
+  The selector carries the original batch packet and its installed approval
+  digest. The receiver obtains the approval and the rollback pair from the
+  installed authority and the original journal. It requires the original
+  protected PR and required-check evidence, the exact opened PID and
+  frontend generation, and independently observed public failure. Under the
+  same deploy lock it records intent before restoring the retained pair or
+  reopening traffic. The SSH client checks the publication receipt against
+  the exact stage bytes and local failure observation before requesting restoration, and
+  checks that the reply binds the exact original release and rollback pair.
   The journal exposes a restoration receipt only after authenticated checks
   and an independent public check of the restored pair. An interrupted
   restoration blocks the next writer. The review-only Linux workflow tests
-  this journal and its lock without accessing ECS.
+  the fixed frame, replay rejection and the durable journal without accessing
+  ECS. The production workflow still records only the failure observation.
 
 The review branch contains the workflow, fixed root receiver, root evidence
 reader, private staging, lifecycle adapter and durable restoration logic.
 The intended trigger is the maintainer's manual PR merge into protected main.
 Keep paired publication disabled until the reviewed host installation, the
 independent machine that produces batch authorization and live observations,
-and the restricted restoration invocation have been exercised together. The
+and the workflow's restoration dispatch have been exercised together. The
 independent read-only GitHub observer must verify a real protected merge and
 the exact required check, and rollback evidence must match the retained pair.
 A failed or interrupted SSH response requires read-only reconciliation through

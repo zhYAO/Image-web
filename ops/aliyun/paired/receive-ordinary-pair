@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""Fixed root receiver for the one SSH paired-release frame."""
+"""Fixed root receiver for paired publication and restoration selectors."""
 import hashlib
 import json
 import os
@@ -168,7 +168,7 @@ def main():
             return installed_system.SystemOps(policy, core, lifecycle)
         host = SimpleNamespace(system_for=system_for, gate=gate, authority=authority, policy=authority.signer_policy,
                                intake=tools['ordinary_intake'], clock=lambda: int(time.time()),
-                               github=github, seen=authority.seen,
+                               github=github, seen=authority.seen, restore=tools['ordinary_restore'].restore,
                                authorization=authority.authorization)
         receipt = tools['ordinary_ssh'].run(BoundedInput(sys.stdin.fileno()), scratch=SPOOL, host=host,
                                            handoff=tools['github_pair_handoff'], ordinary=tools['ordinary'])

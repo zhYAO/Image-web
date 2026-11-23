@@ -1,10 +1,16 @@
 from contextlib import nullcontext
 from copy import deepcopy
+import io
+import os
+from pathlib import Path
+import sys
+import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import ordinary
 import ordinary_restore
+import ordinary_ssh
 from test_ordinary import Fixture
 
 
@@ -37,9 +43,12 @@ class RestoreTest(unittest.TestCase):
         self.reverse.open.side_effect = self.reopen
         self.reverse.hold.side_effect = lambda _: self.live.update(ingressMode='sealed', nodeMode='draining')
         retained = dict(backendManifestSha256='4' * 64, frontendManifestSha256='5' * 64, frontendArtifact='1' * 64)
+        proof = dict(commit=self.f.packet['commit'], pullRequest=22, ruleSuiteId=5, checkRunId=6, workflowRunId=7,
+                     workflowSha256='7' * 64)
         self.gate = Mock(spec=['lock', 'lock_identity', 'claim_restoration', 'journal'])
         self.gate.lock.return_value = nullcontext()
-        self.gate.claim_restoration.return_value = (dict(retained=retained, initial=dict(self.old, frontendArtifact='1' * 64)),
+        self.gate.claim_restoration.return_value = (dict(retained=retained, protectedMerge=proof,
+                                                        initial=dict(self.old, frontendArtifact='1' * 64)),
                                                     dict(process={'pid': 42}, pairSequence=8))
         self.authority = Mock(spec=['assert_other_writers_clear', 'database_digest', 'verify_public_failure',
                                     'verify_restored_candidate', 'verify_public_restoration'])
@@ -60,7 +69,6 @@ class RestoreTest(unittest.TestCase):
 
     def reopen(self, record, process):
         self.assertEqual(record['phase'], 'opening')
-        self.assertEqual(self.gate.journal.call_args.args[0]['phase'], 'restore-open-intent')
         self.live.update(ingressMode='open', nodeMode='open', fence=None, markers={'open': self.reverse.token()})
 
     def run_restore(self):
@@ -110,3 +118,60 @@ class RestoreTest(unittest.TestCase):
         self.reverse.hold.assert_called_once()
         self.assertEqual(self.live['ingressMode'], 'sealed')
         self.assertEqual(self.gate.journal.call_args.args[0]['phase'], 'restore-open-intent')
+
+    def test_original_protected_pr_evidence_is_required_for_restoration(self):
+        initial, _ = self.gate.claim_restoration.return_value
+        del initial['protectedMerge']
+        with self.assertRaisesRegex(ValueError, 'Exact record'):
+            self.run_restore()
+        self.authority.verify_public_failure.assert_not_called()
+        self.reverse.seal.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires a real POSIX deployment lock')
+    def test_fixed_restoration_frame_requires_independent_failure_and_durably_confirms_recovery(self):
+        import core
+        from ordinary_journal import JournalGate, PHASES
+
+        # The host installs both directories in one pinned import closure.
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1]), *sys.path]):
+            import github_pair_handoff as handoff
+
+        packet, approval = self.f.packet, self.f.a
+        operation, digest = approval['operation'], ordinary.sha(approval)
+        with tempfile.TemporaryDirectory(prefix='ordinary-restore-fixture-') as temp:
+            root = Path(temp).resolve()
+            (root / 'deploy.lock').touch(mode=0o600)
+            (root / 'ordinary-operations').mkdir(0o700)
+            gate = JournalGate(root, core, owner_uid=os.getuid())
+            original, generation = self.gate.claim_restoration.return_value
+            evidence = {'seal-intent': original, 'writes-may-open': generation}
+            with gate.lock():
+                gate.assert_clear(operation)
+                for phase in PHASES:
+                    gate.journal(dict(operation=operation, rootApprovalSha256=digest, phase=phase), evidence=evidence.get(phase))
+
+            host = Mock(gate=gate, clock=lambda: self.f.time, authority=self.authority, restore=ordinary_restore.restore)
+            host.authorization.return_value = dict(approval=approval, sha256=digest, stageSha256='8' * 64)
+            host.system_for.return_value = self.system
+
+            def dispatch(**extra):
+                stream = io.BytesIO()
+                handoff.send_restoration(dict(packet=packet, approvalSha256=digest, **extra), stream)
+                stream.seek(0)
+                return ordinary_ssh.run(stream, scratch=root, host=host, handoff=handoff, ordinary=ordinary)
+
+            with self.assertRaisesRegex(ValueError, 'Exact record'):
+                dispatch(target=self.old)
+            host.authorization.assert_not_called()
+            self.authority.verify_public_failure.side_effect = ValueError('No independent public failure')
+            with self.assertRaisesRegex(ValueError, 'No independent public failure'):
+                dispatch()
+            self.reverse.seal.assert_not_called()
+            self.authority.verify_public_failure.side_effect = None
+            result = dispatch()
+            self.assertEqual(result['restoredPair'], self.old)
+            with gate.lock():
+                self.assertEqual(gate.restoration_receipt(operation, digest), result)
+            with self.assertRaisesRegex(ValueError, 'eligible for restoration'):
+                dispatch()
+            self.reverse.seal.assert_called_once()

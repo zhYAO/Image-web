@@ -1,7 +1,7 @@
 """Restore one completed ordinary release through the existing fenced writer.
 
-Installed callers supply root policy and independently obtained failure and
-acceptance evidence. This module has no SSH or command-line entrypoint.
+The fixed receiver supplies root policy and independently obtained failure and
+acceptance evidence. This module exposes no command-line entrypoint.
 """
 from copy import deepcopy
 
@@ -19,9 +19,14 @@ def restore(packet, approval, approval_sha256, *, system, gate, authority, ordin
                        (operation, old['backend'], old['frontend'], new['backend'], new['frontend']),
                        'Restoration policy does not match the original release')
         seal, opened = gate.claim_restoration(operation, approval_sha256)
-        ordinary.exact(seal, {'initial', 'retained', 'protectedMerge'} if 'protectedMerge' in seal else {'initial', 'retained'})
-        if 'protectedMerge' in seal:
-            ordinary.valid(seal['protectedMerge']['commit'] == packet['commit'], 'Original protected merge proof differs')
+        ordinary.exact(seal, {'initial', 'retained', 'protectedMerge'})
+        proof = seal['protectedMerge']
+        identifiers = {'pullRequest', 'checkRunId', 'workflowRunId', 'ruleSuiteId'}
+        ordinary.exact(proof, identifiers | {'commit', 'workflowSha256'})
+        ordinary.hexid(proof['workflowSha256'])
+        ordinary.valid(proof['commit'] == packet['commit']
+                       and all(type(proof[key]) is int and 0 < proof[key] < 2**63 for key in identifiers),
+                       'Original protected merge proof differs')
         ordinary.exact(opened, {'process', 'pairSequence'})
         retained = seal['retained']
         ordinary.exact(retained, {'backendManifestSha256', 'frontendManifestSha256', 'frontendArtifact'})

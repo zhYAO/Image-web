@@ -97,6 +97,21 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(result['rollbackPair'], self.rollback)
         self.assertEqual(self.get.call_args.args, (handoff.API + '/branches/main',))
 
+    def test_restoration_frame_is_bounded_and_does_not_materialize_files(self):
+        selector = {'packet': {'commit': self.release}, 'approvalSha256': 'a' * 64}
+        stream = io.BytesIO()
+        handoff.send_restoration(selector, stream)
+        frame = stream.getvalue()
+        target = Path(self.tmp.name) / 'unused'
+        self.assertEqual(handoff.receive(io.BytesIO(frame), target), selector)
+        malformed = b'{"packet":null,"packet":{}}'
+        for wire in (frame[:-1], frame + b'x', handoff.RESTORE_MAGIC + handoff.LENGTH.pack(handoff.RESTORE_CAP + 1),
+                     handoff.RESTORE_MAGIC + handoff.LENGTH.pack(len(malformed)) + malformed,
+                     handoff.RESTORE_MAGIC + handoff.LENGTH.pack(4) + b'null'):
+            with self.subTest(wire=wire), self.assertRaises(ValueError):
+                handoff.receive(io.BytesIO(wire), target)
+        self.assertFalse(target.exists())
+
     def test_tampered_archive_rejected_before_signer(self):
         (self.request / 'frontend.zip').write_bytes(b'wrong archive')
         with self.assertRaises(ValueError):

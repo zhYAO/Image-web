@@ -160,6 +160,7 @@ class SystemTest(unittest.TestCase):
         f = self.fixture
         stage = 'e' * 64
         handoff = Mock()
+        handoff.receive.return_value = None
         handoff.admit.return_value = {'packet': f.packet, 'stageSha256': stage, 'rollbackPair': f.a['oldPair']}
         host = Mock(gate=self.gate, authority=self.authority, github=self.github)
         host.system_for.return_value = self.system
