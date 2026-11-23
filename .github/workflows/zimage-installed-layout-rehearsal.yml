@@ -47,3 +47,10 @@ jobs:
           set -euo pipefail
           env -u PYTHONOPTIMIZE /usr/bin/python3 -I -B \
             ops/aliyun/paired/versioned-layout-diagnostic.py "$GITHUB_WORKSPACE" "$GUEST_IMAGE"
+      - name: Verify unactivated receiver version selection in sealed guests
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u PYTHONOPTIMIZE /usr/bin/python3 -I -B \
+            ops/aliyun/paired/version-admission-diagnostic.py "$GUEST_IMAGE"
