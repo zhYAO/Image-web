@@ -121,6 +121,17 @@ class ReceiverTests(unittest.TestCase):
         transport.client.assert_called_once_with({'schemaVersion': 1}, ca=receiver.OBSERVER_TLS / 'ca.pem',
                                                  cert=receiver.OBSERVER_TLS / 'client.pem', key=receiver.OBSERVER_TLS / 'client.key')
 
+    def test_relay_does_not_use_a_direct_token_or_fallback(self):
+        tools = {name: Mock() for name, _ in receiver.MODULES}
+        authority = Mock(spec=['attestation_digests', 'merge_policy'])
+        authority.attestation_digests = dict(ghSha256='a' * 64, trustedRootSha256='b' * 64)
+        relay = Mock(side_effect=TimeoutError('No independent GitHub reply'))
+        github = receiver.github_evidence(tools, authority, test_core, get=relay)
+        self.assertIs(github.get, relay)
+        with self.assertRaises(TimeoutError):
+            github.get('/repos/zhYAO/Image-web/branches/main')
+        tools['ordinary_github'].read_only.assert_not_called()
+
     @unittest.skipIf(sys.platform == 'win32', 'Linux pipe readiness')
     def test_bounded_wire_reads_short_chunks_eof_and_deadline(self):
         read, write = os.pipe()
