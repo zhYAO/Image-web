@@ -253,6 +253,40 @@ the lifecycle inventory against the native paired CLI. Installed bytes,
 ownership, credentials, network reachability and host policy still require
 an independently authorized ECS preflight.
 
+### Versioned receiver handoff for independent public evidence
+
+The isolated `review-ordinary-public.yml` workflow uses the existing fixed
+command name, `zimage-publish-pair-v1`. Its interactive request markers are
+`ZIMAGE-CI-PAIR` versions 4 and 5 for publication and restoration. An explicit
+end marker leaves stdin open for the challenge response. The deployed entry
+point's default reader refuses these versions. The Linux rehearsal sends the
+restoration selector through a child process's stdin and stdout, with fixture
+responses and a real GitHub OIDC attestation. A separate job measures live
+public HTTPS. Its result cannot be inferred from the fixture job.
+
+1. Use the existing installed-layout procedure to stage a receiver generation
+   identified by its reviewed Git commit. Extend the closed receiver inventory
+   to cover the interactive module and its dependencies before activation.
+   Verify the exact bytes, root ownership, executable modes, the fixed command
+   and the installed verifier and trust-root digests together. Keep the prior
+   receiver generation and its matching inventory available. A future change
+   of generation must select the receiver and matching inventory as one unit.
+2. Wire interactive admission using the exact protected merge, signed pair,
+   installed batch authorization and retained rollback target. Accept the new
+   frame versions only after selecting the authenticated receiver generation.
+   Use the original journal and shared lock for mutations. Bind the attested
+   observation to a fresh nonce, exact batch, stage and current pair, and
+   recheck journal and live state before committing a result or a rollback.
+3. Pin the independent production observer workflow, commit, run and attempt
+   in receiver policy. That workflow must perform the existing anonymous HTTPS
+   checks from GitHub-hosted Actions. A transport failure creates no rollback
+   witness. Record both the measured candidate rejection and restored-pair
+   acceptance where restoration is needed. The rehearsal workflow and
+   attestation predicate have their own identity and cannot admit production.
+4. Require the separately authorized Supabase read-only observer and its fresh
+   contract evidence before enabling release. ECS process receipts, fixture
+   responses and anonymous HTTPS observations cannot satisfy this DB gate.
+
 ### Independent GitHub evidence connection
 
 The receiver can use an explicitly authorized observer when direct GitHub
