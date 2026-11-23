@@ -15,6 +15,8 @@ DATABASE_REPOSITORY = 'zhYAO/Image-web'
 DATABASE_REPOSITORY_ID = 1329578390
 DATABASE_WORKFLOW = DATABASE_REPOSITORY + '/.github/workflows/observe-ordinary-database.yml'
 DATABASE_PREDICATE = 'https://zimage.store/attestations/ordinary-database/v1'
+PUBLIC_WORKFLOW = DATABASE_REPOSITORY + '/.github/workflows/observe-ordinary-public.yml'
+PUBLIC_PREDICATE = 'https://zimage.store/attestations/ordinary-public-observation/v1'
 
 
 def _trusted_ancestors(path, prefix):
@@ -54,18 +56,27 @@ def verify(*, payload, bundle, expected, gh_path, gh_sha256,
                    predicate=PREDICATE, parse=from_gh)
 
 
-def verify_database(*, payload, bundle, signer_sha, source_sha, run, attempt, gh_path, gh_sha256,
-                    trusted_root_path, trusted_root_sha256):
+def verify_database(**evidence):
     """Accept only the separate protected-main database witness workflow."""
+    return _verify_observer(workflow=DATABASE_WORKFLOW, predicate=DATABASE_PREDICATE, **evidence)
+
+
+def verify_public(**evidence):
+    """Accept only the separate protected-main public witness workflow."""
+    return _verify_observer(workflow=PUBLIC_WORKFLOW, predicate=PUBLIC_PREDICATE, **evidence)
+
+
+def _verify_observer(*, workflow, predicate, payload, bundle, signer_sha, source_sha, run, attempt, gh_path, gh_sha256,
+                     trusted_root_path, trusted_root_sha256):
     expected = dict(repository=DATABASE_REPOSITORY, repositoryId=DATABASE_REPOSITORY_ID,
-                    signerWorkflow=DATABASE_WORKFLOW, signerSHA=signer_sha, sourceRef='refs/heads/main',
+                    signerWorkflow=workflow, signerSHA=signer_sha, sourceRef='refs/heads/main',
                     sourceSHA=source_sha, runId=run, attempt=attempt)
 
     def parse(result, *, payload, subject_path, expected):
-        return verified_subject(result.stdout, payload=payload, expected=expected, predicate=DATABASE_PREDICATE)
+        return verified_subject(result.stdout, payload=payload, expected=expected, predicate=predicate)
 
     return _verify(payload, bundle, expected, gh_path, gh_sha256, trusted_root_path, trusted_root_sha256,
-                   predicate=DATABASE_PREDICATE, parse=parse)
+                   predicate=predicate, parse=parse)
 
 
 def _verify(payload, bundle, expected, gh_path, gh_sha256, trusted_root_path, trusted_root_sha256, *, predicate, parse):

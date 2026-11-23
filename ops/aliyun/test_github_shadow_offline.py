@@ -49,6 +49,23 @@ class OfflineTest(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             run()
 
+    def test_public_verifier_cannot_reuse_the_database_or_rehearsal_signer(self):
+        evidence = dict(payload=b'fixture subject', bundle=b'fixture bundle', signer_sha='a' * 40,
+                        source_sha='b' * 40, run=42, attempt=2, gh_path='/trusted/gh', gh_sha256='a' * 64,
+                        trusted_root_path='/trusted/root', trusted_root_sha256='b' * 64)
+        with patch.object(offline, '_verify') as verify:
+            offline.verify_public(**evidence)
+        expected = verify.call_args.args[2]
+        self.assertEqual(expected, dict(repository='zhYAO/Image-web', repositoryId=1329578390,
+                                       signerWorkflow='zhYAO/Image-web/.github/workflows/observe-ordinary-public.yml',
+                                       signerSHA='a' * 40, sourceRef='refs/heads/main', sourceSHA='b' * 40,
+                                       runId=42, attempt=2))
+        predicate = verify.call_args.kwargs['predicate']
+        self.assertNotEqual(predicate, offline.DATABASE_PREDICATE)
+        self.assertNotEqual(predicate, 'https://zimage.store/attestations/rehearsal-public-observation/v1')
+        with self.assertRaises(TypeError):
+            offline.verify_public(**evidence, predicate=offline.DATABASE_PREDICATE)
+
     def test_dry_run_command_is_offline_and_environment_isolated(self):
         expected = dict.fromkeys(FIELDS, 'a'*40)
         expected.update(repository='zhYAO/Image-web', repositoryId=73, runId=42, attempt=2,
