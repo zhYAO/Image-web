@@ -24,7 +24,6 @@ OPERATION = re.compile(r'zimage-release-([1-9][0-9]{0,18})-([1-9][0-9]{0,18})')
 LIFECYCLE = {'operationId', 'oldBackend', 'oldFrontend', 'newBackend', 'newFrontend',
              'oldFrontendArtifact', 'backendManifestSha256', 'frontendCandidateSha256',
              'frontendPayloadSha256', 'configurationSha256', 'ingressSha256'}
-PUBLIC_ROUTES = ['/', '/login', '/workspace', '/assets', '/account']
 
 
 def require(condition, message):
@@ -33,8 +32,9 @@ def require(condition, message):
 
 
 class Authority:
-    def __init__(self, *, core, tools, read, trusted, root, clock=time.time):
+    def __init__(self, *, core, tools, public, read, trusted, root, clock=time.time):
         self.core, self.tools, self.read, self.trusted, self.root = core, tools, read, trusted, root
+        self.public = public
         self.clock = clock
         self.batch = None
         config = core.parse(read(CONFIG, 65536))
@@ -165,7 +165,7 @@ class Authority:
         self.core.hexid(expected)
         value, digest = self._record(self.batch['directory'] / filename)
         acceptance = dict(schemaVersion=1, backendRelease=pair['backend'], frontendRelease=pair['frontend'],
-                          health='ok', routes=PUBLIC_ROUTES, anonymousSessionStatus=401)
+                          health='ok', routes=list(self.public.ROUTES), anonymousSessionStatus=401)
         require(digest == expected and type(value) is dict and type(value.get('schemaVersion')) is int
                 and type(value.get('anonymousSessionStatus')) is int and value == acceptance,
                 'Independent public readiness, routes and release pair required')
@@ -184,23 +184,29 @@ class Authority:
         recovery = 'restore-' + ordinary.sha(dict(operation=approval['operation'], approval=ordinary.sha(approval)))[:48]
         self._candidate('restoration-candidate.json', process, packet, approval, recovery, approval['oldPair']['backend'])
 
-    def _public(self, filename, packet, approval, snapshot, pair, status):
+    def _public_record(self, filename, packet, approval, snapshot, pair, status):
         self._bound(packet, approval)
         evidence, digest = self._evidence(filename, 'zimage-ordinary-public-v1',
                                           {'pair', 'snapshotSha256', 'status', 'checksSha256'})
         require(evidence['pair'] == pair and evidence['status'] == status
                 and evidence['snapshotSha256'] == self.core.digest(snapshot), 'Public evidence differs from the live pair')
         self.core.hexid(evidence['checksSha256'])
-        if status == 'passed':
-            self._public_acceptance('restored-public-acceptance.json', evidence['checksSha256'], pair)
-        return digest
+        return evidence['checksSha256'], digest
 
     def verify_public_failure(self, packet, approval, snapshot):
-        return self._public('public-failure.json', packet, approval, snapshot, approval['newPair'], 'failed')
+        pair = approval['newPair']
+        expected, digest = self._public_record('public-failure.json', packet, approval, snapshot, pair, 'failed')
+        witness, actual = self._record(self.batch['directory'] / 'failed-public-acceptance.json')
+        require(actual == expected, 'Public failure witness does not match the independent evidence digest')
+        self.public.validate_failure(witness, pair)
+        return digest
 
     def verify_public_restoration(self, packet, approval, snapshot):
-        return self._public('public-restored.json', packet, approval, snapshot, approval['oldPair'], 'passed')
+        pair = approval['oldPair']
+        expected, digest = self._public_record('public-restored.json', packet, approval, snapshot, pair, 'passed')
+        self._public_acceptance('restored-public-acceptance.json', expected, pair)
+        return digest
 
 
-def open_authority(*, core, tools, read, trusted, root):
-    return Authority(core=core, tools=tools, read=read, trusted=trusted, root=root)
+def open_authority(*, core, tools, public, read, trusted, root):
+    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root)

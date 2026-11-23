@@ -1,9 +1,10 @@
 import hashlib
 import importlib.util
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import core
 import ordinary
@@ -20,6 +21,8 @@ def load(name, path):
 HERE = Path(__file__).resolve().parent
 authority = load('test_host_authority', HERE / 'ordinary-authority.py')
 receipt = load('test_backend_receipt', HERE.parent / 'backend/receipt.py')
+with patch.object(sys, 'path', [str(HERE.parent), *sys.path]):
+    import github_pair_public as public_checks
 
 
 class AuthorityTest(unittest.TestCase):
@@ -33,8 +36,8 @@ class AuthorityTest(unittest.TestCase):
         self.trusted = Mock()
         self.put(authority.CONFIG, dict(schemaVersion=1, signerPolicy={'repositoryId': 15}, mergePolicy={},
                                          attestationDigests={}))
-        self.driver = authority.Authority(core=core, tools=SimpleNamespace(receipt=receipt), read=self.read,
-                                          trusted=self.trusted, root=Path('unused'), clock=lambda: self.now)
+        self.driver = authority.Authority(core=core, tools=SimpleNamespace(receipt=receipt), public=public_checks,
+                                          read=self.read, trusted=self.trusted, root=Path('unused'), clock=lambda: self.now)
         self.directory = authority.EVIDENCE / '1-2'
         self.authorization = authority.AUTHORIZATIONS / '1-2.json'
         self.lifecycle = {field: 'e' * 64 for field in authority.LIFECYCLE}
@@ -161,3 +164,29 @@ class AuthorityTest(unittest.TestCase):
         self.put(filename, self.public(self.approval['newPair']))
         with self.assertRaisesRegex(ValueError, 'public readiness'):
             self.driver.verify_public_restoration(self.packet, self.approval, snapshot)
+
+    def test_public_failure_requires_hash_linked_response_for_the_exact_opened_pair(self):
+        self.authorize()
+        pair = self.approval['newPair']
+        snapshot = dict(pair, process={'pid': 303})
+        filename = self.directory / 'failed-public-acceptance.json'
+        witness = public_checks.capture_failure(pair['backend'], fetch=lambda _: (503, 'text/html', 'no-store', b''))
+
+        def bind_witness(checks):
+            return self.evidence('public-failure.json', 'zimage-ordinary-public-v1', pair=pair,
+                                 snapshotSha256=core.digest(snapshot), status='failed', checksSha256=checks)
+
+        expected = bind_witness(core.digest(witness))
+        with self.assertRaises(FileNotFoundError):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)
+        self.put(filename, witness)
+        self.assertEqual(self.driver.verify_public_failure(self.packet, self.approval, snapshot), expected)
+        with self.assertRaisesRegex(ValueError, 'live pair'):
+            self.driver.verify_public_failure(self.packet, self.approval, dict(snapshot, process={'pid': 304}))
+        witness['check']['status'] = 200
+        tampered_digest = self.put(filename, witness)
+        with self.assertRaisesRegex(ValueError, 'digest'):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)
+        bind_witness(tampered_digest)
+        with self.assertRaisesRegex(ValueError, 'contradicts'):
+            self.driver.verify_public_failure(self.packet, self.approval, snapshot)

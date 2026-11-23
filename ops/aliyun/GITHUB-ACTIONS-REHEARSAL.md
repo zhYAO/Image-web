@@ -178,8 +178,16 @@ protected run, artifact name, namespace and signing identity checks.
   frontend generation, and independently observed public failure. Under the
   same deploy lock it records intent before restoring the retained pair or
   reopening traffic. The SSH client checks the publication receipt against
-  the exact stage bytes and local failure observation before requesting restoration, and
-  checks that the reply binds the exact original release and rollback pair.
+  the exact stage bytes and local failure observation before requesting
+  restoration, and checks that the reply binds the exact original release
+  and rollback pair.
+  The independent observer can collect a witness with `github_pair_public.py
+  --capture-failure` for the exact candidate SHA. It records the failed route
+  check, HTTP metadata, and a bounded response-body digest. Probe errors that
+  yield no usable HTTP response do not produce a witness. The installed
+  authority requires the actual `failed-public-acceptance.json` bytes and
+  verifies their digest in `public-failure.json`, tied to the live process and
+  generation. Only the independent observer may supply these host records.
   The journal exposes a restoration receipt only after authenticated checks
   and an independent public check of the restored pair. An interrupted
   restoration blocks the next writer. The review-only Linux workflow tests
