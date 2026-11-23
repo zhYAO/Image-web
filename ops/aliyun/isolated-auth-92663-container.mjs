@@ -195,6 +195,9 @@ async function run(args) {
   const observation = process.env.ZIMAGE_ISOLATED_OBSERVATION_MODE ?? 'diagnostic';
   require(observation === 'diagnostic' || (observation === 'protected-measurement' && args.length === 9),
     'Protected observation requires reconstructed isolated baseline');
+  const diagnosticTeardown = process.env.ZIMAGE_DIAGNOSTIC_TEARDOWN ?? '0';
+  require(diagnosticTeardown === '0' || (diagnosticTeardown === '1' && observation === 'diagnostic'),
+    'Invalid diagnostic teardown mode');
   const selected = (args.length === 8 || args.length === 9) && args[3] === '--protected-main-shadow';
   require(process.platform === 'linux' && process.versions.node === '24.19.0' && selected && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN, 'Invalid isolated proof invocation');
   const paths = [...args.slice(0, 3), args[4], args[5], args[6]];
@@ -258,7 +261,7 @@ async function run(args) {
   const cliEnv = { ...localEnvironment, HOME: scratch, XDG_CONFIG_HOME: scratch, SUPABASE_TELEMETRY_DISABLED: '1' };
   let stackAttempted = false;
   let appProc, failed = false;
-  const protectedMode = observation === 'protected-measurement';
+  const strictTeardown = observation === 'protected-measurement' || diagnosticTeardown === '1';
   const dockerCleanup = args => spawnSync('/usr/bin/docker', args, {
     cwd: project, env: localEnvironment, timeout: 10_000, killSignal: 'SIGKILL', maxBuffer: 1024,
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
@@ -306,7 +309,7 @@ async function run(args) {
         '--env', 'ZIMAGE_STATIC_ASSET_SHA256=' + baseline.digest,
       ] : [];
       appProc = spawn('/usr/bin/docker', ['run', '--rm', '--pull=never', '--platform=linux/amd64',
-        '--name', id, ...(protectedMode ? ['--label', 'org.zimage.fixture-owner=' + id] : []), '--network', networkId, '--ip', '172.31.219.2', '--add-host', 'zimage-fixture-gateway:172.31.219.1',
+        '--name', id, ...(strictTeardown ? ['--label', 'org.zimage.fixture-owner=' + id] : []), '--network', networkId, '--ip', '172.31.219.2', '--add-host', 'zimage-fixture-gateway:172.31.219.1',
         '--user=65532:65532', '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--read-only',
         '--pids-limit', '96', '--memory', '1024m', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
         '--mount', 'type=bind,src=' + selectedApp + ',dst=/candidate,readonly,bind-recursive=disabled',
@@ -340,7 +343,7 @@ async function run(args) {
     const switchIsolatedBackend = async (target) => {
       require(baseline && (target === oldSha || target === commit), 'Unexpected isolated switch target');
       const prior = appProc;
-      if (protectedMode) removeOwnedContainer(id, dockerCleanup);
+      if (strictTeardown) removeOwnedContainer(id, dockerCleanup);
       else command('/usr/bin/docker', ['rm','-f',id], project, localEnvironment, 20_000, 'Stop exact isolated fixture process');
       for (let i = 0; i < 20 && prior.exitCode === null && prior.signalCode === null; i++) await delay(100);
       require(prior.exitCode !== null || prior.signalCode !== null, 'Old fixture process still exists');
@@ -359,7 +362,7 @@ async function run(args) {
     throw error;
   } finally {
     let containerCleanupError;
-    if (protectedMode && appProc) {
+    if (strictTeardown && appProc) {
       if (appProc.exitCode === null && appProc.signalCode === null) appProc.kill('SIGKILL');
       for (let i = 0; i < 20 && appProc.exitCode === null && appProc.signalCode === null && appProc.pid; i++) await delay(100);
       try {
@@ -374,14 +377,14 @@ async function run(args) {
       if (appProc.exitCode === null) appProc.kill('SIGTERM');
     }
     try {
-      if (stackAttempted) command(cli, ['stop', '--no-backup', '--workdir', scratch], project, cliEnv, 120_000, 'Disposable Supabase cleanup', protectedMode ? 'SIGKILL' : 'SIGTERM');
+      if (stackAttempted) command(cli, ['stop', '--no-backup', '--workdir', scratch], project, cliEnv, 120_000, 'Disposable Supabase cleanup', strictTeardown ? 'SIGKILL' : 'SIGTERM');
     } catch (error) {
       if (!failed) throw error;
       console.error('Disposable Supabase cleanup also failed');
     } finally { await rm(scratch, { recursive: true, force: true }); }
     if (containerCleanupError) {
       if (!failed) throw containerCleanupError;
-      console.error('Protected Docker teardown also failed');
+      console.error('Strict Docker teardown also failed');
     }
   }
 }

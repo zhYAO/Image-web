@@ -4,6 +4,9 @@ set -euo pipefail
 umask 077
 root=$(pwd -P)
 mode=diagnostic
+strict_teardown=0
+teardown_marker='Diagnostic host teardown verified.'
+[[ ${ZIMAGE_DIAGNOSTIC_TEARDOWN:-0} =~ ^[01]$ ]] || exit 1
 [[ ${RUNNER_ENVIRONMENT:-} == github-hosted && ${RUNNER_OS:-} == Linux && "$(uname -m)" == x86_64 &&
    -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} && -z ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-} &&
    -z ${ACTIONS_RUNTIME_TOKEN:-} && "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.35' &&
@@ -14,9 +17,16 @@ if [[ $# == 0 ]]; then
      ${GITHUB_REF:-} == "$ref" && ${GITHUB_WORKFLOW_REF:-} == "zhYAO/Image-web/.github/workflows/protected-stage-netproof.yml@$ref" &&
      "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || exit 1
   [[ ${ZIMAGE_FROZEN_BASELINE:-0} != 1 || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]] || exit 1
+  if [[ ${ZIMAGE_DIAGNOSTIC_TEARDOWN:-0} == 1 ]]; then
+    [[ ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]] || { echo 'Diagnostic teardown requires the signed frozen candidate.' >&2; exit 1; }
+    strict_teardown=1
+  fi
 else
   [[ "$#" == 4 && "$1" == --prepared-protected-shadow ]] || exit 1
+  [[ ${ZIMAGE_DIAGNOSTIC_TEARDOWN:-0} == 0 ]] || exit 1
   mode=protected-measurement
+  strict_teardown=1
+  teardown_marker='Protected host teardown verified.'
   prepared=$2
   trusted_commit=$3
   tools_sha=$4
@@ -119,7 +129,7 @@ protected_cleanup() {
 cleanup() {
   status=$?
   set +e
-  if [[ "$mode" == protected-measurement ]]; then
+  if [[ "$strict_teardown" == 1 ]]; then
     teardown=0
     protected_cleanup || teardown=1
     # Read the host observation before removing its private scratch; publish it
@@ -130,11 +140,11 @@ cleanup() {
     fi
     timeout -k 2s 15s rm -rf -- "$scratch" || teardown=1
     if [[ "$teardown" != 0 ]]; then
-      echo 'Protected host teardown unverified; suppressing observation.' >&2
+      echo 'Strict host teardown unverified; suppressing observation.' >&2
       exit 1
     fi
     if [[ "$status" == 0 ]]; then
-      echo 'Protected host teardown verified.' || exit 1
+      printf '%s\n' "$teardown_marker" || exit 1
       printf '%s\n' "$observation" || exit 1
     fi
     exit "$status"
@@ -214,7 +224,7 @@ if [[ "$mode" == protected-measurement || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]];
   # Never reuse Supabase API or database ports for the mock. Only restart
   # the owned diagnostic gateway to switch its fixed upstream; keep TLS,
   # exact bridge, firewall and container isolation unchanged.
-  if [[ "$mode" == protected-measurement ]]; then
+  if [[ "$strict_teardown" == 1 ]]; then
     stop_protected_child "$mock" || exit 1; mock=''
     stop_protected_child "$tripwire" || exit 1; tripwire=''
     stop_protected_child "$gateway" || exit 1; gateway=''
@@ -297,9 +307,9 @@ PY_COMMIT
     echo 'Unattested protected shadow observation only; not release evidence.'
   fi
   exec 3>&1
-  if [[ "$mode" == protected-measurement ]]; then exec 3>"$scratch/browser-observation.json"; fi
+  if [[ "$strict_teardown" == 1 ]]; then exec 3>"$scratch/browser-observation.json"; fi
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
-    ZIMAGE_ISOLATED_OBSERVATION_MODE="$mode" ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+    ZIMAGE_ISOLATED_OBSERVATION_MODE="$mode" ZIMAGE_DIAGNOSTIC_TEARDOWN="${ZIMAGE_DIAGNOSTIC_TEARDOWN:-0}" ZIMAGE_TRUSTED_ARCHIVE_COMMIT="$trusted_commit" PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
     node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$prepared/app" "$prepared/web" \
       --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}" >&3 3>&-
   exec 3>&-
