@@ -31,7 +31,8 @@ class Transport:
         self.hosts, self.connect = frozenset(object_hosts), connect
         self.report = ROOT + '/actions/artifacts/' + str(ids['report'])
         run_path = f'{ROOT}/actions/runs/{run}/attempts/{attempt}'
-        self.json_paths = {ROOT+'/branches/main', run_path, run_path+'/jobs?per_page=100'} | {
+        self.json_paths = {ROOT+'/branches/main', ROOT+'/actions/workflows/rehearsal-candidates.yml',
+                           run_path, run_path+'/jobs?per_page=100'} | {
             ROOT+'/actions/artifacts/'+str(i) for i in ids.values()}
         self.headers = {'Authorization':'Bearer '+token, 'Accept':'application/vnd.github+json',
                         'X-GitHub-Api-Version':'2022-11-28',

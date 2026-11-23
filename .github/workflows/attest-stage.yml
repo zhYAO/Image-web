@@ -1,0 +1,72 @@
+name: ZImage isolated pair signer
+
+on:
+  workflow_call:
+    inputs:
+      backend-id:
+        required: true
+        type: string
+      frontend-id:
+        required: true
+        type: string
+      report-id:
+        required: true
+        type: string
+    outputs:
+      artifact-id:
+        value: ${{ jobs.sign.outputs.artifact-id }}
+
+permissions: {}
+
+jobs:
+  sign:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      artifact-id: ${{ steps.handoff.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+      - name: Verify independent same-attempt metadata and isolated stage report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BACKEND_ID: ${{ inputs.backend-id }}
+          FRONTEND_ID: ${{ inputs.frontend-id }}
+          REPORT_ID: ${{ inputs.report-id }}
+          SIGNER_SHA: ${{ job.workflow_sha }}
+          OBJECT_HOSTS: ${{ vars.ZIMAGE_ARTIFACT_OBJECT_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$SIGNER_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SIGNER_SHA"
+          /usr/bin/python3 -E -s -B ops/aliyun/github_shadow_sign.py
+      - name: Attest the verified pair statement
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/zimage-attestation/stage.json
+          show-summary: false
+      - name: Preserve the exact signed subject and verification bundle
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          install -m 0600 -- "$BUNDLE_PATH" "$RUNNER_TEMP/zimage-attestation/stage.bundle.jsonl"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: handoff
+        with:
+          name: stage-attestation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/zimage-attestation/stage.json
+            ${{ runner.temp }}/zimage-attestation/stage.bundle.jsonl
+          if-no-files-found: error
+          retention-days: 14
