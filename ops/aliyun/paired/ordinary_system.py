@@ -70,6 +70,10 @@ class OrdinarySystem:
         require(old_frontend['artifactId'] == p['oldFrontendArtifact'] and old_frontend['sourceSHA'] == old_backend
                 and self.system.pub.checked_meta(old_frontend) == old_backend,
                 'Retained frontend and live rollback backend differ')
+        retained_backend_digest = self.system.raw(retained / '.manifest-sha256', 128).decode('ascii').strip()
+        retained_frontend_digest = self.system.c.digest(old_frontend)
+        self.system.c.hexid(retained_backend_digest)
+        self.system.c.hexid(retained_frontend_digest)
         self.authority.verify_baseline(initial, approval)
         frontend = self.authority.prepare(self.request, self.evidence, packet, approval)
         require((frontend['archiveSha256'], frontend['manifestSha256'], frontend['candidateSha256'],
@@ -79,14 +83,17 @@ class OrdinarySystem:
                 'Prepared frontend differs from the independent approval')
         self.system.validate_backend(packet['commit'], packet['backendManifestSha256'])
         require(initial == self.system.snapshot(), 'Live baseline changed while preparing the signed pair')
-        self.record = dict(operationId=approval['operation'], initial=deepcopy(initial), migrationNonce=None)
+        self.record = dict(operationId=approval['operation'], initial=deepcopy(initial), migrationNonce=None,
+                           retained=dict(backendManifestSha256=retained_backend_digest,
+                                         frontendManifestSha256=retained_frontend_digest,
+                                         frontendArtifact=old_frontend['artifactId']))
         self.frontend_approval = deepcopy(frontend)
 
     def journal(self, event):
         phase = event['phase']
         evidence = None
         if phase == 'seal-intent':
-            evidence = {'initial': self.record['initial']}
+            evidence = {'initial': self.record['initial'], 'retained': self.record['retained']}
         elif phase == 'writes-may-open':
             evidence = {'process': self.record['candidateProcess'], 'pairSequence': self.record['pairSequence']}
         self.gate.journal(event, evidence=evidence)

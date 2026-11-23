@@ -134,6 +134,15 @@ protected run, artifact name, namespace and signing identity checks.
   deployment receipt digest. Even if the previous pair is visible again,
   the result stays unverified until a root-controlled restoration receipt
   proves the recovery. This observation issues no restore command.
+- `paired/ordinary_restore.py` is the host-side restoration routine. It
+  requires an independently verified public failure for an exact completed
+  operation. Under the same deploy lock, it matches the published PID and
+  frontend generation and reuses the fenced writer to restore the retained
+  pair. It records intent before changing pointers or reopening traffic.
+  The journal exposes a restoration receipt only after authenticated checks
+  and an independent public check of the restored pair. An interrupted
+  restoration blocks the next writer. The review-only Linux workflow tests
+  this journal and its lock without accessing ECS.
 
 The review-branch implementation contains the workflow, receiver admission,
 fixed SSH invocation and lifecycle adaptation. The fixed root command,

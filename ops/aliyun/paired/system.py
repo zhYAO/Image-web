@@ -279,14 +279,26 @@ class SystemOps:
 
     def complete(self,record,*,recovery):
         if recovery:return
+        self.finish_frontend(record, remember_previous=True)
+
+    def finish_frontend(self,record,*,remember_previous):
         self.exact_process(record['candidateProcess'])
         if self.backend.current()!=self.p['newBackend'] or self.pub.current()!=self.p['newFrontend']:raise ValueError('Pair drift during completion')
         path=self.paths.root/'frontend/journal'/(record['operationId']+'.json')
         frontend_record=self.pub.read_json(path)
         if frontend_record['sequence']!=record['pairSequence'] or frontend_record['state']!='checking':raise ValueError('Frontend completion generation drift')
-        self.pub.atomic_pointer('previous',self.p['oldFrontend'])
-        self.backend.previous(self.p['oldBackend'])
+        if remember_previous:
+            self.pub.atomic_pointer('previous',self.p['oldFrontend'])
+            self.backend.previous(self.p['oldBackend'])
         frontend_record['success']=True;self.pub.persist(frontend_record,'committed')
+
+    def reversal(self, operation, retained_manifest):
+        """Use the same fenced pair writer for the exact previous pair."""
+        self.c.hexid(retained_manifest)
+        policy = dict(self.p, operationId=operation, oldBackend=self.p['newBackend'], newBackend=self.p['oldBackend'],
+                      oldFrontend=self.p['newFrontend'], newFrontend=self.p['oldFrontend'],
+                      backendManifestSha256=retained_manifest)
+        return SystemOps(policy, self.c, self.m, paths=self.paths, owner_uid=self.uid, anchor=self.anchor)
 
     def open(self,record,process):
         if record['phase']!='opening' or record['writesMayHaveOpened'] is not True:raise ValueError('Durable opening intent required')

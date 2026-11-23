@@ -29,6 +29,8 @@ class SystemTest(unittest.TestCase):
                              frontendPayloadSha256='5' * 64)
         self.system.snapshot.side_effect = lambda: deepcopy(self.live)
         self.system.paths.root = Path('fixture')
+        self.system.raw.return_value = b'7' * 64
+        self.system.c.digest.return_value = '8' * 64
         self.system.pub.sealed.return_value = dict(artifactId=self.live['frontendArtifact'], sourceSHA=self.live['backend'])
         self.system.pub.checked_meta.return_value = self.live['backend']
         self.system.seal.side_effect = lambda record: self.live.update(ingressMode='sealed', fence=record['operationId'])

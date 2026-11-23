@@ -127,3 +127,59 @@ class TestOrdinaryJournal(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.append(g, 'seal-intent', operation='release-third')
             self.assertEqual({p.name for p in g.operations.iterdir()}, {'release-first', 'release-second'})
+
+    def opened_release(self):
+        operation, digest = 'release-first', 'a' * 64
+        old = dict(backend='b' * 40, frontend='release-' + 'b' * 12)
+        gate = self.gate()
+        with gate.lock():
+            gate.assert_clear(operation)
+            evidence = {'seal-intent': {'initial': old},
+                        'writes-may-open': {'process': {'pid': 9}, 'pairSequence': 10}}
+            for phase in PHASES:
+                gate.journal(dict(operation=operation, rootApprovalSha256=digest, phase=phase),
+                             evidence=evidence.get(phase))
+        return operation, digest, old
+
+    def test_completed_restoration_is_durable_and_rejects_mismatched_receipt(self):
+        operation, digest, old = self.opened_release()
+        restore = 'restore-' + core.digest(dict(operation=operation, approval=digest))[:48]
+        gate = self.gate()
+        with gate.lock():
+            gate.claim_restoration(operation, digest)
+            event = dict(operation=operation, rootApprovalSha256=digest)
+            failure = 'c' * 64
+            gate.journal(dict(event, phase='restore-intent'),
+                         evidence=dict(restorationOperationId=restore, publicFailureSha256=failure))
+            gate.journal(dict(event, phase='restore-open-intent'),
+                         evidence=dict(process={'pid': 11}, pairSequence=11))
+            with self.assertRaisesRegex(ValueError, 'No completed restoration'):
+                gate.restoration_receipt(operation, digest)
+            receipt = dict(schemaVersion=1, kind='zimage-ordinary-restoration-v1', status='restored', operationId=operation,
+                           restorationOperationId=restore, commit='d' * 40, runId=1, attempt=1,
+                           rootApprovalSha256=digest, restoredPair=old, rollbackAcceptanceSha256='e' * 64,
+                           publicFailureSha256=failure, publicRestorationSha256='f' * 64)
+            with self.assertRaisesRegex(ValueError, 'failed release'):
+                gate.journal(dict(event, phase='restored'), evidence=dict(receipt, publicFailureSha256='0' * 64))
+            gate.journal(dict(event, phase='restored'), evidence=receipt)
+        reopened = self.gate()
+        with reopened.lock():
+            self.assertEqual(reopened.restoration_receipt(operation, digest), receipt)
+            with self.assertRaisesRegex(ValueError, 'eligible for restoration'):
+                reopened.claim_restoration(operation, digest)
+            reopened.assert_clear('release-second')
+
+    def test_interrupted_restoration_blocks_next_writer_and_reports_no_receipt(self):
+        operation, digest, _ = self.opened_release()
+        gate = self.gate()
+        with gate.lock():
+            gate.claim_restoration(operation, digest)
+            gate.journal(dict(operation=operation, rootApprovalSha256=digest, phase='restore-intent'),
+                         evidence=dict(restorationOperationId='restore-' + core.digest(dict(operation=operation, approval=digest))[:48],
+                                       publicFailureSha256='c' * 64))
+        reopened = self.gate()
+        with reopened.lock():
+            with self.assertRaisesRegex(ValueError, 'reconcile'):
+                reopened.assert_clear('release-second')
+            with self.assertRaisesRegex(ValueError, 'No completed restoration'):
+                reopened.restoration_receipt(operation, digest)
