@@ -39,6 +39,8 @@ def script():
     return (b"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\n"
             b"SET LOCAL statement_timeout = '5s';\nSET LOCAL lock_timeout = '1s';\n"
             b"SET LOCAL search_path = pg_catalog;\n"
+            b"SELECT to_regclass('private.chat_usage_settings') IS NOT NULL AS m6_present \\gset\n"
+            b"\\if :m6_present\nSELECT '{\"m6Present\":true}'::jsonb;\n\\else\n"
             b"SELECT jsonb_build_object('role', current_user, 'sessionRole', session_user, "
             b"'readOnly', current_setting('transaction_read_only') = 'on', "
             b"'repeatableRead', current_setting('transaction_isolation') = 'repeatable read', "
@@ -51,7 +53,7 @@ def script():
             b"WHERE n.nspname IN ('public', 'private', 'supabase_migrations') AND c.relkind IN ('r','p','v','m','f') "
             b"AND (has_table_privilege(c.oid, 'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') "
             b"OR has_any_column_privilege(c.oid, 'INSERT,UPDATE'))), "
-            b"'snapshot', measured.snapshot) FROM (\n" + body + b"\n) AS measured;\nROLLBACK;\n")
+            b"'snapshot', measured.snapshot) FROM (\n" + body + b"\n) AS measured;\n\\endif\nROLLBACK;\n")
 
 
 def parse_unique(pairs):
@@ -83,6 +85,7 @@ def measure(psql, connection, *, mode, operation, packet_sha256, expected_contra
     require(result.returncode == 0 and 0 < len(result.stdout) <= 1_048_576,
             'Read-only database observer query refused')
     observed = json.loads(result.stdout, object_pairs_hook=parse_unique)
+    require(observed != {'m6Present': True}, 'The reviewed M5 contract requires M6 absent')
     require(type(observed) is dict and set(observed) == {'role', 'sessionRole', 'readOnly', 'repeatableRead',
                                                         'privileged', 'snapshot'}
             and observed['role'] == observed['sessionRole'] == ROLE and observed['readOnly'] is True
