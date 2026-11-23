@@ -274,11 +274,15 @@ identity for this protocol. For the ECS readiness test, run the committed
 as the same UID and in the same network context as the planned receiver.
 For the observed draft head `48900922262c256af1132cc3c773b9c4b0a6f9f0`,
 run `45124137190` returned check `137524481164` and main `a3f43a6a43a7…`
-through the existing D1M GitHub session. The target probe must return the
-same check and run for that head and `releaseAuthority: false`. A later
-release still requires the actual protected merge, rule-suite execution and
-the original same-attempt artifact signature checks on ECS. The probe
-makes no production changes.
+through eight real GitHub reads carried by a temporary mutual TLS listener
+bound to D1M loopback. The probe also verified ruleset `27873546`, its
+effective protections, rule-suite list readability and the exact check workflow
+bytes at that head. The observed main rule-suite list was empty. The test
+used the existing D1M GitHub CLI session behind the listener. It established
+the read and framing behavior in D1M. The target probe must return the same
+check and run for that head and `releaseAuthority: false`. A later release
+still requires the actual protected merge, rule-suite execution and the
+original same-attempt artifact signature checks on ECS.
 
 ## Fixed review-branch diagnostic, without merging main
 

@@ -84,6 +84,16 @@ def single(collection, key):
     return values[0]
 
 
+def check_workflow_digest(get, commit):
+    require(type(commit) is str and re.fullmatch(SHA, commit))
+    file = get(f'{BASE}/contents/{CHECK_WORKFLOW}?ref={commit}')
+    require(file['type'] == 'file' and file['path'] == CHECK_WORKFLOW and file['encoding'] == 'base64'
+            and type(file['size']) is int and 0 < file['size'] <= 65536)
+    workflow = base64.b64decode(''.join(file['content'].splitlines()), validate=True)
+    require(len(workflow) == file['size'])
+    return hashlib.sha256(workflow).hexdigest()
+
+
 def observe(packet, *, get, policy, verify_check):
     """Discover GitHub identities from the admitted commit. The SSH caller selects none."""
     require(packet['repository'] == policy['repository'] == 'zhYAO/Image-web' and packet['workflow'] == WORKFLOW
@@ -119,11 +129,7 @@ def observe(packet, *, get, policy, verify_check):
     require(run['head_sha'] == head and run['check_suite_id'] == suite_id)
     run_id = numeric(run['id'])
 
-    file = read(f'/contents/{CHECK_WORKFLOW}?ref={commit}')
-    require(file['type'] == 'file' and file['path'] == CHECK_WORKFLOW and file['encoding'] == 'base64'
-            and type(file['size']) is int and 0 < file['size'] <= 65536)
-    workflow = base64.b64decode(''.join(file['content'].splitlines()), validate=True)
-    require(len(workflow) == file['size'] and hashlib.sha256(workflow).hexdigest() == expected_workflow)
+    require(check_workflow_digest(get, commit) == expected_workflow)
 
     rules = read(f'/rulesets/{RULESET_ID}')
     require(rules['id'] == RULESET_ID and rules['enforcement'] == 'active' and rules['bypass_actors'] == [])

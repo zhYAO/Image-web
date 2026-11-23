@@ -97,8 +97,24 @@ def probe(get, *, head, run_id):
     github.require(job['run_id'] == run_id and job['run_attempt'] == attempt and job['head_sha'] == head
                    and job['status'] == 'completed' and job['conclusion'] == 'success'
                    and job['check_run_url'] == f'https://api.github.com{github.BASE}/check-runs/{check_id}')
+    rules = get(f'{github.BASE}/rulesets/{github.RULESET_ID}')
+    github.require(rules['id'] == github.RULESET_ID and rules['target'] == 'branch' and rules['enforcement'] == 'active'
+                   and rules['bypass_actors'] == [])
+    effective = get(github.BASE + '/rules/branches/main')
+    github.require(type(effective) is list and len(effective) < 100)
+    active = [rule for rule in effective if rule.get('ruleset_id') == github.RULESET_ID]
+    for name in ('pull_request', 'deletion', 'non_fast_forward', 'required_status_checks'):
+        github.require(sum(rule['type'] == name for rule in active) == 1)
+    required = next(rule['parameters'] for rule in active if rule['type'] == 'required_status_checks')
+    github.require(required['strict_required_status_checks_policy'] is True and
+                   dict(context=github.CHECK_NAME, integration_id=github.CHECK_APP_ID) in required['required_status_checks'])
+    suites = get(github.BASE + github.SUITES)
+    github.require(type(suites) is list and len(suites) <= 100 and
+                   all(type(row) is dict and row.get('ref') == github.MAIN_REF for row in suites))
+    workflow = github.check_workflow_digest(get, head)
     return dict(schemaVersion=1, protectedMain=main['commit']['sha'], checkedHead=head, checkRunId=check_id,
-                actionsRunId=run_id, releaseAuthority=False)
+                actionsRunId=run_id, rulesetId=github.RULESET_ID, mainRuleSuiteCount=len(suites),
+                checkWorkflowSha256=workflow, releaseAuthority=False)
 
 
 def main():

@@ -1,3 +1,4 @@
+import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -153,3 +154,42 @@ class ObserverTransportTest(unittest.TestCase):
             with self.subTest(query=query), self.assertRaises(ValueError):
                 relay.answer(query, get)
         get.assert_not_called()
+
+    def test_github_probe_requires_rule_history_and_exact_workflow_bytes(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github as gh
+            import ordinary_github_relay as relay
+
+        head, run_id, check_id, suite_id = 'a' * 40, 25, 26, 27
+        workflow = b'name: fixture\n'
+        effective = [dict(type=name, ruleset_id=gh.RULESET_ID) for name in ('pull_request', 'deletion', 'non_fast_forward')]
+        effective.append(dict(type='required_status_checks', ruleset_id=gh.RULESET_ID,
+                         parameters=dict(strict_required_status_checks_policy=True,
+                                         required_status_checks=[dict(context=gh.CHECK_NAME, integration_id=gh.CHECK_APP_ID)])))
+        records = {
+            '/branches/main': dict(name='main', protected=True, commit={'sha': 'b' * 40}),
+            f'/commits/{head}{gh.CHECK_QUERY}': dict(total_count=1, check_runs=[dict(id=check_id, name=gh.CHECK_NAME,
+                app={'id': gh.CHECK_APP_ID}, head_sha=head, status='completed', conclusion='success', check_suite={'id': suite_id})]),
+            f'/actions/runs/{run_id}': dict(id=run_id, path=gh.CHECK_WORKFLOW, head_sha=head, event='pull_request',
+                repository={'id': gh.REPO_ID}, status='completed', conclusion='success', check_suite_id=suite_id, run_attempt=1),
+            f'/actions/runs/{run_id}/attempts/1/jobs?per_page=100': dict(total_count=1, jobs=[dict(name=gh.CHECK_NAME,
+                run_id=run_id, run_attempt=1, head_sha=head, status='completed', conclusion='success',
+                check_run_url=f'https://api.github.com{gh.BASE}/check-runs/{check_id}')]),
+            f'/rulesets/{gh.RULESET_ID}': dict(id=gh.RULESET_ID, target='branch', enforcement='active', bypass_actors=[]),
+            '/rules/branches/main': effective,
+            gh.SUITES: [],
+            f'/contents/{gh.CHECK_WORKFLOW}?ref={head}': dict(type='file', path=gh.CHECK_WORKFLOW,
+                encoding='base64', size=len(workflow), content=base64.b64encode(workflow).decode()),
+        }
+
+        def get(path):
+            self.assertTrue(gh.safe_path(path))
+            return records[path.removeprefix(gh.BASE)]
+
+        result = relay.probe(get, head=head, run_id=run_id)
+        self.assertEqual(result['checkWorkflowSha256'], hashlib.sha256(workflow).hexdigest())
+        self.assertEqual(result['mainRuleSuiteCount'], 0)
+        self.assertIs(result['releaseAuthority'], False)
+        records[gh.SUITES] = [dict(ref='refs/heads/unrelated')]
+        with self.assertRaises(ValueError):
+            relay.probe(get, head=head, run_id=run_id)
