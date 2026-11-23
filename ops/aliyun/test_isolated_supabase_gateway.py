@@ -87,6 +87,22 @@ class Access(unittest.TestCase):
             with self.assertRaises(ssl.SSLCertVerificationError):
                 client.request('GET', '/auth/v1/user')
 
+    def test_session_rpc_is_forwarded_without_opening_other_routes(self):
+        port = self.setup_gateway()
+        endpoint = '/rest/v1/rpc/require_verified_user_id'
+        with patch.object(gateway, 'HTTPConnection') as connect:
+            response = connect.return_value.getresponse.return_value
+            response.status = 401
+            response.read.return_value = b'{}'
+            response.getheader.return_value = 'application/json'
+            self.assertEqual(self.request(port, 'POST', endpoint, body=b'{}')[0], 401)
+            connect.assert_called_once_with('127.0.0.1', 54321, timeout=5)
+            self.assertEqual(connect.return_value.request.call_args.args, ('POST', endpoint))
+            for method, target in (('GET', endpoint), ('POST', endpoint + '?select=*'),
+                                   ('POST', endpoint + '_extra'), ('POST', '/rest/v1/rpc/request_account_deletion')):
+                self.assertEqual(self.request(port, method, target)[0], 403)
+            self.assertEqual(connect.call_count, 1)
+
     def test_query_contract(self):
         route = '/rest/v1/account_profiles'
         self.assertTrue(gateway.allowed('GET', route + '?select=display_name%2Cstatus&user_id=eq.00000000-0000-4000-8000-000000000000'))

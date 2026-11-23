@@ -107,7 +107,13 @@ http {
     const homeMeta = await readJson('/api/meta');
     check(homeMeta.ok && homeMeta.body?.backendRelease === commit, stage);
     stage = 'Browser guest session failed';
-    check((await session()).status === 401, stage);
+    {
+      const result = await session();
+      if (result.status !== 401 && Number.isInteger(result.status) && result.status >= 100 && result.status <= 599) {
+        stage += ' (HTTP ' + result.status + ')';
+      }
+      check(result.status === 401, stage);
+    }
     stage = 'Browser guest workspace link not visible';
     const guestTarget = '/login?returnTo=%2Fworkspace';
     const guest = cta(guestTarget);
@@ -205,7 +211,13 @@ http {
     ]);
     check(logout.ok(), stage);
     await page.waitForURL(origin + '/home');
-    check((await session()).status === 401, stage);
+    {
+      const result = await session();
+      if (result.status !== 401 && Number.isInteger(result.status) && result.status >= 100 && result.status <= 599) {
+        stage += ' (HTTP ' + result.status + ')';
+      }
+      check(result.status === 401, stage);
+    }
     await cta(guestTarget).waitFor();
   } catch {
     throw new Error(stage);

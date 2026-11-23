@@ -21,6 +21,7 @@ ROUTES = {
     ('POST', '/auth/v1/logout'): ('scope', {'local'}),
     ('GET', '/auth/v1/user'): None,
     ('GET', '/rest/v1/account_profiles'): 'profile',
+    ('POST', '/rest/v1/rpc/require_verified_user_id'): None,
     ('POST', '/rest/v1/rpc/consume_auth_rate_limit'): None,
     ('POST', '/rest/v1/rpc/list_sessions_with_activity'): None,
 }
