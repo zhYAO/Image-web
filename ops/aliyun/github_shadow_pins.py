@@ -13,7 +13,7 @@ def require(value):
         raise ValueError("Independent GitHub shadow policy rejected")
 
 
-def pins(*, policy, release, run, jobs):
+def pins(*, policy, release, run, jobs, publishing=False):
     """release is locally measured digests + admitted SHA, never statement data."""
     repo = 'zhYAO/Image-web'
     require(type(policy['repositoryId']) is type(policy['workflowId']) is int
@@ -37,7 +37,10 @@ def pins(*, policy, release, run, jobs):
             and run['head_sha'] == release['sourceSHA'])
     for source in (run['repository'], run['head_repository']):
         require(source['id'] == policy['repositoryId'] and source['full_name'] == repo)
-    require(run['status'] == 'completed' and run['conclusion'] == 'success')
+    if publishing:
+        require(run['status'] == 'in_progress' and run['conclusion'] is None)
+    else:
+        require(run['status'] == 'completed' and run['conclusion'] == 'success')
     started = run['run_started_at']
     require(type(started) is str and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', started))
     epoch = int(datetime.fromisoformat(started[:-1] + '+00:00').timestamp())

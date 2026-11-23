@@ -1,0 +1,9 @@
+#!/bin/sh
+# Root-owned authorized_keys forced command for the production publish key.
+set -eu
+if [ "${SSH_ORIGINAL_COMMAND-}" != zimage-publish-pair-v1 ]; then
+    printf '%s\n' 'Unsupported ZImage publish command' >&2
+    exit 1
+fi
+exec /usr/bin/env -i PATH=/usr/bin:/bin LANG=C \
+    /usr/bin/sudo -n -- /usr/local/libexec/zimage-paired-release/receive-ordinary-pair
