@@ -1,0 +1,187 @@
+name: ZImage no-export two-version loopback rollback diagnostic
+
+on:
+  push:
+    branches: [codex/zimage-noexport-rollback-20261123-e37460b]
+    paths: ['.github/workflows/diagnostic-zimage-noexport-rollback-e37460b.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  no-export-rollback:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-noexport-rollback-20261123-e37460b'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 32
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 532d953cdd8fb4cc2446b83de77f435e13041315
+          path: baseline-source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.19.0
+      - name: Build separate released source and test candidate, then verify a networkless rollback
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$RUNNER_ENVIRONMENT" == github-hosted && "$RUNNER_OS" == Linux && "$GITHUB_REF" == refs/heads/codex/zimage-noexport-rollback-20261123-e37460b ]]
+          [[ "$GITHUB_WORKFLOW_REF" == "zhYAO/Image-web/.github/workflows/diagnostic-zimage-noexport-rollback-e37460b.yml@$GITHUB_REF" ]]
+          [[ "$GITHUB_SHA" == "$(git rev-parse HEAD)" && "$GITHUB_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,7}$ ]]
+          candidate=0dc160b23996c3b417699478c405e2ea4c8fb82e
+          baseline=532d953cdd8fb4cc2446b83de77f435e13041315
+          test "$(git rev-parse HEAD^)" = "$candidate"
+          test "$(git show -s --format=%T "$candidate")" = 'e37460ba535fa74053a58b4f15e46fb4569ab9b6'
+          test "$(git diff --name-only HEAD^ HEAD)" = $'.github/workflows/diagnostic-zimage-noexport-rollback-e37460b.yml\nops/aliyun/diagnostic-isolated-loopback-pair.mjs'
+          test "$(git -C baseline-source rev-parse HEAD)" = "$baseline"
+          test "$(git -C baseline-source show -s --format=%T HEAD)" = '28b22f24828dfbd80f3c0b8664b7eb7b276cb196'
+          [[ ! -e /opt/zimage && ! -L /opt/zimage ]]
+          work=$(mktemp -d "$RUNNER_TEMP/zimage-loopback.XXXXXXXX")
+          image=docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
+          owner="org.zimage.noexport-fixture=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          container_started=0
+          owned_ids() {
+            timeout -k 2s 10s docker ps -aq --no-trunc --filter "label=$owner"
+          }
+          stop_owned() {
+            local ids current
+            ids=$(owned_ids) || return 1
+            if [[ -n "$ids" ]]; then
+              [[ "$ids" =~ ^[a-f0-9]{64}$ ]] || return 1
+              current=$(timeout -k 2s 10s docker inspect --format '{{index .Config.Labels "org.zimage.noexport-fixture"}}' "$ids") || return 1
+              [[ "$current" == "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" ]] || return 1
+              timeout -k 2s 15s docker rm -f "$ids" >/dev/null || return 1
+            fi
+            ids=$(owned_ids) || return 1
+            [[ -z "$ids" ]]
+          }
+          clean() {
+            status=$?
+            trap - EXIT INT TERM
+            set +e
+            if [[ "$container_started" == 1 ]]; then
+              stop_owned || status=1
+            fi
+            rm -rf -- "$work" || status=1
+            [[ "$status" == 0 ]] && printf '%s\n' 'No-export fixture and owned container teardown verified.'
+            exit "$status"
+          }
+          trap clean EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          # The stock assembler binds this cache path. Expose runner scratch
+          # only in our private assembly mount namespace, never the host /opt.
+          mkdir -m 700 -- "$work/cache" "$work/fixture" "$work/home"
+          mkdir -m 700 -- "$work/fixture/candidate" "$work/fixture/baseline"
+          install -m 0555 -- "ops/aliyun/diagnostic-isolated-loopback-pair.mjs" "$work/fixture/diagnostic.mjs"
+          install -m 0555 -- "$(realpath "$(command -v node)")" "$work/fixture/node"
+          printf '%s  %s\n' bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12 "$work/fixture/node" | sha256sum --check --status
+          git -c core.hooksPath=/dev/null clone --local --no-hardlinks --no-checkout -- "$GITHUB_WORKSPACE" "$work/candidate-source"
+          git -c core.hooksPath=/dev/null clone --local --no-hardlinks --no-checkout -- "$GITHUB_WORKSPACE/baseline-source" "$work/baseline-source"
+          git -C "$work/candidate-source" -c core.hooksPath=/dev/null checkout --detach "$candidate"
+          git -C "$work/baseline-source" -c core.hooksPath=/dev/null checkout --detach "$baseline"
+          env -i PATH="$PATH" HOME="$work/home" TMPDIR="$work" COREPACK_HOME="$work/corepack" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
+            bash -s -- "$work" "$candidate" "$baseline" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'BASH'
+          set -euo pipefail
+          work=$1
+          candidate=$2
+          baseline=$3
+          run=$4
+          attempt=$5
+          pool="$work/pnpm-store"
+          build_pair() (
+          name=$1
+          sha=$2
+          root="$work/$name-build"
+          result="$work/fixture/$name"
+          mkdir -m 700 -- "$root" "$root/bin"
+          cd "$work/$name-source"
+          test "$(git rev-parse HEAD)" = "$sha"
+          test -z "$(git status --porcelain)"
+          test "$(node --version)" = v24.19.0
+          test "$(corepack pnpm@11.19.0 --version)" = 11.19.0
+          corepack enable --install-directory "$root/bin" pnpm
+          export PATH="$root/bin:$PATH"
+          test "$(pnpm --version)" = 11.19.0
+          # Exact target shape used by the reviewed Ubuntu 22.04 diagnostic; the
+          # stock checker compares against actual runner glibc/Node/ABI/arch.
+          # The fixed runtime cache path is only metadata here: never create it.
+          printf '%s\n' '{"schema":1,"runtime":{"node":"24.19.0","abi":"137","platform":"linux","arch":"x64","libc":"glibc-2.35"},"toolchain":{"packageManager":"pnpm@11.19.0"},"assemblyCacheRoot":"/opt/zimage/layer-cache"}' > "$root/target.json"
+          printf '%s\n' '{"schemaVersion":1,"formalAuth":true,"dataMode":"http","captchaSiteKey":null,"approvedLegalVersion":null,"registrationEnabled":false}' > "$root/config.json"
+          node ops/aliyun/package-release.mjs --check-target --target "$root/target.json"
+          policy=$(node --input-type=module -e 'import{readPinnedPublicImages}from"./apps/web/build/public-image-build.mjs"; process.stdout.write(readPinnedPublicImages().manifestSha256)')
+          [[ "$policy" =~ ^[a-f0-9]{64}$ ]]
+          export ZIMAGE_PUBLIC_IMAGE_BASE_URL="https://www.zimage.store/static-assets/$policy"
+          pnpm install --frozen-lockfile --store-dir "$pool"
+          NEXT_PUBLIC_DATA_MODE=http NEXT_PUBLIC_PHASE2_AUTH=true ZIMAGE_DEPLOYMENT_ENV=rehearsal \
+            NODE_OPTIONS=--max-old-space-size=4096 ZIMAGE_BUILD_SHA="$sha" ZIMAGE_BUILD_SLIM=1 ZIMAGE_BUILD_CPUS=1 \
+            pnpm --filter @zimage/web exec next build --webpack
+          node ops/aliyun/package-static-assets.mjs --runtime-profile model-only-jsquash --output "$root/resources" > "$root/assets.json"
+          assets=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["versionDirectory"])' "$root/assets.json")
+          node ops/aliyun/package-release.mjs apps/web/.next "$root/backend" --assets "$assets" --release-id "$sha" --target "$root/target.json" > "$root/pack.json"
+          manifest=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pack"]["manifestSha256"])' "$root/pack.json")
+          python3 -I -B ops/aliyun/release-transport.py unpack "$root/backend/transport.tgz" "$root/store" \
+            --release-sha "$sha" --manifest-sha256 "$manifest" > "$root/backend-verified.json"
+          python3 -I -B ops/aliyun/release-transport.py request "$root/store" "$root/store/releases/$sha.json" \
+            --manifest-sha256 "$manifest" > "$root/required.json"
+          export ZIMAGE_ASSET_NAMESPACE="rehearsal-$sha-$run-$attempt"
+          export ZIMAGE_FRONTEND_COMPATIBILITY
+          ZIMAGE_FRONTEND_COMPATIBILITY=$(python3 -c 'import json,sys; print(json.dumps(dict(apiRequirements=dict(major=1,minMinor=0,capabilities=["runtime.public-config.v1","runtime.meta.v1"]),allowedBackendReleases=[sys.argv[1]])))' "$sha")
+          pnpm build:frontend
+          python3 -I -B ops/aliyun/frontend/pack.py --dist apps/frontend/dist --public-config "$root/config.json" --subject-only > "$root/frontend-subject.json"
+          launcher="$root/assemble-only.sh"
+          cat > "$launcher" <<'ASSEMBLE'
+          #!/bin/bash
+          set -euo pipefail
+          mount --make-rprivate /
+          mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /opt
+          mkdir -m 0755 /opt/zimage /opt/zimage/layer-cache
+          mount --bind "$1" /opt/zimage/layer-cache
+          shift
+          [[ "$#" == 10 ]]
+          manifest_arg="${10}"
+          [[ "$manifest_arg" =~ ^[a-f0-9]{64}$ ]]
+          exec /usr/bin/setpriv --reuid "$1" --regid "$2" --clear-groups -- /usr/bin/env -i PATH="$3" HOME="$4" \
+            TMPDIR="$5" LANG=C.UTF-8 /usr/bin/python3 -I -B "$6" assemble "$7" "$8" "$9" \
+            --cache /opt/zimage/layer-cache --manifest-sha256 "$manifest_arg" --allow-sample
+          ASSEMBLE
+          sudo -n /usr/bin/unshare --net --mount --propagation private -- /bin/bash "$launcher" "$work/cache" \
+            "$(id -u)" "$(id -g)" "$PATH" "$HOME" "$TMPDIR" "$(pwd -P)/ops/aliyun/three-layer-release.py" \
+            "$root/store/releases/$sha.json" "$root/store" "$result/app" "$manifest" > "$root/assembly.json"
+          cp -a -- apps/frontend/dist "$result/frontend"
+          python3 -I -B - "$root/backend-verified.json" "$root/frontend-subject.json" "$sha" "$ZIMAGE_ASSET_NAMESPACE" <<'PY'
+          import json, sys
+          from pathlib import Path
+          bk, fe = [json.loads(Path(p).read_bytes()) for p in sys.argv[1:3]]
+          sha, namespace = sys.argv[3:]
+          m = bk['manifest']
+          if not (m['schema'] == 3 and m['releaseId'] == sha and m['productionReady'] is False
+                  and len(bk['provided']) == 7 and fe['namespace'] == namespace
+                  and fe['sourceIdentity']['sourceSHA'] == sha and fe['sourceIdentity']['dirty'] is False
+                  and fe['allowedBackendReleases'] == [sha] and fe['acceptanceRequired'] is True):
+              raise SystemExit('Diagnostic two-component identity mismatch')
+          PY
+          )
+          build_pair candidate "$candidate"
+          build_pair baseline "$baseline"
+          BASH
+          # Select only these verified application inputs, not the workspace,
+          # build HOME, socket, logs, credentials, or Git metadata.
+          find "$work/fixture" "$work/cache" -type d -exec chmod a+rx -- {} +
+          find "$work/fixture" "$work/cache" -type f -exec chmod a+r -- {} +
+          docker pull --platform linux/amd64 "$image" >/dev/null
+          ids=$(owned_ids)
+          [[ -z "$ids" ]]
+          container_started=1
+          timeout -k 5s 150s docker run --rm --pull=never --platform linux/amd64 --label "$owner" \
+            --network none --user 65532:65532 --cap-drop ALL --security-opt no-new-privileges:true --read-only --memory 3g --memory-swap 3g --pids-limit 128 --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,exec,size=2g,mode=1777 \
+            --mount "type=bind,src=$work/fixture,dst=/fixture,readonly,bind-recursive=disabled" \
+            --mount "type=bind,src=$work/cache,dst=/opt/zimage/layer-cache,readonly,bind-recursive=disabled" \
+            --env TMPDIR=/tmp --env "DIAGNOSTIC_RUN_ID=$GITHUB_RUN_ID" --env "DIAGNOSTIC_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
+            "$image" /fixture/node /fixture/diagnostic.mjs --no-export-test-only
