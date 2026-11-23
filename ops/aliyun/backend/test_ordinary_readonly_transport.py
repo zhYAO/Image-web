@@ -2,6 +2,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -193,3 +194,50 @@ class ObserverTransportTest(unittest.TestCase):
         records[gh.SUITES] = [dict(ref='refs/heads/unrelated')]
         with self.assertRaises(ValueError):
             relay.probe(get, head=head, run_id=run_id)
+
+    def test_github_observer_reads_rotated_local_credential_per_allowed_lookup(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github_relay as relay
+
+        token = Path('observer-local-fixture') / 'github.token'
+        path = '/repos/zhYAO/Image-web/branches/main'
+        first, second = Mock(return_value={'generation': 1}), Mock(return_value={'generation': 2})
+        get = relay.observer_reader(token)
+        with patch.object(relay, 'read_private', side_effect=[b'fixture-first\n', b'fixture-second\n',
+                          FileNotFoundError]) as local, patch.object(relay.github, 'read_only', side_effect=[first, second]) as upstream:
+            with self.assertRaises(ValueError):
+                get('/repos/zhYAO/Image-web/actions/secrets')
+            local.assert_not_called()
+            self.assertEqual(get(path), {'generation': 1})
+            self.assertEqual(get(path), {'generation': 2})
+            with self.assertRaises(FileNotFoundError):
+                get(path)
+        self.assertEqual(local.call_count, 3)
+        self.assertEqual([call.args for call in upstream.call_args_list], [('fixture-first',), ('fixture-second',)])
+        first.assert_called_once_with(path)
+        second.assert_called_once_with(path)
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires the POSIX private credential reader')
+    def test_private_token_rotation_uses_current_inode_and_refuses_broader_mode(self):
+        with patch.object(sys, 'path', [str(Path(__file__).resolve().parents[1] / 'paired'), *sys.path]):
+            import ordinary_github_relay as relay
+
+        with tempfile.TemporaryDirectory(prefix='github-observer-identity-fixture-') as temp:
+            token, pending = Path(temp) / 'github.token', Path(temp) / 'next-token'
+
+            def replace(body, mode):
+                pending.write_bytes(body)
+                pending.chmod(mode)
+                pending.replace(token)
+
+            path = '/repos/zhYAO/Image-web/branches/main'
+            get = relay.observer_reader(token)
+            with patch.object(relay.github, 'read_only', return_value=lambda _: {'read': True}) as api:
+                replace(b'fixture-first\n', 0o600)
+                self.assertEqual(get(path), {'read': True})
+                replace(b'fixture-second\n', 0o600)
+                self.assertEqual(get(path), {'read': True})
+                replace(b'fixture-third\n', 0o640)
+                with self.assertRaisesRegex(ValueError, 'Private observer file required'):
+                    get(path)
+            self.assertEqual([call.args for call in api.call_args_list], [('fixture-first',), ('fixture-second',)])

@@ -262,8 +262,14 @@ The observer authenticates the receiver's leaf certificate. The protocol
 accepts only the receiver's existing GitHub evidence paths for `zhYAO/Image-web`.
 It has no forwarding mode, HTTP CONNECT, caller headers or destination URL.
 The observer makes fresh GET requests to `api.github.com` using its own local
-read-only `github.token`. The ECS receiver still evaluates all merge,
-required-check, ruleset-execution and artifact signature evidence. The
+read-only `github.token`. A scoped credential requires repository
+`Administration: read` for the [rule-suite endpoints](https://docs.github.com/en/rest/repos/rule-suites?apiVersion=2022-11-28),
+plus read access to the existing check, workflow, pull-request and contents
+lookups. The observer reads the current private file on every allowed query.
+An independent credential provider can rotate it atomically while the listener
+keeps running. A missing or invalid credential stops the lookup. The ECS
+receiver still evaluates all merge, required-check, ruleset-execution and
+artifact signature evidence. The
 observer is trusted to return the authenticated GitHub responses. A failed
 connection in this mode ends the proof check.
 

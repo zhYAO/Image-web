@@ -74,6 +74,15 @@ def read_private(path, limit):
     return body
 
 
+def observer_reader(token_path):
+    """Use the current local credential for each independently allowed read."""
+    def get(path):
+        github.require(github.safe_path(path))
+        token = read_private(token_path, 1024).decode('ascii').removesuffix('\n')
+        return github.read_only(token)(path)
+    return get
+
+
 def probe(get, *, head, run_id):
     """Confirm the protected-main and required-check read paths without authorizing a release."""
     github.require(type(head) is str and re.fullmatch(github.SHA, head))
@@ -134,9 +143,9 @@ def main():
         get = client(policy, ca=directory / 'ca.pem', cert=directory / 'client.pem', key=key)
         print(json.dumps(probe(get, head=head, run_id=int(run_id)), sort_keys=True))
         return
-    token = read_private(directory / 'github.token', 1024).decode('ascii').removesuffix('\n')
-    get = github.read_only(token)
-    del token
+    token = directory / 'github.token'
+    read_private(token, 1024)
+    get = observer_reader(token)
     key = directory / 'server.key'
     read_private(key, 65536)
     transport.listen_one(policy, ca=directory / 'ca.pem', cert=directory / 'server.pem', key=key,
