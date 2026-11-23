@@ -21,7 +21,7 @@ def pointers(root):
     return result
 
 
-def prepare(bridge,adapter,sha,outer_sha,manifest_sha):
+def prepare(bridge,adapter,sha,outer_sha,manifest_sha,*,received=None):
     if not bridge.HEX40.fullmatch(sha) or not bridge.HEX64.fullmatch(outer_sha) or not bridge.HEX64.fullmatch(manifest_sha):raise ValueError('Exact approved artifact digests required')
     before=pointers(adapter.root)
     adapter.current_target();adapter.target_check();adapter.service_check()
@@ -30,7 +30,10 @@ def prepare(bridge,adapter,sha,outer_sha,manifest_sha):
     if not mutable.is_dir():raise ValueError('Existing managed mutable cache required')
     with tempfile.TemporaryDirectory(prefix='.pair-incoming-',dir=adapter.root) as incoming:
         protected=Path(incoming);archive=protected/'transport.tgz'
-        bridge.copy_incoming(adapter.root,sha,archive,outer_sha)
+        if received is None:
+            bridge.copy_incoming(adapter.root,sha,archive,outer_sha)
+        else:
+            bridge.copy_private_transport(received,archive,outer_sha)
         manifest,body,provided=bridge.unpack_outer(archive,protected/'unpacked',sha,manifest_sha,adapter.layers)
         adapter.validate_manifest(manifest,sha);adapter.target_check(manifest)
         store=adapter.root/'layer-store'

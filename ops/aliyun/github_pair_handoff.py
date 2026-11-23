@@ -1,5 +1,6 @@
 """Fixed SSH handoff for the exact protected-main pair and its stage proof."""
 import hashlib
+import json
 from pathlib import Path
 import re
 import stat
@@ -10,14 +11,18 @@ import github_hosted_stage_shadow as stage
 import github_shadow_pins as policy_pins
 from github_shadow_signer_intake import REPO, REPO_ID, WORKFLOW
 
-MAGIC = b'ZIMAGE-CI-PAIR\x01'
+MAGIC = b'ZIMAGE-CI-PAIR\x02'
+RESTORE_MAGIC = b'ZIMAGE-CI-PAIR\x03'
+RESTORE_CAP = 2048
 LENGTH = struct.Struct('!Q')
 MEMBERS = (('stage.json', 4096), ('stage.bundle.jsonl', 1024 * 1024),
            ('pins.json', 65536), ('config.json', 65536),
            ('backend.zip', 100_000_000), ('frontend.zip', 100_000_000))
+WIRE_MEMBERS = (*MEMBERS, ('rollback.json', 4096))
 COMMAND = 'zimage-publish-pair-v1'
 API = '/repos/' + REPO
 COMMIT = re.compile('[a-f0-9]{40}')
+DIGEST = re.compile('[a-f0-9]{64}')
 BLOCK = 1024 * 1024
 
 
@@ -29,10 +34,19 @@ def exact(stream, count):
 
 
 def receive(stream, request):
-    """Receive into a new private directory owned by the installed supervisor."""
-    if exact(stream, len(MAGIC)) != MAGIC:
+    """Receive publication files or return the exact bounded restoration selector."""
+    magic = exact(stream, len(MAGIC))
+    if magic == RESTORE_MAGIC:
+        size, = LENGTH.unpack(exact(stream, LENGTH.size))
+        if not 0 < size <= RESTORE_CAP:
+            raise ValueError('Invalid restoration selector size')
+        selector = json.loads(exact(stream, size), object_pairs_hook=stage._unique)
+        if type(selector) is not dict or stream.read(1):
+            raise ValueError('Invalid restoration selector or trailing bytes')
+        return selector
+    if magic != MAGIC:
         raise ValueError('Unknown pair handoff protocol')
-    for name, cap in MEMBERS:
+    for name, cap in WIRE_MEMBERS:
         remaining, = LENGTH.unpack(exact(stream, LENGTH.size))
         if not 0 < remaining <= cap:
             raise ValueError('Invalid pair handoff member size')
@@ -47,7 +61,7 @@ def receive(stream, request):
 
 def send(request, out):
     out.write(MAGIC)
-    for name, cap in MEMBERS:
+    for name, cap in WIRE_MEMBERS:
         path = request / name
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 0 < info.st_size <= cap:
@@ -61,6 +75,30 @@ def send(request, out):
                 remaining -= len(data)
             if stream.read(1):
                 raise ValueError('Local pair handoff input changed')
+
+
+def send_restoration(selector, out):
+    body = json.dumps(selector, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('ascii')
+    if not 0 < len(body) <= RESTORE_CAP:
+        raise ValueError('Invalid restoration selector size')
+    out.write(RESTORE_MAGIC + LENGTH.pack(len(body)) + body)
+
+
+def validate_restoration(receipt, release):
+    """Check the completed restoration against the original opened release."""
+    operation, approval = release['operationId'], release['rootApprovalSha256']
+    identity = json.dumps(dict(operation=operation, approval=approval), sort_keys=True, separators=(',', ':')) + '\n'
+    expected = {name: release[name] for name in ('operationId', 'commit', 'runId', 'attempt', 'rootApprovalSha256',
+                                                'rollbackAcceptanceSha256')}
+    expected.update(schemaVersion=1, kind='zimage-ordinary-restoration-v1', status='restored',
+                    restorationOperationId='restore-' + hashlib.sha256(identity.encode()).hexdigest()[:48],
+                    restoredPair=release['rollbackPair'])
+    digests = {'publicFailureSha256', 'publicRestorationSha256'}
+    if (type(receipt) is not dict or set(receipt) != expected.keys() | digests
+            or any(type(receipt[key]) is not type(value) or receipt[key] != value for key, value in expected.items())
+            or any(type(receipt[key]) is not str or not DIGEST.fullmatch(receipt[key]) for key in digests)):
+        raise ValueError('Restoration did not return the exact completed receipt')
+    return receipt
 
 
 def assert_main(get, commit):
@@ -77,6 +115,16 @@ def file_sha(path):
     return digest.hexdigest()
 
 
+def rollback_pair(value, candidate):
+    if type(value) is not dict or set(value) != {'backend', 'frontend'}:
+        raise ValueError('Exact rollback pair required')
+    backend = value['backend']
+    if (type(backend) is not str or not COMMIT.fullmatch(backend) or backend == candidate
+            or value['frontend'] != 'release-' + backend[:12]):
+        raise ValueError('Rollback must be a distinct same-commit pair')
+    return dict(value)
+
+
 def admit(request, *, policy, get, verify, intake, now, seen):
     """Verify bytes under independently installed policy; grant no switch authority.
 
@@ -91,6 +139,7 @@ def admit(request, *, policy, get, verify, intake, now, seen):
     if (not COMMIT.fullmatch(commit) or not intake.hosted_namespace(candidate, 'hosted-shadow')
             or any(type(n) is not int or not 0 < n < 2**63 for n in (run_id, attempt))):
         raise ValueError('Protected same-run candidate required')
+    rollback = rollback_pair(intake.read_json(request / 'rollback.json'), commit)
     release = dict(sourceSHA=commit, runId=run_id, attempt=attempt)
     for name in ('backend', 'frontend'):
         digest = file_sha(request / (name + '.zip'))
@@ -116,7 +165,9 @@ def admit(request, *, policy, get, verify, intake, now, seen):
     return {'packet': dict(repository=REPO, workflow=WORKFLOW, commit=commit, runId=run_id, attempt=attempt,
                            backendManifestSha256=candidate['backend']['manifestSha256'],
                            frontendSubjectSha256=candidate['frontend']['subjectSha256']),
-            'stageSha256': hashlib.sha256(subject).hexdigest(), 'replayKey': proof['replayKey']}
+            'stageSha256': hashlib.sha256(subject).hexdigest(), 'replayKey': proof['replayKey'],
+            'rollbackPair': rollback,
+            'artifactDigests': {'backend': release['backendSha256'], 'frontend': release['frontendSha256']}}
 
 
 if __name__ == '__main__':

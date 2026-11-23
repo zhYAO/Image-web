@@ -34,6 +34,10 @@ class GithubRehearsal(unittest.TestCase):
                         publish.index('Publish through the fixed ECS command'))
         self.assertLess(publish.index('Publish through the fixed ECS command'),
                         publish.index('Verify the new pair through public HTTPS'))
+        self.assertNotIn('ZIMAGE_PAIR_ROLLBACK_SHA', publish)
+        self.assertIn('--capture-current', publish)
+        self.assertIn('--observe-failed-public', publish)
+        self.assertIn("failure() && steps.public_acceptance.outcome == 'failure'", publish)
 
     def test_publish_and_legacy_jobs_share_a_non_canceling_queue(self):
         # Concurrency is repository-wide and group names are case-insensitive.

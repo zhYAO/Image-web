@@ -105,33 +105,97 @@ protected run, artifact name, namespace and signing identity checks.
   command with SSH forwarding, PTY and user RC disabled. Its only privileged
   executable is `/usr/local/libexec/zimage-paired-release/receive-ordinary-pair`
   with zero arguments. The status-only key has its own separate authorization.
-- The SSH request consists of a fixed magic header and six bounded,
+- The receiver checks the exact rooted source inventory in
+  `/etc/zimage/ordinary-receiver-tools.json` before consuming SSH input. Its
+  private spool is `/opt/zimage/ordinary-requests` with mode `0700`. The
+  `paired/ordinary-authority.py` is installed at
+  `ordinary-runtime/ordinary-authority.py`. It reads the trust policies and
+  Sigstore digests from `/etc/zimage/ordinary-authority.json` and a root-only
+  GitHub observer credential from `/etc/zimage/ordinary-github-observer.token`.
+  The receiver uses its fixed offline verifier and its own GET-only client
+  for `api.github.com`.
+  Missing authority code or any changed digest causes refusal before the
+  first request byte.
+  Lifecycle policy is resolved for the authenticated batch and its current
+  rollback pair after admission, then checked again under the shared lock.
+- The authority reads `/etc/zimage/ordinary-authorizations/<runId>-<attempt>.json`
+  for the exact batch and its signed stage digest. It checks the lifecycle
+  digest and requires the operation identity `zimage-release-<runId>-<attempt>`.
+  Independent evidence under `/etc/zimage/ordinary-evidence/<runId>-<attempt>/`
+  binds to that operation and packet. It includes a fresh read-only database
+  contract observation, the live baseline and a digest-linked rollback drill
+  with the retained pair's public readiness and route acceptance. Candidate
+  checks reuse the backend read-only receipt, including the exact live
+  PID, request nonce and authenticated GET results. Restored public acceptance
+  is checked against the exact prior pair and required routes before issuing a
+  restoration receipt.
+- The SSH request consists of a fixed version-two magic header and seven bounded,
   length-prefixed members. It carries only the stage subject and bundle, the
-  exact candidate descriptor and both outer ZIPs. The server independently
+  exact candidate descriptor, both outer ZIPs and the publicly observed prior
+  pair. The public pair is compared against separately authorized and locally
+  verified rollback evidence before mutation. The server independently
   checks protected main, the real attempt and signer, the archive bytes and
   the same-run pair. The release key supplies no path, credentials, root
   approval, rollback selection or executable to the root controller.
-- The installed controller must supply an approved host adapter to
-  `paired/ordinary_ssh.py`. The adapter must verify the root approval, retained
-  packages, live rollback drill on the exact old pair, and authenticated
-  checks of the candidate. It must use the existing deploy lock and durable
-  journal against all legacy and ordinary writers. No migration operation
-  is part of this path.
-- The workflow checks the public rollback pair named in
-  `ZIMAGE_PAIR_ROLLBACK_SHA` before sending the request. After a successful
+- `paired/ordinary_ssh.py` routes an approved request through
+  `paired/ordinary_system.py` and the existing service and ingress tools.
+  Under the common deploy lock, it requires independent protected-merge and
+  required-check evidence and checks the active pair and rollback evidence
+  before creating the first intent. It drains the old backend, switches
+  both components behind the fence, and checks the candidate process before
+  reopening. The installed host must provide the independent evidence and
+  private staging and exclude unresolved legacy writers under the same lock.
+  No migration operation is part of this path.
+- The GitHub observer derives the PR, required check and Actions run from
+  the signed release commit. It binds the approved workflow bytes to that
+  commit, requires the successful check to precede the merge and requires
+  an actual passing GitHub rule suite for this update to main. The check
+  and PR rules must both have been enforced by ruleset `27873546`. The
+  selected PR, check, workflow run and rule suite IDs are recorded before
+  sealing. Current branch settings alone do not prove a protected merge.
+- `paired/ordinary_stage.py` uses the private SSH spool below `/opt/zimage`.
+  It rechecks the signed ZIPs before rebuilding the formal frontend. The
+  frontend must match existing root-owned acceptance and the approved
+  archive and manifest digests. Only then does it stage the exact backend
+  transport. It writes no acceptance or live release pointer.
+- The workflow measures the live public pair anew before each request. The
+  next successful release therefore uses the immediately previous pair as
+  its rollback target. After a successful
   SSH reply it uploads the exact deployment receipt, then independently
   checks the public backend version, frontend release, readiness and route
   shells. The receipt must identify the same commit, run, attempt, digests,
   operation and tested rollback target. Authenticated workspace acceptance
   must also be observed before recording the release as complete.
+- Failed public acceptance produces a separate observation linked to the
+  deployment receipt digest. Even if the previous pair is visible again,
+  the result stays unverified until a root-controlled restoration receipt
+  proves the recovery. This observation issues no restore command.
+- The same SSH forced command and key accept one bounded restoration frame.
+  The selector carries the original batch packet and its installed approval
+  digest. The receiver obtains the approval and the rollback pair from the
+  installed authority and the original journal. It requires the original
+  protected PR and required-check evidence, the exact opened PID and
+  frontend generation, and independently observed public failure. Under the
+  same deploy lock it records intent before restoring the retained pair or
+  reopening traffic. The SSH client checks the publication receipt against
+  the exact stage bytes and local failure observation before requesting restoration, and
+  checks that the reply binds the exact original release and rollback pair.
+  The journal exposes a restoration receipt only after authenticated checks
+  and an independent public check of the restored pair. An interrupted
+  restoration blocks the next writer. The review-only Linux workflow tests
+  the fixed frame, replay rejection and the durable journal without accessing
+  ECS. The production workflow still records only the failure observation.
 
-The review-branch implementation contains the workflow, receiver admission,
-fixed SSH invocation and transaction integration. The root command and its
-concrete ECS adapter still require installation and live validation. Keep
-paired publication disabled until that installation, approval gate and
-rollback evidence have been verified. A failed or interrupted SSH response
-requires read-only reconciliation through the existing status interface
-before any further write.
+The review branch contains the workflow, fixed root receiver, root evidence
+reader, private staging, lifecycle adapter and durable restoration logic.
+The intended trigger is the maintainer's manual PR merge into protected main.
+Keep paired publication disabled until the reviewed host installation, the
+independent machine that produces batch authorization and live observations,
+and the workflow's restoration dispatch have been exercised together. The
+independent read-only GitHub observer must verify a real protected merge and
+the exact required check, and rollback evidence must match the retained pair.
+A failed or interrupted SSH response requires read-only reconciliation through
+the existing status interface before any further write.
 
 ## Fixed review-branch diagnostic, without merging main
 

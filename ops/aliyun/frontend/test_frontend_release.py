@@ -98,6 +98,28 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'acceptance'):
             self.m.pack(dist, self.root / 'bad.tgz', self.options, self.public, evidence)
 
+    def test_private_archive_seals_without_using_upload_directory(self):
+        report = self.pack()
+        spool = self.server / 'ordinary-requests'
+        spool.mkdir(mode=0o700)
+        received = spool / 'formal.tgz'
+        shutil.copyfile(report['archive'], received)
+        with patch.object(self.adapter, 'copy_incoming', side_effect=AssertionError('legacy upload used')):
+            sealed = self.adapter.seal('nonprod-fixture', 'web-A', report['archiveSha256'],
+                                       report['manifestSha256'], received=received)
+        self.assertEqual(sealed['artifactId'], report['artifactId'])
+        self.assertFalse(os.path.lexists(self.adapter.base / 'current'))
+
+    def test_private_archive_digest_mismatch_creates_no_sealed_release(self):
+        report = self.pack()
+        spool = self.server / 'ordinary-requests'
+        spool.mkdir(mode=0o700)
+        received = spool / 'formal.tgz'
+        shutil.copyfile(report['archive'], received)
+        with self.assertRaisesRegex(ValueError, 'checksum'):
+            self.adapter.seal('nonprod-fixture', 'web-A', '0' * 64, report['manifestSha256'], received=received)
+        self.assertFalse((self.adapter.base / 'releases/web-A').exists())
+
     def test_candidate_backend_allowlist_and_api_requirements_are_binding(self):
         dist = self.dist()
         evidence = self.evidence(dist)

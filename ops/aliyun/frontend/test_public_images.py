@@ -49,6 +49,16 @@ class PublicImages(unittest.TestCase):
         evidence = dict(self.subject(), backendReleases=[{'backendRelease': 'offline', 'acceptanceSha256': 'e' * 64}])
         return m.pack(self.dist, self.root / 'fixture.tgz', self.options, self.config, evidence)
 
+    def test_formal_archive_digest_is_independent_of_output_filename_and_time(self):
+        approved = self.pack()
+        second = self.root / 'staged.tgz'
+        evidence = dict(self.subject(), backendReleases=[{'backendRelease': 'offline', 'acceptanceSha256': 'e' * 64}])
+        staged = m.pack(self.dist, second, self.options, self.config, evidence)
+        self.assertEqual(Path(approved['archive']).read_bytes(), second.read_bytes())
+        self.assertEqual(second.read_bytes()[4:8], bytes(4))
+        self.assertEqual(approved['archiveSha256'], staged['archiveSha256'])
+        self.assertEqual(approved['manifestSha256'], staged['manifestSha256'])
+
     def test_legacy_pack_and_verify_identity_unchanged(self):
         subject = self.subject()
         self.assertEqual(subject['publicConfigFingerprint'], m.digest(m.canonical(self.config)))

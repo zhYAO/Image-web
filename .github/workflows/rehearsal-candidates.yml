@@ -325,7 +325,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: f60b5916dbc0ef1c01c0bbddb4990b13d4cf1e00
+          ref: 3e41c0fe2b123d102d900b02fcedd50d9ebfb864
           persist-credentials: false
       - name: Recheck the production approval gate
         env:
@@ -351,19 +351,18 @@ jobs:
             --source-ref refs/heads/main --source-digest "$GITHUB_SHA" \
             --deny-self-hosted-runners --predicate-type https://slsa.dev/provenance/v1 >/dev/null
       - name: Verify the exact public pair selected for rollback
-        env:
-          EXPECTED_ROLLBACK: ${{ vars.ZIMAGE_PAIR_ROLLBACK_SHA }}
         run: |
           set -euo pipefail
-          GITHUB_SHA="$EXPECTED_ROLLBACK" /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py > "$RUNNER_TEMP/zimage-rollback-public.json"
+          /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py --capture-current > "$RUNNER_TEMP/zimage-rollback-public.json"
       - name: Publish through the fixed ECS command and validate its receipt
         id: publish
         env:
           ZIMAGE_PAIR_SSH_HOST: ${{ vars.ZIMAGE_PAIR_SSH_HOST }}
           ZIMAGE_PAIR_SSH_KNOWN_HOSTS: ${{ vars.ZIMAGE_PAIR_SSH_KNOWN_HOSTS }}
           ZIMAGE_PAIR_SSH_KEY: ${{ secrets.ZIMAGE_PAIR_SSH_KEY }}
-          ZIMAGE_PAIR_ROLLBACK_SHA: ${{ vars.ZIMAGE_PAIR_ROLLBACK_SHA }}
-        run: /usr/bin/python3 -E -s -B ops/aliyun/github_pair_ssh.py "$RUNNER_TEMP/zimage-pair" "$RUNNER_TEMP/zimage-pair-receipt.json"
+        run: |
+          /usr/bin/python3 -E -s -B ops/aliyun/github_pair_ssh.py \
+            "$RUNNER_TEMP/zimage-pair" "$RUNNER_TEMP/zimage-pair-receipt.json" "$RUNNER_TEMP/zimage-rollback-public.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pair-deployment-receipt-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -373,10 +372,24 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Verify the new pair through public HTTPS
+        id: public_acceptance
         run: /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py > "$RUNNER_TEMP/zimage-public.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pair-public-verification-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/zimage-public.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record rollback visibility after failed public acceptance
+        id: rollback_observation
+        if: ${{ failure() && steps.public_acceptance.outcome == 'failure' }}
+        run: |
+          /usr/bin/python3 -E -s -B ops/aliyun/github_pair_public.py --observe-failed-public \
+            "$RUNNER_TEMP/zimage-pair-receipt.json" "$RUNNER_TEMP/zimage-rollback-public.json" > "$RUNNER_TEMP/zimage-rollback-observation.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ failure() && steps.rollback_observation.outcome == 'success' }}
+        with:
+          name: pair-rollback-observation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/zimage-rollback-observation.json
           if-no-files-found: error
           retention-days: 30
