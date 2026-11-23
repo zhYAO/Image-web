@@ -52,3 +52,24 @@ def inspect(packet, *, observe=None, verify=None):
         # Production-shaped packets and callbacks must never leak data via a response.
         return {"status": "rejected", "reason": "untrusted-evidence", "productionReady": False}
     return {"status": "shadow-verified", "productionReady": False}
+
+
+def read_packet(stream):
+    """Read one bounded packet from trusted binary stdin; caller bounds wall time."""
+    def exact(size):
+        chunks = bytearray()
+        while len(chunks) < size:
+            part = stream.read(min(65536, size - len(chunks)))
+            if type(part) is not bytes or not part or len(part) > size - len(chunks):
+                raise ValueError("Invalid shadow packet")
+            chunks.extend(part)
+        return bytes(chunks)
+
+    header = exact(HEADER.size)
+    magic, *sizes = HEADER.unpack(header)
+    if magic != MAGIC or not all(0 < n <= cap for n, cap in zip(sizes, LIMITS)):
+        raise ValueError("Invalid shadow packet")
+    packet = header + exact(sum(sizes))
+    if stream.read(1) != b'':
+        raise ValueError("Invalid shadow packet")
+    return packet
