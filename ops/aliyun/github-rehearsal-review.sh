@@ -51,8 +51,21 @@ private=$(mktemp -d "$RUNNER_TEMP/zimage-pair.XXXXXXXX")
 trap 'rm -rf -- "$private"' EXIT
 printf '%s\n' "$REHEARSAL_PUBLIC_CONFIG" > "$private/config.json"
 unset REHEARSAL_PUBLIC_CONFIG
+if [[ "$phase" == hosted-shadow ]]; then
+  : "${GITHUB_REPOSITORY_ID:?Missing numerical repository identity}"
+  prefix="repos/zhYAO/Image-web/actions"
+  attempt="$prefix/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+  gh api "$prefix/workflows/rehearsal-candidates.yml" | head -c 1000001 > "$private/workflow.json"
+  gh api "$attempt" | head -c 1000001 > "$private/run.json"
+  gh api "$attempt/jobs?per_page=100" | head -c 1000001 > "$private/jobs.json"
+  python3 -I -B ops/aliyun/github_hosted_producer_jobs.py "$private" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$GITHUB_REPOSITORY_ID"
+  rm -- "$private/workflow.json" "$private/run.json" "$private/jobs.json"
+fi
 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BACKEND_ID/zip" | head -c 100000001 > "$private/backend.zip"
 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$FRONTEND_ID/zip" | head -c 100000001 > "$private/frontend.zip"
+if [[ "$phase" == hosted-shadow ]]; then
+  printf '%s  %s\n' "$BACKEND_ARTIFACT_DIGEST" "$private/backend.zip" "$FRONTEND_ARTIFACT_DIGEST" "$private/frontend.zip" | sha256sum --check --status
+fi
 tree=$(git ls-tree -r --full-tree HEAD | sha256sum)
 lock=$(sha256sum pnpm-lock.yaml)
 python3 - "$private/pins.json" "${tree%% *}" "${lock%% *}" "$(zimage_frontend_namespace)" <<'PY_PINS'
@@ -90,6 +103,7 @@ if [[ "$phase" == hosted-smoke ]]; then
   test ! -e "$RUNNER_TEMP/zimage-hosted-smoke"
   mv -T -- "$private" "$RUNNER_TEMP/zimage-hosted-smoke"
 elif [[ "$phase" == hosted-shadow ]]; then
+  rm -- "$private/report.json"
   test ! -e "$RUNNER_TEMP/zimage-hosted-shadow" && test ! -L "$RUNNER_TEMP/zimage-hosted-shadow"
   mv -T -- "$private" "$RUNNER_TEMP/zimage-hosted-shadow"
 elif [[ -n "$phase" ]]; then
