@@ -169,7 +169,8 @@ def make_modules():
     first_ops=first.FirstOps(adapter,legacy)
     pub=frontend.Publisher(ROOT,probe=frontend.production_probe,meta=frontend.production_meta,approval=frontend.production_approval)
     return types.SimpleNamespace(backend=backend,first=first_ops,engine=engine,transaction=engine,adapter=adapter,
-                                 legacy=legacy,publisher=pub,frontend=frontend,bridge=bridge)
+                                 legacy=legacy,publisher=pub,frontend=frontend,bridge=bridge,
+                                 stage=load(HERE/'stage.py','paired_stage'))
 
 
 def accepted_root_document(c,path,expected):

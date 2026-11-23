@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import ordinary
 import ordinary_ssh
@@ -43,13 +43,17 @@ class SystemTest(unittest.TestCase):
         self.gate = Mock(spec=['lock', 'lock_identity', 'assert_clear', 'journal'])
         self.gate.lock.return_value = nullcontext()
         self.authority = Mock(spec=['assert_other_writers_clear', 'assert_main', 'database_digest',
-                                    'verify_protected_merge', 'verify_baseline', 'prepare', 'verify_candidate'])
+                                    'verify_protected_merge', 'verify_baseline', 'verify_candidate'])
         self.authority.database_digest.return_value = approval['databaseSha256']
-        self.authority.prepare.return_value = dict(archiveSha256=approval['frontendArchiveSha256'],
-                                                    manifestSha256=approval['frontendManifestSha256'],
-                                                    candidateSha256=self.system.p['frontendCandidateSha256'],
-                                                    payloadSha256=self.system.p['frontendPayloadSha256'])
-        self.ops = OrdinarySystem(self.system, self.gate, self.authority, 'private-request', {'stageSha256': '6' * 64})
+        stage = patch('ordinary_system.ordinary_stage.prepare')
+        self.prepare = stage.start()
+        self.addCleanup(stage.stop)
+        self.prepare.return_value = dict(archiveSha256=approval['frontendArchiveSha256'],
+                                         manifestSha256=approval['frontendManifestSha256'],
+                                         candidateSha256=self.system.p['frontendCandidateSha256'],
+                                         payloadSha256=self.system.p['frontendPayloadSha256'])
+        self.ops = OrdinarySystem(self.system, self.gate, self.authority, Path('private-request'),
+                                  {'stageSha256': '6' * 64}, intake=Mock())
 
     def start(self, record, release):
         self.assertEqual(record['phase'], 'backend_select_intent')
@@ -86,7 +90,7 @@ class SystemTest(unittest.TestCase):
         self.authority.verify_protected_merge.side_effect = ValueError('required check proof missing')
         with self.assertRaisesRegex(ValueError, 'required check proof missing'):
             self.run_release()
-        self.authority.prepare.assert_not_called()
+        self.prepare.assert_not_called()
         self.gate.journal.assert_not_called()
         self.system.seal.assert_not_called()
 
@@ -101,7 +105,7 @@ class SystemTest(unittest.TestCase):
         self.system.m.adapter.verify_retained_layered.side_effect = ValueError('corrupt rollback backend')
         with self.assertRaisesRegex(ValueError, 'corrupt rollback backend'):
             self.run_release()
-        self.authority.prepare.assert_not_called()
+        self.prepare.assert_not_called()
         self.gate.journal.assert_not_called()
         self.system.seal.assert_not_called()
 
@@ -113,7 +117,7 @@ class SystemTest(unittest.TestCase):
         self.system.open.assert_not_called()
 
     def test_prepared_frontend_digest_drift_refuses_switch(self):
-        self.authority.prepare.return_value['manifestSha256'] = '9' * 64
+        self.prepare.return_value['manifestSha256'] = '9' * 64
         with self.assertRaisesRegex(ValueError, 'Prepared frontend differs'):
             self.run_release()
         self.gate.journal.assert_not_called()

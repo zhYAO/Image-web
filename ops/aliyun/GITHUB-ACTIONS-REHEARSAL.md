@@ -122,6 +122,11 @@ protected run, artifact name, namespace and signing identity checks.
   reopening. The installed host must provide the independent evidence and
   private staging and exclude unresolved legacy writers under the same lock.
   No migration operation is part of this path.
+- `paired/ordinary_stage.py` uses the private SSH spool below `/opt/zimage`.
+  It rechecks the signed ZIPs before rebuilding the formal frontend. The
+  frontend must match existing root-owned acceptance and the approved
+  archive and manifest digests. Only then does it stage the exact backend
+  transport. It writes no acceptance or live release pointer.
 - The workflow measures the live public pair anew before each request. The
   next successful release therefore uses the immediately previous pair as
   its rollback target. After a successful

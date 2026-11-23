@@ -129,7 +129,8 @@ def admit(request, *, policy, get, verify, intake, now, seen):
                            backendManifestSha256=candidate['backend']['manifestSha256'],
                            frontendSubjectSha256=candidate['frontend']['subjectSha256']),
             'stageSha256': hashlib.sha256(subject).hexdigest(), 'replayKey': proof['replayKey'],
-            'rollbackPair': rollback}
+            'rollbackPair': rollback,
+            'artifactDigests': {'backend': release['backendSha256'], 'frontend': release['frontendSha256']}}
 
 
 if __name__ == '__main__':

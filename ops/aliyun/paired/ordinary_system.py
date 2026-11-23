@@ -5,6 +5,8 @@ The existing SystemOps performs every service and ingress mutation.
 """
 from copy import deepcopy
 
+import ordinary_stage
+
 
 def require(condition, message):
     if not condition:
@@ -12,11 +14,12 @@ def require(condition, message):
 
 
 class OrdinarySystem:
-    def __init__(self, system, gate, authority, request, evidence):
+    def __init__(self, system, gate, authority, request, evidence, *, intake):
         self.system = system
         self.gate = gate
         self.authority = authority
         self.request = request
+        self.intake = intake
         self.evidence = deepcopy(evidence)
         self.record = None
         self.frontend_approval = None
@@ -75,7 +78,8 @@ class OrdinarySystem:
         self.system.c.hexid(retained_backend_digest)
         self.system.c.hexid(retained_frontend_digest)
         self.authority.verify_baseline(initial, approval)
-        frontend = self.authority.prepare(self.request, self.evidence, packet, approval)
+        frontend = ordinary_stage.prepare(self.request, self.evidence, packet, approval,
+                                          system=self.system, intake=self.intake)
         require((frontend['archiveSha256'], frontend['manifestSha256'], frontend['candidateSha256'],
                  frontend['payloadSha256']) ==
                 (approval['frontendArchiveSha256'], approval['frontendManifestSha256'],
@@ -118,7 +122,8 @@ class OrdinarySystem:
 
     def select_frontend(self, packet, approval):
         self.gate.lock_identity()
-        self.system.prepare_frontend(self.record, self.frontend_approval)
+        self.system.prepare_frontend(self.record, self.frontend_approval,
+                                     received=self.request / 'private-pair-stage/frontend-release.tgz')
         live = self.system.publish_frontend(self.record, self.frontend_approval)
         require(live['frontendSequence'] == self.record['initial']['frontendSequence'] + 1,
                 'Unexpected frontend generation')

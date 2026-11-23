@@ -248,9 +248,10 @@ class SystemOps:
         self.require_ours(checking=True)
         return result
 
-    def prepare_frontend(self,record,approval):
+    def prepare_frontend(self,record,approval,*,received=None):
         self.require_ours(checking=True);self.exact_process(record['candidateProcess'])
-        value=self.pub.seal(record['operationId'],self.p['newFrontend'],approval['archiveSha256'],approval['manifestSha256'])
+        arguments = {} if received is None else {'received': received}
+        value=self.pub.seal(record['operationId'],self.p['newFrontend'],approval['archiveSha256'],approval['manifestSha256'], **arguments)
         acceptance=Path('/etc/zimage/frontend-acceptances')/(value['artifactId']+'.json')
         if hashlib.sha256(self.raw(acceptance)).hexdigest()!=approval['acceptanceSha256']:raise ValueError('Root frontend approval changed')
         installed=self.read(acceptance)

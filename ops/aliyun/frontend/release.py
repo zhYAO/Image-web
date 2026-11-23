@@ -180,11 +180,22 @@ class Publisher:
                 fd = os.open('frontend-' + operation + '.tgz', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=incoming_fd)
             finally: os.close(incoming_fd)
         finally: os.close(root_fd)
+        self.copy_archive(fd, archive_sha, destination)
+
+    def copy_private_archive(self, path, archive_sha, destination):
+        m.checksum(archive_sha)
+        self.managed(path)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        self.copy_archive(fd, archive_sha, destination, private=True)
+
+    def copy_archive(self, fd, archive_sha, destination, *, private=False):
         with os.fdopen(fd, 'rb') as source, destination.open('xb') as out:
             os.chmod(destination, 0o600)
             before = os.fstat(source.fileno())
             if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 < before.st_size <= m.MAX_ARCHIVE:
                 raise ValueError('Incoming must be bounded single-link regular file')
+            if private and (before.st_uid != self.uid or before.st_mode & 0o022):
+                raise ValueError('Untrusted opened private archive')
             if self.free_bytes() < before.st_size + m.MAX_BYTES * 2 + self.reserve_bytes:
                 raise ValueError('Insufficient disk space for bounded extraction')
             self.after_incoming_open()
@@ -278,7 +289,7 @@ class Publisher:
                 sync_directory(target.parent)
             finally: temporary.unlink(missing_ok=True)
 
-    def seal(self, operation, namespace, archive_sha, manifest_sha):
+    def seal(self, operation, namespace, archive_sha, manifest_sha, *, received=None):
         path = self.base / 'releases' / namespace
         if os.path.lexists(path):
             try: value = self.sealed(namespace, manifest_sha)
@@ -288,7 +299,10 @@ class Publisher:
         stage = Path(tempfile.mkdtemp(prefix=operation + '-', dir=self.base / '.stage'))
         try:
             archive = stage / 'input.tgz'
-            self.copy_incoming(operation, archive_sha, archive)
+            if received is None:
+                self.copy_incoming(operation, archive_sha, archive)
+            else:
+                self.copy_private_archive(received, archive_sha, archive)
             value = transport.assemble(archive, stage / 'dist', manifest_sha, self.cached_object)
             if value['assetNamespace'] != namespace: raise ValueError('Uploaded namespace differs from request')
             # No uploader path is read after this point. All validation is over

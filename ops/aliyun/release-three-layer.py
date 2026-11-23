@@ -140,11 +140,24 @@ def copy_incoming(root, sha, destination, checksum):
             os.close(incoming_fd)
     finally:
         os.close(root_fd)
+    copy_transport(source_fd, destination, checksum)
+
+
+def copy_private_transport(path, destination, checksum):
+    """Copy an exact transport from the root-only SSH request spool."""
+    owned(path, ancestors=True)
+    source_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    copy_transport(source_fd, destination, checksum, private=True)
+
+
+def copy_transport(source_fd, destination, checksum, *, private=False):
     with os.fdopen(source_fd, 'rb') as source, destination.open('xb') as output:
         destination.chmod(0o600)
         before = os.fstat(source.fileno())
         if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= MAX_OUTER:
             raise ValueError('Incoming outer payload must be a bounded regular file')
+        if private and (before.st_uid != 0 or before.st_nlink != 1 or before.st_mode & 0o022):
+            raise ValueError('Untrusted opened private transport')
         digest, total = hashlib.sha256(), 0
         while True:
             block = source.read(1024 * 1024)

@@ -32,7 +32,7 @@ def run(stream, *, scratch, host, handoff, ordinary):
         ordinary.valid(evidence['rollbackPair'] == approval['oldPair'],
                        'Observed public rollback pair differs from installed authorization')
 
-        ops = OrdinarySystem(host.system, host.gate, host.authority, request, evidence)
+        ops = OrdinarySystem(host.system, host.gate, host.authority, request, evidence, intake=host.intake)
         result = ordinary.transition(packet, approval, digest, ops, clock=host.clock)
         ordinary.valid(result == {'operation': approval['operation'], 'phase': 'opened',
                                   'pair': approval['newPair']}, 'Unconfirmed production result')
