@@ -18,10 +18,13 @@ class InstallationInventoryTests(unittest.TestCase):
         cls.tree = inventory.CommittedTree(repository, commit)
         cls.plan = inventory.build(cls.tree)
 
-    def test_receiver_can_authenticate_and_load_exact_committed_closure(self):
+    def authenticate_receiver(self):
+        self.assertEqual(set(self.plan['receiver']), {path.as_posix() for path in receiver.FILES})
+        installed_pins = {str(path): self.plan['receiver'][path.as_posix()] for path in receiver.FILES}
+
         def read(path, limit):
-            if PurePosixPath(path.as_posix()) == PurePosixPath('/etc/zimage/ordinary-receiver-tools.json'):
-                body = json.dumps(self.plan['receiver']).encode()
+            if path == receiver.INVENTORY:
+                body = json.dumps(installed_pins).encode()
             else:
                 entry = self.plan['files'][path.as_posix()]
                 body = self.tree.blob(PurePosixPath(entry['source']), executable=entry['gitExecutable'])
@@ -29,8 +32,16 @@ class InstallationInventoryTests(unittest.TestCase):
             return body
 
         pins, bodies = receiver.authenticate(read)
-        self.assertEqual(pins, self.plan['receiver'])
+        self.assertEqual(pins, installed_pins)
+        return bodies
+
+    def test_receiver_authenticates_exact_committed_closure(self):
+        self.authenticate_receiver()
         self.assertTrue(self.plan['files'][str(inventory.BASE / 'ssh-publish')]['gitExecutable'])
+
+    @unittest.skipUnless(os.name == 'posix', 'Requires POSIX runtime imports')
+    def test_receiver_loads_exact_committed_runtime_in_order(self):
+        bodies = self.authenticate_receiver()
         with patch.dict(sys.modules):
             for name, filename in receiver.MODULES:
                 path = receiver.RUNTIME / filename
