@@ -5,7 +5,9 @@ import re
 from pathlib import Path
 import subprocess
 import tempfile
+from textwrap import dedent
 import unittest
+from unittest.mock import call, patch
 
 WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/rehearsal-candidates.yml'
 HERE = Path(__file__).resolve().parent
@@ -38,6 +40,59 @@ class GithubRehearsal(unittest.TestCase):
         self.assertIn('--capture-current', publish)
         self.assertIn('--observe-failed-public', publish)
         self.assertIn("failure() && steps.public_acceptance.outcome == 'failure'", publish)
+
+
+    def test_main_only_production_environment_gate_is_before_artifacts_and_credentials(self):
+        workflow = WORKFLOW.read_text(encoding='utf-8')
+        _, publish = workflow.split('\n  publish-pair:\n', 1)
+        step = publish.split('      - name: Recheck the main-only production environment\n', 1)[1]
+        gate = dedent(step.split("          /usr/bin/python3 -I - <<'PY'\n", 1)[1]
+                      .split('\n          PY\n', 1)[0])
+        self.assertIn("github.event_name == 'push'", publish)
+        self.assertIn("github.ref == 'refs/heads/main' && github.ref_protected", publish)
+        self.assertIn('environment: production', publish)
+        self.assertLess(publish.index('Recheck the main-only production environment'),
+                        publish.index('Freeze the signed same-run publication handoff'))
+        self.assertLess(publish.index('--source-digest "$GITHUB_SHA"'),
+                        publish.index('secrets.ZIMAGE_PAIR_SSH_KEY'))
+        endpoint = 'repos/zhYAO/Image-web/environments/production'
+
+        environment = {
+            'name': 'production', 'can_admins_bypass': False,
+            'deployment_branch_policy': {'custom_branch_policies': True, 'protected_branches': False},
+            'protection_rules': [{'type': 'branch_policy', 'id': 17}],
+        }
+        main = {'name': 'main', 'type': 'branch', 'id': 42}
+        allow = {'total_count': 1, 'branch_policies': [main]}
+
+        def run(fixtures):
+            with patch.object(subprocess, 'check_output', side_effect=fixtures) as gh:
+                exec(compile(gate, '<production environment gate>', 'exec'), {})
+            self.assertEqual(gh.call_args_list, [
+                call(['gh', 'api', '--method', 'GET', endpoint], timeout=15),
+                call(['gh', 'api', '--method', 'GET', endpoint + '/deployment-branch-policies?per_page=100'],
+                     timeout=15),
+            ])
+
+        run([json.dumps(environment), json.dumps(allow)])
+        refused = [
+            ('admin bypass allowed', {**environment, 'can_admins_bypass': True}, allow),
+            ('admin bypass absent', {k: v for k, v in environment.items() if k != 'can_admins_bypass'}, allow),
+            ('reviewers still required', {**environment, 'protection_rules':
+                                          environment['protection_rules'] + [{'type': 'required_reviewers'}]}, allow),
+            ('protected branches instead of exact main', {**environment, 'deployment_branch_policy':
+                                                          {'custom_branch_policies': False, 'protected_branches': True}}, allow),
+            ('tag named main', environment, {**allow, 'branch_policies': [{**main, 'type': 'tag'}]}),
+            ('wildcard', environment, {**allow, 'branch_policies': [{**main, 'name': 'ma*'}]}),
+            ('extra tag', environment, {'total_count': 2, 'branch_policies': [main, {**main, 'type': 'tag'}]}),
+            ('hidden rule on another page', environment, {**allow, 'total_count': 2}),
+            ('missing rule', environment, {'total_count': 0, 'branch_policies': []}),
+            ('API failure', environment, subprocess.CalledProcessError(1, 'gh')),
+            ('invalid API JSON', environment, '<html>503</html>'),
+        ]
+        for label, first, second in refused:
+            with self.subTest(label=label), self.assertRaisesRegex(SystemExit, 'Refusing paired publication'):
+                run([json.dumps(first), second if isinstance(second, (str, Exception)) else json.dumps(second)])
 
     def test_publish_and_legacy_jobs_share_a_non_canceling_queue(self):
         # Concurrency is repository-wide and group names are case-insensitive.

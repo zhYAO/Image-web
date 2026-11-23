@@ -327,13 +327,47 @@ jobs:
         with:
           ref: 3e41c0fe2b123d102d900b02fcedd50d9ebfb864
           persist-credentials: false
-      - name: Recheck the production approval gate
+      - name: Recheck the main-only production environment
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api repos/zhYAO/Image-web/environments/production |
-            jq -e '.can_admins_bypass == false and ([.protection_rules[] | select(.type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length > 0))] | length == 1)' >/dev/null
+          /usr/bin/python3 -I - <<'PY'
+          import json
+          import subprocess
+
+          endpoint = "repos/zhYAO/Image-web/environments/production"
+
+          def api(path):
+              return json.loads(subprocess.check_output(["gh", "api", "--method", "GET", path], timeout=15))
+
+          def refuse():
+              raise SystemExit("Refusing paired publication: production must permit only the main branch without admin bypass.")
+
+          try:
+              env = api(endpoint)
+              if (
+                  env["name"] != "production"
+                  or env["can_admins_bypass"] is not False
+                  or env["deployment_branch_policy"] != {"custom_branch_policies": True, "protected_branches": False}
+                  or [rule["type"] for rule in env["protection_rules"]] != ["branch_policy"]
+              ):
+                  refuse()
+
+              # total_count covers the entire collection, not only the first page.
+              data = api(endpoint + "/deployment-branch-policies?per_page=100")
+              policies = data["branch_policies"]
+              if (
+                  type(data["total_count"]) is not int
+                  or data["total_count"] != 1
+                  or type(policies) is not list
+                  or len(policies) != 1
+                  or (policies[0]["name"], policies[0]["type"]) != ("main", "branch")
+              ):
+                  refuse()
+          except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
+              refuse()
+          PY
       - name: Freeze the signed same-run publication handoff
         env:
           GH_TOKEN: ${{ github.token }}
