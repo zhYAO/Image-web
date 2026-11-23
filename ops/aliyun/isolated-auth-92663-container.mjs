@@ -111,8 +111,29 @@ async function prepare(project, scratch, id, fixture) {
   return expectedLedger;
 }
 
+export function classifySupabaseStart(result) {
+  if (result.error?.code === 'ETIMEDOUT') return 'startup deadline';
+  if (result.error) return 'child execution error';
+  if (result.signal) return 'child signal';
+  const diagnostic = String(result.stderr ?? '') + '\n' + String(result.stdout ?? '');
+  if (/address already in use|port is already allocated|failed to bind host port/i.test(diagnostic)) return 'port conflict';
+  if (/overlap.*(?:pool|network)|(?:pool|network).*overlap/i.test(diagnostic)) return 'network address overlap';
+  if (/failed to pull|pull access denied|manifest unknown|toomanyrequests|failed to resolve reference/i.test(diagnostic)) return 'image retrieval';
+  if (/SQLSTATE|failed to apply migration|error applying migration/i.test(diagnostic)) return 'migration rejected';
+  if (/is not healthy|unhealthy|health check.*(?:failed|timeout)/i.test(diagnostic)) {
+    for (const service of ['kong', 'db', 'auth', 'rest', 'storage', 'mailpit']) {
+      const pattern = new RegExp('supabase_' + service + '_[^\\s]*[^\\n]{0,48}(?:not healthy|unhealthy)', 'i');
+      if (pattern.test(diagnostic)) return 'unhealthy ' + service;
+    }
+    return 'service unhealthy';
+  }
+  return 'unclassified child failure';
+}
+
 function command(file, args, cwd, env, timeout, name) {
   const done = spawnSync(file, args, { cwd, env, timeout, encoding: 'utf8', maxBuffer: 12 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  if (name === 'Disposable Supabase start and migrations' && (done.error || done.status !== 0))
+    throw new Error('Disposable Supabase startup failed: ' + classifySupabaseStart(done));
   require(!done.error && done.status === 0, `${name} failed (command output suppressed)`);
   return done.stdout;
 }
@@ -174,7 +195,7 @@ async function run(args) {
   const cli = path.join(project, 'node_modules/.bin/supabase');
   const cliEnv = { ...localEnvironment, HOME: scratch, XDG_CONFIG_HOME: scratch, SUPABASE_TELEMETRY_DISABLED: '1' };
   let stackAttempted = false;
-  let appProc;
+  let appProc, failed = false;
   try {
     require(command(cli, ['--version'], project, cliEnv, 10000, 'Pinned Supabase CLI').trim() === CLI_VERSION, 'Supabase CLI differs from pinned workspace version');
     const expectedLedger = await prepare(project, scratch, id, fixture);
@@ -235,6 +256,9 @@ async function run(args) {
       migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
     return { commit, ...dbEvidence, scope: 'isolated-container-browser-only', browserUiTested: true,
       productionReady: false, credentialMode: 'synthetic', checks: ['candidate-health', 'browser-home-login-workspace-logout'] };
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     if (appProc) {
       spawnSync('/usr/bin/docker', ['rm', '-f', id], { env: localEnvironment, stdio: 'ignore', timeout: 20_000 });
@@ -242,6 +266,9 @@ async function run(args) {
     }
     try {
       if (stackAttempted) command(cli, ['stop', '--no-backup', '--workdir', scratch], project, cliEnv, 120_000, 'Disposable Supabase cleanup');
+    } catch (error) {
+      if (!failed) throw error;
+      console.error('Disposable Supabase cleanup also failed');
     } finally { await rm(scratch, { recursive: true, force: true }); }
   }
 }
@@ -252,7 +279,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     // All explicit harness errors contain a fixed description and HTTP status.
     // Arbitrary SDK, process and filesystem errors can contain credentials.
     const known = error instanceof Error && /^([A-Z][A-Za-z -]+)( \(HTTP [0-9]{3}\)| \(command output suppressed\))?$/.test(error.message);
-    console.error('Isolated HTTP authentication unverified:', known ? error.message : 'unexpected local prerequisite or verifier failure');
+    const startup = error instanceof Error && /^Disposable Supabase startup failed: (?:startup deadline|child execution error|child signal|port conflict|network address overlap|image retrieval|migration rejected|service unhealthy|unhealthy (?:kong|db|auth|rest|storage|mailpit)|unclassified child failure)$/.test(error.message);
+    console.error('Isolated HTTP authentication unverified:', (known || startup) ? error.message : 'unexpected local prerequisite or verifier failure');
     process.exitCode = 1;
   }
 }

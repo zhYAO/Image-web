@@ -43,7 +43,7 @@ if (process.env.ZIMAGE_SYNTHETIC_NET_PROBE === '1') {
   await unlink('/tmp/probe-scratch');
   if (await access('/var/run/docker.sock').then(() => true, () => false)) throw new Error('Unexpected Docker socket');
 }
-const forbidden = [[bridge, 54321], [bridge, 54322], [bridge, 2375], [bridge, 2376], [bridge, 22],
+const forbidden = [[bridge, 54321], [bridge, 54322], [bridge, 55421], [bridge, 55422], [bridge, 2375], [bridge, 2376], [bridge, 22],
   ['169.254.169.254', 80], ['100.100.100.200', 80], ['1.1.1.1', 443]];
 const observations = await Promise.all(forbidden.map(([ip, port]) => reachable(ip, port)));
 if (observations.some(Boolean)) throw new Error('Unexpected direct network access');

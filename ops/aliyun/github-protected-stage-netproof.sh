@@ -67,17 +67,17 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(b)
 HTTPServer((sys.argv[1],int(sys.argv[2])), Handler).serve_forever()
 PY
-python3 -I -B "$scratch/mock.py" 127.0.0.1 54321 & mock=$!
-python3 -I -B "$scratch/mock.py" "$bridge" 54322 & tripwire=$!
+python3 -I -B "$scratch/mock.py" 127.0.0.1 55421 & mock=$!
+python3 -I -B "$scratch/mock.py" "$bridge" 55422 & tripwire=$!
 python3 -I -B ops/aliyun/isolated-supabase-gateway.py --listen-ip "$bridge" --candidate-ip "$peer" \
-  --certificate "$scratch/tls/gateway.pem" --private-key "$scratch/tls/gateway.key" & gateway=$!
+  --certificate "$scratch/tls/gateway.pem" --private-key "$scratch/tls/gateway.key" --netproof-mock-origin & gateway=$!
 for _ in $(seq 1 30); do
   kill -0 "$mock" "$gateway" "$tripwire"
   if ss -ltn | grep -Fq "$bridge:8443"; then break; fi
   sleep .1
 done
 kill -0 "$mock" "$gateway" "$tripwire"
-curl --noproxy "*" --max-time 2 --silent --show-error --fail "http://$bridge:54322/auth/v1/user" | grep -Fx '{"syntheticBoundary":true}'
+curl --noproxy "*" --max-time 2 --silent --show-error --fail "http://$bridge:55422/auth/v1/user" | grep -Fx '{"syntheticBoundary":true}'
 cp "$root/ops/aliyun/probe-isolated-gateway.mjs" "$scratch/probe.mjs"
 chmod 0444 "$scratch/probe.mjs"
 docker run --rm --pull never --platform linux/amd64 --network "$id" --ip "$peer" \
@@ -91,12 +91,36 @@ docker run --rm --pull never --platform linux/amd64 --network "$id" --ip "$peer"
   "$image" /node /proof.mjs "$bridge"
 printf '%s\n' 'Linux synthetic network boundary only; no candidate release, database, signing or deployment.'
 if [[ ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]; then
-  # Only these two known PID-owned mock processes are removed. Firewall and
-  # real TLS gateway remain in force from the just-completed boundary probe.
-  kill "$mock" "$tripwire"
+  # Never reuse Supabase API or database ports for the mock. Only restart
+  # the owned diagnostic gateway to switch its fixed upstream; keep TLS,
+  # exact bridge, firewall and container isolation unchanged.
+  kill "$mock" "$tripwire" "$gateway"
   wait "$mock" || true; mock=''
   wait "$tripwire" || true; tripwire=''
+  wait "$gateway" || true; gateway=''
+  python3 -I -B - <<'PY_PORT'
+import socket
+ports=(54320,54321,54322,54323,54324,54329)
+sockets=[]
+try:
+    for port in ports:
+        s=socket.socket()
+        sockets.append(s)
+        s.bind(('0.0.0.0',port))
+except OSError:
+    raise SystemExit('Disposable Supabase localhost port unavailable')
+finally:
+    for s in sockets: s.close()
+PY_PORT
+  python3 -I -B ops/aliyun/isolated-supabase-gateway.py --listen-ip "$bridge" --candidate-ip "$peer" \
+    --certificate "$scratch/tls/gateway.pem" --private-key "$scratch/tls/gateway.key" & gateway=$!
+  for _ in $(seq 1 30); do
+    kill -0 "$gateway"
+    if ss -ltn | grep -Fq "$bridge:8443"; then break; fi
+    sleep .1
+  done
   kill -0 "$gateway"
+  ss -ltn | grep -F "$bridge:8443" >/dev/null
   frozen="$RUNNER_TEMP/zimage-frozen-92663"
   test -d "$frozen" && test ! -L "$frozen" && test -d "$frozen/files" && test ! -L "$frozen/files"
   test ! -e /opt/zimage && test ! -L /opt/zimage

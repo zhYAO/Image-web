@@ -51,8 +51,9 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
 
-    def __init__(self, address, candidate):
+    def __init__(self, address, candidate, *, mock_origin=False):
         self.candidate = candidate
+        self.upstream_port = 55421 if mock_origin else 54321
         super().__init__(address, Handler)
 
     def handle_error(self, *_):
@@ -121,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
             if key in headers and not JWT_OR_LOCAL.fullmatch(headers[key].removeprefix('Bearer ')):
                 self.send_error(400)
                 return
-        upstream = HTTPConnection('127.0.0.1', 54321, timeout=5)
+        upstream = HTTPConnection('127.0.0.1', self.server.upstream_port, timeout=5)
         try:
             body = self.rfile.read(length)
             if len(body) != length:
@@ -165,14 +166,18 @@ def main():
     p.add_argument('--candidate-ip', required=True, type=IPv4Address)
     p.add_argument('--certificate', type=Path)
     p.add_argument('--private-key', type=Path)
+    p.add_argument('--netproof-mock-origin', action='store_true')
     args = p.parse_args()
+    if args.netproof_mock_origin and not (args.listen_ip == IPv4Address('172.31.219.1') and
+                                          args.candidate_ip == IPv4Address('172.31.219.2')):
+        p.error('Mock upstream reserved for exact isolated proof bridge')
     private = re.compile(r'172\.(?:1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+')
     ip, peer = str(args.listen_ip), str(args.candidate_ip)
     if not (ip == peer == '127.0.0.1' or (ip != peer and private.fullmatch(ip) and private.fullmatch(peer))):
         p.error('expected exact loopback or separately provisioned private bridge endpoints')
     if bool(args.certificate) != bool(args.private_key) or (ip != '127.0.0.1' and not args.certificate):
         p.error('TLS certificate and key are required on a private bridge')
-    with Server((ip, 8443), peer) as server:
+    with Server((ip, 8443), peer, mock_origin=args.netproof_mock_origin) as server:
         if args.certificate:
             # Set timeout before each TLS handshake; do not block in the accept loop.
             server.tls = tls_context(args.certificate, args.private_key)
