@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tarfile
 
-SHA = "bbf3aae0de1f65b484a85092c7674f91e50d1137"
+SHA = "8a2ff1f0749eb7270ac28290b96feb02ffc5f67a"
 BASE = "/usr/local/libexec/zimage-paired-release"
 RECEIVER = BASE + "/receive-ordinary-pair"
 PREFIXES = (BASE + "/", "/usr/local/libexec/zimage-backend/",

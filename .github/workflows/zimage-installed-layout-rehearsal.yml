@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 8
     env:
-      BASE_SHA: bbf3aae0de1f65b484a85092c7674f91e50d1137
+      BASE_SHA: 8a2ff1f0749eb7270ac28290b96feb02ffc5f67a
       GUEST_IMAGE: docker.io/library/python@sha256:e8c69d86735f6df3efa06b324694fe51f0422785f83a3bd463052636c2421944
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -29,6 +29,10 @@ jobs:
             --format '{{.Os}}/{{.Architecture}}' "$GUEST_IMAGE" | grep -Fx linux/amd64
           docker --host unix:///var/run/docker.sock run --rm --pull=never --network=none --cap-drop=ALL \
             --security-opt=no-new-privileges --entrypoint /usr/local/bin/python3 "$GUEST_IMAGE" -I --version
+      - name: Exercise release client DNS policy and receiver gates
+        timeout-minutes: 2
+        working-directory: ops/aliyun/paired
+        run: python3 -B -m unittest -v test_ordinary_github test_ordinary_receiver test_ordinary_install_inventory
       - name: Verify isolated installed layout
         timeout-minutes: 4
         shell: bash
