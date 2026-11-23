@@ -16,13 +16,19 @@ network=zimage-staging-internal
 iface=zimg-netproof
 bridge=172.31.219.1
 peer=172.31.219.2
-id='' mock='' gateway='' tripwire='' denied=0 allowed=0
+id='' mock='' gateway='' tripwire='' denied=0 allowed=0 reply_allowed=0
+# Only connection-tracked replies from the exact candidate listener to the
+# local bridge address; NEW candidate traffic still hits the deny rule.
+reply_rule=(-i "$iface" -s "$peer" -d "$bridge" -p tcp --sport 3100
+  -m conntrack --ctstate ESTABLISHED --ctdir REPLY
+  --ctorigsrc "$bridge" --ctorigdst "$peer" --ctorigdstport 3100 -j ACCEPT)
 cleanup() {
   status=$?
   set +e
   if [[ -n "$gateway" ]]; then kill "$gateway"; wait "$gateway"; fi
   if [[ -n "$tripwire" ]]; then kill "$tripwire"; wait "$tripwire"; fi
   if [[ -n "$mock" ]]; then kill "$mock"; wait "$mock"; fi
+  if [[ "$reply_allowed" == 1 ]]; then sudo iptables -D INPUT "${reply_rule[@]}"; fi
   if [[ "$allowed" == 1 ]]; then sudo iptables -D INPUT -i "$iface" -s "$peer" -d "$bridge" -p tcp --dport 8443 -j ACCEPT; fi
   if [[ "$denied" == 1 ]]; then sudo iptables -D INPUT -i "$iface" -s "$peer" -j REJECT; fi
   if [[ -n "$id" ]]; then docker network rm "$id" >/dev/null; fi
@@ -135,6 +141,11 @@ PY_PORT
   export PLAYWRIGHT_BROWSERS_PATH="$scratch/chromium"
   driver=$(node --input-type=module -e 'import {playwrightPath} from "./ops/aliyun/isolated-auth-browser.mjs"; console.log(playwrightPath(process.cwd()))')
   node "$(dirname "$driver")/cli.js" install --with-deps chromium
+  local_route=$(ip -4 route get "$peer")
+  [[ " $local_route " == *" dev $iface "* && " $local_route " == *" src $bridge "* ]]
+  sudo iptables -I INPUT 1 "${reply_rule[@]}"
+  reply_allowed=1
+  sudo iptables -C INPUT "${reply_rule[@]}"
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
     PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
     node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$scratch/prepared/app" "$scratch/prepared/web" \

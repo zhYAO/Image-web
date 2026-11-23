@@ -15,3 +15,11 @@ test('startup emits fixed categories rather than captured private output', () =>
   ];
   for (const [result, expected] of rows) assert.equal(classifySupabaseStart(result), expected);
 });
+
+test('readiness categorizes only fixed state or numeric HTTP status', async () => {
+  const { readinessOutcome } = await import('./isolated-auth-92663-container.mjs');
+  assert.equal(readinessOutcome(null, null, 'sha'), 'no HTTP response');
+  assert.equal(readinessOutcome({status: 503}, {message: 'private input'}, 'sha'), 'HTTP 503');
+  assert.equal(readinessOutcome({status: 200}, {version: 'wrong', status: 'ok'}, 'sha'), 'wrong exact response identity');
+  assert.equal(readinessOutcome({status: 200}, {version: 'sha', status: 'ok'}, 'sha'), 'exact ready');
+});

@@ -153,6 +153,23 @@ async function request(origin, route, options = {}) {
   return fetch(origin + route, { ...options, signal: AbortSignal.timeout(4000), redirect: 'error' });
 }
 
+export function readinessOutcome(response, body, commit) {
+  if (response == null) return 'no HTTP response';
+  if (!Number.isInteger(response.status) || response.status < 100 || response.status > 599) return 'invalid HTTP response';
+  if (response.status !== 200) return 'HTTP ' + response.status;
+  if (body?.version !== commit || body?.status !== 'ok') return 'wrong exact response identity';
+  return 'exact ready';
+}
+
+function dockerState(name, project) {
+  const r = spawnSync('/usr/bin/docker', ['inspect', '--format', '{{.State.Status}}', name], {
+    cwd: project, env: localEnvironment, timeout: 3000, maxBuffer: 128, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const status = r.stdout?.trim();
+  return r.status === 0 && ['created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead'].includes(status)
+    ? status : 'not observed';
+}
+
 async function run(args) {
   const selected = args.length === 8 && args[3] === '--protected-main-shadow';
   require(process.platform === 'linux' && process.versions.node === '24.19.0' && selected && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN, 'Invalid isolated proof invocation');
@@ -242,14 +259,24 @@ async function run(args) {
       '--env', 'NEXT_TELEMETRY_DISABLED=1', '--env', 'HOME=/tmp', '--env', 'HOSTNAME=0.0.0.0', '--env', 'PORT=3100',
       '--workdir', '/candidate/apps/web', 'docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad',
       '/node', 'server.js'], { cwd: project, stdio: 'ignore', env: localEnvironment });
-    let readiness;
-    for (let attempt = 0; attempt < 40; attempt++) {
-      require(appProc.exitCode === null, 'Exact candidate process exited');
-      readiness = await request(origin, '/api/health/ready').catch(() => null);
-      if (readiness?.ok) break;
+    let launchError = false, outcome = 'no HTTP response';
+    appProc.on('error', () => { launchError = true; });
+    const deadline = performance.now() + 20_000;
+    while (performance.now() < deadline && appProc.exitCode === null && appProc.signalCode === null && !launchError) {
+      const response = await request(origin, '/api/health/ready').catch(() => null);
+      let body;
+      if (response?.status === 200) body = await response.json().catch(() => null);
+      outcome = readinessOutcome(response, body, commit);
+      if (outcome === 'exact ready') break;
       await delay(250);
     }
-    require(readiness?.ok && (await readiness.json()).version === commit, 'Exact local candidate readiness failed');
+    if (outcome !== 'exact ready') {
+      const child = launchError ? 'launch error' : appProc.signalCode ? 'child signalled' :
+        appProc.exitCode === null ? 'child active' : 'child exit ' + appProc.exitCode;
+      // Emit only controlled categories, never untrusted body, logs, or env.
+      console.error('Candidate readiness diagnostic: ' + dockerState(id, project) + '; ' + child + '; ' + outcome);
+      throw new Error('Exact local candidate readiness failed');
+    }
     await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit, shadow: true, isolatedUpstream: true });
     verifyLedger();
     const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
