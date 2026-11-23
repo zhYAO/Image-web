@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 import importlib.util
 import json
 from pathlib import Path
@@ -46,6 +47,22 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(result['pid'], 101)
         socket.sendall.assert_called_once_with(b'{"command":"status"}\n')
 
+    def test_pinned_kit_requires_live_preload_from_exact_socket_peer(self):
+        preload = Path('/pinned/receiver/backend/http-admission.cjs')
+        for reported in (None, '/old/http-admission.cjs', str(preload)):
+            with self.subTest(reported=reported):
+                socket, patches = self.fixture()
+                socket.recv.return_value = (json.dumps({'pid': 101, 'httpAdmission': {'preloadPath': reported}})+'\n').encode()
+                with ExitStack() as stack:
+                    for item in patches:
+                        stack.enter_context(item)
+                    ops = release.SystemOps(None, None, preload=preload)
+                    if reported == str(preload):
+                        self.assertEqual(ops.status()['pid'], 101)
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'pinned receiver preload'):
+                            ops.status()
+
     def test_socket_replacement_or_pid_change_fails_closed(self):
         for peer_pid, second_pid in ((999, 101), (101, 999)):
             with self.subTest(peer_pid=peer_pid, second_pid=second_pid):
@@ -53,6 +70,17 @@ class ControlTests(unittest.TestCase):
 
 
 class LaunchPreflightTests(unittest.TestCase):
+    def test_versioned_service_requires_exact_path_and_single_command(self):
+        preload = Path('/usr/local/libexec/zimage-production/versions/'+'8'*64+'/backend/http-admission.cjs')
+        base = '/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node --require '
+        command = '{ argv[]='+base+str(preload)+' server.js ; }'
+        with patch.object(release, 'owned'), patch.object(release.subprocess, 'check_output', return_value=command) as query:
+            release.service_launch_preflight(preload)
+            for other in (command.replace(str(preload), '/old/preload.cjs'), command+' '+command):
+                query.return_value = other
+                with self.assertRaises(ValueError):
+                    release.service_launch_preflight(preload)
+
     def test_loaded_service_must_bind_exact_trusted_preload(self):
         command = '/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node --require /usr/local/libexec/zimage-backend/http-admission.cjs server.js'
         with patch.object(release, 'owned'), patch.object(release.subprocess, 'check_output', return_value='{ argv[]=' + command + ' ; }'):

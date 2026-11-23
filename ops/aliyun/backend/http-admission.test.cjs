@@ -167,21 +167,24 @@ test('upgrade and CONNECT output finish cannot release an inbound half-open tunn
   }
 });
 
-test('actual audited Next stale image response stays counted through delayed fetch, native render, and cache write', async t => {
+test('actual audited Next stale image response stays counted through delayed fetch, WASM render, and cache write', async t => {
   const nextRequire = createRequire(resolve(__dirname, '../../../apps/web/package.json'));
   const f = await fixture(t, async (_req, res) => { const cached = await operation; res.end(cached.value.buffer); });
   installFrameworkTracking(f.controller, nextRequire);
   assert.throws(() => installFrameworkTracking(f.controller, nextRequire), /repeated Next admission hook/);
   const { default: ResponseCache, CachedRouteKind } = nextRequire('next/dist/server/response-cache');
-  const sharp = nextRequire('sharp');
+  const png = await import(nextRequire.resolve('@jsquash/png/encode.js'));
+  const wasm = require('node:fs').readFileSync(nextRequire.resolve('@jsquash/png/codec/pkg/squoosh_png_bg.wasm'));
+  await png.init(await WebAssembly.compile(wasm));
   const value = { kind: CachedRouteKind.IMAGE, buffer: Buffer.from('cached'), etag: 'cached', extension: 'png', upstreamEtag: 'upstream' };
   const previous = { value, cacheControl: { revalidate: 1, expire: undefined }, isStale: true };
-  const lookup = deferred(), fetch = deferred(), native = deferred(), write = deferred(), entered = deferred(), writing = deferred();
+  const lookup = deferred(), fetch = deferred(), render = deferred(), write = deferred(), entered = deferred(), writing = deferred();
   const cache = new ResponseCache({ minimalMode: false, route: 'image' });
   const operation = cache.get('delayed-image', async () => {
     entered.resolve(); await fetch.promise;
-    const buffer = await sharp({ create: { width: 2, height: 2, channels: 4, background: '#ff0000' } }).png().toBuffer();
-    await native.promise;
+    const buffer = Buffer.from(await png.default({ data: new Uint8ClampedArray(16), width: 2, height: 2 }));
+    assert.equal(buffer.subarray(1, 4).toString(), 'PNG');
+    await render.promise;
     return { value: { ...value, buffer }, cacheControl: { revalidate: 1, expire: undefined } };
   }, { incrementalCache: { get: async () => { await lookup.promise; return previous; }, set: async () => { writing.resolve(); await write.promise; } }, isFallback: false });
   assert.ok(f.controller.snapshot().activeFrameworkWork > 0, 'cache lookup scheduler must already be counted');
@@ -193,8 +196,8 @@ test('actual audited Next stale image response stays counted through delayed fet
   assert.ok(f.controller.snapshot().activeFrameworkWork > 0, 'detached fetch is still counted after stale response');
   assert.equal(await f.request('/api/meta'), 503);
   fetch.resolve(); await tick();
-  assert.ok(f.controller.snapshot().activeFrameworkWork > 0, 'native generation remains counted');
-  native.resolve(); await writing.promise;
+  assert.ok(f.controller.snapshot().activeFrameworkWork > 0, 'image generation remains counted');
+  render.resolve(); await writing.promise;
   assert.ok(f.controller.snapshot().activeFrameworkWork > 0, 'cache persistence remains counted');
   write.resolve();
   while (cache.revalidateBatcher.pending.size) await tick();
@@ -299,7 +302,8 @@ test('framework pins reject version and source drift before installing hooks', (
     assert.throws(() => installFrameworkTracking(createAdmissionController(() => gate('open')), wrongVersion), /audited Next/);
   }
   const wrongSource = name => nextRequire(name);
-  wrongSource.resolve = () => __filename;
+  wrongSource.resolve = name => nextRequire.resolve(name === 'next/dist/server/lib/start-server.js'
+    ? 'next/dist/server/next-server.js' : name);
   assert.throws(() => installFrameworkTracking(createAdmissionController(() => gate('open')), wrongSource), /Unaudited Next admission source/);
 });
 

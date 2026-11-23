@@ -43,6 +43,7 @@ class ReceiverEntry(unittest.TestCase):
         bridge.load_tools.return_value = (Mock(), Mock())
         bridge.Adapter.return_value.locked.side_effect = nullcontext
         engine.BackendTransaction.return_value.observed.return_value = dict(pid=7, admissionMode='open')
+        enter(patch.object(receive, 'TOOLS', root/('e'*64)))
         modules = {receive.LAYERS/'release-three-layer.py': bridge,
                    receive.BACKEND/'transaction.py': engine, receive.TOOLS/'check.py': checks}
         enter(patch.object(management, 'load', side_effect=lambda path, name: modules[path]))
@@ -70,7 +71,7 @@ class ReceiverEntry(unittest.TestCase):
         if not hmac.compare_digest(bundle.read_bytes(), self.proof(sha, archive.read_bytes())):
             raise ValueError('Fixture provenance rejected')
 
-    def receive(self, phase, live, *, run=19, trusted=True, changes=None):
+    def receive(self, phase, live, *, run=19, trusted=True, changes=None, kit_id='e'*64):
         self.current.return_value = live
         if not self.journal.is_symlink():
             self.journal.write_text(json.dumps(dict(self.state, phase=phase) | (changes or {})))
@@ -82,12 +83,19 @@ class ReceiverEntry(unittest.TestCase):
             tar.addfile(member, io.BytesIO(meta))
         body = archive.getvalue()
         proof = self.proof(INCOMING, body) if trusted else bytes(32)
-        header = f'{INCOMING} {len(proof)} {len(body)}\n'.encode()
+        header = f'{kit_id} {INCOMING} {len(proof)} {len(body)}\n'.encode()
         stdin = SimpleNamespace(buffer=io.BytesIO(header+proof+body))
         isolated = SimpleNamespace(argv=['receive.py'], flags=SimpleNamespace(isolated=True),
                                    stdin=stdin, stderr=sys.stderr)
         with patch.object(receive, 'sys', isolated):
             return receive.main()
+
+    def test_signed_candidate_for_another_kit_is_rejected_before_archive(self):
+        with self.assertRaisesRegex(ValueError, 'different receiver kit'):
+            self.receive('committed', PREVIOUS_CANDIDATE, kit_id='f'*64)
+        self.verify.assert_not_called()
+        self.prepare.assert_not_called()
+        self.activate.assert_not_called()
 
     def test_terminal_phase_selects_matching_live_pair_and_tree(self):
         for phase, live, tree in [('committed', PREVIOUS_CANDIDATE, NEW_TREE), ('restored', RETAINED, OLD_TREE)]:

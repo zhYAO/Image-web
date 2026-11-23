@@ -16,9 +16,10 @@ import time
 
 ROOT = Path('/opt/zimage')
 ETC = Path('/etc/zimage')
-TOOLS = Path('/usr/local/libexec/zimage-production')
-BACKEND = Path('/usr/local/libexec/zimage-backend')
-LAYERS = Path('/usr/local/libexec/zimage-three-layer')
+TOOLS = Path(__file__).absolute().parent
+BACKEND = TOOLS/'backend'
+LAYERS = TOOLS/'layers'
+PRELOAD = BACKEND/'http-admission.cjs'
 JOURNAL = ROOT/'production-release.json'
 MAX_PAIR = 2_600_000_000
 REPO = 'zhYAO/Image-web'
@@ -146,7 +147,7 @@ class Host:
         self.http_get = legacy.get
         self.ingress_open = ETC/"ingress-open.json"
         self.saved_open = ETC/"production-saved-open.json"
-        self.ops = management.SystemOps(adapter, legacy)
+        self.ops = management.SystemOps(adapter, legacy, preload=PRELOAD)
         self.management, self.engine = management, engine
         self.tx = engine.BackendTransaction(self.ops, management.CONTROL, JOURNAL)
         self.operation = 'release-'+sha
@@ -204,7 +205,7 @@ class Host:
                 ETC/'ingress-checking.json', ETC/'frontend-checking.json')), 'Existing ingress maintenance')
         for directory in (self.front/'assets', self.front/'releases'):
             self.management.owned(directory, directory=True)
-        self.management.service_launch_preflight()
+        self.management.service_launch_preflight(PRELOAD)
         self.adapter.service_check()
         self.adapter.target_check()
         status = self.tx.observed(old[0])
@@ -221,7 +222,8 @@ class Host:
         require(isinstance(trees, list) and review == self.review and self.old_migrations in trees and self.migrations in trees,
                 'Database compatibility review changed or excludes retained code')
 
-    def process(self, sha, pid):
+    @staticmethod
+    def process(sha, pid):
         proc = Path('/proc')/str(pid)
         require((proc/'exe').resolve(strict=True) == ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
                 and (proc/'cwd').resolve(strict=True) == ROOT/'releases'/sha/'apps/web',
@@ -350,6 +352,45 @@ class Host:
         self.checks.probe(*pair, local=True)
 
 
+def check_installation():
+    """Administrative read-only check. No receipt, cache assembly, lock, restart or release."""
+    management = load(BACKEND/'release.py')
+    bridge = management.load(LAYERS/'release-three-layer.py', 'production_layers')
+    management.load(BACKEND/'transaction.py', 'production_lifecycle')
+    bridge.load_tools(strict=True)
+    require(callable(getattr(bridge.Adapter, 'prepare_archive', None)), 'Missing layered preparation helper')
+    management.owned(Path('/usr/bin/gh'))
+    help_text = subprocess.check_output(['/usr/bin/gh', 'attestation', 'verify', '--help'], text=True, timeout=10)
+    for flag in ('--repo', '--signer-workflow', '--source-ref', '--source-digest', '--signer-digest',
+                 '--deny-self-hosted-runners', '--bundle', '--custom-trusted-root'):
+        require(re.search(r'(?<![\w-])'+flag+r'(?![\w-])', help_text), 'Installed gh lacks '+flag)
+    trust = ETC/'production-trusted-root.jsonl'
+    management.owned(trust)
+    require(0 < trust.stat().st_size <= 1024*1024, 'Invalid trusted root size')
+    roots = [json.loads(line) for line in trust.read_bytes().splitlines() if line.strip()]
+    require(roots and all(isinstance(row, dict) and isinstance(row.get('certificateAuthorities'), list)
+                          and row['certificateAuthorities'] for row in roots),
+            'Missing Sigstore certificate authorities')
+    target_policy(management)
+    with bridge.safe_node_environment():
+        bridge.enabled_target_check()
+        bridge.service_preflight()
+        management.service_launch_preflight(PRELOAD)
+        ops = management.SystemOps(None, None, preload=PRELOAD)
+        state = ops.status()  # Checks the live MainPID and Unix peer UID/PID.
+        target = (ROOT/'current').resolve(strict=True)
+        require(target.parent == ROOT/'releases' and re.fullmatch('[0-9a-f]{40}', target.name)
+                and state.get('backendRelease') == target.name and state.get('admissionMode') == 'open'
+                and state.get('controlValid') is True, 'Current release or admission status differs')
+        Host.process(target.name, state['pid'])
+        node = ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
+        inspection = json.loads(subprocess.check_output([str(node), str(PRELOAD), 'inspect',
+                                                        str(target/'apps/web/server.js')], timeout=30))
+        framework = state['httpAdmission']['frameworkWork']
+        require(inspection['release'] == target.name and framework == dict(inspection['contract'], installed=True,
+                hook='response-cache-revalidate-v1', controlValid=True), 'Live Next profile differs from installed release')
+
+
 def main():
     require(os.geteuid() == 0 and sys.flags.isolated and len(sys.argv) == 1, 'Fixed isolated helper required')
     os.umask(0o022)
@@ -361,10 +402,11 @@ def main():
     management.owned(ROOT, directory=True)
     target_policy(management)  # Reject a copied installation before accepting archive bytes.
     header = sys.stdin.buffer.readline(128)
-    match = re.fullmatch(rb'([a-f0-9]{40}) ([0-9]{1,7}) ([0-9]{1,10})\n', header)
+    match = re.fullmatch(rb'([a-f0-9]{64}) ([a-f0-9]{40}) ([0-9]{1,7}) ([0-9]{1,10})\n', header)
     require(match, 'Invalid release header')
-    sha = match[1].decode()
-    proof_size, size = int(match[2]), int(match[3])
+    require(match[1].decode() == TOOLS.name, 'Merged source requires a different receiver kit')
+    sha = match[2].decode()
+    proof_size, size = int(match[3]), int(match[4])
     require(0 < proof_size <= 1024*1024 and 0 < size <= MAX_PAIR, 'Transfer exceeds bound')
     with bridge.safe_node_environment(), tempfile.TemporaryDirectory(dir=ROOT) as name:
         layers, legacy = bridge.load_tools(strict=True)
@@ -383,4 +425,4 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit('Invoke the versioned kit.py entrypoint to verify the installed closure')

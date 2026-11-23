@@ -10,15 +10,25 @@
 2. 为专用账户 `zimage-release` 仅授权下面这一把强制命令密钥。账户无其他登录途径、sudo 授权、可写启动脚本或可修改的 authorized_keys。用管理员管理的 `AuthorizedKeysFile`，确认 sshd 对该账户禁用密码、用户环境和其他身份认证入口。账户不能写代码、助手、信任根或配置。先核对正常登录不可取得终端、端口转发、任意命令或 SFTP；sender 固定检查主机密钥。[OpenSSH authorized_keys](https://man.openbsd.org/sshd.8#AUTHORIZED_KEYS_FILE_FORMAT)
 
    ```text
-   restrict,command="/usr/bin/sudo -n /usr/bin/python3 -I -B /usr/local/libexec/zimage-production/receive.py" ssh-ed25519 <新发布公钥>
+   restrict,command="/usr/bin/sudo -n /usr/bin/python3 -I -B /usr/local/libexec/zimage-production/versions/<KIT_ID>/kit.py" ssh-ed25519 <新发布公钥>
    ```
 
-   对应 sudoers 规则仅含 `zimage-release ALL=(root) NOPASSWD: /usr/bin/python3 -I -B /usr/local/libexec/zimage-production/receive.py`。默认 `env_reset`，不授予 SETENV。接收端忽略原始 SSH 命令和任意远程路径参数。
+   对应 sudoers 规则仅含 `zimage-release ALL=(root) NOPASSWD: /usr/bin/python3 -I -B /usr/local/libexec/zimage-production/versions/<KIT_ID>/kit.py`。默认 `env_reset`，不授予 SETENV。接收端忽略原始 SSH 命令和任意远程路径参数。
 
-3. 由管理员核对、安装本提交的 `receive.py`、`check.py` 到上述 production 目录。核对三层助手目录 `/usr/local/libexec/zimage-three-layer` 的完整文件集（`release-three-layer.py:TOOLS`），其中需要新版 `prepare_archive`、schema 3 与 `public-image-contract.py`。在 `/usr/local/libexec/zimage-backend` 核对 `release.py`、`transaction.py`、`http-admission.cjs`、`next-source-profiles.json`。文件和祖先目录须 root 管理。确认现有 split Nginx 路由及有效的 ingress-maintenance 配置、前后端 current、命名空间 assets、缓存及可用磁盘。核对已加载的 `zimage.service` 专用 Node 24.19.0、服务身份、每版资源 EnvironmentFile、三层目标配置和业务排空 preload。实际 MainPID、cwd、私有状态 socket、原生运行时任一不符即停止。[服务模板](../zimage.service) · [现有后端服务前置条件](../backend/README.md)
+3. 从独立审阅的提交运行 `python3 -I -B ops/aliyun/production/kit.py digest` 记录 `KIT_ID`。该 SHA-256 标识接收器、preload、Next profile 和所有依赖助手的名称及字节。可先在私有临时目录执行 `python3 -I -B ops/aliyun/production/kit.py stage "$KIT_ID" "$EMPTY_PARENT"` 核对布局。经单独授权后，管理员在可信控制台创建 root 管理、模式 0755 的 `/usr/local/libexec/zimage-production/versions`，从独立核对过的管理员只读源码目录执行同一条 stage 命令，父目录改为上述绝对路径。目标版本已存在时命令退出。密钥强制命令与 sudoers 中的 `<KIT_ID>` 均须替换为完整的同一摘要。每次进入接收器前，入口检查完整目录清单、UID、权限、链接和摘要。发送方从实际合并提交计算相同摘要。接收端比较固定安装目录的摘要后才读取归档；只有接收器文件变化才需要审批新版本。
+
+   先保留原助手、原 systemd 配置和旧应用。单独批准维护窗口后，为现有 `zimage.service` 添加新的独立 drop-in，沿用现有用户、工作目录、资源 EnvironmentFile 和专用 Node。只替换 ExecStart 中的 preload。下例的 `<KIT_ID>` 由管理员写为字面摘要。
+
+   ```ini
+   [Service]
+   ExecStart=
+   ExecStart=/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node --require /usr/local/libexec/zimage-production/versions/<KIT_ID>/backend/http-admission.cjs server.js
+   ```
+
+   在业务已排空且现有版本可恢复的窗口重载单元、重启当前旧应用。管理员运行 `/usr/bin/python3 -I -B /usr/local/libexec/zimage-production/versions/<KIT_ID>/kit.py check`。该操作只读，检查实例、gh 验签能力、信任根、Node 目标、已加载的单元、真实 MainPID/UID 私有 socket、进程 cwd 及可执行文件。运行中 preload 在状态响应中返回自身路径，预检再用版本化 profile 独立检查当前 Next 文件。仅重载 systemd、旧进程仍在运行时检查会失败。若旧应用无法用新 preload 通过检查，应在同一窗口恢复原 drop-in 和旧进程，核对服务健康并保持发布开关关闭。检查真实 SSH 限权、同 SHA 签发和公网链路仍需各自的外部证据。
 
 4. 目标机的 `/usr/bin/gh` 需要支持本实现使用的验证参数（本地验证使用 2.83.2）。管理员从独立可信机器执行 `gh attestation trusted-root`，将结果安装为 root 管理的 `/etc/zimage/production-trusted-root.jsonl`，按官方轮换指引更新。发布发送方不能提供或更改该文件。
-5. 由数据库负责人核实**同一真实生产数据库**支持当前代码、候选代码以及切回旧代码。对照 `git diff 7a811b3..a3f43a6 -- supabase/migrations` 的两份 SQL，分别涉及 OpenAI 聊天计量与提供方诊断。核对实际已应用的修订、RPC/权限、Worker 和计量兼容后，由管理员把实际实例 ID 和已批准的迁移树写入 `/etc/zimage/production-target.json`。字段为 `instanceId` 和 `compatibleMigrationTrees`（Git tree SHA 字符串数组）；通过 `git rev-parse <commit>:supabase/migrations` 取值。一次发布要求候选、保留版两棵树同时获准。静态树值是审查索引，不能替代检查生产数据库。此流程不访问数据库或执行 SQL。
+5. 由数据库负责人核实**同一真实生产数据库**支持当前代码、候选代码以及切回旧代码。当前生产库及 Edge 采用 M6 合同；诊断迁移 M8 已按实际时间戳应用，M7 尚未应用，新计量开关关闭。复核候选和旧版在这个真实合同下的请求及回滚行为。核对实际已应用的修订、RPC/权限、Worker 和计量兼容后，由管理员把实际实例 ID 和已批准的迁移树写入 `/etc/zimage/production-target.json`。字段为 `instanceId` 和 `compatibleMigrationTrees`（Git tree SHA 字符串数组）；通过 `git rev-parse <commit>:supabase/migrations` 取值。一次发布要求候选、保留版两棵树同时获准。静态树值是审查索引，不能替代检查生产数据库。此流程不访问数据库或执行 SQL。
 6. 先确认真正的公网 DNS、证书、首页及版本接口已经恢复。当前首次基线要求后端 `7a811b326aa4b344cee08bc5a33c04e44a780fd4`、前端 `release-7a811b326aa4`、对应源 SHA 和健康原进程。首次启用仍需由维护者在授权窗口验证真实服务、SSH 权限及真实恢复。演示样例或本机回环 200 都不足以满足这些条件。
 
 构建复用优化开发分支 `68e71973dc2f6295d1d33206728f460c79e4f832` 的前后端与锁文件，使用 `model-only-jsquash` 运行层。两个构建都按固定 HTTPS 地址、响应策略、字节数和 SHA-256 验证全部 62 张公开图。接收端在服务停止后按该版本的 profile 探测模型版 WASM 或旧版原生字体，然后才切换。先在变更窗口核对整套助手、preload、Next profile 和旧版恢复能力。

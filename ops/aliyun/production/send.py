@@ -10,10 +10,12 @@ import sys
 import tempfile
 
 from check import SHA, NAMESPACE, probe
+from kit import identity, source_contents
 
 
 def deliver(process, sha, archive, bundle):
-    header = f'{sha} {bundle.stat().st_size} {archive.stat().st_size}\n'.encode()
+    receiver_id = identity(source_contents())
+    header = f'{receiver_id} {sha} {bundle.stat().st_size} {archive.stat().st_size}\n'.encode()
     process.stdin.write(header)
     for file in (bundle, archive):
         with file.open('rb') as src:

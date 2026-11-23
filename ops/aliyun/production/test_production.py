@@ -232,8 +232,9 @@ with open(sys.argv[1], 'r+') as f:
 
     def test_sender_and_receiver_share_one_bounded_session(self):
         child = """
-import sys, receive
-sha, proof_size, size = sys.stdin.buffer.readline().split()
+import sys, receive, kit
+kit_id, sha, proof_size, size = sys.stdin.buffer.readline().split()
+assert kit_id.decode() == kit.identity(kit.source_contents())
 assert sys.stdin.buffer.read(int(proof_size)) == b'proof'
 assert sys.stdin.buffer.read(int(size)) == b'contents'
 old = ('a'*40, 'release-'+'a'*12)

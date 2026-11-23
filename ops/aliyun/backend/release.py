@@ -72,20 +72,21 @@ def bounded_json(path, limit=65536):
         return json.loads(value, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite backend JSON')))
 
 
-def service_launch_preflight():
+def service_launch_preflight(preload=Path('/usr/local/libexec/zimage-backend/http-admission.cjs')):
     owned(Path(__file__).with_name('http-admission.cjs'))
     owned(Path(__file__).with_name('next-source-profiles.json'))
     fields = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage.service', '--property=ExecStart', '--value'], text=True)
-    match = __import__('re').search(r'argv\[\]=([^;]+);', fields)
+    commands = __import__('re').findall(r'argv\[\]=([^;]+);', fields)
     expected = ['/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node', '--require',
-                '/usr/local/libexec/zimage-backend/http-admission.cjs', 'server.js']
-    if match is None or match.group(1).strip().split() != expected:
+                str(preload), 'server.js']
+    if len(commands) != 1 or commands[0].strip().split() != expected:
         raise ValueError('Loaded systemd ExecStart must bind exact reviewed root Node preload')
 
 
 class SystemOps:
-    def __init__(self, adapter, legacy):
+    def __init__(self, adapter, legacy, *, preload=None):
         self.adapter, self.legacy = adapter, legacy
+        self.preload = preload
 
     def current(self):
         return self.adapter.current_target().name
@@ -186,6 +187,8 @@ class SystemOps:
             state = json.loads(body)
             if state.get('pid') != pid or self.service_pid() != pid:
                 raise RuntimeError('Lifecycle status process changed during read')
+            if self.preload is not None and state.get('httpAdmission', {}).get('preloadPath') != str(self.preload):
+                raise ValueError('Live MainPID did not load the pinned receiver preload')
             return state
 
     def validate(self, release):
