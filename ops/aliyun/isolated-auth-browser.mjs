@@ -12,12 +12,12 @@ export function playwrightPath(project) {
   return next.resolve('@playwright/test');
 }
 
-export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit, retained, shadow = false, isolatedUpstream = false }) {
+export async function browserAuth({ project, frontend, scratch, namespace, backendPort, ingressPort, email, password, userId, commit, retained, shadow = false, isolatedUpstream = false, switchIsolatedBackend }) {
   const { chromium } = createRequire(import.meta.url)(playwrightPath(project));
   check((shadow ? /^[a-f0-9]{40}$/.test(commit) && namespace === 'release-' + commit.slice(0, 12) : /^rehearsal-[a-f0-9]{40}-[0-9]+-[0-9]+$/.test(namespace)) && /^[\w/.\-]+$/.test(scratch), 'Invalid disposable ingress paths');
   check(typeof isolatedUpstream === 'boolean' && Number.isInteger(backendPort) && backendPort >= 1024 && backendPort <= 65535,
     'Invalid fixture upstream port');
-  check(!isolatedUpstream || (shadow && !retained && backendPort === 3100 && process.platform === 'linux' &&
+  check(!isolatedUpstream || (shadow && (!retained || typeof switchIsolatedBackend === 'function') && backendPort === 3100 && process.platform === 'linux' &&
     process.env.RUNNER_ENVIRONMENT === 'github-hosted' && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN),
     'Container upstream requires isolated trusted host supervisor');
   const host = isolatedUpstream ? '172.31.219.2' : '127.0.0.1';
@@ -75,7 +75,7 @@ http {
     }
     check(ready && nginx.exitCode === null, stage);
     stage = 'Disposable browser startup failed';
-    browser = await chromium.launch({ args: ['--disable-background-networking', '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=127.0.0.1'] });
+    browser = await chromium.launch({ chromiumSandbox: isolatedUpstream, args: ['--disable-background-networking', '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=127.0.0.1'] });
     const ctx = await browser.newContext({ serviceWorkers: 'block' });
     await ctx.route('**/*', route => {
       const req = route.request(), url = new URL(req.url());
@@ -153,9 +153,14 @@ http {
     if (retained) {
       const candidateScript = scripts[0];
       const selectBackend = async (port, sha) => {
-        await writeFile(upstream + '.new', `proxy_pass http://127.0.0.1:${port};\n`, { mode: 0o600, flag: 'wx' });
-        await rename(upstream + '.new', upstream);
-        check(nginx.kill('SIGHUP'), stage);
+        if (isolatedUpstream) {
+          check(port === 3100, stage);
+          await switchIsolatedBackend(sha);
+        } else {
+          await writeFile(upstream + '.new', `proxy_pass http://127.0.0.1:${port};\n`, { mode: 0o600, flag: 'wx' });
+          await rename(upstream + '.new', upstream);
+          check(nginx.kill('SIGHUP'), stage);
+        }
         for (let i = 0; i < 60; i++) {
           const observed = await fetch(origin + '/api/meta', {
             headers: { connection: 'close' }, redirect: 'error', signal: AbortSignal.timeout(1000),

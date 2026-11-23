@@ -171,7 +171,7 @@ function dockerState(name, project) {
 }
 
 async function run(args) {
-  const selected = args.length === 8 && args[3] === '--protected-main-shadow';
+  const selected = (args.length === 8 || args.length === 9) && args[3] === '--protected-main-shadow';
   require(process.platform === 'linux' && process.versions.node === '24.19.0' && selected && !process.env.GH_TOKEN && !process.env.GITHUB_TOKEN, 'Invalid isolated proof invocation');
   const paths = [...args.slice(0, 3), args[4], args[5], args[6]];
   require(paths.every(item => path.isAbsolute(item)), 'Expected absolute checkout and inspected artifact roots');
@@ -204,6 +204,26 @@ async function run(args) {
     && candidate.allowedBackendReleases?.length === 1 && candidate.allowedBackendReleases[0] === commit, 'Not an exact paired release');
   require((await regular(path.join(frontend, 'app.html'))).includes(Buffer.from('/frontend-assets/' + candidate.namespace + '/')),
     'Exact frontend shell does not bind its expected namespace');
+  let baseline;
+  const oldSha = '7a811b326aa4b344cee08bc5a33c04e44a780fd4';
+  if (args[8]) {
+    const root = await realpath(args[8]);
+    const base = await realpath(process.env.TMPDIR);
+    require(path.isAbsolute(args[8]) && root === path.join(base, 'baseline'), 'Wrong isolated baseline root');
+    const [kind, source, digest, ...extra] = (await regular(path.join(root, 'RECONSTRUCTION_ONLY'))).toString().trimEnd().split('\n');
+    const frontend = path.join(root, 'web'), app = path.join(root, 'app');
+    const desc = JSON.parse((await regular(path.join(frontend, '.release/candidate.json'))).toString());
+    require(kind === 'source-reconstructed-nonpromotable' && source === oldSha && !extra.length &&
+      /^[a-f0-9]{64}$/.test(digest) && desc.sourceIdentity?.sourceSHA === oldSha && desc.sourceIdentity.dirty === false
+      && desc.allowedBackendReleases?.length === 1 && desc.allowedBackendReleases[0] === oldSha
+      && new RegExp('^rehearsal-' + oldSha + '-[1-9][0-9]*-[1-9][0-9]*$').test(desc.namespace)
+      && (await regular(path.join(app, 'apps/web/.next/BUILD_ID'))).toString().trim() === oldSha
+      && (await regular(path.join(frontend, 'app.html'))).includes(Buffer.from('/frontend-assets/' + desc.namespace + '/')),
+      'Invalid reconstructed isolated baseline');
+    const resources = path.join(root, 'resources', digest);
+    require(await realpath(resources) === resources && (await lstat(path.join(resources, 'fonts'))).isDirectory(), 'Missing reconstructed fixture resources');
+    baseline = { commit: oldSha, frontend, app, resources, digest, namespace: desc.namespace, port: 3100 };
+  }
   require((await lstat('/var/run/docker.sock').catch(() => null))?.isSocket(), 'Local Docker socket unavailable - real authenticated rehearsal blocked');
   const docker = command('docker', ['version', '--format', '{{.Server.Version}}'], project, localEnvironment, 10_000, 'Local Docker runtime');
   require(docker.trim(), 'Local Docker daemon unavailable');
@@ -246,43 +266,63 @@ async function run(args) {
       'AUTH_RATE_LIMIT_PEPPER=' + randomBytes(32).toString('hex'),
       'ZIMAGE_ALLOWED_ORIGINS=' + ingressOrigin,
     ].join('\n') + '\n', { flag: 'wx', mode: 0o600 });
-    appProc = spawn('/usr/bin/docker', ['run', '--rm', '--pull=never', '--platform=linux/amd64',
-      '--name', id, '--network', networkId, '--ip', '172.31.219.2', '--add-host', 'zimage-fixture-gateway:172.31.219.1',
-      '--user=65532:65532', '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--read-only',
-      '--pids-limit', '96', '--memory', '1024m', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
-      '--mount', 'type=bind,src=' + backend + ',dst=/candidate,readonly,bind-recursive=disabled',
-      '--mount', 'type=bind,src=/opt/zimage/layer-cache,dst=/opt/zimage/layer-cache,readonly,bind-recursive=disabled',
-      '--mount', 'type=bind,src=' + nodeBin + ',dst=/node,readonly,bind-recursive=disabled',
-      '--mount', 'type=bind,src=' + ca + ',dst=/fixture-ca.pem,readonly,bind-recursive=disabled',
-      '--env-file', candidateEnv, '--env', 'NODE_EXTRA_CA_CERTS=/fixture-ca.pem',
-      '--env', 'NEXT_PUBLIC_SUPABASE_URL=https://zimage-fixture-gateway:8443', '--env', 'NODE_ENV=production',
-      '--env', 'NEXT_TELEMETRY_DISABLED=1', '--env', 'HOME=/tmp', '--env', 'HOSTNAME=0.0.0.0', '--env', 'PORT=3100',
-      '--workdir', '/candidate/apps/web', 'docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad',
-      '/node', 'server.js'], { cwd: project, stdio: 'ignore', env: localEnvironment });
-    let launchError = false, outcome = 'no HTTP response';
-    appProc.on('error', () => { launchError = true; });
-    const deadline = performance.now() + 20_000;
-    while (performance.now() < deadline && appProc.exitCode === null && appProc.signalCode === null && !launchError) {
-      const response = await request(origin, '/api/health/ready').catch(() => null);
-      let body;
-      if (response?.status === 200) body = await response.json().catch(() => null);
-      outcome = readinessOutcome(response, body, commit);
-      if (outcome === 'exact ready') break;
-      await delay(250);
-    }
-    if (outcome !== 'exact ready') {
-      const child = launchError ? 'launch error' : appProc.signalCode ? 'child signalled' :
-        appProc.exitCode === null ? 'child active' : 'child exit ' + appProc.exitCode;
-      // Emit only controlled categories, never untrusted body, logs, or env.
-      console.error('Candidate readiness diagnostic: ' + dockerState(id, project) + '; ' + child + '; ' + outcome);
-      throw new Error('Exact local candidate readiness failed');
-    }
-    await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit, shadow: true, isolatedUpstream: true });
+    const start = async (target) => {
+      const isOld = target === oldSha;
+      require(target === commit || (isOld && baseline), 'Unexpected isolated release choice');
+      const selectedApp = isOld ? baseline.app : backend;
+      const oldMounts = isOld ? [
+        '--mount', 'type=bind,src=' + baseline.resources + ',dst=/legacy-assets,readonly,bind-recursive=disabled',
+        '--env', 'ZIMAGE_SHARED_FONT_DIR=/legacy-assets/fonts',
+        '--env', 'ZIMAGE_STATIC_ASSET_SHA256=' + baseline.digest,
+      ] : [];
+      appProc = spawn('/usr/bin/docker', ['run', '--rm', '--pull=never', '--platform=linux/amd64',
+        '--name', id, '--network', networkId, '--ip', '172.31.219.2', '--add-host', 'zimage-fixture-gateway:172.31.219.1',
+        '--user=65532:65532', '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--read-only',
+        '--pids-limit', '96', '--memory', '1024m', '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777',
+        '--mount', 'type=bind,src=' + selectedApp + ',dst=/candidate,readonly,bind-recursive=disabled',
+        '--mount', 'type=bind,src=/opt/zimage/layer-cache,dst=/opt/zimage/layer-cache,readonly,bind-recursive=disabled',
+        '--mount', 'type=bind,src=' + nodeBin + ',dst=/node,readonly,bind-recursive=disabled',
+        '--mount', 'type=bind,src=' + ca + ',dst=/fixture-ca.pem,readonly,bind-recursive=disabled',
+        ...oldMounts, '--env-file', candidateEnv, '--env', 'NODE_EXTRA_CA_CERTS=/fixture-ca.pem',
+        '--env', 'NEXT_PUBLIC_SUPABASE_URL=https://zimage-fixture-gateway:8443', '--env', 'NODE_ENV=production',
+        '--env', 'NEXT_TELEMETRY_DISABLED=1', '--env', 'HOME=/tmp', '--env', 'HOSTNAME=0.0.0.0', '--env', 'PORT=3100',
+        '--workdir', '/candidate/apps/web', 'docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad',
+        '/node', 'server.js'], { cwd: project, stdio: 'ignore', env: localEnvironment });
+      let launchError = false, outcome = 'no HTTP response';
+      appProc.on('error', () => { launchError = true; });
+      const deadline = performance.now() + 20_000;
+      while (performance.now() < deadline && appProc.exitCode === null && appProc.signalCode === null && !launchError) {
+        const response = await request(origin, '/api/health/ready').catch(() => null);
+        let body;
+        if (response?.status === 200) body = await response.json().catch(() => null);
+        outcome = readinessOutcome(response, body, target);
+        if (outcome === 'exact ready') break;
+        await delay(250);
+      }
+      if (outcome !== 'exact ready') {
+        const child = launchError ? 'launch error' : appProc.signalCode ? 'child signalled' :
+          appProc.exitCode === null ? 'child active' : 'child exit ' + appProc.exitCode;
+        // Emit only controlled categories, never untrusted body, logs, or env.
+        console.error('Candidate readiness diagnostic: ' + dockerState(id, project) + '; ' + child + '; ' + outcome);
+        throw new Error('Exact local candidate readiness failed');
+      }
+    };
+    const switchIsolatedBackend = async (target) => {
+      require(baseline && (target === oldSha || target === commit), 'Unexpected isolated switch target');
+      const prior = appProc;
+      command('/usr/bin/docker', ['rm','-f',id], project, localEnvironment, 20_000, 'Stop exact isolated fixture process');
+      for (let i = 0; i < 20 && prior.exitCode === null && prior.signalCode === null; i++) await delay(100);
+      require(prior.exitCode !== null || prior.signalCode !== null, 'Old fixture process still exists');
+      await start(target);
+    };
+    await start(commit);
+    await browserAuth({ project, frontend, scratch, namespace: candidate.namespace, backendPort: port, ingressPort, email, password, userId, commit, shadow: true, isolatedUpstream: true,
+      retained: baseline, switchIsolatedBackend });
     verifyLedger();
     const dbEvidence = expectedLedger ? { dbProfile: 'm6-diagnostics-no-m7', migrationCount: 43,
       migrationLedgerSha256: createHash('sha256').update(expectedLedger + '\n').digest('hex') } : {};
     return { commit, ...dbEvidence, scope: 'isolated-container-browser-only', browserUiTested: true,
-      productionReady: false, credentialMode: 'synthetic', checks: ['candidate-health', 'browser-home-login-workspace-logout'] };
+      productionReady: false, credentialMode: 'synthetic', ...(baseline ? { reconstructedIsolatedPairRecovery: true, reconstructedCommit: oldSha } : {}), checks: ['candidate-health', 'browser-home-login-workspace-logout'] };
   } catch (error) {
     failed = true;
     throw error;

@@ -9,6 +9,7 @@ ref=refs/heads/codex/zimage-protected-stage-netproof-20261122
    -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} &&
    ${GITHUB_SHA:-} =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
 [[ "$(getconf GNU_LIBC_VERSION)" == 'glibc 2.35' ]]
+[[ ${ZIMAGE_FROZEN_BASELINE:-0} != 1 || ${ZIMAGE_FROZEN_CANDIDATE:-0} == 1 ]]
 root=$(pwd -P)
 scratch=$(mktemp -d "$RUNNER_TEMP/zimage-netproof.XXXXXXXX")
 image=docker.io/library/ubuntu@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
@@ -146,8 +147,22 @@ PY_PORT
   sudo iptables -I INPUT 1 "${reply_rule[@]}"
   reply_allowed=1
   sudo iptables -C INPUT "${reply_rule[@]}"
+  baseline_args=()
+  if [[ ${ZIMAGE_FROZEN_BASELINE:-0} == 1 ]]; then
+    old_sha=7a811b326aa4b344cee08bc5a33c04e44a780fd4
+    old_source="$scratch/baseline-source"
+    git init -q "$old_source"
+    git -C "$old_source" fetch --quiet --depth 1 https://github.com/zhYAO/Image-web.git "$old_sha"
+    git -C "$old_source" checkout --quiet --detach "$old_sha"
+    TMPDIR="$scratch" bash ops/aliyun/reconstruct-7a-browser-fixture.sh "$old_source" "$scratch/baseline" "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+    # Reconstructed fixture permissions only; source preparation used umask 077.
+    # Candidate and verified layer bytes/modes stay untouched.
+    find "$scratch/baseline/app" "$scratch/baseline/resources" -type d -exec chmod a+rx {} +
+    find "$scratch/baseline/app" "$scratch/baseline/resources" -type f -exec chmod a+r {} +
+    baseline_args+=("$scratch/baseline")
+  fi
   env -i PATH="$PATH" HOME="$HOME" TMPDIR="$scratch" RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux \
     PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
     node ops/aliyun/isolated-auth-92663-container.mjs "$root" "$scratch/prepared/app" "$scratch/prepared/web" \
-      --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id"
+      --protected-main-shadow "$scratch/m6" "$scratch/node" "$scratch/tls/ca.pem" "$id" "${baseline_args[@]}"
 fi

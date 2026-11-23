@@ -37,6 +37,7 @@ jobs:
         run: bash ops/aliyun/fetch-92663-frozen-proof.sh
       - name: Exercise trusted boundary and optionally boot the signed candidate
         env:
+          ZIMAGE_FROZEN_BASELINE: ${{ contains(github.event.head_commit.message, '[reconstructed-baseline]') && '1' || '0' }}
           ZIMAGE_FROZEN_CANDIDATE: ${{ contains(github.event.head_commit.message, '[frozen-candidate]') && '1' || '0' }}
         run: |
           set -euo pipefail
@@ -46,5 +47,6 @@ jobs:
             COREPACK_HOME="$home/corepack" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_OS="$RUNNER_OS" \
             GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
             GITHUB_REF="$GITHUB_REF" GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" GITHUB_SHA="$GITHUB_SHA" \
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" ZIMAGE_FROZEN_BASELINE="$ZIMAGE_FROZEN_BASELINE" \
             ZIMAGE_FROZEN_CANDIDATE="$ZIMAGE_FROZEN_CANDIDATE" \
             bash ops/aliyun/github-protected-stage-netproof.sh
