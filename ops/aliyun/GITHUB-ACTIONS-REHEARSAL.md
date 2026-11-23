@@ -287,6 +287,16 @@ public HTTPS. Its result cannot be inferred from the fixture job.
    contract evidence before enabling release. ECS process receipts, fixture
    responses and anonymous HTTPS observations cannot satisfy this DB gate.
 
+The isolated receiver expects `/etc/zimage/ordinary-database-observer.json`
+with the exact observer workflow SHA and reviewed query SHA-256. Its batch
+evidence directory must contain `database.json` and `database.bundle.jsonl`.
+The subject must match the approved project, role, contract, release packet and
+operation. The offline verifier additionally pins the database workflow path,
+main source commit, run, attempt and repository ID. The temporary PostgreSQL
+rehearsal produces a `fixture` measurement. The receiver rejects this mode and
+the earlier unsigned database record. Production still requires an approved
+independent observer workflow, DB principal and evidence handoff.
+
 ### Independent GitHub evidence connection
 
 The receiver can use an explicitly authorized observer when direct GitHub

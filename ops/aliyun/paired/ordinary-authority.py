@@ -15,10 +15,12 @@ import ordinary
 
 ETC = Path('/etc/zimage')
 CONFIG = ETC / 'ordinary-authority.json'
+DATABASE_POLICY = ETC / 'ordinary-database-observer.json'
 TOKEN = ETC / 'ordinary-github-observer.token'
 AUTHORIZATIONS = ETC / 'ordinary-authorizations'
 EVIDENCE = ETC / 'ordinary-evidence'
 PROJECT = 'klmiycyesxnpinxpeqep'
+DATABASE_ROLE = 'zimage_release_observer'
 MAX_RECORDS = 512
 MAX_AGE = 120
 VERIFY_WAIT = 110
@@ -35,10 +37,12 @@ def require(condition, message):
 
 class Authority:
     def __init__(self, *, core, tools, public, read, trusted, root, observe=None, clock=time.time,
-                 monotonic=time.monotonic, sleep=time.sleep):
+                 monotonic=time.monotonic, sleep=time.sleep, verify_database=None):
         self.core, self.tools, self.read, self.trusted, self.root = core, tools, read, trusted, root
         self.public = public
         self.observe = observe
+        self.verify_database = verify_database
+        self.database_proof = None
         self.clock = clock
         self.monotonic, self.sleep = monotonic, sleep
         self.batch = None
@@ -61,6 +65,7 @@ class Authority:
 
     def authorization(self, packet):
         self.batch = None
+        self.database_proof = None
         ordinary.exact(packet, ordinary.PACKET)
         for key in ('runId', 'attempt'):
             require(type(packet[key]) is int and 0 < packet[key] < 2**63, 'Invalid release batch')
@@ -149,12 +154,36 @@ class Authority:
                 'Host evidence is stale or belongs to a different batch')
 
     def database_digest(self):
-        evidence, _ = self._evidence('database.json', 'zimage-ordinary-database-v1',
-                                     {'projectRef', 'contractSha256', 'readOnly'})
-        require(evidence['projectRef'] == PROJECT and evidence['readOnly'] is True,
-                'Independent read-only database observation required')
-        self.core.hexid(evidence['contractSha256'])
-        return evidence['contractSha256']
+        require(self.batch is not None and self.verify_database is not None,
+                'Independent database attestations are unavailable')
+        policy, policy_sha = self._record(DATABASE_POLICY)
+        self.core.exact(policy, {'schemaVersion', 'signerSha', 'querySha256'})
+        require(type(policy['schemaVersion']) is int and policy['schemaVersion'] == 1,
+                'Unknown database observer policy schema')
+        self.core.hexid(policy['signerSha'], 40)
+        self.core.hexid(policy['querySha256'])
+        directory = self.batch['directory']
+        payload = self.read(directory / 'database.json', 4096)
+        evidence = self.core.parse(payload)
+        fields = {'projectRef', 'contractSha256', 'readOnly', 'mode', 'role', 'querySha256'}
+        kind = 'zimage-ordinary-db-observation-v1'
+        self._check_evidence(evidence, kind, fields)
+        expected = self.batch['approval']['databaseSha256']
+        require(evidence['projectRef'] == PROJECT and evidence['readOnly'] is True
+                and evidence['mode'] == 'supabase' and evidence['role'] == DATABASE_ROLE
+                and evidence['querySha256'] == policy['querySha256'] and evidence['contractSha256'] == expected,
+                'Independent read-only database observation differs from policy')
+        bundle = self.read(directory / 'database.bundle.jsonl', 65536)
+        proof = (policy_sha, hashlib.sha256(payload).hexdigest(), hashlib.sha256(bundle).hexdigest())
+        if self.database_proof != proof:
+            packet = self.batch['packet']
+            self.verify_database(payload=payload, bundle=bundle, signer_sha=policy['signerSha'],
+                                 source_sha=packet['commit'], run=packet['runId'], attempt=packet['attempt'],
+                                 gh_sha256=self.attestation_digests['ghSha256'],
+                                 trusted_root_sha256=self.attestation_digests['trustedRootSha256'])
+            self._check_evidence(evidence, kind, fields)
+            self.database_proof = proof
+        return expected
 
     def verify_baseline(self, initial, approval):
         require(self.batch is not None, 'No exact batch for host evidence')
@@ -263,5 +292,6 @@ class Authority:
         return digest
 
 
-def open_authority(*, core, tools, public, read, trusted, root, observe):
-    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root, observe=observe)
+def open_authority(*, core, tools, public, read, trusted, root, observe, verify_database):
+    return Authority(core=core, tools=tools, public=public, read=read, trusted=trusted, root=root, observe=observe,
+                     verify_database=verify_database)

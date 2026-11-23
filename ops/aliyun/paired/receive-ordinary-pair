@@ -1,6 +1,7 @@
 #!/usr/bin/python3 -I
 """Fixed root receiver for paired publication and restoration selectors."""
 import hashlib
+from functools import partial
 import json
 import os
 from pathlib import Path
@@ -178,9 +179,12 @@ def main():
         lifecycle = cli.make_modules()
         installed_system = cli.load(BASE / 'system.py', 'ordinary_installed_system')
         observe = observer_client(tools['ordinary_readonly_transport'], core, read_installed)
+        verify_database = partial(tools['github_shadow_offline'].verify_database, gh_path=VERIFIER,
+                                  trusted_root_path=SIGSTORE_ROOT)
         authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle,
                                                                public=tools['github_pair_public'], read=read_installed,
-                                                               trusted=cli.trusted, root=cli.ROOT, observe=observe)
+                                                               trusted=cli.trusted, root=cli.ROOT, observe=observe,
+                                                               verify_database=verify_database)
         get = observer_client(tools['ordinary_github_relay'], core, read_installed, GITHUB_TLS)
         github = github_evidence(tools, authority, core, get=get)
         def system_for(packet, approval):

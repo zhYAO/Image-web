@@ -104,5 +104,5 @@ def measure(psql, connection, *, mode, operation, packet_sha256, expected_contra
     require(timestamp.tzinfo is not None and 0 <= clock() - timestamp.timestamp() <= 30,
             'Database observation timestamp is stale or invalid')
     return dict(schemaVersion=1, kind='zimage-ordinary-db-observation-v1', mode=mode,
-                operationId=operation, packetSha256=packet_sha256, contractSha256=expected_contract,
+                operationId=operation, packetSha256=packet_sha256, projectRef=PROJECT, contractSha256=expected_contract,
                 querySha256=QUERY_SHA256, observedAt=int(timestamp.timestamp()), role=ROLE, readOnly=True)

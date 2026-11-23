@@ -47,12 +47,13 @@ class AuthorityTest(unittest.TestCase):
         self.read = Mock(side_effect=self.read_file)
         self.trusted = Mock()
         self.writer = Mock(side_effect=self.publish_and_respond)
+        self.verify_database = Mock()
         self.put(authority.CONFIG, dict(schemaVersion=1, signerPolicy={'repositoryId': 15}, mergePolicy={},
-                                         attestationDigests={}))
+                                        attestationDigests=dict(ghSha256='b' * 64, trustedRootSha256='c' * 64)))
         tools = SimpleNamespace(receipt=receipt, transaction=SimpleNamespace(atomic_json=self.writer))
         self.driver = authority.Authority(core=core, tools=tools, public=public_checks, read=self.read,
                                           trusted=self.trusted, root=Path('unused'), clock=lambda: self.now,
-                                          monotonic=lambda: self.elapsed, sleep=self.tick)
+                                          monotonic=lambda: self.elapsed, sleep=self.tick, verify_database=self.verify_database)
         self.directory = authority.EVIDENCE / '1-2'
         self.authorization = authority.AUTHORIZATIONS / '1-2.json'
         self.lifecycle = {field: 'e' * 64 for field in authority.LIFECYCLE}
@@ -140,17 +141,36 @@ class AuthorityTest(unittest.TestCase):
 
     def test_database_observation_requires_exact_project_packet_and_freshness(self):
         self.authorize()
-        fields = dict(projectRef=authority.PROJECT, contractSha256=self.approval['databaseSha256'], readOnly=True)
-        self.evidence('database.json', 'zimage-ordinary-database-v1', **fields)
+        self.put(authority.DATABASE_POLICY, dict(schemaVersion=1, signerSha='a' * 40, querySha256='e' * 64))
+        fields = dict(projectRef=authority.PROJECT, contractSha256=self.approval['databaseSha256'], readOnly=True,
+                      mode='supabase', role=authority.DATABASE_ROLE, querySha256='e' * 64)
+        self.evidence('database.json', 'zimage-ordinary-db-observation-v1', **fields)
+        with self.assertRaises(FileNotFoundError):
+            self.driver.database_digest()
+        bundle = self.directory / 'database.bundle.jsonl'
+        self.files[bundle] = b'fixture only'
         self.assertEqual(self.driver.database_digest(), self.approval['databaseSha256'])
         file = self.directory / 'database.json'
         original = core.parse(self.files[file])
+        self.assertEqual(self.driver.database_digest(), self.approval['databaseSha256'])
+        self.verify_database.assert_called_once_with(payload=self.files[file], bundle=self.files[bundle],
+            signer_sha='a' * 40, source_sha=self.packet['commit'], run=self.packet['runId'], attempt=self.packet['attempt'],
+            gh_sha256='b' * 64, trusted_root_sha256='c' * 64)
         for change in (dict(projectRef='different'), dict(readOnly=False), dict(observedAt=self.now - 121),
-                       dict(packetSha256='f' * 64)):
+                       dict(packetSha256='f' * 64), dict(mode='fixture'), dict(role='postgres'),
+                       dict(querySha256='f' * 64), dict(contractSha256='f' * 64),
+                       dict(kind='zimage-ordinary-database-v1')):
             with self.subTest(change=change):
                 self.put(file, dict(original, **change))
                 with self.assertRaises(ValueError):
                     self.driver.database_digest()
+        self.assertEqual(self.verify_database.call_count, 1)
+        self.put(file, original)
+        self.files[bundle] = b'tampered receipt'
+        self.verify_database.side_effect = ValueError('invalid signature')
+        with self.assertRaisesRegex(ValueError, 'invalid signature'):
+            self.driver.database_digest()
+        self.assertEqual(self.verify_database.call_count, 2)
 
     def test_baseline_requires_the_drill_and_public_acceptance_for_the_retained_pair(self):
         old = self.approval['oldPair']

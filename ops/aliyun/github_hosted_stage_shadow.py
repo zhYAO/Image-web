@@ -93,16 +93,27 @@ def from_gh(result, *, payload, subject_path, expected):
         '--source-ref', expected['sourceRef'], '--source-digest', expected['sourceSHA'],
         '--deny-self-hosted-runners', '--predicate-type', PREDICATE, '--format', 'json',
     ])
+    verified = verified_subject(result.stdout, payload=payload, expected=expected, predicate=PREDICATE)
+    # This is the attested FILE, not gh's workflow-controlled provenance predicate.
+    content = json.loads(payload, object_pairs_hook=_unique)
+    _require(type(content) is dict and set(content) == FIELDS | {'schemaVersion', 'kind', 'productionReady'})
+    _require(type(content['schemaVersion']) is int and content['schemaVersion'] == 1
+             and content['kind'] == KIND and content['productionReady'] is False)
+    return verified
+
+
+def verified_subject(stdout, *, payload, expected, predicate):
+    """Check the verified file digest and invocation from an authenticated gh process."""
     _require(type(payload) is bytes and 0 < len(payload) <= 4096)
-    _require(type(result.stdout) in (bytes, str) and 0 < len(result.stdout) <= 1024 * 1024)
-    rows = json.loads(result.stdout, object_pairs_hook=_unique)
+    _require(type(stdout) in (bytes, str) and 0 < len(stdout) <= 1024 * 1024)
+    rows = json.loads(stdout, object_pairs_hook=_unique)
     _require(type(rows) is list and len(rows) == 1 and type(rows[0]) is dict)
     verification = rows[0].get('verificationResult')
     _require(type(verification) is dict)
     statement, signature = verification.get('statement'), verification.get('signature')
     _require(type(statement) is dict and type(signature) is dict)
     _require(statement.get('_type') == 'https://in-toto.io/Statement/v1'
-             and statement.get('predicateType') == PREDICATE and type(statement.get('predicate')) is dict)
+             and statement.get('predicateType') == predicate and type(statement.get('predicate')) is dict)
     subjects = statement.get('subject')
     _require(type(subjects) is list and len(subjects) == 1 and type(subjects[0]) is dict)
     digest = hashlib.sha256(payload).hexdigest()
@@ -111,10 +122,5 @@ def from_gh(result, *, payload, subject_path, expected):
     _require(type(certificate) is dict)
     invocation = 'https://github.com/{repository}/actions/runs/{runId}/attempts/{attempt}'.format(**expected)
     _require(certificate.get('runInvocationURI') == invocation)
-    # This is the attested FILE, not gh's workflow-controlled provenance predicate.
-    content = json.loads(payload, object_pairs_hook=_unique)
-    _require(type(content) is dict and set(content) == FIELDS | {'schemaVersion', 'kind', 'productionReady'})
-    _require(type(content['schemaVersion']) is int and content['schemaVersion'] == 1
-             and content['kind'] == KIND and content['productionReady'] is False)
     return dict(verified_subject_sha256=digest, verified_certificate=certificate,
-                verified_predicate_type=PREDICATE)
+                verified_predicate_type=predicate)
