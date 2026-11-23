@@ -19,7 +19,9 @@ def restore(packet, approval, approval_sha256, *, system, gate, authority, ordin
                        (operation, old['backend'], old['frontend'], new['backend'], new['frontend']),
                        'Restoration policy does not match the original release')
         seal, opened = gate.claim_restoration(operation, approval_sha256)
-        ordinary.exact(seal, {'initial', 'retained'})
+        ordinary.exact(seal, {'initial', 'retained', 'protectedMerge'} if 'protectedMerge' in seal else {'initial', 'retained'})
+        if 'protectedMerge' in seal:
+            ordinary.valid(seal['protectedMerge']['commit'] == packet['commit'], 'Original protected merge proof differs')
         ordinary.exact(opened, {'process', 'pairSequence'})
         retained = seal['retained']
         ordinary.exact(retained, {'backendManifestSha256', 'frontendManifestSha256', 'frontendArtifact'})

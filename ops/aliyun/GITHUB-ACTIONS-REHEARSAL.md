@@ -109,9 +109,11 @@ protected run, artifact name, namespace and signing identity checks.
   `/etc/zimage/ordinary-receiver-tools.json` before consuming SSH input. Its
   private spool is `/opt/zimage/ordinary-requests` with mode `0700`. The
   separately reviewed `ordinary-runtime/ordinary-authority.py` must provide
-  the actual host policies, pinned verification, independent GitHub
-  observations and live baseline and candidate evidence. Missing authority
-  code or any changed digest causes refusal before the first request byte.
+  the host policies, a local read-only GitHub observer credential, Sigstore
+  trust digests and live baseline and candidate evidence. The receiver uses
+  its fixed offline verifier and its own GET-only client for `api.github.com`.
+  Missing authority code or any changed digest causes refusal before the
+  first request byte.
   Lifecycle policy is resolved for the authenticated batch and its current
   rollback pair after admission, then checked again under the shared lock.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
@@ -131,6 +133,13 @@ protected run, artifact name, namespace and signing identity checks.
   reopening. The installed host must provide the independent evidence and
   private staging and exclude unresolved legacy writers under the same lock.
   No migration operation is part of this path.
+- The GitHub observer derives the PR, required check and Actions run from
+  the signed release commit. It binds the approved workflow bytes to that
+  commit, requires the successful check to precede the merge and requires
+  an actual passing GitHub rule suite for this update to main. The check
+  and PR rules must both have been enforced by ruleset `27873546`. The
+  selected PR, check, workflow run and rule suite IDs are recorded before
+  sealing. Current branch settings alone do not prove a protected merge.
 - `paired/ordinary_stage.py` uses the private SSH spool below `/opt/zimage`.
   It rechecks the signed ZIPs before rebuilding the formal frontend. The
   frontend must match existing root-owned acceptance and the approved

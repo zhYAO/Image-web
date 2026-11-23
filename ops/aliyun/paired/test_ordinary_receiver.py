@@ -5,9 +5,11 @@ import json
 import os
 from pathlib import Path
 import sys
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 import unittest
 from unittest.mock import Mock, patch
+
+import core as test_core
 
 
 script = Path(__file__).with_name('receive-ordinary-pair')
@@ -62,7 +64,7 @@ class ReceiverTests(unittest.TestCase):
             stdin.fileno.assert_not_called()
 
     def test_only_fixed_coordinator_can_return_receipt_from_initialized_host(self):
-        core = SimpleNamespace(canonical=lambda value: json.dumps(value, sort_keys=True).encode() + b'\n')
+        core = test_core
         cli = Mock()
         cli.ROOT = Path('/opt/zimage')
         cli.authenticate.return_value = (core, {str(receiver.BASE / 'cli.py'): self.pins[str(receiver.BASE / 'cli.py')]})
@@ -72,6 +74,9 @@ class ReceiverTests(unittest.TestCase):
         spool.lstat.return_value.st_mode = 0o700
         tools = {name: Mock() for name, _ in receiver.MODULES}
         tools['ordinary_installed_cli'] = cli
+        authority = tools['ordinary_authority'].open_authority.return_value
+        authority.attestation_digests = dict(ghSha256='a' * 64, trustedRootSha256='b' * 64)
+        authority.github_read_token = 'nonproduction-fixture-token'
         expected = {'status': 'opened', 'operationId': 'nonproduction-fixture'}
         coordinator = tools['ordinary_ssh'].run
         def execute(stream, *, host, **kwargs):
@@ -93,8 +98,16 @@ class ReceiverTests(unittest.TestCase):
         self.assertIs(call.args[0], bounded.return_value)
         self.assertIs(call.kwargs['handoff'], tools['github_pair_handoff'])
         self.assertIs(call.kwargs['host'].gate, tools['ordinary_journal'].JournalGate.return_value)
-        authority = tools['ordinary_authority'].open_authority.return_value
         authority.lifecycle_policy.assert_called_once_with({'fixture': 'packet'}, {'fixture': 'approval'})
+        packet = {'fixture': 'packet'}
+        github = call.kwargs['host'].github
+        github.merge(packet)
+        get = tools['ordinary_github'].read_only.return_value
+        tools['ordinary_github'].observe.assert_called_once_with(packet, get=get, policy=authority.merge_policy,
+                                                                  verify_check=tools['github_protected_merge_observe'].observe)
+        github.verify(payload=b'fixture')
+        tools['github_shadow_offline'].verify.assert_called_once_with(payload=b'fixture', gh_path=receiver.VERIFIER,
+            gh_sha256='a' * 64, trusted_root_path=receiver.SIGSTORE_ROOT, trusted_root_sha256='b' * 64)
 
     @unittest.skipIf(sys.platform == 'win32', 'Linux pipe readiness')
     def test_bounded_wire_reads_short_chunks_eof_and_deadline(self):

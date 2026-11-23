@@ -42,9 +42,10 @@ class SystemTest(unittest.TestCase):
         self.system.open.side_effect = lambda *_: self.live.update(ingressMode='open', nodeMode='open', fence=None)
         self.gate = Mock(spec=['lock', 'lock_identity', 'assert_clear', 'journal'])
         self.gate.lock.return_value = nullcontext()
-        self.authority = Mock(spec=['assert_other_writers_clear', 'assert_main', 'database_digest',
-                                    'verify_protected_merge', 'verify_baseline', 'verify_candidate'])
+        self.authority = Mock(spec=['assert_other_writers_clear', 'database_digest', 'verify_baseline', 'verify_candidate'])
         self.authority.database_digest.return_value = approval['databaseSha256']
+        self.github = Mock(spec=['assert_main', 'merge', 'get', 'verify'])
+        self.github.merge.return_value = {'commit': packet['commit'], 'pullRequest': 22, 'ruleSuiteId': 17}
         stage = patch('ordinary_system.ordinary_stage.prepare')
         self.prepare = stage.start()
         self.addCleanup(stage.stop)
@@ -53,7 +54,7 @@ class SystemTest(unittest.TestCase):
                                          candidateSha256=self.system.p['frontendCandidateSha256'],
                                          payloadSha256=self.system.p['frontendPayloadSha256'])
         self.ops = OrdinarySystem(self.system, self.gate, self.authority, Path('private-request'),
-                                  {'stageSha256': '6' * 64}, intake=Mock())
+                                  {'stageSha256': '6' * 64}, intake=Mock(), github=self.github)
 
     def start(self, record, release):
         self.assertEqual(record['phase'], 'backend_select_intent')
@@ -83,11 +84,12 @@ class SystemTest(unittest.TestCase):
         self.system.m.adapter.verify_retained_layered.assert_called_once_with(
             Path('fixture') / 'releases' / rollback, rollback, run_probe=False)
         self.authority.verify_candidate.assert_called_once_with({'pid': 202}, self.fixture.packet, self.fixture.a)
-        self.authority.verify_protected_merge.assert_called_once_with(self.fixture.packet)
+        self.github.merge.assert_called_once_with(self.fixture.packet)
+        self.assertEqual(entries[0].kwargs['evidence']['protectedMerge'], self.github.merge.return_value)
         self.assertEqual(self.live['nodeMode'], 'open')
 
     def test_unproven_protected_merge_does_not_stage_or_switch(self):
-        self.authority.verify_protected_merge.side_effect = ValueError('required check proof missing')
+        self.github.merge.side_effect = ValueError('required check proof missing')
         with self.assertRaisesRegex(ValueError, 'required check proof missing'):
             self.run_release()
         self.prepare.assert_not_called()
@@ -128,7 +130,7 @@ class SystemTest(unittest.TestCase):
         stage = 'e' * 64
         handoff = Mock()
         handoff.admit.return_value = {'packet': f.packet, 'stageSha256': stage, 'rollbackPair': f.a['oldPair']}
-        host = Mock(gate=self.gate, authority=self.authority)
+        host = Mock(gate=self.gate, authority=self.authority, github=self.github)
         host.system_for.return_value = self.system
         host.clock.return_value = f.time
         host.authorization.return_value = dict(approval=f.a, sha256=ordinary.sha(f.a), stageSha256='f' * 64)

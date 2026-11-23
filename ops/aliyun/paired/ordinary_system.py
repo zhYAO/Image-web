@@ -14,12 +14,13 @@ def require(condition, message):
 
 
 class OrdinarySystem:
-    def __init__(self, system, gate, authority, request, evidence, *, intake):
+    def __init__(self, system, gate, authority, request, evidence, *, intake, github):
         self.system = system
         self.gate = gate
         self.authority = authority
         self.request = request
         self.intake = intake
+        self.github = github
         self.evidence = deepcopy(evidence)
         self.record = None
         self.frontend_approval = None
@@ -34,7 +35,7 @@ class OrdinarySystem:
 
     def assert_main(self, commit):
         self.gate.lock_identity()
-        self.authority.assert_main(commit)
+        self.github.assert_main(commit)
 
     def snapshot(self):
         self.gate.lock_identity()
@@ -61,7 +62,8 @@ class OrdinarySystem:
                 (approval['operation'], approval['oldPair']['backend'], approval['oldPair']['frontend'],
                  packet['commit'], approval['newPair']['frontend'], packet['backendManifestSha256']),
                 'Installed lifecycle policy does not bind the approved pair')
-        self.authority.verify_protected_merge(packet)
+        merge = self.github.merge(packet)
+        require(type(merge) is dict and merge.get('commit') == packet['commit'], 'Exact protected merge proof required')
         initial = self.system.snapshot()
         for key, value in (('frontendArtifact', p['oldFrontendArtifact']),
                            ('configurationSha256', p['configurationSha256']), ('ingressSha256', p['ingressSha256'])):
@@ -88,6 +90,7 @@ class OrdinarySystem:
         self.system.validate_backend(packet['commit'], packet['backendManifestSha256'])
         require(initial == self.system.snapshot(), 'Live baseline changed while preparing the signed pair')
         self.record = dict(operationId=approval['operation'], initial=deepcopy(initial), migrationNonce=None,
+                           protectedMerge=deepcopy(merge),
                            retained=dict(backendManifestSha256=retained_backend_digest,
                                          frontendManifestSha256=retained_frontend_digest,
                                          frontendArtifact=old_frontend['artifactId']))
@@ -97,7 +100,8 @@ class OrdinarySystem:
         phase = event['phase']
         evidence = None
         if phase == 'seal-intent':
-            evidence = {'initial': self.record['initial'], 'retained': self.record['retained']}
+            evidence = {'initial': self.record['initial'], 'retained': self.record['retained'],
+                        'protectedMerge': self.record['protectedMerge']}
         elif phase == 'writes-may-open':
             evidence = {'process': self.record['candidateProcess'], 'pairSequence': self.record['pairSequence']}
         self.gate.journal(event, evidence=evidence)

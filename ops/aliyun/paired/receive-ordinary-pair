@@ -16,6 +16,8 @@ LOCATION = BASE / 'receive-ordinary-pair'
 RUNTIME = BASE / 'ordinary-runtime'
 INVENTORY = Path('/etc/zimage/ordinary-receiver-tools.json')
 SPOOL = Path('/opt/zimage/ordinary-requests')
+VERIFIER = BASE / 'bin/gh'
+SIGSTORE_ROOT = Path('/etc/zimage/ordinary-sigstore-roots.jsonl')
 SHA = re.compile('[a-f0-9]{64}')
 MODULES = (
     ('ordinary', 'ordinary.py'),
@@ -24,6 +26,7 @@ MODULES = (
     ('ordinary_system', 'ordinary_system.py'),
     ('ordinary_ssh', 'ordinary_ssh.py'),
     ('ordinary_restore', 'ordinary_restore.py'),
+    ('ordinary_github', 'ordinary_github.py'),
     ('github_hosted_stage_shadow', 'github_hosted_stage_shadow.py'),
     ('github_shadow_pins', 'github_shadow_pins.py'),
     ('github_shadow_stage_build', 'github_shadow_stage_build.py'),
@@ -112,6 +115,28 @@ class BoundedInput:
         return bytes(body)
 
 
+def github_evidence(tools, authority, core):
+    attestation = authority.attestation_digests
+    core.exact(attestation, {'ghSha256', 'trustedRootSha256'})
+    for digest in attestation.values():
+        core.hexid(digest)
+    get = tools['ordinary_github'].read_only(authority.github_read_token)
+
+    def verify(**evidence):
+        return tools['github_shadow_offline'].verify(**evidence, gh_path=VERIFIER,
+                   gh_sha256=attestation['ghSha256'], trusted_root_path=SIGSTORE_ROOT,
+                   trusted_root_sha256=attestation['trustedRootSha256'])
+
+    def merge(packet):
+        return tools['ordinary_github'].observe(packet, get=get, policy=authority.merge_policy,
+                                                verify_check=tools['github_protected_merge_observe'].observe)
+
+    def assert_main(commit):
+        tools['github_pair_handoff'].assert_main(get, commit)
+
+    return SimpleNamespace(get=get, verify=verify, merge=merge, assert_main=assert_main)
+
+
 def main():
     invocation(sys.argv, script=__file__, uid=os.geteuid(), isolated=sys.flags.isolated)
     sys.dont_write_bytecode = True
@@ -135,12 +160,13 @@ def main():
         lifecycle = cli.make_modules()
         installed_system = cli.load(BASE / 'system.py', 'ordinary_installed_system')
         authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle)
+        github = github_evidence(tools, authority, core)
         def system_for(packet, approval):
             policy = authority.lifecycle_policy(packet, approval)
             return installed_system.SystemOps(policy, core, lifecycle)
         host = SimpleNamespace(system_for=system_for, gate=gate, authority=authority, policy=authority.signer_policy,
                                intake=tools['ordinary_intake'], clock=lambda: int(time.time()),
-                               get=authority.get, verify=authority.verify, seen=authority.seen,
+                               github=github, seen=authority.seen,
                                authorization=authority.authorization)
         receipt = tools['ordinary_ssh'].run(BoundedInput(sys.stdin.fileno()), scratch=SPOOL, host=host,
                                            handoff=tools['github_pair_handoff'], ordinary=tools['ordinary'])

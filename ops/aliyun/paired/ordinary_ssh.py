@@ -20,7 +20,7 @@ def run(stream, *, scratch, host, handoff, ordinary):
     with tempfile.TemporaryDirectory(prefix='ordinary-pair-', dir=scratch) as temp:
         request = Path(temp)
         handoff.receive(stream, request)
-        evidence = handoff.admit(request, policy=host.policy, get=host.get, verify=host.verify,
+        evidence = handoff.admit(request, policy=host.policy, get=host.github.get, verify=host.github.verify,
                                  intake=host.intake, now=host.clock(), seen=host.seen())
         packet = evidence['packet']
         authorization = host.authorization(packet)
@@ -33,7 +33,7 @@ def run(stream, *, scratch, host, handoff, ordinary):
                        'Observed public rollback pair differs from installed authorization')
 
         system = host.system_for(packet, approval)
-        ops = OrdinarySystem(system, host.gate, host.authority, request, evidence, intake=host.intake)
+        ops = OrdinarySystem(system, host.gate, host.authority, request, evidence, intake=host.intake, github=host.github)
         result = ordinary.transition(packet, approval, digest, ops, clock=host.clock)
         ordinary.valid(result == {'operation': approval['operation'], 'phase': 'opened',
                                   'pair': approval['newPair']}, 'Unconfirmed production result')
