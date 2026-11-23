@@ -105,6 +105,15 @@ protected run, artifact name, namespace and signing identity checks.
   command with SSH forwarding, PTY and user RC disabled. Its only privileged
   executable is `/usr/local/libexec/zimage-paired-release/receive-ordinary-pair`
   with zero arguments. The status-only key has its own separate authorization.
+- The receiver checks the exact rooted source inventory in
+  `/etc/zimage/ordinary-receiver-tools.json` before consuming SSH input. Its
+  private spool is `/opt/zimage/ordinary-requests` with mode `0700`. The
+  separately reviewed `ordinary-runtime/ordinary-authority.py` must provide
+  the actual host policies, pinned verification, independent GitHub
+  observations and live baseline and candidate evidence. Missing authority
+  code or any changed digest causes refusal before the first request byte.
+  Lifecycle policy is resolved for the authenticated batch and its current
+  rollback pair after admission, then checked again under the shared lock.
 - The SSH request consists of a fixed version-two magic header and seven bounded,
   length-prefixed members. It carries only the stage subject and bundle, the
   exact candidate descriptor, both outer ZIPs and the publicly observed prior
@@ -149,9 +158,9 @@ protected run, artifact name, namespace and signing identity checks.
   restoration blocks the next writer. The review-only Linux workflow tests
   this journal and its lock without accessing ECS.
 
-The review-branch implementation contains the workflow, receiver admission,
-fixed SSH invocation and lifecycle adaptation. The fixed root command,
-production evidence and staging providers, and loopback validation still
+The review branch contains the workflow, fixed root receiver, private staging,
+lifecycle adapter and durable restoration logic. The trusted authority
+implementation, reviewed host installation and live validation still
 require ECS integration. The intended trigger is the maintainer's manual PR
 merge into protected main. Keep paired publication disabled until the
 installed authority can validate the exact merged PR and required check

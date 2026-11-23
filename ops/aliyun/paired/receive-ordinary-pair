@@ -1,0 +1,159 @@
+#!/usr/bin/python3 -I
+"""Fixed root receiver for the one SSH paired-release frame."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import select
+import stat
+import sys
+import time
+from types import ModuleType, SimpleNamespace
+
+BASE = Path('/usr/local/libexec/zimage-paired-release')
+LOCATION = BASE / 'receive-ordinary-pair'
+RUNTIME = BASE / 'ordinary-runtime'
+INVENTORY = Path('/etc/zimage/ordinary-receiver-tools.json')
+SPOOL = Path('/opt/zimage/ordinary-requests')
+SHA = re.compile('[a-f0-9]{64}')
+MODULES = (
+    ('ordinary', 'ordinary.py'),
+    ('ordinary_journal', 'ordinary_journal.py'),
+    ('ordinary_stage', 'ordinary_stage.py'),
+    ('ordinary_system', 'ordinary_system.py'),
+    ('ordinary_ssh', 'ordinary_ssh.py'),
+    ('ordinary_restore', 'ordinary_restore.py'),
+    ('github_hosted_stage_shadow', 'github_hosted_stage_shadow.py'),
+    ('github_shadow_pins', 'github_shadow_pins.py'),
+    ('github_shadow_stage_build', 'github_shadow_stage_build.py'),
+    ('github_shadow_signer_intake', 'github_shadow_signer_intake.py'),
+    ('github_shadow_offline', 'github_shadow_offline.py'),
+    ('github_protected_merge_shadow', 'github_protected_merge_shadow.py'),
+    ('github_protected_merge_observe', 'github_protected_merge_observe.py'),
+    ('github_pair_handoff', 'github_pair_handoff.py'),
+    ('ordinary_intake', 'github-rehearsal-intake.py'),
+    ('ordinary_authority', 'ordinary-authority.py'),
+)
+INTAKE_FILES = ('release-transport.py', 'release-layers.py', 'three-layer-release.py',
+                'release-public-policy.json', 'public-image-contract.py', 'frontend/manifest.py')
+FILES = (LOCATION, BASE / 'cli.py', *(RUNTIME / name for _, name in MODULES),
+         *(RUNTIME / name for name in INTAKE_FILES))
+
+
+def require(value, message):
+    if not value:
+        raise ValueError(message)
+
+
+def invocation(argv, *, script, uid, isolated):
+    require(len(argv) == 1 and Path(script) == LOCATION and uid == 0 and isolated,
+            'Fixed isolated root receiver required')
+
+
+def read_installed(path, limit):
+    for parent in path.parents:
+        info = parent.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
+                'Untrusted receiver ancestor')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        before = os.fstat(stream.fileno())
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and before.st_nlink == 1
+                and not before.st_mode & 0o022 and 0 < before.st_size <= limit, 'Untrusted receiver file')
+        body = stream.read(limit + 1)
+        def identity(info):
+            return info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns, info.st_size, info.st_mode, info.st_uid, info.st_nlink
+        require(len(body) == before.st_size and identity(before) == identity(os.fstat(stream.fileno()))
+                == identity(path.lstat()), 'Receiver file changed while reading')
+    return body
+
+
+def authenticate(read):
+    def pairs(items):
+        value = dict(items)
+        require(len(value) == len(items), 'Duplicate receiver pin')
+        return value
+    pins = json.loads(read(INVENTORY, 65536), object_pairs_hook=pairs)
+    require(type(pins) is dict and set(pins) == {str(path) for path in FILES}, 'Exact receiver source inventory required')
+    bodies = {}
+    for path in FILES:
+        expected = pins[str(path)]
+        require(type(expected) is str and SHA.fullmatch(expected), 'Exact receiver digest required')
+        body = read(path, 2_097_152)
+        require(hashlib.sha256(body).hexdigest() == expected, 'Receiver source differs from approved inventory')
+        bodies[path] = body
+    return pins, bodies
+
+
+def source(name, path, body):
+    module = ModuleType(name)
+    module.__file__ = str(path)
+    sys.modules[name] = module
+    exec(compile(body, str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
+class BoundedInput:
+    """The fixed wire transfer cannot leave the privileged receiver blocked on stdin."""
+    def __init__(self, fd, *, timeout=180):
+        self.fd = fd
+        self.deadline = time.monotonic() + timeout
+
+    def read(self, size):
+        body = bytearray()
+        while len(body) < size:
+            remaining = self.deadline - time.monotonic()
+            require(remaining > 0 and select.select([self.fd], [], [], remaining)[0], 'Pair transfer timed out')
+            chunk = os.read(self.fd, size - len(body))
+            if not chunk:
+                break
+            body.extend(chunk)
+        return bytes(body)
+
+
+def main():
+    invocation(sys.argv, script=__file__, uid=os.geteuid(), isolated=sys.flags.isolated)
+    sys.dont_write_bytecode = True
+    os.umask(0o077)
+    pins, bodies = authenticate(read_installed)
+    cli_path = BASE / 'cli.py'
+    cli = source('ordinary_installed_cli', cli_path, bodies[cli_path])
+    core, existing = cli.authenticate()
+    require(all(pins[path] == existing[path] for path in pins.keys() & existing.keys()),
+            'Receiver and installed lifecycle pins differ')
+    cli.trusted(SPOOL, True)
+    require(stat.S_IMODE(SPOOL.lstat().st_mode) == 0o700, 'Private receiver spool required')
+    for name in ('frontend', 'frontend/releases', 'frontend/assets', 'frontend/objects', 'frontend/.stage', 'frontend/journal'):
+        cli.trusted(cli.ROOT / name, True)
+    with cli.source_only(existing | pins), cli.safe_environment():
+        tools = {}
+        for name, filename in MODULES:
+            path = RUNTIME / filename
+            tools[name] = source(name, path, bodies[path])
+        gate = tools['ordinary_journal'].JournalGate(cli.ROOT, core)
+        lifecycle = cli.make_modules()
+        installed_system = cli.load(BASE / 'system.py', 'ordinary_installed_system')
+        authority = tools['ordinary_authority'].open_authority(core=core, tools=lifecycle)
+        def system_for(packet, approval):
+            policy = authority.lifecycle_policy(packet, approval)
+            return installed_system.SystemOps(policy, core, lifecycle)
+        host = SimpleNamespace(system_for=system_for, gate=gate, authority=authority, policy=authority.signer_policy,
+                               intake=tools['ordinary_intake'], clock=lambda: int(time.time()),
+                               get=authority.get, verify=authority.verify, seen=authority.seen,
+                               authorization=authority.authorization)
+        receipt = tools['ordinary_ssh'].run(BoundedInput(sys.stdin.fileno()), scratch=SPOOL, host=host,
+                                           handoff=tools['github_pair_handoff'], ordinary=tools['ordinary'])
+    return core.canonical(receipt)
+
+
+if __name__ == '__main__':
+    try:
+        # The restricted peer receives exactly the final receipt. Child probes
+        # and diagnostics cannot intermingle with the protocol on stdout.
+        with os.fdopen(os.dup(sys.stdout.fileno()), 'wb') as reply, open(os.devnull, 'wb') as quiet:
+            os.dup2(quiet.fileno(), sys.stdout.fileno())
+            reply.write(main())
+    except Exception:
+        print('ZImage ordinary pair receiver refused or requires read-only reconciliation', file=sys.stderr)
+        sys.exit(1)

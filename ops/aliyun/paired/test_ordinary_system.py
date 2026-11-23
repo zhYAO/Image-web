@@ -128,7 +128,8 @@ class SystemTest(unittest.TestCase):
         stage = 'e' * 64
         handoff = Mock()
         handoff.admit.return_value = {'packet': f.packet, 'stageSha256': stage, 'rollbackPair': f.a['oldPair']}
-        host = Mock(system=self.system, gate=self.gate, authority=self.authority)
+        host = Mock(gate=self.gate, authority=self.authority)
+        host.system_for.return_value = self.system
         host.clock.return_value = f.time
         host.authorization.return_value = dict(approval=f.a, sha256=ordinary.sha(f.a), stageSha256='f' * 64)
         with tempfile.TemporaryDirectory() as scratch:
@@ -143,6 +144,7 @@ class SystemTest(unittest.TestCase):
             self.gate.lock.assert_not_called()
             handoff.admit.return_value['rollbackPair'] = f.a['oldPair']
             receipt = ordinary_ssh.run(io.BytesIO(), scratch=scratch, host=host, handoff=handoff, ordinary=ordinary)
+        host.system_for.assert_called_once_with(f.packet, f.a)
         self.assertEqual(receipt['status'], 'opened')
         self.assertEqual(receipt['rootApprovalSha256'], ordinary.sha(f.a))
         self.assertEqual(receipt['rollbackPair'], f.a['oldPair'])
