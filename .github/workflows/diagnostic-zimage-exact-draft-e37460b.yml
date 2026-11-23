@@ -1,0 +1,90 @@
+name: ZImage private candidate Linux validation (no deployment)
+
+on:
+  push:
+    branches: [codex/zimage-exact-draft-linux-20261123-e37460b]
+    paths:
+      - '.github/workflows/diagnostic-zimage-exact-draft-e37460b.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  posix-release:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-exact-draft-linux-20261123-e37460b'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Confirm candidate provenance and the single workflow-only overlay
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = '0dc160b23996c3b417699478c405e2ea4c8fb82e'
+          test "$(git show -s --format=%T HEAD^)" = 'e37460ba535fa74053a58b4f15e46fb4569ab9b6'
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/diagnostic-zimage-exact-draft-e37460b.yml'
+      - name: Verify receiver, exact GitHub VPC TLS, and real POSIX rollback locks
+        working-directory: ops/aliyun/paired
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -v \
+            test_ordinary_receiver test_ordinary_authority test_ordinary_github test_ordinary_install_inventory \
+            test_ordinary_restore test_ordinary_journal test_ordinary_stage test_ordinary_system test_ordinary
+      - name: Verify protected main, production policy, signer, and public evidence protocol
+        working-directory: ops/aliyun
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest -v \
+            test_github_rehearsal test_github_shadow_offline test_github_hosted_stage_shadow \
+            test_github_pair_handoff test_github_pair_ssh test_github_pair_public test_ordinary_public_exchange \
+            test_github_protected_merge_observe test_ordinary_rolling_incumbent test_ordinary_database_observer
+
+  private-postgres:
+    if: github.repository == 'zhYAO/Image-web' && github.event_name == 'push' && github.ref == 'refs/heads/codex/zimage-exact-draft-linux-20261123-e37460b'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Confirm candidate provenance and the single workflow-only overlay
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = '0dc160b23996c3b417699478c405e2ea4c8fb82e'
+          test "$(git show -s --format=%T HEAD^)" = 'e37460ba535fa74053a58b4f15e46fb4569ab9b6'
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/diagnostic-zimage-exact-draft-e37460b.yml'
+      - name: Run pinned SQL against a private local fixture with a separate PostgreSQL role
+        working-directory: ops/aliyun
+        run: |
+          set -euo pipefail
+          pg_bin="$(pg_config --bindir)"
+          state="$(mktemp -d "$RUNNER_TEMP/zimage-pg.XXXXXX")"
+          "$pg_bin/initdb" --pgdata="$state/data" --auth-local=peer --auth-host=scram-sha-256 >/dev/null
+          printf 'local zimage_observer_fixture zimage_release_observer peer map=zimage_fixture\nlocal all all peer\n' > "$state/data/pg_hba.conf"
+          printf 'zimage_fixture %s zimage_release_observer\n' "$(id -un)" > "$state/data/pg_ident.conf"
+          "$pg_bin/pg_ctl" -D "$state/data" -o "-c listen_addresses='' -k $state" -l "$state/postgres.log" -w start
+          trap '"$pg_bin/pg_ctl" -D "$state/data" -m fast -w stop >/dev/null' EXIT
+          "$pg_bin/createdb" -h "$state" zimage_observer_fixture
+          "$pg_bin/psql" -Xqw -h "$state" -d zimage_observer_fixture -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE zimage_release_observer LOGIN;
+          CREATE SCHEMA private;
+          CREATE SCHEMA supabase_migrations;
+          CREATE TABLE supabase_migrations.schema_migrations (version text, name text);
+          INSERT INTO supabase_migrations.schema_migrations VALUES ('1', 'isolated_fixture');
+          CREATE TABLE private.credit_settings (singleton boolean);
+          CREATE TABLE private.credit_price_versions (version integer);
+          CREATE TABLE private.commerce_package_settings (singleton boolean);
+          CREATE TABLE private.commerce_package_cost_versions (version integer);
+          CREATE TABLE private.commerce_package_sale_versions (version integer);
+          CREATE TABLE private.provider_runtime_config (provider text, enabled boolean);
+          CREATE TABLE private.runtime_flags (flag text, enabled boolean);
+          GRANT USAGE ON SCHEMA private, supabase_migrations TO zimage_release_observer;
+          GRANT SELECT ON ALL TABLES IN SCHEMA private, supabase_migrations TO zimage_release_observer;
+          SQL
+          ZIMAGE_OBSERVER_FIXTURE_SOCKET="$state" ZIMAGE_OBSERVER_FIXTURE_PSQL="$pg_bin/psql" \
+            python3 -B -m unittest -v test_ordinary_database_observer
