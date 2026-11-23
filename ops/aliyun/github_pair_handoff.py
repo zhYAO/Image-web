@@ -13,6 +13,9 @@ from github_shadow_signer_intake import REPO, REPO_ID, WORKFLOW
 
 MAGIC = b'ZIMAGE-CI-PAIR\x02'
 RESTORE_MAGIC = b'ZIMAGE-CI-PAIR\x03'
+INTERACTIVE_MAGIC = b'ZIMAGE-CI-PAIR\x04'
+INTERACTIVE_RESTORE_MAGIC = b'ZIMAGE-CI-PAIR\x05'
+REQUEST_END = b'ZIMAGE-CI-END\x01'
 RESTORE_CAP = 2048
 LENGTH = struct.Struct('!Q')
 MEMBERS = (('stage.json', 4096), ('stage.bundle.jsonl', 1024 * 1024),
@@ -33,18 +36,19 @@ def exact(stream, count):
     return data
 
 
-def receive(stream, request):
-    """Receive publication files or return the exact bounded restoration selector."""
+def receive(stream, request, *, interactive=False):
+    """Use the caller's protocol version. Interactive framing leaves stdin open."""
     magic = exact(stream, len(MAGIC))
-    if magic == RESTORE_MAGIC:
+    if magic == (INTERACTIVE_RESTORE_MAGIC if interactive else RESTORE_MAGIC):
         size, = LENGTH.unpack(exact(stream, LENGTH.size))
         if not 0 < size <= RESTORE_CAP:
             raise ValueError('Invalid restoration selector size')
         selector = json.loads(exact(stream, size), object_pairs_hook=stage._unique)
-        if type(selector) is not dict or stream.read(1):
-            raise ValueError('Invalid restoration selector or trailing bytes')
+        if type(selector) is not dict:
+            raise ValueError('Invalid restoration selector')
+        finish_request(stream, interactive)
         return selector
-    if magic != MAGIC:
+    if magic != (INTERACTIVE_MAGIC if interactive else MAGIC):
         raise ValueError('Unknown pair handoff protocol')
     for name, cap in WIRE_MEMBERS:
         remaining, = LENGTH.unpack(exact(stream, LENGTH.size))
@@ -55,12 +59,19 @@ def receive(stream, request):
                 data = exact(stream, min(remaining, BLOCK))
                 out.write(data)
                 remaining -= len(data)
-    if stream.read(1):
+    finish_request(stream, interactive)
+
+
+def finish_request(stream, interactive):
+    if interactive:
+        if exact(stream, len(REQUEST_END)) != REQUEST_END:
+            raise ValueError('Interactive pair handoff missing its end marker')
+    elif stream.read(1):
         raise ValueError('Trailing pair handoff bytes')
 
 
-def send(request, out):
-    out.write(MAGIC)
+def send(request, out, *, interactive=False):
+    out.write(INTERACTIVE_MAGIC if interactive else MAGIC)
     for name, cap in WIRE_MEMBERS:
         path = request / name
         info = path.lstat()
@@ -75,13 +86,18 @@ def send(request, out):
                 remaining -= len(data)
             if stream.read(1):
                 raise ValueError('Local pair handoff input changed')
+    if interactive:
+        out.write(REQUEST_END)
 
 
-def send_restoration(selector, out):
+def send_restoration(selector, out, *, interactive=False):
     body = json.dumps(selector, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('ascii')
     if not 0 < len(body) <= RESTORE_CAP:
         raise ValueError('Invalid restoration selector size')
-    out.write(RESTORE_MAGIC + LENGTH.pack(len(body)) + body)
+    magic = INTERACTIVE_RESTORE_MAGIC if interactive else RESTORE_MAGIC
+    out.write(magic + LENGTH.pack(len(body)) + body)
+    if interactive:
+        out.write(REQUEST_END)
 
 
 def validate_restoration(receipt, release):

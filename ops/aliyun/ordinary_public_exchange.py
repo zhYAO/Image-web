@@ -81,7 +81,7 @@ class Frames:
         readers, writers, _ = select.select([] if write else [self.reader], [self.writer] if write else [], [], remaining)
         require(readers or writers, 'Public observer channel timed out')
 
-    def _read(self, size):
+    def read_bytes(self, size):
         result = bytearray()
         while len(result) < size:
             self._ready()
@@ -91,9 +91,9 @@ class Frames:
         return bytes(result)
 
     def read(self, cap):
-        size, = LENGTH.unpack(self._read(LENGTH.size))
+        size, = LENGTH.unpack(self.read_bytes(LENGTH.size))
         require(0 < size <= cap, 'Observer frame exceeds bound')
-        return decode(self._read(size))
+        return decode(self.read_bytes(size))
 
     def write(self, value, cap):
         body = encode(value)

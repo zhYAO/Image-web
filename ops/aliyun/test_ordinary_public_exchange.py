@@ -4,10 +4,14 @@ import os
 from pathlib import Path
 import shutil
 import socket
+import subprocess
 import sys
+import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 
+import github_pair_handoff as handoff
 import github_pair_public as public
 import ordinary_public_exchange as wire
 
@@ -115,21 +119,23 @@ class WireTests(unittest.TestCase):
                 frames.write('c' * 1_000_000, 2_000_000)
 
 
-def hosted(state):
-    """Exercise actual GitHub signing with a fixture batch and responses."""
+def fixture_selector():
+    packet = dict(repository=handoff.REPO, workflow=handoff.WORKFLOW, commit=NEW, runId=10, attempt=2,
+                  backendManifestSha256='e' * 64, frontendSubjectSha256='f' * 64)
+    return dict(packet=packet, approvalSha256=batch()['rootApprovalSha256'])
+
+
+def fixed_stdio_fixture(state):
+    """Exercise the fixed command's v5 wire reader without installing a receiver."""
+    if os.environ.get('SSH_ORIGINAL_COMMAND') != handoff.COMMAND:
+        raise ValueError('Exact fixed command required')
+    frames = wire.Frames(0, 1, deadline=time.monotonic() + 116)
+    with tempfile.TemporaryDirectory() as scratch:
+        selector = handoff.receive(SimpleNamespace(read=frames.read_bytes), Path(scratch), interactive=True)
+    if selector != fixture_selector():
+        raise ValueError('Fixture submission differs from the reviewed selector')
     commit = os.environ['GITHUB_SHA']
     gh = Path(shutil.which('gh')).resolve()
-
-    def make_reply(challenge, deadline):
-        subject = wire.observe(challenge, fetch=responses(OLD))
-        with (state / 'observation.tmp').open('xb') as output:
-            output.write(wire.encode(subject))
-        (state / 'observation.tmp').rename(state / 'observation.json')
-        while time.monotonic() < deadline:
-            if (state / 'bundle.jsonl').exists():
-                return wire.reply(subject, (state / 'bundle.jsonl').read_bytes())
-            time.sleep(0.1)
-        raise TimeoutError('Hosted observer did not sign the public observation')
 
     def verify(subject, bundle):
         policy = dict(gh=gh, roots=state / 'roots.jsonl', signer_sha=commit, source_sha=commit,
@@ -143,14 +149,47 @@ def hosted(state):
                 continue
             raise AssertionError('Unexpected GitHub workflow identity accepted')
 
-    result = connection('restored', make_reply, verify, limit=116)
-    if result['backendRelease'] != OLD:
-        raise ValueError('Fixture restored pair differs')
-    (state / 'passed').write_text(hashlib.sha256(wire.encode(result)).hexdigest(), encoding='ascii')
+    fixture_batch = dict(batch(), packetSha256=hashlib.sha256(wire.encode(selector['packet']) + b'\n').hexdigest())
+    result = wire.receive_observation(frames, batch=fixture_batch, phase='restored', verify=verify)
+    frames.write(dict(rehearsal=True, observationSha256=hashlib.sha256(wire.encode(result)).hexdigest()), wire.MAX_SUBJECT)
+
+
+def hosted(state):
+    """Exercise actual GitHub signing over the private fixed-command stdio fixture."""
+    argv = [sys.executable, '-B', __file__, '--fixed-stdio-fixture', str(state)]
+    with subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0,
+                          env=dict(os.environ, SSH_ORIGINAL_COMMAND=handoff.COMMAND)) as peer:
+        deadline = time.monotonic() + 116
+        try:
+            handoff.send_restoration(fixture_selector(), peer.stdin, interactive=True)
+            frames = wire.Frames(peer.stdout.fileno(), peer.stdin.fileno(), deadline=deadline)
+            challenge = frames.read(wire.MAX_SUBJECT)
+            if challenge['phase'] != 'restored':
+                raise ValueError('Fixture observer expected a restoration challenge')
+            subject = wire.observe(challenge, fetch=responses(OLD))
+            (state / 'observation.tmp').write_bytes(wire.encode(subject))
+            (state / 'observation.tmp').rename(state / 'observation.json')
+            bundle_path = state / 'bundle.jsonl'
+            while not bundle_path.exists():
+                if time.monotonic() >= deadline or peer.poll() is not None:
+                    raise TimeoutError('Hosted observer did not sign the fixture observation')
+                time.sleep(0.1)
+            with bundle_path.open('rb') as bundle:
+                frames.write(wire.reply(subject, bundle.read(wire.MAX_BUNDLE + 1)), wire.MAX_REPLY)
+            result = frames.read(wire.MAX_SUBJECT)
+            digest = hashlib.sha256(wire.encode(subject['public'])).hexdigest()
+            if result != dict(rehearsal=True, observationSha256=digest) or peer.wait(timeout=5):
+                raise ValueError('Fixed stdio peer returned an unexpected fixture result')
+        finally:
+            if peer.poll() is None:
+                peer.kill()
+    (state / 'passed').write_text(digest, encoding='ascii')
 
 
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == '--hosted':
         hosted(Path(sys.argv[2]).resolve())
+    elif len(sys.argv) == 3 and sys.argv[1] == '--fixed-stdio-fixture':
+        fixed_stdio_fixture(Path(sys.argv[2]).resolve())
     else:
         unittest.main()

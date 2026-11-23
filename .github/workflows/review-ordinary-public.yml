@@ -5,6 +5,8 @@ on:
     branches: [codex/zimage-attestation-shadow-20261122]
     paths:
       - '.github/workflows/review-ordinary-public.yml'
+      - 'ops/aliyun/github_pair_handoff.py'
+      - 'ops/aliyun/test_github_pair_handoff.py'
       - 'ops/aliyun/ordinary_public_exchange.py'
       - 'ops/aliyun/test_ordinary_public_exchange.py'
 
@@ -25,7 +27,7 @@ jobs:
           persist-credentials: false
       - name: Check bounded and batch-bound bidirectional frames
         working-directory: ops/aliyun
-        run: python3 -B -m unittest -v test_ordinary_public_exchange test_github_pair_public
+        run: python3 -B -m unittest -v test_ordinary_public_exchange test_github_pair_public test_github_pair_handoff
       - name: Start private fixture exchange for the exact restoration target
         working-directory: ops/aliyun
         env:
