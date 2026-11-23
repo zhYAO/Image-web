@@ -12,6 +12,43 @@ from github_hosted_stage_shadow import FIELDS, KIND, PREDICATE
 
 
 class OfflineTest(unittest.TestCase):
+    def test_database_attestation_pins_independent_workflow_and_exact_batch(self):
+        payload = b'{"fixture":"db subject"}'
+        digest = hashlib.sha256(payload).hexdigest()
+        invocation = 'https://github.com/zhYAO/Image-web/actions/runs/42/attempts/2'
+        for mismatch in ('none', 'invocation', 'repository', 'predicate', 'digest'):
+            with self.subTest(mismatch=mismatch):
+                def verify(argv, **_):
+                    for flag, expected in {
+                        '--signer-workflow': offline.DATABASE_WORKFLOW,
+                        '--signer-digest': 'c' * 40,
+                        '--source-digest': 'd' * 40,
+                        '--source-ref': 'refs/heads/main',
+                        '--predicate-type': offline.DATABASE_PREDICATE,
+                    }.items():
+                        self.assertEqual(argv[argv.index(flag) + 1], expected)
+                    self.assertIn('--deny-self-hosted-runners', argv)
+                    statement = {'_type': 'https://in-toto.io/Statement/v1', 'predicate': {},
+                                 'predicateType': PREDICATE if mismatch == 'predicate' else offline.DATABASE_PREDICATE,
+                                 'subject': [{'digest': {'sha256': 'f' * 64 if mismatch == 'digest' else digest}}]}
+                    cert = dict(runInvocationURI=invocation + ('0' if mismatch == 'invocation' else ''),
+                                sourceRepositoryIdentifier='99' if mismatch == 'repository' else '1329578390')
+                    stdout = json.dumps([dict(verificationResult=dict(statement=statement, signature={'certificate': cert}))])
+                    return subprocess.CompletedProcess(argv, 0, stdout.encode())
+
+                def run():
+                    return offline.verify_database(payload=payload, bundle=b'fixture bundle', signer_sha='c' * 40,
+                        source_sha='d' * 40, run=42, attempt=2, gh_path='/trusted/gh', gh_sha256='a' * 64,
+                        trusted_root_path='/trusted/root', trusted_root_sha256='b' * 64)
+
+                with patch.object(offline, '_read_trusted', side_effect=(b'bin', b'root')), \
+                     patch.object(offline.subprocess, 'run', side_effect=verify):
+                    if mismatch == 'none':
+                        self.assertEqual(run()['verified_subject_sha256'], digest)
+                    else:
+                        with self.assertRaises(ValueError):
+                            run()
+
     def test_dry_run_command_is_offline_and_environment_isolated(self):
         expected = dict.fromkeys(FIELDS, 'a'*40)
         expected.update(repository='zhYAO/Image-web', repositoryId=73, runId=42, attempt=2,

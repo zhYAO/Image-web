@@ -6,11 +6,15 @@ import stat
 import subprocess
 import tempfile
 
-from github_hosted_stage_shadow import PREDICATE, _require, from_gh
+from github_hosted_stage_shadow import PREDICATE, _require, from_gh, verified_subject
 
 
 GH_PREFIX = Path('/usr/local/libexec/zimage-paired-release')
 ROOT_PREFIX = Path('/etc/zimage')
+DATABASE_REPOSITORY = 'zhYAO/Image-web'
+DATABASE_REPOSITORY_ID = 1329578390
+DATABASE_WORKFLOW = DATABASE_REPOSITORY + '/.github/workflows/observe-ordinary-database.yml'
+DATABASE_PREDICATE = 'https://zimage.store/attestations/ordinary-database/v1'
 
 
 def _trusted_ancestors(path, prefix):
@@ -34,18 +38,37 @@ def _read_trusted(path, maximum, expected_digest, prefix):
     return raw
 
 
-def _argv(binary, subject, expected):
+def _argv(binary, subject, expected, predicate):
     return [
         binary, 'attestation', 'verify', str(subject), '--repo', expected['repository'],
         '--signer-workflow', expected['signerWorkflow'], '--signer-digest', expected['signerSHA'],
         '--source-ref', expected['sourceRef'], '--source-digest', expected['sourceSHA'],
-        '--deny-self-hosted-runners', '--predicate-type', PREDICATE, '--format', 'json',
+        '--deny-self-hosted-runners', '--predicate-type', predicate, '--format', 'json',
     ]
 
 
 def verify(*, payload, bundle, expected, gh_path, gh_sha256,
            trusted_root_path, trusted_root_sha256):
     """Paths and digests are trusted host policy, never packet-supplied."""
+    return _verify(payload, bundle, expected, gh_path, gh_sha256, trusted_root_path, trusted_root_sha256,
+                   predicate=PREDICATE, parse=from_gh)
+
+
+def verify_database(*, payload, bundle, signer_sha, source_sha, run, attempt, gh_path, gh_sha256,
+                    trusted_root_path, trusted_root_sha256):
+    """Accept only the separate protected-main database witness workflow."""
+    expected = dict(repository=DATABASE_REPOSITORY, repositoryId=DATABASE_REPOSITORY_ID,
+                    signerWorkflow=DATABASE_WORKFLOW, signerSHA=signer_sha, sourceRef='refs/heads/main',
+                    sourceSHA=source_sha, runId=run, attempt=attempt)
+
+    def parse(result, *, payload, subject_path, expected):
+        return verified_subject(result.stdout, payload=payload, expected=expected, predicate=DATABASE_PREDICATE)
+
+    return _verify(payload, bundle, expected, gh_path, gh_sha256, trusted_root_path, trusted_root_sha256,
+                   predicate=DATABASE_PREDICATE, parse=parse)
+
+
+def _verify(payload, bundle, expected, gh_path, gh_sha256, trusted_root_path, trusted_root_sha256, *, predicate, parse):
     _require(type(payload) is bytes and 0 < len(payload) <= 4096
              and type(bundle) is bytes and 0 < len(bundle) <= 1024 * 1024)
     _require(expected.get('sourceRef') == 'refs/heads/main')
@@ -58,7 +81,7 @@ def verify(*, payload, bundle, expected, gh_path, gh_sha256,
             with p.open('xb') as f:
                 f.write(content)
             p.chmod(0o400)
-        online_shape = _argv(str(gh_path), subject, expected)
+        online_shape = _argv(str(gh_path), subject, expected, predicate)
         offline_argv = online_shape + ['--bundle', str(supplied), '--custom-trusted-root', str(roots)]
         # Do not inherit PATH, GH_TOKEN, GITHUB_TOKEN, proxy overrides, or gh user config.
         dead_proxy = 'http://127.0.0.1:9'
@@ -72,7 +95,7 @@ def verify(*, payload, bundle, expected, gh_path, gh_sha256,
         # Normalization is internal, only after verifying the actual offline argv
         # and exit status. Retain a single existing verified JSON schema checker.
         normalized = subprocess.CompletedProcess(online_shape, result.returncode, result.stdout)
-        verified = from_gh(normalized, payload=payload, subject_path=subject, expected=expected)
+        verified = parse(normalized, payload=payload, subject_path=subject, expected=expected)
         repository_id = expected.get('repositoryId')
         _require(type(repository_id) is int and repository_id > 0
                  and verified['verified_certificate'].get('sourceRepositoryIdentifier') == str(repository_id))

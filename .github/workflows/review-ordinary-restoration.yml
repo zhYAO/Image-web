@@ -13,6 +13,9 @@ on:
       - 'ops/aliyun/frontend/**'
       - 'ops/aliyun/github_pair_*.py'
       - 'ops/aliyun/test_github_pair_*.py'
+      - 'ops/aliyun/github_shadow_offline.py'
+      - 'ops/aliyun/test_github_shadow_offline.py'
+      - 'ops/aliyun/github_hosted_stage_shadow.py'
       - 'ops/aliyun/github_protected_merge_*.py'
       - 'ops/aliyun/test_github_protected_merge_*.py'
       - 'ops/aliyun/release-three-layer.py'
@@ -34,7 +37,7 @@ jobs:
         run: python3 -B -m unittest -v test_ordinary test_ordinary_journal test_ordinary_stage test_ordinary_system test_ordinary_restore test_ordinary_receiver test_ordinary_github test_ordinary_authority test_ordinary_install_inventory
       - name: Verify bounded SSH frames and receipt acceptance
         working-directory: ops/aliyun
-        run: python3 -B -m unittest -v test_github_pair_handoff test_github_pair_public test_github_pair_ssh test_github_protected_merge_observe test_github_protected_merge_shadow
+        run: python3 -B -m unittest -v test_github_pair_handoff test_github_pair_public test_github_pair_ssh test_github_protected_merge_observe test_github_protected_merge_shadow test_github_shadow_offline test_github_hosted_stage_shadow
       - name: Exercise the independent backend verifier and receipt protocol
         working-directory: ops/aliyun/backend
         run: python3 -B -m unittest -v test_verify test_receipt test_ordinary_readonly_transport

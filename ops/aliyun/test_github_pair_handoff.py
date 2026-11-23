@@ -97,6 +97,31 @@ class HandoffTest(unittest.TestCase):
         self.assertEqual(result['rollbackPair'], self.rollback)
         self.assertEqual(self.get.call_args.args, (handoff.API + '/branches/main',))
 
+    def test_interactive_publication_and_restoration_stop_before_the_observer_response(self):
+        selector = {'packet': {'commit': self.release}, 'approvalSha256': 'a' * 64}
+        for name, payload, send, expected in [('publication', self.request, handoff.send, None),
+                                              ('restoration', selector, handoff.send_restoration, selector)]:
+            with self.subTest(name=name):
+                target = Path(self.tmp.name) / name
+                target.mkdir()
+                wire = io.BytesIO()
+                send(payload, wire, interactive=True)
+                request = wire.getvalue()
+                with self.assertRaisesRegex(ValueError, 'Unknown pair handoff protocol'):
+                    handoff.receive(io.BytesIO(request), target)
+                first_response = b'observer-response'
+                stream = io.BytesIO(request + first_response)
+                self.assertEqual(handoff.receive(stream, target, interactive=True), expected)
+                self.assertEqual(stream.read(), first_response)
+
+    def test_interactive_restore_requires_explicit_terminator(self):
+        wire = io.BytesIO()
+        handoff.send_restoration({'packet': {}}, wire, interactive=True)
+        for tail in (b'', b'x' * len(handoff.REQUEST_END)):
+            body = wire.getvalue()[:-len(handoff.REQUEST_END)] + tail
+            with self.subTest(tail=tail), self.assertRaises(ValueError):
+                handoff.receive(io.BytesIO(body), self.request, interactive=True)
+
     def test_restoration_frame_is_bounded_and_does_not_materialize_files(self):
         selector = {'packet': {'commit': self.release}, 'approvalSha256': 'a' * 64}
         stream = io.BytesIO()

@@ -1,0 +1,53 @@
+name: ZImage non-production read-only database rehearsal
+
+on:
+  push:
+    branches: [codex/zimage-attestation-shadow-20261122]
+    paths:
+      - '.github/workflows/review-ordinary-database.yml'
+      - 'ops/aliyun/ordinary_database_observer.py'
+      - 'ops/aliyun/test_ordinary_database_observer.py'
+      - 'doc/separation/20261106-paired-preflight/before-snapshot.sql'
+
+permissions:
+  contents: read
+
+jobs:
+  database-observer:
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-attestation-shadow-20261122'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Run the pinned SQL under a separate PostgreSQL role in a private fixture
+        working-directory: ops/aliyun
+        run: |
+          set -euo pipefail
+          pg_bin="$(pg_config --bindir)"
+          state="$(mktemp -d "$RUNNER_TEMP/zimage-pg.XXXXXX")"
+          "$pg_bin/initdb" --pgdata="$state/data" --auth-local=peer --auth-host=scram-sha-256 >/dev/null
+          printf 'local zimage_observer_fixture zimage_release_observer peer map=zimage_fixture\nlocal all all peer\n' > "$state/data/pg_hba.conf"
+          printf 'zimage_fixture %s zimage_release_observer\n' "$(id -un)" > "$state/data/pg_ident.conf"
+          "$pg_bin/pg_ctl" -D "$state/data" -o "-c listen_addresses='' -k $state" -l "$state/postgres.log" -w start
+          trap '"$pg_bin/pg_ctl" -D "$state/data" -m fast -w stop >/dev/null' EXIT
+          "$pg_bin/createdb" -h "$state" zimage_observer_fixture
+          "$pg_bin/psql" -Xqw -h "$state" -d zimage_observer_fixture -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE zimage_release_observer LOGIN;
+          CREATE SCHEMA private;
+          CREATE SCHEMA supabase_migrations;
+          CREATE TABLE supabase_migrations.schema_migrations (version text, name text);
+          INSERT INTO supabase_migrations.schema_migrations VALUES ('1', 'isolated_fixture');
+          CREATE TABLE private.credit_settings (singleton boolean);
+          CREATE TABLE private.credit_price_versions (version integer);
+          CREATE TABLE private.commerce_package_settings (singleton boolean);
+          CREATE TABLE private.commerce_package_cost_versions (version integer);
+          CREATE TABLE private.commerce_package_sale_versions (version integer);
+          CREATE TABLE private.provider_runtime_config (provider text, enabled boolean);
+          CREATE TABLE private.runtime_flags (flag text, enabled boolean);
+          GRANT USAGE ON SCHEMA private, supabase_migrations TO zimage_release_observer;
+          GRANT SELECT ON ALL TABLES IN SCHEMA private, supabase_migrations TO zimage_release_observer;
+          SQL
+          ZIMAGE_OBSERVER_FIXTURE_SOCKET="$state" ZIMAGE_OBSERVER_FIXTURE_PSQL="$pg_bin/psql" \
+            python3 -B -m unittest -v test_ordinary_database_observer
