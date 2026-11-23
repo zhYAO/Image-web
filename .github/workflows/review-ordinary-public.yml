@@ -1,0 +1,68 @@
+name: ZImage non-production public evidence rehearsal
+
+on:
+  push:
+    branches: [codex/zimage-attestation-shadow-20261122]
+    paths:
+      - '.github/workflows/review-ordinary-public.yml'
+      - 'ops/aliyun/ordinary_public_exchange.py'
+      - 'ops/aliyun/test_ordinary_public_exchange.py'
+
+permissions: {}
+
+jobs:
+  public-evidence:
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-attestation-shadow-20261122'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Check bounded and batch-bound bidirectional frames
+        working-directory: ops/aliyun
+        run: python3 -B -m unittest -v test_ordinary_public_exchange test_github_pair_public
+      - name: Start private rehearsal and observe the currently served HTTPS pair
+        working-directory: ops/aliyun
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/zimage-public-observer"
+          install -d -m 0700 -- "$state"
+          gh attestation trusted-root > "$state/roots.jsonl"
+          env -u GH_TOKEN python3 -B test_ordinary_public_exchange.py --hosted "$state" > "$state/observer.log" 2>&1 &
+          observer=$!
+          for ((i = 0; i < 600; i++)); do
+            if [[ -s "$state/observation.json" ]]; then exit 0; fi
+            kill -0 "$observer" || { cat "$state/observer.log"; exit 1; }
+            sleep .1
+          done
+          exit 1
+      - name: Sign this specific rehearsal observation with GitHub OIDC
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/zimage-public-observer/observation.json
+          predicate-type: https://zimage.store/attestations/rehearsal-public-observation/v1
+          predicate: '{"environment":"rehearsal"}'
+          push-to-registry: false
+          show-summary: false
+      - name: Return proof over the live channel and verify offline
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          state="$RUNNER_TEMP/zimage-public-observer"
+          install -m 0600 -- "$BUNDLE" "$state/bundle.tmp"
+          mv -- "$state/bundle.tmp" "$state/bundle.jsonl"
+          for ((i = 0; i < 600; i++)); do
+            if [[ -s "$state/passed" ]]; then cat "$state/passed"; exit 0; fi
+            if [[ -s "$state/observer.log" ]]; then cat "$state/observer.log"; exit 1; fi
+            sleep .1
+          done
+          exit 1
