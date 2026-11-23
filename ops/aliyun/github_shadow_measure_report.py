@@ -20,7 +20,7 @@ def report(result, *, argv, context):
     """
     _require(type(result.returncode) is int and result.returncode == 0 and result.args == argv)
     _require(type(argv) in (list, tuple) and len(argv) >= 5 and argv[-4] == '--prepared-protected-shadow'
-             and argv[-1] == 'c65ee2fd2aa81bf474db37497366c58733a627fb')
+             and argv[-1] == '119d835f091fe31d0383062f37bebd070c5297ad')
     _require(type(context) is dict and set(context) == IDS | ARTIFACTS)
     _require(context['repository'] == 'zhYAO/Image-web' and context['repositoryId'] == 1329578390
              and context['sourceRef'] == 'refs/heads/main' and context['event'] == 'push'
@@ -32,7 +32,9 @@ def report(result, *, argv, context):
     _require(argv[-2] == context['sourceSHA'])
     _require(type(result.stdout) is bytes and 0 < len(result.stdout) <= 1_000_000)
     lines = result.stdout.decode().splitlines()
-    _require(lines.count(NETWORK) == 1 and bool(lines) and len(lines[-1]) <= 4096)
+    _require(lines.count(NETWORK) == 1 and len(lines) >= 3 and len(lines[-1]) <= 4096
+             and lines[-2] == 'Protected host teardown verified.'
+             and lines.count('Protected host teardown verified.') == 1)
     data = json.loads(lines[-1], object_pairs_hook=_unique)
     expected = dict(commit=context['sourceSHA'], dbProfile='m6-diagnostics-no-m7',
                     migrationCount=43, migrationLedgerSha256=LEDGER, scope=SCOPE,

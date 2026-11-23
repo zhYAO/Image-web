@@ -197,7 +197,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: c65ee2fd2aa81bf474db37497366c58733a627fb
+          ref: 119d835f091fe31d0383062f37bebd070c5297ad
           path: trusted-runtime
           persist-credentials: false
       - name: Read exact application Git objects; never checkout or execute
@@ -205,7 +205,7 @@ jobs:
           set -euo pipefail
           [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
           test "$(git -C trusted-intake rev-parse HEAD)" = bc6a29043434ba62f032be8a312976fd5b9aaa9e
-          test "$(git -C trusted-runtime rev-parse HEAD)" = c65ee2fd2aa81bf474db37497366c58733a627fb
+          test "$(git -C trusted-runtime rev-parse HEAD)" = 119d835f091fe31d0383062f37bebd070c5297ad
           test ! -e "$RUNNER_TEMP/zimage-candidate.git"
           git init --bare "$RUNNER_TEMP/zimage-candidate.git"
           git --git-dir="$RUNNER_TEMP/zimage-candidate.git" -c core.hooksPath=/dev/null fetch --no-tags --depth=1 https://github.com/zhYAO/Image-web.git "$GITHUB_SHA"
@@ -269,7 +269,7 @@ jobs:
             GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
             ZIMAGE_PAIRED_AUTOMATION=false ZIMAGE_PAIRED_PRODUCTION=false \
             bash ops/aliyun/github-protected-stage-netproof.sh --prepared-protected-shadow \
-              "$private/prepared" "$GITHUB_SHA" c65ee2fd2aa81bf474db37497366c58733a627fb
+              "$private/prepared" "$GITHUB_SHA" 119d835f091fe31d0383062f37bebd070c5297ad
 
   authenticated-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
