@@ -3,9 +3,14 @@ import base64
 from datetime import datetime
 import hashlib
 import http.client
+import ipaddress
 import json
 import re
 import ssl
+import os
+import socket
+import struct
+import time
 
 BASE = '/repos/zhYAO/Image-web'
 REPO_ID = 1329578390
@@ -42,6 +47,109 @@ def safe_path(path):
         rf'actions/runs/{N}(?:/attempts/{N}(?:/jobs\?per_page=100)?)?|'
         rf'actions/workflows/{N}/runs\?event=pull_request&check_suite_id={N}&per_page=100|'
         rf'contents/{re.escape(CHECK_WORKFLOW)}\?ref={SHA})', tail) is not None
+
+
+API_HOST = 'api.github.com'
+VPC_DNS = frozenset({'100.100.2.136', '100.100.2.138'})
+DNS_NAME = b'\x03api\x06github\x03com\x00'
+DNS_QUESTION = DNS_NAME + b'\x00\x01\x00\x01'
+DNS_OUTPUT_CAP = 4096
+
+
+def vpc_connection(resolver):
+    """Return a connect seam for exact-host, TLS-verified ECS evidence reads."""
+    require(type(resolver) is str and resolver in VPC_DNS)
+
+    class VpcGitHubConnection(http.client.HTTPSConnection):
+        def __init__(self, host, *, timeout, context):
+            require(host == API_HOST and context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED)
+            super().__init__(host, port=443, timeout=timeout, context=context)
+            self._create_connection = self._dial
+
+        def _dial(self, address, timeout, source_address):
+            require(address == (API_HOST, 443) and source_address is None and self._tunnel_host is None)
+            deadline = time.monotonic() + min(timeout, 5)
+
+            def left():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('GitHub evidence connection deadline expired')
+                return remaining
+
+            addresses = vpc_ipv4(resolver, min(2.5, left()))
+            for ip in addresses[:2]:
+                raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    raw.settimeout(min(1.5, left()))
+                    raw.connect((ip, 443))
+                    raw.settimeout(left())  # also bounds the native TLS handshake
+                    return raw
+                except OSError:
+                    raw.close()
+            raise OSError('Approved GitHub evidence route unavailable')
+
+    return VpcGitHubConnection
+
+
+def dns_answers(packet, txid):
+    require(12 + len(DNS_QUESTION) <= len(packet) <= DNS_OUTPUT_CAP)
+    ident, flags, qd, an, ns, ar = struct.unpack_from('!6H', packet)
+    require(ident == txid and flags & 0xFA0F == 0x8000 and qd == 1
+            and 1 <= an <= 8 and ns + ar <= 16)
+    cursor = 12 + len(DNS_QUESTION)
+    require(packet[12:cursor] == DNS_QUESTION)
+    answers = []
+    for _ in range(an):
+        if packet[cursor:cursor + 2] == b'\xc0\x0c':
+            cursor += 2
+        else:
+            require(packet[cursor:cursor + len(DNS_NAME)] == DNS_NAME)
+            cursor += len(DNS_NAME)
+        require(cursor + 14 <= len(packet))
+        rrtype, rrclass, _, size = struct.unpack_from('!HHIH', packet, cursor)
+        require((rrtype, rrclass, size) == (1, 1, 4))
+        ip = ipaddress.IPv4Address(packet[cursor + 10:cursor + 14])
+        require(ip.is_global and not (ip.is_multicast or ip.is_reserved)
+                and ip not in ipaddress.IPv4Network('198.18.0.0/15'))
+        if str(ip) not in answers:
+            answers.append(str(ip))
+        cursor += 14
+    if ns + ar == 0:
+        require(cursor == len(packet))
+    return tuple(answers)
+
+
+def vpc_ipv4(resolver, timeout):
+    require(type(resolver) is str and resolver in VPC_DNS and 0 < timeout <= 2.5)
+    deadline = time.monotonic() + timeout
+    txid = int.from_bytes(os.urandom(2), 'big')
+    query = struct.pack('!6H', txid, 0x0100, 1, 0, 0, 0) + DNS_QUESTION
+
+    def bound(sock):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise TimeoutError('GitHub evidence DNS deadline expired')
+        sock.settimeout(left)
+
+    def read(sock, size):
+        data = bytearray()
+        while len(data) < size:
+            bound(sock)
+            piece = sock.recv(size - len(data))
+            if not piece:
+                raise OSError('Early EOF from approved VPC DNS')
+            data.extend(piece)
+        return bytes(data)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        bound(sock)
+        sock.connect((resolver, 53))
+        bound(sock)
+        sock.sendall(struct.pack('!H', len(query)) + query)
+        size = struct.unpack('!H', read(sock, 2))[0]
+        require(12 + len(DNS_QUESTION) <= size <= DNS_OUTPUT_CAP)
+        return dns_answers(read(sock, size), txid)
+
 
 
 def read_only(token, connect=http.client.HTTPSConnection):
