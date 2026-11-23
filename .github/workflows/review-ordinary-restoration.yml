@@ -8,6 +8,8 @@ on:
       - 'ops/aliyun/paired/**'
       - 'ops/aliyun/backend/verify.py'
       - 'ops/aliyun/backend/test_verify.py'
+      - 'ops/aliyun/backend/ordinary_readonly_transport.py'
+      - 'ops/aliyun/backend/test_ordinary_readonly_transport.py'
       - 'ops/aliyun/frontend/**'
       - 'ops/aliyun/github_pair_*.py'
       - 'ops/aliyun/test_github_pair_*.py'
@@ -33,7 +35,7 @@ jobs:
         run: python3 -B -m unittest -v test_github_pair_handoff test_github_pair_public test_github_pair_ssh
       - name: Exercise the independent backend verifier and receipt protocol
         working-directory: ops/aliyun/backend
-        run: python3 -B -m unittest -v test_verify test_receipt
+        run: python3 -B -m unittest -v test_verify test_receipt test_ordinary_readonly_transport
       - name: Exercise private frontend sealing on the Linux filesystem
         working-directory: ops/aliyun/frontend
         run: python3 -B -m unittest -v test_frontend_release.ReleaseTests.test_private_archive_seals_without_using_upload_directory test_frontend_release.ReleaseTests.test_private_archive_digest_mismatch_creates_no_sealed_release

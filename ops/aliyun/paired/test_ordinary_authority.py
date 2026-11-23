@@ -219,6 +219,21 @@ class AuthorityTest(unittest.TestCase):
         self.assertEqual(self.elapsed, 20)
         self.writer.assert_called_once()
 
+    def test_configured_observer_accepts_only_verified_response_and_never_uses_local_fallback(self):
+        self.authorize()
+        self.writer.side_effect = self.put
+        self.driver.observe = Mock(side_effect=lambda challenge, **_: self.verifier_response(challenge))
+        self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+        self.assertEqual(self.writer.call_count, 2)
+        response = self.directory / 'candidate.json'
+        original = self.files[response]
+        del self.files[self.directory / 'candidate-challenge.json']
+        self.driver.observe.side_effect = TimeoutError('Observer TLS failed')
+        with self.assertRaisesRegex(TimeoutError, 'Observer TLS failed'):
+            self.driver.verify_candidate(PROCESS, self.packet, self.approval)
+        self.assertEqual(self.files[response], original)
+        self.assertEqual(self.writer.call_count, 3)
+
     @unittest.skipUnless(os.name == 'posix', 'Requires the actual POSIX challenge writer')
     def test_live_challenge_crosses_a_private_file_boundary_before_receipt_acceptance(self):
         self.authorize()
