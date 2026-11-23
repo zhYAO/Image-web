@@ -200,12 +200,18 @@ jobs:
           ref: 119d835f091fe31d0383062f37bebd070c5297ad
           path: trusted-runtime
           persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: bdb09caeb0fc4fb44b77d1dee6d78e3d7231d089
+          path: trusted-report
+          persist-credentials: false
       - name: Read exact application Git objects; never checkout or execute
         run: |
           set -euo pipefail
           [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
           test "$(git -C trusted-intake rev-parse HEAD)" = bc6a29043434ba62f032be8a312976fd5b9aaa9e
           test "$(git -C trusted-runtime rev-parse HEAD)" = 119d835f091fe31d0383062f37bebd070c5297ad
+          test "$(git -C trusted-report rev-parse HEAD)" = bdb09caeb0fc4fb44b77d1dee6d78e3d7231d089
           test ! -e "$RUNNER_TEMP/zimage-candidate.git"
           git init --bare "$RUNNER_TEMP/zimage-candidate.git"
           git --git-dir="$RUNNER_TEMP/zimage-candidate.git" -c core.hooksPath=/dev/null fetch --no-tags --depth=1 https://github.com/zhYAO/Image-web.git "$GITHUB_SHA"
@@ -225,7 +231,11 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends nginx
       - name: Verify and stage exact same-run bytes without executing them
+        id: freeze_pair
         env:
+          ZIMAGE_PAIRED_AUTOMATION: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
+          BACKEND_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
+          FRONTEND_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
           ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW: ${{ vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW }}
           GH_TOKEN: ${{ github.token }}
           BACKEND_ID: ${{ needs.backend.outputs.artifact_id }}
@@ -246,30 +256,23 @@ jobs:
           export ZIMAGE_INTAKE_TOOLS_SHA=bc6a29043434ba62f032be8a312976fd5b9aaa9e
           export ZIMAGE_CANDIDATE_BARE_GIT="$RUNNER_TEMP/zimage-candidate.git"
           bash ops/aliyun/github-rehearsal-review.sh hosted-shadow
-      - name: Measure only the exact assembled pair and mandatory reconstructed baseline
+          marker=$(/usr/bin/python3 -E -s -B "$GITHUB_WORKSPACE/trusted-report/ops/aliyun/github_shadow_measure_run.py" freeze)
+          [[ "$marker" =~ ^[a-f0-9]{64}$ ]]
+          printf 'admitted_marker_sha256=%s\n' "$marker" >> "$GITHUB_OUTPUT"
+      - name: Measure exact pair and write only an unsigned private report
         env:
           BACKEND_DIGEST: ${{ needs.backend.outputs.artifact_digest }}
           FRONTEND_DIGEST: ${{ needs.frontend.outputs.artifact_digest }}
+          ADMITTED_MARKER_SHA256: ${{ steps.freeze_pair.outputs.admitted_marker_sha256 }}
+          ZIMAGE_PAIRED_AUTOMATION: ${{ vars.ZIMAGE_PAIRED_AUTOMATION }}
+          ZIMAGE_PAIRED_PRODUCTION: ${{ vars.ZIMAGE_PAIRED_PRODUCTION }}
         run: |
           set -euo pipefail
           umask 077
-          packet="$RUNNER_TEMP/zimage-hosted-shadow"
-          private=$(mktemp -d "$RUNNER_TEMP/zimage-protected-observe.XXXXXXXX")
-          trap 'rm -rf -- "$private" "$packet"' EXIT
-          mkdir -m 700 "$private/home"
-          python3 -I -B trusted-intake/ops/aliyun/prepare-hosted-shadow-pair.py "$packet" "$private/prepared" /opt/zimage/layer-cache \
-            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
-            --backend-sha256 "$BACKEND_DIGEST" --frontend-sha256 "$FRONTEND_DIGEST"
-          cd trusted-runtime
-          env -i PATH="$PATH" HOME="$private/home" TMPDIR="$private" RUNNER_TEMP="$RUNNER_TEMP" \
-            RUNNER_ENVIRONMENT=github-hosted RUNNER_OS=Linux LANG=C.UTF-8 NEXT_TELEMETRY_DISABLED=1 \
-            COREPACK_HOME="$RUNNER_TEMP/zimage-corepack" GITHUB_SHA="$GITHUB_SHA" \
-            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" GITHUB_REPOSITORY_ID="$GITHUB_REPOSITORY_ID" \
-            GITHUB_REF="$GITHUB_REF" GITHUB_REF_PROTECTED="$GITHUB_REF_PROTECTED" GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
-            GITHUB_WORKFLOW_REF="$GITHUB_WORKFLOW_REF" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
-            ZIMAGE_PAIRED_AUTOMATION=false ZIMAGE_PAIRED_PRODUCTION=false \
-            bash ops/aliyun/github-protected-stage-netproof.sh --prepared-protected-shadow \
-              "$private/prepared" "$GITHUB_SHA" 119d835f091fe31d0383062f37bebd070c5297ad
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            /usr/bin/python3 -E -s -B trusted-report/ops/aliyun/github_shadow_measure_run.py measure
+          test -s "$RUNNER_TEMP/zimage-report-handoff/stage-report.json"
+          printf '%s\n' 'Protected shadow verified and cleaned up. Report remains unsigned and no release is authorized.' >> "$GITHUB_STEP_SUMMARY"
 
   authenticated-staging:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref_protected && vars.ZIMAGE_PROTECTED_MAIN_BROWSER_SHADOW != 'true' && vars.ZIMAGE_PAIRED_AUTOMATION == 'true'
