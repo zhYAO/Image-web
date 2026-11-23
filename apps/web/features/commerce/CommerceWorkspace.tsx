@@ -84,6 +84,7 @@ export function CommerceWorkspace({
   timelineLoading = false,
   renderTimeline,
   onReferencesAdopt,
+  onPrepareApparelModelPrompt,
   onModeChange,
   onTaskChanged,
   ...wizardProps
@@ -102,6 +103,7 @@ export function CommerceWorkspace({
   routeDriven?: boolean;
   onViewChange?: (sessionId: string, taskId: string, view?: CommerceView) => void;
   onExitDraft?: () => void;
+  onPrepareApparelModelPrompt?: (prompt: string, references: UploadReference[]) => boolean;
   onModeChange?: (sessionId: string | undefined, active: boolean, scene?: CommerceScene) => void;
   onTaskChanged?: (sessionId: string) => void | Promise<unknown>;
   onReferencesAdopt: (
@@ -463,19 +465,12 @@ export function CommerceWorkspace({
       </button>
     </div>
   );
-  const apparelSaved = (task: import('@zimage/domain').ApparelTask, source: string) => {
-    apparel.accept(task);
-    setDrafts(current => current.filter(draft => draft.sessionId !== source));
-    setSelectedBySession(current => ({ ...current, [task.sessionId]: task.id }));
-    onSavedSession?.(task, source);
-    void Promise.resolve(onTaskChanged?.(task.sessionId)).catch(() => undefined);
-  };
   if (activeScene === 'apparel-catalog' && sessionId) return <section className={styles.commerceRoot}>
     <header className={styles.workbenchHeader}><Link href="/create"><ArrowLeft size={15}/>创作方式</Link><span>服装商品图片</span><button className={styles.refreshTask} type="button" onClick={() => void apparel.refresh()}>手动刷新任务</button>
       {apparel.tasks.length > 0 && <label className={styles.taskHistory}>当前会话<CommerceSelect aria-label="当前会话任务" value={showDraft?'draft':selectedApparel?.id??''} onChange={value=>chooseTask(value)}>{currentDraft&&<option value="draft">新方案 · 尚未保存</option>}{[...apparel.tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.plan.brief.name} · v{task.revision}</option>)}{[...tasks].reverse().map(task=><option key={task.id} value={task.id}>{task.brief.name} · v{task.revision}</option>)}</CommerceSelect></label>}
     </header>
     {apparel.error&&<p role="alert">{apparel.error}<button onClick={()=>void apparel.refresh()}>重试任务载入</button></p>}
-    {apparel.loading ? <p role="status">正在载入服装任务…</p> : <ApparelWorkspace key={`${ownerKey}:${sessionId}:${showDraft?'new':selectedApparel?.id??'new'}`} ownerKey={ownerKey} sessionId={sessionId} task={showDraft?undefined:selectedApparel} gateway={gateway?.apparel} references={wizardProps.references} ensureSession={ensureSession} onReferenceAdd={wizardProps.onReferenceAdd} onReferenceRemove={wizardProps.onReferenceRemove} onReferenceUploaded={wizardProps.onReferenceUploaded} onTask={apparelSaved}/>}
+    {apparel.loading ? <p role="status">正在载入服装任务…</p> : <ApparelWorkspace key={`${ownerKey}:${sessionId}:${showDraft?'new':selectedApparel?.id??'new'}`} ownerKey={ownerKey} sessionId={sessionId} task={showDraft?undefined:selectedApparel} gateway={gateway?.apparel} references={wizardProps.references} onReferenceAdd={wizardProps.onReferenceAdd} onReferenceRemove={wizardProps.onReferenceRemove} onPrepareModelPrompt={onPrepareApparelModelPrompt}/>}
   </section>;
   return (
     <section className={hasCommerce ? styles.commerceRoot : undefined}>

@@ -33,8 +33,8 @@ EXTENSIONS = {'.cjs', '.conf', '.css', '.example', '.html', '.inc', '.jpg', '.js
               '.lock', '.md', '.mjs', '.mts', '.png', '.py', '.service', '.sh', '.sql',
               '.toml', '.ts', '.tsx', '.txt', '.webp', '.yaml', '.yml', ''}
 PUBLIC_KEYS = {'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-               'NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'NEXT_PUBLIC_SENTRY_DSN',
-               'NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE'}
+               'NEXT_PUBLIC_TURNSTILE_SITE_KEY'}
+LEGACY_PUBLIC_KEYS = {'NEXT_PUBLIC_SENTRY_DSN', 'NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE'}
 FONTS = {
     'NotoSansCJKsc-Bold.otf': 'b5f0d1a190a7f9b43c310a8850630af12553df32c4c050543f9059732d9b4c0a',
     'NotoSansCJKsc-Regular.otf': '2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b',
@@ -380,8 +380,8 @@ def public_config(path, expected):
             d[k] = v
         return d
     obj = json.loads(raw, object_pairs_hook=unique)
-    if set(obj) != PUBLIC_KEYS or not all(isinstance(v, str) for v in obj.values()):
-        raise ValueError('Exactly five public string keys required')
+    if not PUBLIC_KEYS <= set(obj) <= PUBLIC_KEYS | LEGACY_PUBLIC_KEYS or not all(isinstance(v, str) for v in obj.values()):
+        raise ValueError('Three required public string keys and optional legacy telemetry keys expected')
     url = urlsplit(obj['NEXT_PUBLIC_SUPABASE_URL'])
     if url.scheme != 'https' or not url.hostname or url.username or url.password:
         raise ValueError('Invalid public Supabase URL')
@@ -394,13 +394,8 @@ def public_config(path, expected):
         if payload.get('role') != 'anon': raise ValueError('Non-anon credential rejected')
     else: raise ValueError('Non-public Supabase credential rejected')
     if not obj['NEXT_PUBLIC_TURNSTILE_SITE_KEY'].strip(): raise ValueError('Missing public sitekey')
-    if obj['NEXT_PUBLIC_SENTRY_DSN']:
-        u = urlsplit(obj['NEXT_PUBLIC_SENTRY_DSN'])
-        if u.scheme != 'https' or not u.hostname or not u.username or u.password:
-            raise ValueError('Invalid public Sentry DSN')
-    rate = obj['NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE']
-    if rate and not 0 <= float(rate) <= 1: raise ValueError('Invalid sample rate')
-    return obj
+    # Old approved input files remain accepted, without passing retired telemetry to builds.
+    return {key: obj[key] for key in PUBLIC_KEYS}
 
 
 def build(args):

@@ -1,4 +1,5 @@
-import sharp from 'sharp';
+import { decodeRaster, RASTER_LIMITS, withRasterWork } from '../images/raster-engine';
+import type { RasterFormat } from '../images/raster-header';
 
 import { ApiRouteError } from '@/server/api-error';
 
@@ -56,16 +57,10 @@ export async function validateReferenceUpload(input: ReferenceUploadInput) {
   }
 
   try {
-    const metadata = await sharp(input.bytes, { animated: true, limitInputPixels: MAX_DIMENSION * MAX_DIMENSION }).metadata();
-    const formatMatches = metadata.format === 'jpeg'
-      ? input.mimeType === 'image/jpeg'
-      : metadata.format === input.mimeType.replace('image/', '');
-    if (!formatMatches || !metadata.width || !metadata.height) throw invalidUpload('无法识别参考图内容。');
-    if (metadata.width > MAX_DIMENSION || metadata.height > MAX_DIMENSION) {
-      throw invalidUpload(`参考图单边像素不能超过 ${MAX_DIMENSION}。`);
-    }
-    if ((metadata.pages ?? 1) > 1) throw invalidUpload('暂不支持动态参考图。');
-
+    const { meta: metadata } = await withRasterWork(() => decodeRaster(input.bytes, {
+      ...RASTER_LIMITS, maxBytes: MAX_UPLOAD_BYTES, maxEdge: MAX_DIMENSION,
+      expectedFormat: input.mimeType.slice(6) as RasterFormat,
+    }));
     return {
       extension: extension === 'jpeg' ? 'jpg' : extension,
       height: metadata.height,

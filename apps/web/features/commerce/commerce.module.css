@@ -37,7 +37,7 @@
   padding: 9px 13px;
   color: var(--z-text);
   cursor: pointer;
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   font-size: 14px;
 }
 .actions button[aria-pressed="true"] {
@@ -434,7 +434,7 @@ label.checkbox {
   padding: 8px 14px;
 }
 .taskCard input {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -450,7 +450,7 @@ label.checkbox {
   padding: 10px 12px;
 }
 .wizard select {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -1101,7 +1101,7 @@ button.primary:hover:not(:disabled) {
   padding: 8px 12px;
   background: var(--z-glass-control);
   color: var(--z-text);
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   min-height: 44px;
   border-radius: 12px;
   border: 1px solid var(--z-border-control);
@@ -1328,7 +1328,7 @@ button.primary:hover:not(:disabled) {
   padding: 12px;
   color: var(--z-primary);
   cursor: pointer;
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   font-size: 14px;
   border-radius: 12px;
   border: 1px solid var(--z-border-control);
@@ -1443,7 +1443,7 @@ button.primary:hover:not(:disabled) {
   padding: 10px 12px;
 }
 .taskCard select {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -1459,7 +1459,7 @@ button.primary:hover:not(:disabled) {
   padding: 10px 12px;
 }
 .taskCard textarea {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -1476,7 +1476,7 @@ button.primary:hover:not(:disabled) {
   min-height: 112px;
 }
 .wizard textarea {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -1493,7 +1493,7 @@ button.primary:hover:not(:disabled) {
   min-height: 112px;
 }
 .wizard input {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   border: 1px solid var(--z-border);
   color: var(--z-text);
   width: 100%;
@@ -1975,7 +1975,7 @@ button.primary:active:not(:disabled) {
 .batchGlobal label, .batchRows label { display: grid; gap: 6px; font-size: 14px; }
 .batchRows { display: grid; gap: 14px; max-height: 55vh; overflow-y: auto; padding: 2px; }
 .batchRows fieldset { border: 1px solid var(--z-border); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
-.batchRows input:not([type=file]), .batchRows textarea { width: 100%; border: 1px solid var(--z-border-control); border-radius: 10px; padding: 8px; font: inherit; }
+.batchRows input:not([type=file]), .batchRows textarea { width: 100%; border: 1px solid var(--z-border-control); border-radius: 10px; padding: 8px; font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit; }
 .batchWorkbench button { border: 1px solid var(--z-border-control); border-radius: 10px; background: var(--z-panel); color: var(--z-primary); padding: 8px 12px; cursor: pointer; }
 .batchWorkbench button:disabled { cursor: not-allowed; opacity: .55; }
 .batchWorkbench button.primary { background: var(--z-primary); border-color: var(--z-primary); color: var(--z-on-primary); }
@@ -1987,7 +1987,7 @@ button.primary:active:not(:disabled) {
 .originalCompare figure { margin: 0; }
 .originalCompare figcaption { color: var(--z-muted); font-size: 12px; padding: 5px 0; }
 .urlImport { display: grid; gap: 8px; }
-.urlImport input { width: 100%; min-width: 0; border: 1px solid var(--z-border-control); border-radius: 10px; padding: 8px; font: inherit; }
+.urlImport input { width: 100%; min-width: 0; border: 1px solid var(--z-border-control); border-radius: 10px; padding: 8px; font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit; }
 .cloneReference { margin:0 0 12px; padding:10px; background:var(--z-primary-soft); border-radius:8px; }
 .cloneReference img { max-height:160px; object-fit:contain; }
 .cloneReference figcaption { color:var(--z-muted); font-size:12px; margin-top:6px; }
@@ -2011,7 +2011,7 @@ button.primary:active:not(:disabled) {
 .wizardEmbedded .wizardControls { border-top: 1px solid var(--z-border); }
 @media(max-width:767px) { .wizardEmbedded .wizardColumns,.savedWorkbench { gap: 18px; } }
 
-.refreshTask { flex: none; padding: 7px 12px; border: 1px solid var(--z-border); border-radius: 10px; background: var(--z-panel); color: var(--z-muted); cursor: pointer; font: inherit; font-size: 11px; }
+.refreshTask { flex: none; padding: 7px 12px; border: 1px solid var(--z-border); border-radius: 10px; background: var(--z-panel); color: var(--z-muted); cursor: pointer; font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit; font-size: 11px; }
 .refreshTask:hover { color: var(--z-primary); background: var(--z-primary-soft); }
 .refreshTask:focus-visible { outline: 2px solid var(--z-focus); outline-offset: 3px; }
 

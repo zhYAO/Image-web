@@ -1,0 +1,76 @@
+name: Publish merged ZImage pair
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: zimage-production-release
+  cancel-in-progress: false
+
+jobs:
+  merged-pr:
+    if: github.repository == 'zhYAO/Image-web' && github.ref_protected && !github.event.deleted
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Require this commit to be the merge of a PR into main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" |
+            jq -se --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" 'any(.[][]; .merged_at and .merge_commit_sha == $sha and .base.ref == "main" and .base.repo.full_name == $repo)'
+
+  build-only:
+    needs: merged-pr
+    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED != '1'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-production-pair
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+
+  publish:
+    needs: merged-pr
+    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED == '1'
+    runs-on: ubuntu-22.04
+    environment: production
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/build-production-pair
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        id: provenance
+        with:
+          subject-path: ${{ runner.temp }}/zimage-pair/pair.tar
+      - name: Verify main tip and deliver the exact signed pair
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ECS_ADDRESS: ${{ vars.ZIMAGE_ECS_ADDRESS }}
+          SSH_HOST_KEY: ${{ vars.ZIMAGE_ECS_HOST_KEY }}
+          SSH_KEY: ${{ secrets.ZIMAGE_PRODUCTION_RELEASE_KEY }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
+          unset GH_TOKEN
+          python3 -B ops/aliyun/production/send.py

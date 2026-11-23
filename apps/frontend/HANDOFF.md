@@ -38,9 +38,7 @@ paid API or Git history was changed by this implementation task.
 - Allowlisted public media/license copy; static resource checker covers missing
   HTML/CSS/lazy resources, namespace mismatch, fonts/native packages, private maps,
   symlinks/hardlinks, case collisions and forbidden server/secret markers.
-- Browser-only Sentry adapter deferred behind optional explicit public DSN. It
-  removes identity/request/prompts/breadcrumbs, redacts error messages and uses
-  route classes rather than private IDs/queries. No server SDK enters the graph.
+- Generic event scrubbing and route classification remain covered by privacy tests.
 - Runtime error boundary offers explicit recovery without automatic business
   retries or displaying raw exception messages.
 

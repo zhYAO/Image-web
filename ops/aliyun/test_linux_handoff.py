@@ -9,6 +9,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import stat
 import os
 from pathlib import Path
 import subprocess
@@ -25,7 +26,7 @@ HANDOFF = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HANDOFF)
 FIXTURE_COMMIT = '1' * 40
 FIXTURE_TREE = '2' * 40
-REVIEWED_ADAPTER_SHA256 = '3633c92e6785ab6ae4a98133fe7ddbec3174a3a236471f51daebe49a3f2ebb7f'
+REVIEWED_ADAPTER_SHA256 = 'c63209f4827de101f70a2bb2512359c5e1b97c2c06afaee3a89f86f413d8b104'
 
 
 def credential_name(name):
@@ -436,6 +437,33 @@ class BuildAndReturnGuards(HandoffFixture):
         with self.assertRaisesRegex(ValueError, 'one clean real source commit'):
             HANDOFF.return_bundle(argparse.Namespace(build_root=root, output=rejected))
         self.assertFalse(rejected.exists())
+
+
+class PublicConfigCompatibility(unittest.TestCase):
+    def config(self, value):
+        raw = json.dumps(value).encode()
+        from unittest.mock import Mock
+        path = Mock()
+        path.is_symlink.return_value = False
+        path.is_file.return_value = True
+        path.stat.return_value = argparse.Namespace(st_mode=stat.S_IFREG | 0o600)
+        path.read_bytes.return_value = raw
+        return HANDOFF.public_config(path, HANDOFF.digest(raw))
+
+    def test_current_and_legacy_inputs_produce_only_three_build_keys(self):
+        base = dict(NEXT_PUBLIC_SUPABASE_URL='https://synthetic.supabase.co',
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_synthetic',
+            NEXT_PUBLIC_TURNSTILE_SITE_KEY='synthetic-sitekey')
+        self.assertEqual(self.config(base), base)
+        legacy = dict(base, NEXT_PUBLIC_SENTRY_DSN='retired-value',
+            NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE='retired-value')
+        self.assertEqual(self.config(legacy), base)
+        for key in base:
+            incomplete = dict(base); del incomplete[key]
+            with self.assertRaises(ValueError): self.config(incomplete)
+        with self.assertRaises(ValueError): self.config(dict(base, DATABASE_URL='private'))
+        with self.assertRaises(ValueError): self.config(dict(base, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='sb_secret_private'))
+
 
 
 if __name__ == '__main__':

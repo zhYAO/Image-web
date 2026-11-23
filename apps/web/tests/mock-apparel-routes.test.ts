@@ -4,17 +4,6 @@ import { POST as downloadPOST } from "@/app/api/creative-tasks/mock-apparel-rend
 import { apparelFixture } from "./apparel-fixtures";
 import { apparelOutputNames } from "@zimage/domain";
 import { File as NodeFile } from "node:buffer";
-vi.mock("@/server/apparel/apparel-renderer", () => ({
-  renderApparelPages: async function* () {
-    for (const name of apparelOutputNames(apparelFixture))
-      yield {
-        name,
-        width: 790,
-        height: 1000,
-        bytes: new Uint8Array([255, 216, 7, 255, 217]),
-      };
-  },
-}));
 function request(kind: "render" | "download", hostname = "localhost") {
   const url = `http://${hostname}/api/creative-tasks/mock-apparel-render${kind === "download" ? "/download" : ""}`;
   const files = apparelOutputNames(apparelFixture).map(
@@ -79,10 +68,12 @@ describe("explicitly local mock apparel endpoints", () => {
       (await downloadPOST(request("download", "example.com"))).status,
     ).toBe(404);
   });
-  it("allows opted-in localhost rendering and keeps original JPEG bytes and directory names in ZIP", async () => {
-    const rendered = await renderPOST(request("render"));
-    expect(rendered.status).toBe(200);
-    expect((await rendered.json()).pages).toHaveLength(11);
+  it("retires opted-in localhost rendering and keeps original JPEG bytes and directory names in ZIP", async () => {
+    const original = request("render");
+    original.formData = vi.fn().mockRejectedValue(new Error("must not read retired multipart"));
+    const rendered = await renderPOST(original);
+    expect(rendered.status).toBe(410);
+    expect(original.formData).not.toHaveBeenCalled();
     const downloaded = await downloadPOST(request("download"));
     expect(downloaded.status).toBe(200);
     const zip = new Uint8Array(await downloaded.arrayBuffer()),

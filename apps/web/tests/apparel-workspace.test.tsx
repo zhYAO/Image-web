@@ -16,8 +16,7 @@ const props = {
   references: [],
   onReferenceAdd: vi.fn(),
   onReferenceRemove: vi.fn(),
-  onReferenceUploaded: vi.fn(),
-  onTask: vi.fn(),
+  onPrepareModelPrompt: vi.fn(() => true),
 };
 describe("apparel form in the shared commerce workspace", () => {
   afterEach(() => {
@@ -103,7 +102,7 @@ describe("apparel form in the shared commerce workspace", () => {
     expect(screen.getByLabelText("面料成分")).toHaveValue("");
     expect(screen.getByLabelText("上架尺码")).toHaveValue("");
     expect(props.onReferenceAdd).not.toHaveBeenCalled();
-    expect(props.onTask).not.toHaveBeenCalled();
+    expect(props.onPrepareModelPrompt).not.toHaveBeenCalled();
   });
   it("keeps eleven inspectable examples compact while retaining expandable business notes", () => {
     render(<ApparelWorkspace {...props} />);
@@ -118,7 +117,7 @@ describe("apparel form in the shared commerce workspace", () => {
     expect(screen.getByRole("dialog").querySelector("img")).toHaveAttribute("src", expect.stringContaining("main-1.jpg"));
     expect(screen.getByLabelText("商品名称")).toHaveValue("");
     expect(props.onReferenceAdd).not.toHaveBeenCalled();
-    expect(props.onTask).not.toHaveBeenCalled();
+    expect(props.onPrepareModelPrompt).not.toHaveBeenCalled();
   });
   it("uses upload/form inputs, preserves fields on refresh and isolates accounts", () => {
     const first = render(<ApparelWorkspace {...props} />);
@@ -177,103 +176,25 @@ describe("apparel form in the shared commerce workspace", () => {
       <ApparelWorkspace {...props} gateway={gateway} task={latest} />,
     );
     expect(screen.getByLabelText("颜色")).toHaveValue("本地编辑");
-    expect(screen.getByRole("button", { name: "保存为新版本" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "加载最新方案" }));
     expect(screen.getByLabelText("颜色")).toHaveValue("最新白色");
-    expect(screen.getByRole("button", { name: "保存为新版本" })).toBeEnabled();
   });
-  it("retries a lost save response with the same frozen plan without uploading sources again", async () => {
-    const task = apparelTaskSchema.parse({
-      id: apparelIds[7],
-      sessionId: apparelIds[7],
-      engine: "apparel-catalog",
-      revision: 1,
-      plan: { ...apparelFixture, fabricCrop: [0.22, 0.2, 0.76, 0.57] },
-      createdAt: "now",
-      updatedAt: "now",
-      runs: [],
-    });
-    const upload = vi.fn(
-      async (_session: string, ref: { id?: string }) => ref.id!,
-    );
-    const save = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("响应丢失"))
-      .mockImplementationOnce(async (_id, input) => ({
-        ...task,
-        revision: 2,
-        plan: input.plan,
-      }));
-    const onTask = vi.fn();
-    render(
-      <ApparelWorkspace
-        {...props}
-        sessionId={task.sessionId}
-        task={task}
-        gateway={{ upload, save } as unknown as ApparelGateway}
-        onTask={onTask}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText("衣长"), {
-      target: { value: "68" },
-    });
-    fireEvent.change(screen.getByLabelText("Design"), {
-      target: { value: "新的设计说明" },
-    });
-    expect(screen.queryByLabelText("面料裁切左")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "保存为新版本" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("响应丢失");
-    expect(onTask).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("衣长")).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "继续保存同一请求" }));
-    await waitFor(() => expect(onTask).toHaveBeenCalledTimes(1));
-    expect(upload).toHaveBeenCalledTimes(7);
-    expect(save.mock.calls[1]).toEqual(save.mock.calls[0]);
-    expect(save.mock.calls[1]![1]).toMatchObject({
-      expectedRevision: 1,
-      plan: {
-        brief: { measurements: { length: "68" }, design: "新的设计说明" },
-        fabricCrop: [0.22, 0.2, 0.76, 0.57],
-      },
-    });
-    expect(screen.getByLabelText("衣长")).toBeEnabled();
+  it("prepares an editable Chinese draft without creating tasks, submitting or uploading", () => {
+    const onPrepareModelPrompt = vi.fn(() => true);
+    const gateway = { create: vi.fn(), save: vi.fn(), upload: vi.fn(), submit: vi.fn() };
+    const task = apparelTaskSchema.parse({ id: apparelIds[7], sessionId: "session", engine: "apparel-catalog",
+      revision: 1, plan: apparelFixture, createdAt: "2026-10-06", updatedAt: "2026-10-06", runs: [] });
+    render(<ApparelWorkspace {...props} task={task} gateway={gateway as unknown as ApparelGateway} onPrepareModelPrompt={onPrepareModelPrompt} />);
+    expect(onPrepareModelPrompt).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "前往生图工作台" }));
+    expect(onPrepareModelPrompt).toHaveBeenCalledWith(expect.stringContaining(apparelFixture.brief.name), []);
+    for (const operation of Object.values(gateway)) expect(operation).not.toHaveBeenCalled();
   });
-  it("keeps the render request identity after failure and disables rendering unsaved edits", async () => {
-    const task = apparelTaskSchema.parse({
-      id: apparelIds[7],
-      sessionId: apparelIds[7],
-      engine: "apparel-catalog",
-      revision: 1,
-      plan: apparelFixture,
-      createdAt: "now",
-      updatedAt: "now",
-      runs: [],
-    });
-    const submit = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("排版暂不可用"))
-      .mockResolvedValueOnce(task);
-    const onTask = vi.fn();
-    render(
-      <ApparelWorkspace
-        {...props}
-        sessionId={task.sessionId}
-        task={task}
-        gateway={{ submit } as unknown as ApparelGateway}
-        onTask={onTask}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "开始整套排版" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("排版暂不可用");
-    fireEvent.click(screen.getByRole("button", { name: "开始整套排版" }));
-    await waitFor(() =>
-      expect(onTask).toHaveBeenCalledWith(task, task.sessionId),
-    );
-    expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0]);
-    fireEvent.change(screen.getByLabelText("颜色"), {
-      target: { value: "编辑后的白色" },
-    });
-    expect(screen.getByRole("button", { name: "开始整套排版" })).toBeDisabled();
-    expect(submit).toHaveBeenCalledTimes(2);
+  it("does not prepare a prompt for invalid product information", () => {
+    const onPrepareModelPrompt = vi.fn();
+    render(<ApparelWorkspace {...props} onPrepareModelPrompt={onPrepareModelPrompt} />);
+    fireEvent.click(screen.getByRole("button", { name: "前往生图工作台" }));
+    expect(screen.getByRole("alert")).toBeVisible();
+    expect(onPrepareModelPrompt).not.toHaveBeenCalled();
   });
 });

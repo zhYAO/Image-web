@@ -314,7 +314,8 @@ function installController(controller, nextRequire, qaOnly, entry) {
   const original = http.createServer;
   http.createServer = function(...args) { return controller.createServer(original, this, args); };
   syncBuiltinESMExports();
-  const bridge = Object.freeze({ protocolVersion: PROTOCOL_VERSION, barrierId: BARRIER_ID, qaOnly, snapshot: controller.snapshot });
+  const bridge = Object.freeze({ protocolVersion: PROTOCOL_VERSION, barrierId: BARRIER_ID, qaOnly,
+    snapshot: () => ({ ...controller.snapshot(), preloadPath: __filename }) });
   Object.defineProperty(globalThis, BRIDGE_KEY, { value: bridge, writable: false, configurable: false });
   return bridge;
 }

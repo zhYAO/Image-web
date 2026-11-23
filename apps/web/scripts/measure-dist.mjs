@@ -7,6 +7,9 @@
 //   node apps/web/scripts/measure-dist.mjs
 //   node apps/web/scripts/measure-dist.mjs --dist apps/web/.next --json report.json
 //   node apps/web/scripts/measure-dist.mjs --assert-slim
+//   node apps/web/scripts/measure-dist.mjs --runtime-audit --json report.json
+// --runtime-audit indexes bounded NFT manifests for optional trace attribution.
+// If the build is in a different checkout, use --trace-root <its tracing root>.
 //
 // --assert-slim exits nonzero when the trace still contains Next development
 // entrypoints or esbuild, i.e. when ZIMAGE_BUILD_SLIM=1 did not take effect.
@@ -33,15 +36,21 @@ const DEV_LEAK_MARKERS = [
 ];
 
 function parseArgs(argv) {
-  const options = { dist: 'apps/web/.next', publicDir: 'apps/web/public', json: undefined, assertSlim: false };
+  const options = { dist: 'apps/web/.next', publicDir: 'apps/web/public', json: undefined, assertSlim: false, runtimeAudit: false, traceRoot: undefined };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--dist') options.dist = argv[++index];
     else if (arg === '--public') options.publicDir = argv[++index];
     else if (arg === '--json') options.json = argv[++index];
     else if (arg === '--assert-slim') options.assertSlim = true;
+    else if (arg === '--runtime-audit') options.runtimeAudit = true;
+    else if (arg === '--trace-root') {
+      options.traceRoot = argv[++index];
+      if (!options.traceRoot || options.traceRoot.startsWith('--')) throw new Error('--trace-root requires a directory');
+    }
     else throw new Error(`Unknown argument: ${arg}`);
   }
+  if (options.traceRoot && !options.runtimeAudit) throw new Error('--trace-root requires --runtime-audit');
   return options;
 }
 
@@ -128,6 +137,7 @@ if (missing.length) {
 }
 
 const totals = Object.create(null);
+const runtimeAuditFiles = [];
 const diagnostics = { files: 0, bytes: 0 };
 const seen = new Set();
 let excludedPublic = { files: 0, bytes: 0 };
@@ -154,6 +164,7 @@ for (const file of finalFiles.values()) {
     continue;
   }
   const category = categorize(file.path);
+  if (options.runtimeAudit && category === 'runtimeDependencies') runtimeAuditFiles.push(file);
   const bucket = totals[category] ??= { files: 0, bytes: 0 };
   bucket.files += 1;
   bucket.bytes += file.bytes;
@@ -195,6 +206,14 @@ console.log(`Excluded diagnostics: ${diagnostics.files} files, ${diagnostics.byt
 console.log(`Excluded public policy: ${excludedPublic.files} files, ${excludedPublic.bytes} bytes (release-public-policy.json)`);
 console.log(`Slim trace check: ${leaked.length ? `FAIL — development output present: ${leaked.join(', ')}` : 'PASS — no development entrypoint or esbuild in the trace'}`);
 
+let audit;
+if (options.runtimeAudit) {
+  const { runtimeDependencyAudit } = await import('./measure-dist-runtime-audit.mjs');
+  audit = await runtimeDependencyAudit(runtimeAuditFiles, { dist, traceRoot: path.resolve(repoRoot, options.traceRoot ?? '.') });
+  console.log(`Runtime audit: ${audit.trace.manifestsRead}/${audit.trace.manifestsFound} NFT manifests read; regular deployed paths only`);
+  for (const item of audit.packages.slice(0, 10)) console.log(`  ${item.name}: ${item.bytes} bytes (${item.attributedBytes} owner-attributed)`);
+}
+
 if (options.json) {
   await writeFile(path.resolve(repoRoot, options.json), JSON.stringify({
     dist: path.relative(repoRoot, dist).split(path.sep).join('/'),
@@ -209,6 +228,7 @@ if (options.json) {
     diagnostics: { ...diagnostics },
     excludedPublicPolicy: { ...excludedPublic },
     slimTracePassed: leaked.length === 0,
+    ...(audit ? { runtimeDependencyAudit: audit } : {}),
   }, null, 2) + '\n', 'utf8');
   console.log(`Report written to ${options.json}`);
 }

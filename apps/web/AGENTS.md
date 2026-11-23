@@ -41,3 +41,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Run `pnpm lint`, `pnpm typecheck`, `pnpm test:run`, `pnpm --filter @zimage/web test:acceptance-budget`, and `pnpm build` for local validation. CI also retains coverage and database checks. Passing these checks does not establish browser or real-environment readiness.
 - Use `.next` for normal development. If an isolated build is needed, reuse `NEXT_DIST_DIR=.next-build-qa` and remove its artifacts after validation; do not create a new `.next-*` directory per task. Check process ownership before deleting caches, and skip active or uncertain directories.
 - Preserve `.design-qa/2026-09-16-real-acceptance/` in full: it contains the paid-generation budget, unresolved-result reconciliation records, and real acceptance evidence, not disposable caches.
+
+
+## Public example image hosting (owner decision, 2026-11-19)
+
+- Follow ../../doc/PUBLIC-EXAMPLE-IMAGES.md for the 62 reviewed public examples. Future examples use the owner's same-site, versioned ECS HTTPS URLs through publicAssetUrl(), not a new CDN or automatically shared user uploads.
+- Update the pinned image manifest, common path set and Vite allowlist together; keep the LF image-version hash stable across Windows/Linux. Unlisted new commerce images must fail review/pack checks.
+- Current versioned route is not publicly accepted. Keep bundled production defaults and existing release/rollback guards until real per-image HTTPS acceptance and the coordinated package contract pass. Never claim preview links are deployed.

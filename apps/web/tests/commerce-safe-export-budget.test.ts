@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import sharp from 'sharp';
+import { writeRaster } from '@/server/images/raster-engine';
 import { renderCommerceImage } from '@/server/commerce/commerce-export';
 
 describe('local synthetic 2K safe export resource budget', () => {
   it('bounds sequential renderer latency, CPU and incremental RSS without external I/O', async () => {
     const width = 2048, height = 2048;
-    const pixels = Buffer.alloc(width * height * 3);
+    const pixels = new Uint8ClampedArray(width * height * 4);
     let state = 20261014;
     for (let index = 0; index < pixels.length; index++) {
       state ^= state << 13; state ^= state >>> 17; state ^= state << 5;
-      pixels[index] = state & 255;
+      pixels[index] = index % 4 === 3 ? 255 : state & 255;
     }
-    const source = await sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 92 }).toBuffer();
+    const source = await writeRaster({width,height,data:pixels},'jpg');
     const measurements: Array<{ elapsedMs: number; cpuMs: number; incrementalRssMiB: number; peakRssMiB: number; outputBytes: number }> = [];
     for (let iteration = 0; iteration < 3; iteration++) {
       const baseline = process.memoryUsage().rss;

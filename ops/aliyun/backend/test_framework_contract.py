@@ -32,7 +32,7 @@ class ContractCacheTests(unittest.TestCase):
         scope = dict(__file__=str(FILE), ROOT=root, Path=Path, HEX40=re.compile('[a-f0-9]{40}'),
                      owned=lambda *_: None, json=json, subprocess=SimpleNamespace(check_output=inspect))
         exec(compile(ast.Module(body=[cls], type_ignores=[]), str(FILE), 'exec'), scope)
-        adapter = SimpleNamespace(verify_retained_layered=lambda *_: events.append('closure'))
+        adapter = SimpleNamespace(verify_retained_layered=lambda *_, **kwargs: events.append(('closure',kwargs.get('run_probe'))))
         return scope['SystemOps'](adapter, None), sha, events
 
     def test_expectation_is_independent_cached_and_immutable(self):
@@ -40,13 +40,13 @@ class ContractCacheTests(unittest.TestCase):
         info = SimpleNamespace(st_dev=1, st_ino=1, st_size=1, st_mtime_ns=1, st_ctime_ns=1, st_mode=1, st_uid=1)
         with mock.patch.object(Path, 'stat', return_value=info):
             self.assertEqual(ops.framework_contract(sha)['sourceProfile'], PROFILE)
-            self.assertEqual(events, ['closure', 'inspect'])
+            self.assertEqual(events, [('closure',False), 'inspect'])
             ops.framework_contract(sha)
-            self.assertEqual(events, ['closure', 'inspect'])
+            self.assertEqual(events, [('closure',False), 'inspect'])
             info.st_ctime_ns = 2
             with self.assertRaisesRegex(ValueError, 'changed after inspection'):
                 ops.framework_contract(sha)
-            self.assertEqual(events, ['closure', 'inspect'], 'must not relearn changed live files')
+            self.assertEqual(events, [('closure',False), 'inspect'], 'must not relearn changed live files')
 
     def test_invalid_release_never_reaches_inspection(self):
         ops, _, events = self.setup_ops()

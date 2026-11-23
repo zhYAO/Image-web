@@ -13,14 +13,14 @@ const catalogue = new Set(policy.files.filter(path => path.startsWith('commerce/
  * Only reviewed source constants are rewritten; dynamic/user/private URLs retain
  * their existing runtime handling. Already versioned inputs remain unchanged.
  */
-export function namespacePublicAssetSource(source: string, rawId: string, namespace: string): string {
+export function namespacePublicAssetSource(source: string, rawId: string, namespace: string, imageBase = ''): string {
   const id = rawId.replaceAll('\\', '/').split('?')[0] ?? '';
   if (!namespace || !reviewedModules.some(path => id.endsWith(path))) return source;
   const parsed = ts.createSourceFile(id, source, ts.ScriptTarget.Latest, true, id.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const edits: Array<{ start: number; end: number; value: string }> = [];
   function visit(node: ts.Node) {
     if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && catalogue.has(node.text)) {
-      edits.push({ start: node.getStart(parsed), end: node.end, value: JSON.stringify(`/frontend-assets/${namespace}${node.text}`) });
+      edits.push({ start: node.getStart(parsed), end: node.end, value: JSON.stringify(imageBase ? imageBase + node.text : `/frontend-assets/${namespace}${node.text}`) });
     }
     ts.forEachChild(node, visit);
   }

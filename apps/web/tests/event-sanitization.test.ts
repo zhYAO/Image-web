@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeSentryEvent } from '@/lib/sentry/sanitize-event';
+import { sanitizeEvent } from '@/lib/observability/sanitize-event';
 
-describe('Sentry event sanitization', () => {
+describe('event sanitization', () => {
   it('removes request content, identity and original exception messages while retaining safe tags', () => {
-    const event = sanitizeSentryEvent({
+    const event = sanitizeEvent({
       breadcrumbs: [{ message: 'prompt: private prompt' }],
       exception: { values: [{ type: 'Error', value: 'provider echoed private prompt' }] },
       extra: { token: 'secret' },

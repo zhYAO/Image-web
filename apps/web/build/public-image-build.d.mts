@@ -1,0 +1,13 @@
+export type PublicImageEntry = { path: string; bytes: number; sha256: string; contentType: string };
+export type PublicImageContract = { schema: number; baseUrl: string; manifestSha256: string; files: PublicImageEntry[] };
+export const publicImageMetadataPath: string;
+export function publicImageContract(base: string): PublicImageContract;
+export function validatePublicImageContract(value: unknown): PublicImageContract;
+export function compiledPublicImageContract(config: unknown): PublicImageContract | undefined;
+export function verifyPublicImageSources(root: string, images: PublicImageContract): Promise<void>;
+export function hash(bytes: Uint8Array): string;
+export function imagePolicyVersion(bytes: Uint8Array): string;
+export function readPinnedPublicImages(): { files: PublicImageEntry[]; manifestSha256: string };
+export function requirePinnedImageBase(raw: string, options?: { offlinePreview?: boolean }): { base: string; files: PublicImageEntry[]; manifestSha256: string };
+export function verifyPublishedImages(base: string, options?: { request?: typeof fetch }): Promise<{ baseUrl: string; manifestSha256: string; images: number; allImagesVerified: boolean }>;
+export function verifyBuildPublicImages(base: string): Promise<{ baseUrl: string; manifestSha256: string; images: number; allImagesVerified: boolean }>;

@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import sharp from 'sharp';
+import { solid as fixture, rgb, exifJpeg } from './raster-fixture';
+import { decodeRaster } from '@/server/images/raster-engine';
 import { renderCommerceImage } from '@/server/commerce/commerce-export';
 
 const safe = (bytes: Uint8Array, format: 'png' | 'jpg' = 'png', target?: { width: number; height: number }) =>
   renderCommerceImage(bytes, format, target, undefined, 'ec03-white-8');
 
 async function solid(width: number, height: number) {
-  return sharp({ create: { width, height, channels: 3, background: '#123456' } }).png().toBuffer();
+  return fixture(width, height, '#123456');
 }
 
 async function assertWhiteInsets(bytes: Uint8Array, width: number, height: number) {
-  const { data, info } = await sharp(bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await rgb(bytes);
   expect([info.width, info.height]).toEqual([width, height]);
   const mx = Math.ceil(width * .08), my = Math.ceil(height * .08);
   let invalid = 0;
@@ -47,13 +48,9 @@ describe('EC03 safe PNG geometry (synthetic pixels)', () => {
 
   it('keeps all four corner marks and a central text-like stripe without stretching or cropping', async () => {
     const width = 600, height = 800;
-    const source = await sharp(await solid(width, height)).composite([
-      { input: await sharp({ create: { width: 60, height: 60, channels: 3, background: '#ff0000' } }).png().toBuffer(), left: 0, top: 0 },
-      { input: await sharp({ create: { width: 60, height: 60, channels: 3, background: '#00ff00' } }).png().toBuffer(), left: 540, top: 0 },
-      { input: await sharp({ create: { width: 60, height: 60, channels: 3, background: '#0000ff' } }).png().toBuffer(), left: 0, top: 740 },
-      { input: await sharp({ create: { width: 60, height: 60, channels: 3, background: '#ffff00' } }).png().toBuffer(), left: 540, top: 740 },
-      { input: await sharp({ create: { width: 240, height: 20, channels: 3, background: '#000000' } }).png().toBuffer(), left: 180, top: 390 },
-    ]).png().toBuffer();
+    const source = await fixture(width, height, '#123456', [
+      [0,0,60,60,'#ff0000'],[540,0,60,60,'#00ff00'],[0,740,60,60,'#0000ff'],[540,740,60,60,'#ffff00'],[180,390,240,20,'#000000'],
+    ]);
     const result = await safe(source);
     const { data } = await assertWhiteInsets(result.bytes, width, height);
     const pixel = (x: number, y: number) => [...data.subarray((y * width + x) * 3, (y * width + x) * 3 + 3)];
@@ -67,19 +64,15 @@ describe('EC03 safe PNG geometry (synthetic pixels)', () => {
   });
 
   it.each([6, 8])('uses displayed dimensions and orientation %i before adding padding', async orientation => {
-    const source = await sharp(await solid(400, 300)).withMetadata({ orientation }).jpeg().toBuffer();
+    const source = await exifJpeg(await solid(400, 300), orientation);
     const result = await safe(source);
     expect([result.width, result.height]).toEqual([300, 400]);
     await assertWhiteInsets(result.bytes, 300, 400);
-    expect((await sharp(result.bytes).metadata()).orientation).toBeUndefined();
+    expect(((await decodeRaster(result.bytes)).meta).orientation).toBe(1);
   });
   it.each([6, 8])('preserves the displayed corner order for JPEG EXIF %i', async orientation => {
     const marks = ['#ff0000', '#00ff00', '#0000ff', '#ffff00'];
-    const composites = await Promise.all(marks.map(async (background, index) => ({
-      input: await sharp({ create: { width: 60, height: 60, channels: 3, background } }).png().toBuffer(),
-      left: index % 2 ? 540 : 0, top: index > 1 ? 740 : 0,
-    })));
-    const source = await sharp(await solid(600, 800)).composite(composites).withMetadata({ orientation }).jpeg().toBuffer();
+    const source = await exifJpeg(await fixture(600,800,'#123456',marks.map((color,index)=>[index % 2 ? 540 : 0,index > 1 ? 740 : 0,60,60,color])),orientation);
     const result = await safe(source);
     const { data } = await assertWhiteInsets(result.bytes, 800, 600);
     const colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0]];
@@ -91,7 +84,7 @@ describe('EC03 safe PNG geometry (synthetic pixels)', () => {
   });
 
   it('flattens transparent source pixels onto white', async () => {
-    const source = await sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 200, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+    const source = await fixture(100,100,'#c80000',[],0);
     const result = await safe(source);
     const { data } = await assertWhiteInsets(result.bytes, 100, 100);
     expect(data.every(value => value === 255)).toBe(true);
@@ -111,7 +104,7 @@ describe('EC03 safe PNG geometry (synthetic pixels)', () => {
   it('does not alter ordinary PNG or JPG export when the strategy is absent', async () => {
     const source = await solid(300, 400);
     const png = await renderCommerceImage(source, 'png');
-    expect(await sharp(png.bytes).raw().toBuffer()).toEqual(await sharp(source).raw().toBuffer());
-    expect((await sharp((await renderCommerceImage(source, 'jpg')).bytes).metadata()).format).toBe('jpeg');
+    expect((await rgb(png.bytes)).data).toEqual((await rgb(source)).data);
+    expect(((await decodeRaster((await renderCommerceImage(source, 'jpg')).bytes)).meta).format).toBe('jpeg');
   });
 });

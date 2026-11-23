@@ -166,3 +166,76 @@ test('uses the same later static/public overrides as the release packer', () => 
     assert.equal(result.regularFiles, 8);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('runtime audit counts package/subtree bytes once and records overlapping NFT owner paths', () => {
+  const { root, dist } = fixture();
+  try {
+    const write = (relative, data) => {
+      const file = path.join(root, relative);
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, data);
+    };
+    const pkg = 'node_modules/.pnpm/next@16.4.5/node_modules/next';
+    const a = `${pkg}/dist/compiled/next-server/app-page.runtime.prod.js`;
+    const b = `${pkg}/dist/server/lib/router-server.js`;
+    const c = 'node_modules/.pnpm/@example+image@1.0.0/node_modules/@example/image/codec.wasm';
+    for (const [file, size] of [[a, 500], [b, 300], [c, 51]]) {
+      write(`.next/standalone/${file}`, Buffer.alloc(size));
+      write(file, Buffer.alloc(size));
+    }
+    const tf = (owner, refs) => {
+      const actual = path.join(dist, owner);
+      const toSource = p => path.relative(path.dirname(actual), path.join(root, p)).split(path.sep).join('/');
+      write(`.next/${owner}`, JSON.stringify({ version: 1, files: refs.map(toSource) }));
+    };
+    tf('next-server.js.nft.json', [a, a, b, 'node_modules/sharp/build/Release/sharp.node']);
+    tf('server/app/workspace/page.js.nft.json', [a, c, '../ignored-outside-root.js']);
+    write('.next/server/app/bad.js.nft.json', '{}');
+    write('.next/cache/bogus.js.nft.json', '{"version":1,"files":[]}');
+    const ordinary = report(root, dist);
+    assert.equal(Object.hasOwn(ordinary, 'runtimeDependencyAudit'), false);
+    const output = path.join(root, 'audit.json');
+    run(root, dist, ['--runtime-audit', '--trace-root', root, '--json', output]);
+    const result = JSON.parse(readFileSync(output, 'utf8'));
+    const audit = result.runtimeDependencyAudit;
+    assert.equal(audit.runtimeBytes, ordinary.categories.runtimeDependencies.bytes);
+    assert.equal(audit.runtimeFiles, ordinary.categories.runtimeDependencies.files);
+    assert.deepEqual(audit.packages.map(({ name, bytes }) => [name, bytes]), [['sharp', 2000], ['next', 800], ['@example/image', 51]]);
+    assert.deepEqual(audit.nextSubtrees.map(({ name, bytes }) => [name, bytes]), [['dist/compiled/next-server', 500], ['dist/server/lib', 300]]);
+    assert.deepEqual(audit.packages.find(({ name }) => name === 'next').traceOwners, [
+      { name: 'next-server.js.nft.json', bytes: 800 },
+      { name: 'server/app/workspace/page.js.nft.json', bytes: 500 },
+    ]);
+    assert.deepEqual(audit.largestNextFiles[0], { name: a, bytes: 500, tracedBy: ['next-server.js.nft.json', 'server/app/workspace/page.js.nft.json'] });
+    assert.equal(audit.trace.manifestsFound, 3);
+    assert.equal(audit.trace.manifestsRead, 2);
+    assert.equal(audit.trace.ignoredOutsideRoot, 1);
+    assert.deepEqual(audit.trace.manifestErrors, ['server/app/bad.js.nft.json']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('runtime audit accepts only a contained source alias and never counts symlink target copies', () => {
+  const { root, dist } = fixture();
+  try {
+    const alias = path.join(root, 'node_modules/next');
+    const instance = path.join(root, 'node_modules/.pnpm/next@16.4.5/node_modules/next');
+    const install = path.join(dist, 'standalone/node_modules/.pnpm/next@16.4.5/node_modules/next');
+    for (const dir of [instance, install]) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, 'package.json'), '{}');
+    }
+    symlinkSync(instance, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    symlinkSync(root, path.join(root, 'node_modules/loop'), process.platform === 'win32' ? 'junction' : 'dir');
+    writeFileSync(path.join(dist, 'next-server.js.nft.json'), JSON.stringify({
+      version: 1,
+      files: ['../node_modules/next/package.json', '../node_modules/loop/nonexistent', '/etc/passwd', null],
+    }));
+    const output = path.join(root, 'audit.json');
+    run(root, dist, ['--runtime-audit', '--trace-root', root, '--json', output]);
+    const result = JSON.parse(readFileSync(output, 'utf8')).runtimeDependencyAudit;
+    assert.equal(result.runtimeBytes, 2002);
+    assert.deepEqual(result.packages.find(pkg => pkg.name === 'next').traceOwners, [{ name: 'next-server.js.nft.json', bytes: 2 }]);
+    assert.equal(result.trace.invalidEntries, 2);
+    assert.equal(result.trace.unmatchedEntries, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

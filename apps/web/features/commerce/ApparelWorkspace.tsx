@@ -9,7 +9,6 @@ import { publicAssetUrl } from "@/lib/public-assets";
 import {
   APPAREL_LAYOUT_VERSION,
   apparelBriefSchema,
-  apparelPlanSchema,
   type ApparelBrief,
   type ApparelTask,
   type ApparelGateway,
@@ -19,7 +18,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { HttpApparelGateway } from "@/gateways/http-apparel-gateway";
 
 import { Download, Upload, X } from "lucide-react";
-import { isLocalCommerceDraft } from "@/features/workspace/workspace-route";
 import {
   loadApparelDraft,
   saveApparelDraft,
@@ -27,6 +25,7 @@ import {
 } from "./apparel-draft-storage";
 import styles from "./apparel.module.css";
 import { ApparelResultImage } from "./ApparelResultImage";
+import { buildApparelModelPrompt } from "./apparel-model-prompt";
 const examplePages = [
   ...Array.from({ length: 5 }, (_, index) => ({
     file: `main-${index + 1}`,
@@ -63,15 +62,9 @@ interface Props {
   ownerKey: string;
   task?: ApparelTask;
   references: UploadReference[];
-  ensureSession?: (title: string, requestId: string) => Promise<string>;
   onReferenceAdd: (files: FileList) => void;
   onReferenceRemove: (index: number) => void;
-  onReferenceUploaded: (
-    ref: UploadReference,
-    id: string,
-    sessionId: string,
-  ) => void;
-  onTask: (task: ApparelTask, sourceId: string) => void;
+  onPrepareModelPrompt?: (prompt: string, references: UploadReference[]) => boolean;
 }
 export function ApparelWorkspace({
   gateway,
@@ -79,11 +72,9 @@ export function ApparelWorkspace({
   ownerKey,
   task,
   references,
-  ensureSession,
   onReferenceAdd,
   onReferenceRemove,
-  onReferenceUploaded,
-  onTask,
+  onPrepareModelPrompt,
 }: Props) {
   const storageKey = `${ownerKey}:${sessionId}:${task?.id ?? "new"}`;
   const ownerScope = useRef({ active: false, epoch: 0, storageKey, gateway });
@@ -181,10 +172,14 @@ export function ApparelWorkspace({
       );
       return;
     }
-    if (group(role).length + list.length > (role === "display" ? 20 : 1)) {
+    if (materials.filter((ref) => ref.file && roleOf(ref) !== "unused").length + list.length > 4) {
+      setError("生图最多支持 4 张参考图。");
+      return;
+    }
+    if (group(role).filter((ref) => ref.file).length + list.length > (role === "display" ? 4 : 1)) {
       setError(
         role === "display"
-          ? "展示照片最多 20 张。"
+          ? "展示照片最多 4 张。"
           : "请先移除当前图片再替换。",
       );
       return;
@@ -241,127 +236,17 @@ export function ApparelWorkspace({
       if (isCurrent()) setBusy(false);
     }
   };
-  const save = () =>
-    act(async (isCurrent) => {
-      if (!gateway) throw new Error("服装排版服务尚未就绪。");
-      let current = { ...draft };
-      if (!current.pending) {
-        apparelBriefSchema.parse(current.brief);
-        if (
-          Array.from({ length: 5 }, (_, i) => group(`main-${i}`).length).some(
-            (count) => count !== 1,
-          ) ||
-          group("display").length < 1 ||
-          group("logo").length !== 1
-        )
-          throw new Error(
-            "请上传五张主图、1–20 张展示照片和一张透明 PNG Logo。",
-          );
-      }
-      const remote =
-        current.remoteSession ??
-        (isLocalCommerceDraft(sessionId)
-          ? await ensureSession?.(current.brief.name, current.sessionRequest)
-          : sessionId);
-      if (!isCurrent()) return;
-      if (!remote) throw new Error("无法保存会话，请重试。");
-      current = { ...current, remoteSession: remote };
-      saveApparelDraft(storageKey, current);
-      setDraft(current);
-      if (!current.pending) {
-        const ids = new Map<UploadReference, string>();
-        for (const ref of materials.filter((ref) => roleOf(ref) !== "unused")) {
-          const id = await gateway.upload(remote, ref);
-          if (!isCurrent()) return;
-          ids.set(ref, id);
-          onReferenceUploaded(ref, id, sessionId);
-        }
-        const plan = apparelPlanSchema.parse({
-          engine: "apparel-catalog",
-          scene: "apparel-catalog",
-          layoutVersion: APPAREL_LAYOUT_VERSION,
-          brief: current.brief,
-          fabricCrop: current.crop,
-          sources: {
-            mains: Array.from({ length: 5 }, (_, i) =>
-              ids.get(group(`main-${i}`)[0]!),
-            ),
-            displays: group("display").map((ref) => ({
-              id: ids.get(ref),
-              name: ref.name,
-            })),
-            logo: ids.get(group("logo")[0]!),
-          },
-        });
-        current = {
-          ...current,
-          pending: {
-            operation: task ? "save" : "create",
-            requestId: crypto.randomUUID(),
-            plan,
-            expectedRevision: current.baseRevision ?? task?.revision,
-          },
-        };
-        saveApparelDraft(storageKey, current);
-        setDraft(current);
-      }
-      const pending = current.pending!;
-      const saved =
-        pending.operation === "save" && task
-          ? await gateway.save(task.id, {
-              requestId: pending.requestId,
-              expectedRevision: pending.expectedRevision!,
-              plan: pending.plan,
-            })
-          : await gateway.create({
-              requestId: pending.requestId,
-              sessionId: remote,
-              plan: pending.plan,
-            });
-      if (!isCurrent()) return;
-      current = {
-        ...current,
-        pending: undefined,
-        submit: undefined,
-        removed: [],
-        baseRevision: saved.revision,
-      };
-      saveApparelDraft(storageKey, current);
-      setDraft(current);
-      onTask(saved, sessionId);
-    });
-  const submit = () =>
-    act(async (isCurrent) => {
-      if (!gateway || !task) return;
-      const last = task.runs
-        .filter(
-          (run) => run.revision === task.revision && run.status !== "succeeded",
-        )
-        .at(-1);
-      const input =
-        draft.submit?.revision === task.revision
-          ? draft.submit
-          : {
-              requestId: last?.requestId ?? crypto.randomUUID(),
-              revision: task.revision,
-            };
-      const current = { ...draft, submit: input };
-      saveApparelDraft(storageKey, current);
-      setDraft(current);
-      const result = await gateway.submit(task.id, input);
-      if (!isCurrent()) return;
-      onTask(result, sessionId);
-      if (
-        result.runs.some(
-          (run) =>
-            run.requestId === input.requestId && run.status === "succeeded",
-        )
-      ) {
-        const done = { ...current, submit: undefined };
-        saveApparelDraft(storageKey, done);
-        setDraft(done);
-      }
-    });
+  const prepare = () => {
+    if (!captureOwner()() || !onPrepareModelPrompt) return;
+    setError(undefined);
+    try {
+      const selected = materials.filter((ref) => ref.file && roleOf(ref) !== "unused");
+      const prompt = buildApparelModelPrompt(apparelBriefSchema.parse(draft.brief), selected.map(roleOf));
+      if (!onPrepareModelPrompt(prompt, selected)) setError("生图工作台已有未发送的草稿或参考图；请先处理那份草稿。");
+    } catch (error) {
+      setError(error instanceof Error && error.name !== "ZodError" ? error.message : "请填写必填商品资料，并检查字数限制。");
+    }
+  };
   const run =
     task?.runs.find((item) => item.id === (previewRun ?? task.selectedRunId)) ??
     task?.runs.at(-1);
@@ -415,9 +300,7 @@ export function ApparelWorkspace({
           accept={role === "logo" ? "image/png" : "image/jpeg"}
           multiple={role === "display"}
           disabled={
-            busy ||
-            Boolean(draft.pending) ||
-            (role !== "display" && group(role).length > 0)
+            busy || (role !== "display" && group(role).some((ref) => ref.file))
           }
           onChange={(event) => {
             add(event.target.files, role);
@@ -440,13 +323,6 @@ export function ApparelWorkspace({
     ["design", "Design", true],
     ["fabric", "Fabric", true],
   ];
-  const dirty = Boolean(
-    task &&
-    (JSON.stringify(draft.brief) !== JSON.stringify(task.plan.brief) ||
-      JSON.stringify(draft.crop) !== JSON.stringify(task.plan.fabricCrop) ||
-      draft.removed.length ||
-      references.some((ref) => !ref.id && roleOf(ref) !== "unused")),
-  );
   const stale = Boolean(
     task &&
     draft.baseRevision !== undefined &&
@@ -473,7 +349,7 @@ export function ApparelWorkspace({
         <div className={styles.formScroll}>
         <header>
           <h1>服装商品图片</h1>
-          <p>固定版式 · 5 张主图 + 790px 详情页 · 不消耗模型积分</p>
+          <p>根据商品资料准备中文生图提示词，不使用额外字体。在生图工作台发送后才生图，按模型计费。</p>
         </header>
         {stale && (
           <p role="status">
@@ -484,18 +360,18 @@ export function ApparelWorkspace({
             </button>
           </p>
         )}
-        <fieldset disabled={busy || Boolean(draft.pending)}>
+        <fieldset disabled={busy}>
           <legend>商品照片</legend>
-          <p>主图须为 3:4 JPEG；展示照片按文件名自然排序。每张不超过 10 MB。</p>
+          <p>参考图可选，最多 4 张。历史任务中的照片需重新上传才会传入新提示词。</p>
           <div className={styles.mains}>
             {Array.from({ length: 5 }, (_, i) =>
               upload(`主图 ${i + 1}`, `main-${i}`),
             )}
           </div>
-          {upload("展示照片（1–20 张）", "display")}
+          {upload("展示照片（可选）", "display")}
           {upload("透明 PNG Logo", "logo")}
         </fieldset>
-        <fieldset disabled={busy || Boolean(draft.pending)}>
+        <fieldset disabled={busy}>
           <legend>商品资料</legend>
           <div className={styles.fields}>
             {fields.map(([field, title, long]) => (
@@ -551,37 +427,10 @@ export function ApparelWorkspace({
             {error}
           </p>
         )}
-        {dirty && <p>资料或素材有修改，请先保存新版本。</p>}
         <div className={styles.actions}>
-          <button
-            type="button"
-            disabled={busy || !gateway || (stale && !draft.pending)}
-            onClick={save}
-          >
-            {busy
-              ? "正在处理…"
-              : draft.pending
-                ? "继续保存同一请求"
-                : task
-                  ? "保存为新版本"
-                  : "保存整套方案"}
+          <button type="button" className={styles.primary} disabled={busy || stale || !onPrepareModelPrompt} onClick={prepare}>
+            前往生图工作台
           </button>
-          {task && (
-            <button
-              className={styles.primary}
-              disabled={
-                busy || dirty || stale || Boolean(draft.pending) || !gateway
-              }
-              onClick={submit}
-            >
-              {task.runs.some(
-                (run) =>
-                  run.revision === task.revision && run.status !== "succeeded",
-              )
-                ? "继续同一排版请求"
-                : "开始整套排版"}
-            </button>
-          )}
         </div>
         </footer>
       </div>

@@ -281,15 +281,16 @@ def wait_healthy(target):
             time.sleep(2)
 
 
-def activate(target, restore_previous_on_failure=True):
-    font_preflight(target)
+def activate(target, restore_previous_on_failure=True, *, preflight=None):
+    preflight = font_preflight if preflight is None else preflight
+    preflight(target)
     old = CURRENT.resolve(strict=True)
     try:
         switch(target)
         wait_healthy(target)
     except Exception:
         if old != target and restore_previous_on_failure:
-            font_preflight(old)
+            preflight(old)
             switch(old)
             wait_healthy(old)
             print('Rollback verified:', old.name, flush=True)
@@ -302,11 +303,11 @@ def activate(target, restore_previous_on_failure=True):
     print('Activated and locally verified; external verification still required:', target.name, flush=True)
 
 
-def activate_initial(target, runner=subprocess.run):
+def activate_initial(target, runner=subprocess.run, *, preflight=None):
     """Only the explicit layered empty-install path calls this; no old target exists."""
     if os.path.lexists(CURRENT) or os.path.lexists(PREVIOUS):
         raise ValueError('Initial activation requires absent current and previous')
-    font_preflight(target)
+    (font_preflight if preflight is None else preflight)(target)
     try:
         switch(target)
         wait_healthy(target)
@@ -322,6 +323,28 @@ def activate_initial(target, runner=subprocess.run):
     print('Initial release locally verified; external verification still required:', target.name, flush=True)
 
 
+def require_legacy_current():
+    """The standalone full helper cannot verify fontless layered recovery."""
+    if not CURRENT.is_symlink():
+        return
+    current = CURRENT.resolve(strict=True)
+    if current.parent != RELEASES:
+        raise ValueError('Current is not a managed retained release')
+    marker = current / '.three-layer-release.json'
+    if not os.path.lexists(marker):
+        if os.path.lexists(current / '.manifest-sha256'):
+            raise ValueError('Current layered metadata is incomplete')
+        return
+    descriptor = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022 or info.st_size > 1_000_000:
+            raise ValueError('Untrusted current layered marker')
+        manifest = json.load(stream)
+    if manifest.get('runtimeProfile') is not None or manifest.get('schema') == 3:
+        raise ValueError('Use the layered helper for model-only or schema-3 recovery')
+
+
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('Use the restricted sudo release command')
@@ -329,6 +352,7 @@ def main():
     with (ROOT / 'deploy.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if mode == 'rollback' and len(sys.argv) == 3:
+            require_legacy_current()
             name = sys.argv[2]
             target = PREVIOUS.resolve(strict=True) if name == 'previous' else RELEASES / release_name(name)
             if target.parent != RELEASES or not target.is_dir() or target.is_symlink():
@@ -341,6 +365,7 @@ def main():
             return
         if mode != 'deploy' or len(sys.argv) != 5:
             raise ValueError('Usage: deploy SHA SHA256 RUN_NUMBER | rollback RELEASE_OR_previous')
+        require_legacy_current()
         sha, digest, run = sys.argv[2:]
         if not re.fullmatch('[a-f0-9]{40}', sha) or not re.fullmatch('[a-f0-9]{64}', digest) or not run.isdigit():
             raise ValueError('Invalid deployment arguments')

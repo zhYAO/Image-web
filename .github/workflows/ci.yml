@@ -1,19 +1,13 @@
-name: ZImage CI and Deploy
+name: ZImage manual checks and candidates
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: '手动检查、仅构建候选、发布指定候选或回滚'
+        description: '手动检查或仅构建候选'
         type: choice
-        options: [checks, candidate, deploy, rollback]
+        options: [checks, candidate]
         default: candidate
-      candidate_run_id:
-        description: '发布必填：成功候选运行 ID'
-        type: string
-      candidate_attempt:
-        description: '发布必填：候选运行次数'
-        type: string
       format:
         description: 'Release transport (full is explicit fallback)'
         type: choice
@@ -23,10 +17,6 @@ on:
         description: 'Opt-in: verify this fresh layers candidate in isolated Linux before upload'
         type: boolean
         default: false
-      release:
-        description: '回滚版本目录名；默认 previous'
-        default: previous
-        type: string
 
 permissions:
   contents: read
@@ -240,139 +230,3 @@ jobs:
           path: /tmp/zimage-delivery/*
           if-no-files-found: error
           retention-days: 1
-
-  deploy:
-    environment: production
-    if: github.ref == 'refs/heads/main' && inputs.action == 'deploy'
-    permissions:
-      contents: read
-      actions: read
-    runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
-    concurrency:
-      group: zimage-production-release
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.19.0
-      - name: Fetch exact successful candidate without rebuilding
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
-          CANDIDATE_ATTEMPT: ${{ inputs.candidate_attempt }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: python3 -I -B ops/aliyun/candidate-artifact.py "$CANDIDATE_RUN_ID" "$CANDIDATE_ATTEMPT" "$RELEASE_SHA" /tmp/production
-      - name: Validate supplied exact target and delivery report before SSH
-        env:
-          TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
-          RELEASE_SHA: ${{ github.sha }}
-          EXPECTED_RELEASE_FORMAT: ${{ github.event_name == 'workflow_dispatch' && inputs.format || 'layers' }}
-        run: |
-          set -euo pipefail
-          test -n "$TARGET_JSON"
-          printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
-          node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
-          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("/tmp/production/release-result.json")); if(r.schema!==1||r.releaseSha!==process.env.RELEASE_SHA||r.format!==process.env.EXPECTED_RELEASE_FORMAT||!["layers","full"].includes(r.format)||r.productionReady!==false)throw Error("Invalid delivery report"); const m=r.format==="layers"?r.pack.manifestSha256:""; if(r.format==="layers"&&(typeof m!=="string"||m.length!==64||!/^[a-f0-9]{64}$/.test(m)))throw Error("Invalid manifest SHA"); fs.appendFileSync(process.env.GITHUB_ENV,"RELEASE_FORMAT="+r.format+"\nMANIFEST_SHA="+m+"\n");'
-      - name: Verify this is still main
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          EXPECTED_SHA: ${{ github.sha }}
-        run: test "$(gh api "repos/$REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
-      - name: Configure restricted SSH connection
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          umask 077
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Record exact original release before activation
-        id: rollback-point
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-        run: |
-          set -euo pipefail
-          original=$(bash ops/aliyun/deployment-health.sh record)
-          printf 'release=%s\n' "$original" >> "$GITHUB_OUTPUT"
-          printf 'Verified rollback point: %s\n' "$original"
-      - name: Upload and activate immutable release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
-          CANDIDATE_ATTEMPT: ${{ inputs.candidate_attempt }}
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          RELEASE_SHA: ${{ github.sha }}
-          RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          set -euo pipefail
-          python3 -I -B ops/aliyun/candidate-artifact.py --recheck "$CANDIDATE_RUN_ID" "$CANDIDATE_ATTEMPT" "$RELEASE_SHA" /tmp/production
-          digest=$(sha256sum /tmp/production/transport.tgz | cut -d ' ' -f1)
-          if [[ "$RELEASE_FORMAT" == layers ]]; then
-            suffix=layers.tgz
-            command="/usr/bin/python3 -I /usr/local/libexec/zimage-three-layer/release-three-layer.py deploy $RELEASE_SHA $digest $MANIFEST_SHA $RUN_NUMBER"
-          elif [[ "$RELEASE_FORMAT" == full ]]; then
-            suffix=tgz
-            command="/usr/local/sbin/zimage-release deploy $RELEASE_SHA $digest $RUN_NUMBER"
-          else
-            exit 1
-          fi
-          scp -i ~/.ssh/zimage -P "$DEPLOY_PORT" -o StrictHostKeyChecking=yes /tmp/production/transport.tgz "zimage-deploy@$DEPLOY_HOST:/opt/zimage/incoming/$RELEASE_SHA.$suffix"
-          ssh -T -i ~/.ssh/zimage -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes "zimage-deploy@$DEPLOY_HOST" "sudo $command"
-      - name: Verify published version and retired batch endpoints
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          RELEASE_SHA: ${{ github.sha }}
-          ORIGINAL_SHA: ${{ steps.rollback-point.outputs.release }}
-        run: |
-          set -euo pipefail
-          bash ops/aliyun/deployment-health.sh verify "$RELEASE_SHA" "$ORIGINAL_SHA"
-      - name: Remove runner key
-        if: always()
-        run: rm -f ~/.ssh/zimage
-
-  rollback:
-    environment: production
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
-    runs-on: ${{ vars.ZIMAGE_RELEASE_RUNNER || 'ubuntu-24.04' }}
-    concurrency:
-      group: zimage-production-release
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24.19.0
-      - name: Require supplied exact target before SSH
-        env:
-          TARGET_JSON: ${{ vars.ZIMAGE_RELEASE_TARGET_JSON }}
-        run: |
-          set -euo pipefail
-          test -n "$TARGET_JSON"
-          printf '%s\n' "$TARGET_JSON" > "$RUNNER_TEMP/zimage-target.json"
-          node ops/aliyun/package-release.mjs --check-target --target "$RUNNER_TEMP/zimage-target.json"
-      - name: Configure restricted SSH connection
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          umask 077
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/zimage
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Restore retained release and verify health
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          RELEASE: ${{ inputs.release }}
-        run: |
-          set -euo pipefail
-          bash ops/aliyun/deployment-health.sh rollback "$RELEASE"
-      - name: Remove runner key
-        if: always()
-        run: rm -f ~/.ssh/zimage

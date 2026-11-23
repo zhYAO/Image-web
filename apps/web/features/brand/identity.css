@@ -1,6 +1,6 @@
 .zi-identity {
   color: var(--text);
-  font-family: var(--font);
+
   font-size: 13px;
   line-height: 1.5;
 }
@@ -64,7 +64,7 @@
 }
 .zi-identity button,
 .zi-identity input {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
 }
 .zi-identity button:disabled {
   opacity: 0.45;

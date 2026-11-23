@@ -62,7 +62,7 @@
   background: var(--z-glass-control);
   color: var(--z-text);
   padding: 7px 12px;
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   font-size: 13px;
   display: inline-flex;
   align-items: center;
@@ -152,7 +152,7 @@
 .editor button,
 .editor input,
 .editor textarea {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
 }
 .editor button {
   cursor: pointer;
@@ -194,7 +194,7 @@
   font-size: 12px;
 }
 .editor select {
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
 }
 .section {
   margin: 0 0 24px;
@@ -811,7 +811,7 @@
   background: var(--z-bg);
   padding: 9px 12px;
   border-radius: 8px;
-  font: inherit;
+  font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   font-size: 12px;
 }
 .catalogueFilter {
@@ -1309,12 +1309,6 @@ box-sizing: border-box;
 .v18Root figure {
 margin: 0;
 }
-.v18Root button,
-.v18Root input,
-.v18Root textarea,
-.v18Root select {
-font-family: inherit;
-}
 .v18Root button {
 border: 0;
 }
@@ -1347,7 +1341,7 @@ opacity: 0.45;
 outline-offset: 3px;
 }
 .v18Root select {
-font: inherit;
+font-size: inherit; font-weight: inherit; font-style: inherit; font-variant: inherit; font-stretch: inherit; line-height: inherit;
   color: var(--z-text);
 }
 .back {

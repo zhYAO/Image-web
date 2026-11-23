@@ -4,7 +4,6 @@ import { act, cleanup, fireEvent, render as renderUI, screen, waitFor } from '@t
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ApparelGateway, ApparelTask } from '@zimage/domain';
 import { ApparelWorkspace } from '../../web/features/commerce/ApparelWorkspace';
-import { APPAREL_DRAFT_PREFIX } from '../../web/features/commerce/apparel-draft-storage';
 
 const render = (ui: ReactNode) => renderUI(<NavigationProvider>{ui}</NavigationProvider>);
 
@@ -15,24 +14,16 @@ const task: ApparelTask = { id: ids[8]!, sessionId: ids[9]!, engine: 'apparel-ca
     measurements: { length: '65', chest: '100', shoulder: '40', sleeve: '58' }, weightRecommendation: '45-55kg', design: 'simple', fabric: 'linen' },
   sources: { mains: ids.slice(0, 5), displays: [{ id: ids[5]!, name: 'display.jpg' }], logo: ids[6]! }, fabricCrop: [0.24, 0.2, 0.76, 0.57],
 } };
-const onTask = vi.fn();
-const props = { ownerKey: 'owner-A', sessionId: task.sessionId, references: [], onReferenceAdd: vi.fn(), onReferenceRemove: vi.fn(), onReferenceUploaded: vi.fn(), onTask };
+const props = { ownerKey: 'owner-A', sessionId: task.sessionId, references: [], onReferenceAdd: vi.fn(), onReferenceRemove: vi.fn() };
 beforeEach(() => { window.sessionStorage.clear(); vi.clearAllMocks(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-it('does not resurrect an old apparel pending draft or task after its mount is replaced', async () => {
-  let finish!: (task: ApparelTask) => void;
-  let requestId = '';
-  const submit = vi.fn((_id, input) => { requestId = input.requestId; return new Promise<ApparelTask>(resolve => { finish = resolve; }); });
-  const gateway = { submit } as unknown as ApparelGateway;
-  const view = render(<ApparelWorkspace {...props} task={task} gateway={gateway} />);
-  fireEvent.click(screen.getByRole('button', { name: '开始整套排版' }));
-  await waitFor(() => expect(submit).toHaveBeenCalledOnce());
-  view.unmount(); window.sessionStorage.clear();
-  render(<ApparelWorkspace {...props} ownerKey="owner-B" />);
-  await act(async () => { finish({ ...task, runs: [{ id: ids[7]!, requestId, revision: 1, status: 'succeeded', createdAt: 'now', assets: [] }] }); });
-  expect(onTask).not.toHaveBeenCalled();
-  expect(window.sessionStorage.getItem(`${APPAREL_DRAFT_PREFIX}owner-A:${task.sessionId}:${task.id}`)).toBeNull();
-  expect((screen.getByLabelText('商品名称') as HTMLInputElement).value).toBe('');
+it("does not transfer old owner data after changing the apparel workspace owner", () => {
+  const prepare = vi.fn(() => true);
+  const old = render(<ApparelWorkspace {...props} task={task} onPrepareModelPrompt={prepare} />);
+  old.unmount();
+  render(<ApparelWorkspace {...props} ownerKey="owner-B" onPrepareModelPrompt={prepare} />);
+  fireEvent.click(screen.getByRole("button", { name: "前往生图工作台" }));
+  expect(prepare).not.toHaveBeenCalled();
 });
 it('does not click an old apparel ZIP after download resolves under a new mount', async () => {
   let finish!: (blob: Blob) => void;

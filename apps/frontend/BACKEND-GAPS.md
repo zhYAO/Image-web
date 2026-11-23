@@ -45,10 +45,7 @@ For the reused full business UI, append existing exact versions:
 Next, server Supabase or raw fonts. Existing `@testing-library/user-event@14.6.1`
 and `@testing-library/jest-dom@6.9.1` may be reused for ported UI tests.
 
-Browser observability additionally requires direct `@sentry/browser@10.75.2`
-(already present transitively via the old Next integration). Browser SDK init,
-privacy scrubbing and route tracing now exist in the new frontend source, with
-privacy unit tests. Direct dependency installation, bundling and configured
-telemetry verification remain pending. No server Sentry package enters the graph.
+External browser telemetry has been removed. Generic event scrubbing and route
+classification remain covered by local privacy tests.
 
 No package manifest or lockfile is edited by this task.

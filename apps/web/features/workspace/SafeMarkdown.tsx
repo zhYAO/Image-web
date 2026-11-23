@@ -5,17 +5,18 @@ import ReactMarkdown, { type Components, type ExtraProps, type UrlTransform } fr
 import remarkGfm from 'remark-gfm';
 import remend from 'remend';
 import type { HighlighterCore, ThemedToken } from 'shiki/core';
+import { codeGrammar } from './code-grammars';
 
 import styles from './safe-markdown.module.css';
 
-// Lazy registry entries load individual grammars on demand; no WASM engine is bundled.
-let highlighter: Promise<HighlighterCore> | undefined;
+// Bounded grammar subpaths load on demand; no full registry or WASM engine.
+let highlighter: Promise<Pick<HighlighterCore, 'loadLanguage' | 'codeToTokens'>> | undefined;
 function getHighlighter() {
   return highlighter ??= Promise.all([
-    import('shiki/core'),
+    import('./token-highlighter'),
     import('shiki/engine/javascript'),
     import('shiki/themes/github-dark.mjs'),
-  ]).then(([{ createHighlighterCore }, { createJavaScriptRegexEngine }, theme]) => createHighlighterCore({
+  ]).then(([{ createTokenHighlighter }, { createJavaScriptRegexEngine }, theme]) => createTokenHighlighter({
     themes: [theme.default], langs: [], engine: createJavaScriptRegexEngine(),
   }));
 }
@@ -39,15 +40,13 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   useEffect(() => {
     let active = true;
-    void import('shiki/langs').then(async ({ bundledLanguages }) => {
+    const grammar = codeGrammar(language);
+    if (!grammar) return;
+    void Promise.all([getHighlighter(), grammar.load()]).then(async ([instance, loaded]) => {
       if (!active) return;
-      const loader = bundledLanguages[language as keyof typeof bundledLanguages];
-      if (!loader) return;
-      const [instance, grammar] = await Promise.all([getHighlighter(), loader()]);
+      await instance.loadLanguage(loaded);
       if (!active) return;
-      await instance.loadLanguage(grammar);
-      if (!active) return;
-      const lines = instance.codeToTokens(source, { lang: language, theme: 'github-dark' }).tokens;
+      const lines = instance.codeToTokens(source, { lang: grammar.language, theme: 'github-dark' }).tokens;
       if (active) setHighlight({ source, language, lines });
     }).catch(() => { /* Unsupported grammar/runtime: keep escaped plain text. */ });
     return () => { active = false; };

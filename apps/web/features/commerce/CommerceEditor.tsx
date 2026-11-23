@@ -8,7 +8,7 @@ import { publicAssetUrl } from "@/lib/public-assets";
 
 import { useState, type ReactNode } from "react";
 
-import Image from "next/image";
+import Image from "@/features/commerce/PublicExampleImage";
 import {
   ArrowRight,
   ArrowUp,

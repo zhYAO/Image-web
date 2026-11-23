@@ -1,15 +1,14 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, mkdtemp, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import { inspectRaster } from '../../apps/web/server/images/raster-header.ts';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { publicImageContract, verifyPublicImageSources } from '../../apps/web/build/public-image-build.mjs';
 
 // Offline prototype: sources and the output parent must remain unchanged during a run.
 // The exclusive sibling lock coordinates this CLI only. Node's rename is atomic, but
 // does not provide RENAME_NOREPLACE against uncooperative concurrent filesystem writers.
-const require = createRequire(new URL('../../apps/web/package.json', import.meta.url));
-const sharp = require('sharp');
 const fontNames = ['LICENSE.txt', 'NotoSansCJKsc-Bold.otf', 'NotoSansCJKsc-Regular.otf', 'README.md'];
 const mimeTypes = new Map([
   ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.webp', 'image/webp'],
@@ -88,13 +87,16 @@ function provenanceFor(file, publicPaths) {
     directory = path.posix.dirname(directory);
   }
 }
-async function packageAssets(project, output, fontRoot, fontsOnly) {
+async function packageAssets(project, output, fontRoot, fontsOnly, modelOnly) {
+  const images = process.env.ZIMAGE_PUBLIC_IMAGE_BASE_URL ? publicImageContract(process.env.ZIMAGE_PUBLIC_IMAGE_BASE_URL) : undefined;
+  if (modelOnly && !images) throw new Error('Model-only assets require an independent pinned public image contract');
+  if (images && fontsOnly) throw new Error('External public images require the complete reviewed resource scope');
   if (contains(project, output) || contains(output, project)) throw new Error('Output and project paths overlap');
   await noSymlinkAncestors(project);
   const publicRoot = path.join(project, 'apps/web/public');
-  if (contains(fontRoot, output) || contains(output, fontRoot)) throw new Error('Output and font source paths overlap');
+  if (fontRoot && (contains(fontRoot, output) || contains(output, fontRoot))) throw new Error('Output and font source paths overlap');
   if (!fontsOnly) await noSymlinkAncestors(publicRoot);
-  await noSymlinkAncestors(fontRoot);
+  if (fontRoot) await noSymlinkAncestors(fontRoot);
   await noSymlinkAncestors(path.dirname(output));
   await mustNotExist(output);
   const lock = path.join(path.dirname(output), `.${path.basename(output)}.static-assets.lock`);
@@ -106,9 +108,11 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
     const excluded = new Set(policy.excludedSourceFiles.map(safePath));
     // Any change to the exclusion list must be a deliberate policy edit, not a typo.
     if (excluded.size !== 4 || policy.excludedSourceFiles.length !== 4) throw new Error('Expected exactly four source exclusions');
-    const publicFiles = (fontsOnly ? [] : await walk(publicRoot)).filter(file => !excluded.has(file));
-    const fonts = await walk(fontRoot);
-    if (JSON.stringify(fonts) !== JSON.stringify(fontNames)) throw new Error('Font directory must contain exactly the two fonts, LICENSE.txt and README.md');
+    if (images) await verifyPublicImageSources(publicRoot, images);
+    const imagePaths = new Set(images?.files.map(file => file.path));
+    const publicFiles = (fontsOnly ? [] : await walk(publicRoot)).filter(file => !excluded.has(file) && !imagePaths.has(file));
+    const fonts = fontRoot ? await walk(fontRoot) : [];
+    if (fontRoot && JSON.stringify(fonts) !== JSON.stringify(fontNames)) throw new Error('Font directory must contain exactly the two fonts, LICENSE.txt and README.md');
     const publicPaths = new Set(publicFiles), assets = [];
     for (const [kind, sourceRoot, files] of [['public', publicRoot, publicFiles], ['font', fontRoot, fonts]]) {
       for (const relative of files) {
@@ -126,10 +130,10 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
         }[relative]) throw new Error(`Original font/license/provenance SHA-256 mismatch: ${relative}`);
         const entry = { path: assetPath, kind, bytes: bytes.length, sha256: hash(bytes), mime };
         if (mime.startsWith('image/')) {
-          const metadata = await sharp(bytes, { failOn: 'warning' }).metadata(); // Metadata only: no resize, encode or rotate.
+          const metadata = inspectRaster(bytes, { maxBytes: 64 * 1024 * 1024, maxEdge: 16384, maxPixels: 64_000_000 }); // No resize, encode or rotate.
           const expected = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.webp': 'webp' }[extension];
           if (metadata.format !== expected || !metadata.width || !metadata.height) throw new Error(`Invalid image metadata: ${relative}`);
-          Object.assign(entry, { width: metadata.width, height: metadata.height, hasAlpha: Boolean(metadata.hasAlpha), orientation: metadata.orientation ?? null, blurDataURL: null });
+          Object.assign(entry, { width: metadata.width, height: metadata.height, hasAlpha: Boolean(metadata.hasAlpha), orientation: metadata.orientation === 1 ? null : metadata.orientation, blurDataURL: null });
         }
         if (kind === 'font' && extension === '.otf') Object.assign(entry, { license: 'fonts/LICENSE.txt', provenance: ['fonts/README.md'] });
         if (kind === 'public') {
@@ -140,7 +144,7 @@ async function packageAssets(project, output, fontRoot, fontsOnly) {
       }
     }
     assets.sort((a, b) => a.entry.path < b.entry.path ? -1 : a.entry.path > b.entry.path ? 1 : 0);
-    const manifestBytes = Buffer.from(`${JSON.stringify({ schema: 1, productionReady: false, files: assets.map(asset => asset.entry) }, null, 2)}\n`);
+    const manifestBytes = Buffer.from(`${JSON.stringify({ schema: modelOnly ? 2 : 1, productionReady: false, ...(modelOnly ? { runtimeProfile: 'model-only-jsquash' } : {}), ...(images ? { publicImages: images } : {}), files: assets.map(asset => asset.entry) }, null, 2)}\n`);
     const manifestSha256 = hash(manifestBytes);
     stage = await mkdtemp(path.join(path.dirname(output), `.${path.basename(output)}.static-assets.tmp-`));
     const version = path.join(stage, manifestSha256);
@@ -177,17 +181,20 @@ function argumentsFor(argv) {
   const options = new Map();
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index], value = argv[index + 1];
-    if (!['--project', '--output', '--font-source', '--fonts-only'].includes(key) || !value || value.startsWith('--') || options.has(key)) throw new Error('Usage: node package-static-assets.mjs [--project REPO] --font-source ORIGINAL_FONT_DIRECTORY --output NEW_DIRECTORY');
+    if (!['--project', '--output', '--font-source', '--fonts-only', '--runtime-profile'].includes(key) || !value || value.startsWith('--') || options.has(key)) throw new Error('Usage: node package-static-assets.mjs [--project REPO] --font-source ORIGINAL_FONT_DIRECTORY --output NEW_DIRECTORY');
     options.set(key, value);
   }
-  if (!options.has('--font-source')) throw new Error('--font-source ORIGINAL_FONT_DIRECTORY is required; see ops/aliyun/FONTS.md');
+  const modelOnly = options.get('--runtime-profile') === 'model-only-jsquash';
+  if (options.has('--runtime-profile') && !modelOnly) throw new Error('Unsupported asset runtime profile');
+  if (modelOnly && (options.has('--font-source') || options.has('--fonts-only'))) throw new Error('Model-only assets cannot include fonts');
+  if (!modelOnly && !options.has('--font-source')) throw new Error('--font-source ORIGINAL_FONT_DIRECTORY is required; see ops/aliyun/FONTS.md');
   if (!options.has('--output')) throw new Error('--output NEW_DIRECTORY is required');
   if (options.has('--fonts-only') && options.get('--fonts-only') !== 'true') throw new Error('--fonts-only accepts true only');
-  return { fontsOnly: options.has('--fonts-only'), fontRoot: path.resolve(options.get('--font-source')), project: path.resolve(options.get('--project') ?? fileURLToPath(new URL('../../', import.meta.url))), output: path.resolve(options.get('--output')) };
+  return { modelOnly, fontsOnly: options.has('--fonts-only'), fontRoot: options.has('--font-source') ? path.resolve(options.get('--font-source')) : null, project: path.resolve(options.get('--project') ?? fileURLToPath(new URL('../../', import.meta.url))), output: path.resolve(options.get('--output')) };
 }
 try {
-  const { project, output, fontRoot, fontsOnly } = argumentsFor(process.argv.slice(2));
-  console.log(JSON.stringify(await packageAssets(project, output, fontRoot, fontsOnly), null, 2));
+  const { project, output, fontRoot, fontsOnly, modelOnly } = argumentsFor(process.argv.slice(2));
+  console.log(JSON.stringify(await packageAssets(project, output, fontRoot, fontsOnly, modelOnly), null, 2));
 } catch (error) {
   console.error(`Static asset package failed: ${error.message}`);
   process.exitCode = 1;

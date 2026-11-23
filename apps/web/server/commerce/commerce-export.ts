@@ -1,5 +1,5 @@
 import { beginWork, trackFinalizer } from '@/server/lifecycle/request-lifecycle';
-import sharp from 'sharp';
+import { compositeOnWhite, decodeRaster, fitCoverRaster, MAX_RASTER_PIXELS, opaqueRasterPng, orientRaster, whiteRaster, withRasterWork, writeRaster } from '../images/raster-engine';
 import { ApiRouteError } from '@/server/api-error';
 import { renderCommerceSafePng } from './commerce-safe-export';
 
@@ -11,33 +11,32 @@ export async function renderCommerceImage(source: Uint8Array, format: ExportForm
     if (format !== 'png' || target) throw new ApiRouteError({ code: 'bad_request', status: 400, retryable: false, message: '安全导出只支持无裁切的单张 PNG。' });
     return renderCommerceSafePng(source);
   }
-  const image = sharp(source, { limitInputPixels: 100_000_000 }).rotate();
-  const meta = await image.metadata();
-  if (!meta.width || !meta.height) throw new Error('invalid_image_dimensions');
-  const rotated = meta.orientation && meta.orientation >= 5 && meta.orientation <= 8;
-  const sourceWidth = rotated ? meta.height : meta.width;
-  const sourceHeight = rotated ? meta.width : meta.height;
-  let transformed = image;
-  if (target) {
-    const scale = Math.max(target.width / sourceWidth, target.height / sourceHeight);
-    const scaledWidth = Math.ceil(sourceWidth * scale);
-    const scaledHeight = Math.ceil(sourceHeight * scale);
-    const left = Math.max(0, Math.min(scaledWidth - target.width, Math.round((scaledWidth - target.width) * focus.x)));
-    const top = Math.max(0, Math.min(scaledHeight - target.height, Math.round((scaledHeight - target.height) * focus.y)));
-    transformed = transformed.resize(scaledWidth, scaledHeight).extract({ left, top, width: target.width, height: target.height });
-  }
-  const bytes = await (format === 'png' ? transformed.png() : transformed.jpeg({ quality: 92 })).toBuffer();
-  return { bytes, width: target?.width ?? sourceWidth, height: target?.height ?? sourceHeight };
+  return withRasterWork(async () => {
+    const { pixels, meta } = await decodeRaster(source);
+    const oriented = orientRaster(pixels, meta.orientation);
+    const output = target ? fitCoverRaster(oriented, target.width, target.height, focus) : oriented;
+    return { bytes: await writeRaster(output, format), width: output.width, height: output.height };
+  });
 }
 
 export async function stitchCommerceImages(images: ExportImage[], format: ExportFormat) {
   if (!images.length) throw new Error('empty_export');
+  if (images.some(({width,height}) => !Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1)) throw new Error('invalid_image_dimensions');
   const width = Math.max(...images.map(image => image.width));
   const height = images.reduce((sum, image) => sum + image.height, 0);
-  if (width > 8192 || height > 60000 || width * height > 150_000_000) throw new Error('long_image_too_large');
-  const composites = images.map((image, index) => ({ input: Buffer.from(image.bytes), left: 0, top: images.slice(0, index).reduce((sum, previous) => sum + previous.height, 0) }));
-  const output = sharp({ create: { width, height, channels: 3, background: '#ffffff' }, limitInputPixels: 150_000_000 }).composite(composites);
-  return format === 'png' ? output.png().toBuffer() : output.jpeg({ quality: 92 }).toBuffer();
+  if (width > 8192 || height > 60000 || width * height > MAX_RASTER_PIXELS) throw new Error('long_image_too_large');
+  return withRasterWork(async () => {
+    const canvas = whiteRaster(width, height);
+    let top = 0;
+    for (const image of images) {
+      const {pixels,meta} = await decodeRaster(image.bytes);
+      const oriented = orientRaster(pixels,meta.orientation);
+      if (oriented.width !== image.width || oriented.height !== image.height) throw new Error('invalid_image_dimensions');
+      compositeOnWhite(canvas, oriented, 0, top);
+      top += image.height;
+    }
+    return format === 'png' ? opaqueRasterPng(canvas) : writeRaster(canvas, format);
+  });
 }
 
 // ZIP STORE keeps generated JPG/PNG bytes intact and avoids a second quality loss.

@@ -1,5 +1,7 @@
-import { lstat, readdir, readlink, realpath } from 'node:fs/promises';
+import { lstat, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const within = (root, file) => { const relative = path.relative(root, file); return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative)); };
@@ -76,4 +78,46 @@ export async function probeCandidateSharp(candidate) {
     throw new Error(`Sharp native preflight failed for ${process.platform}/${process.arch}. Rebuild the standalone package with its host-native Sharp dependency and package-internal aliases. ${result.error?.message || result.stderr?.trim() || 'Probe failed'}`);
   try { return JSON.parse(result.stdout.trim()); }
   catch (error) { throw new Error('Sharp native preflight failed: invalid probe report', { cause: error }); }
+}
+
+// Explicit model-only preflight. Staged codecs and bytes must resolve inside the
+// release; a missing or host-supplied codec is never equivalent to the old native probe.
+export async function probeCandidateWasm(candidate, archiveExclusions = []) {
+  const root = await realpath(candidate);
+  await validateCandidateLinks(root, archiveExclusions);
+  const require = createRequire(path.join(root, 'apps/web/package.json'));
+  const binaries = new Map();
+  async function get(entry, binary) {
+    const moduleFile = await realpath(require.resolve(entry));
+    const wasmFile = await realpath(require.resolve(binary));
+    if (!within(root, moduleFile) || !within(root, wasmFile)) throw new Error('Codec resolved outside candidate: ' + entry);
+    let compiled = binaries.get(wasmFile);
+    if (!compiled) {
+      compiled = WebAssembly.compile(await readFile(wasmFile));
+      binaries.set(wasmFile, compiled);
+    }
+    const codec = await import(pathToFileURL(moduleFile).href);
+    await codec.init(await compiled);
+    return codec.default;
+  }
+  if (typeof globalThis.ImageData === 'undefined') {
+    globalThis.ImageData = class ImageData { constructor(data, width, height) { Object.assign(this, { data, width, height }); } };
+  }
+  const encJpeg = await get('@jsquash/jpeg/encode.js', '@jsquash/jpeg/codec/enc/mozjpeg_enc.wasm');
+  const decJpeg = await get('@jsquash/jpeg/decode.js', '@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm');
+  const encPng = await get('@jsquash/png/encode.js', '@jsquash/png/codec/pkg/squoosh_png_bg.wasm');
+  const decPng = await get('@jsquash/png/decode.js', '@jsquash/png/codec/pkg/squoosh_png_bg.wasm');
+  const decWebp = await get('@jsquash/webp/decode.js', '@jsquash/webp/codec/dec/webp_dec.wasm');
+  const image = { width: 2, height: 2, data: new Uint8ClampedArray([51,102,153,255,51,102,153,255,51,102,153,255,51,102,153,255]) };
+  const webp = Uint8Array.from(Buffer.from('UklGRjgAAABXRUJQVlA4ICwAAADwAQCdASoCAAIAAUAmJaACdLoB+AAETAAA/u+9V/43bjDfgu/33oDeBgAAAA==','base64')).buffer;
+  for (const [name, output] of [
+    ['jpeg', await decJpeg(await encJpeg(image,{quality:92}))],
+    ['png', await decPng(await encPng(image))],
+    ['webp', await decWebp(webp)],
+  ]) {
+    if (output.width !== 2 || output.height !== 2 || output.data.length !== 16 || output.data[3] !== 255)
+      throw new Error('Candidate WASM codec failed: ' + name);
+  }
+  return { platform: process.platform, arch: process.arch, engine: 'jsquash',
+    codecs: ['jpeg', 'png', 'webp'], wasm: [...binaries.keys()].map(file => path.relative(root, file)), native: [] };
 }

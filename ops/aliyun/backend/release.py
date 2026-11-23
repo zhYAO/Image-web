@@ -72,20 +72,21 @@ def bounded_json(path, limit=65536):
         return json.loads(value, object_pairs_hook=pairs, parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Nonfinite backend JSON')))
 
 
-def service_launch_preflight():
+def service_launch_preflight(preload=Path('/usr/local/libexec/zimage-backend/http-admission.cjs')):
     owned(Path(__file__).with_name('http-admission.cjs'))
     owned(Path(__file__).with_name('next-source-profiles.json'))
     fields = subprocess.check_output(['/usr/bin/systemctl', 'show', 'zimage.service', '--property=ExecStart', '--value'], text=True)
-    match = __import__('re').search(r'argv\[\]=([^;]+);', fields)
+    commands = __import__('re').findall(r'argv\[\]=([^;]+);', fields)
     expected = ['/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node', '--require',
-                '/usr/local/libexec/zimage-backend/http-admission.cjs', 'server.js']
-    if match is None or match.group(1).strip().split() != expected:
+                str(preload), 'server.js']
+    if len(commands) != 1 or commands[0].strip().split() != expected:
         raise ValueError('Loaded systemd ExecStart must bind exact reviewed root Node preload')
 
 
 class SystemOps:
-    def __init__(self, adapter, legacy):
+    def __init__(self, adapter, legacy, *, preload=None):
         self.adapter, self.legacy = adapter, legacy
+        self.preload = preload
 
     def current(self):
         return self.adapter.current_target().name
@@ -96,7 +97,7 @@ class SystemOps:
         cache = getattr(self, '_framework_contracts', {})
         if release not in cache:
             target = ROOT / 'releases' / release
-            self.adapter.verify_retained_layered(target, release)
+            self.adapter.verify_retained_layered(target, release, run_probe=False)
             helper = Path(__file__).with_name('http-admission.cjs')
             catalog = helper.with_name('next-source-profiles.json')
             owned(helper); owned(catalog)
@@ -186,13 +187,15 @@ class SystemOps:
             state = json.loads(body)
             if state.get('pid') != pid or self.service_pid() != pid:
                 raise RuntimeError('Lifecycle status process changed during read')
+            if self.preload is not None and state.get('httpAdmission', {}).get('preloadPath') != str(self.preload):
+                raise ValueError('Live MainPID did not load the pinned receiver preload')
             return state
 
     def validate(self, release):
         target = ROOT / 'releases' / release
         # This intentionally accepts only the retained layered protocol, never
         # an unverified source directory or a pure frontend artifact.
-        self.adapter.verify_retained_layered(target, release)
+        self.adapter.verify_retained_layered(target, release, run_probe=False)
         policy = self.policy()['backends'][release]
         actual = self.legacy.get('http://127.0.0.1:3100/api/meta')
         if actual[0] != 200: raise RuntimeError('Current backend metadata unavailable')
@@ -208,7 +211,9 @@ class SystemOps:
         subprocess.run(['/usr/bin/systemctl', 'start', 'zimage.service'], check=True)
 
     def native(self, release):
-        self.legacy.font_preflight(ROOT / 'releases' / release)
+        if not HEX40.fullmatch(release):
+            raise ValueError('Native probe requires exact managed release')
+        self.adapter.activation_preflight(ROOT / 'releases' / release)
 
     def select(self, release, expected):
         if self.current() != expected: raise RuntimeError('Backend current changed before exact selection')
@@ -313,7 +318,7 @@ def main():
     with bridge.safe_node_environment():
         # Native probe is deferred until the old API has safely drained/stopped;
         # all existing layer/cache/ELF/font closure validation stays enabled.
-        adapter = bridge.Adapter(ROOT, layers, legacy, native_check=lambda *_: None)
+        adapter = bridge.Adapter(ROOT, layers, legacy)
         if args.command == 'accept-receipt':
             # The release transaction holds deploy.lock while waiting for the
             # verifier. This independent narrow lock serializes receipt installs
