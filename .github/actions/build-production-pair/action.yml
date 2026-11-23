@@ -1,0 +1,15 @@
+name: Build and check the ZImage pair
+description: Test the receiver and build both applications for the measured ECS target.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: 24.19.0
+    - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      with:
+        version: 11.19.0
+    - shell: bash
+      run: python3 -B -m unittest discover -s ops/aliyun/production -v
+    - shell: bash
+      run: bash ops/aliyun/production/build.sh

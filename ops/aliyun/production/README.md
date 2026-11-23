@@ -1,8 +1,8 @@
 # 上海 ECS 的前后端成对发布
 
-维护者把 PR 合并到受保护的 `main` 后，`production.yml` 检查合并提交对应的 PR 和目标分支。GitHub 托管的 Ubuntu 22.04 runner 校验实际 Node、ABI、架构和 glibc，按锁文件构建静态前端、Next standalone 和资源层。它将同一 SHA 的前后端封入一个 `pair.tar`，由 `actions/attest` 签发整包 provenance，再检查 main 最新提交。包和证明经一次 SSH 连接直送 ECS。GitHub 保存证明，生产包不上传至 Actions artifacts。旧的手动 CI 仍可检查或构建候选，其 ZIP 按仓库可见性处理。
+维护者把 PR 合并到受保护的 `main` 后，`production.yml` 检查合并提交对应的 PR 和目标分支。GitHub 托管的 Ubuntu 22.04 runner 校验实际 Node、ABI、架构和 glibc，按锁文件构建静态前端、Next standalone 和资源层。默认只执行构建和测试，使用仓库级的五项公开构建变量；缺少必填值会使构建失败。验收完成后，管理员显式将仓库级 Actions 变量 `ZIMAGE_PRODUCTION_DEPLOY_ENABLED` 设为 `1`，后续符合条件的合并才进入 `production` 环境。缺省及其他值均不签发、不发送。启用后，同一 SHA 的前后端封入一个 `pair.tar`，由 `actions/attest` 签发整包 provenance，再检查 main 最新提交。包和证明经一次 SSH 连接直送 ECS。GitHub 保存证明，生产包不上传至 Actions artifacts。旧的手动 CI 仍可检查或构建候选，其 ZIP 按仓库可见性处理。
 
-构建及发送位于同一个受保护的 production 作业，避免跨作业公开传包。这个 runner、被合并的构建代码及锁定依赖都属于信任边界。专用 SSH 私钥只供发送步骤使用。ECS 按管理员独立安装的信任根离线验证仓库、工作流路径、main ref、源码 SHA、工作流 SHA、托管 runner 和实际归档摘要，然后才解包。[GitHub Environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) · [官方 attest Action](https://github.com/actions/attest) · [离线验证](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline) · [CLI 验证参数](https://cli.github.com/manual/gh_attestation_verify)
+启用发布后，构建及发送位于同一个受保护的 production 作业，避免跨作业公开传包。这个 runner、被合并的构建代码及锁定依赖都属于信任边界。专用 SSH 私钥只供发送步骤使用。ECS 按管理员独立安装的信任根离线验证仓库、工作流路径、main ref、源码 SHA、工作流 SHA、托管 runner 和实际归档摘要，然后才解包。[GitHub Environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) · [官方 attest Action](https://github.com/actions/attest) · [离线验证](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline) · [CLI 验证参数](https://cli.github.com/manual/gh_attestation_verify)
 
 ## 一次性启用条件
 

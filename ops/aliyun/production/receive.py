@@ -178,12 +178,18 @@ class Host:
                 'Database compatibility review required')
         old = self.current()
         require(old[0] != sha, 'Release is already selected')
-        if JOURNAL.exists():
+        if os.path.lexists(JOURNAL):
             state = self.management.bounded_json(JOURNAL)
-            self.old_migrations = state['newMigrations' if state['phase'] == 'committed' else 'oldMigrations']
-            require(state['phase'] in ('committed','restored') and state['run'] < meta['run']
-                    and list(old) == state['new' if state['phase']=='committed' else 'old'],
-                    'Unresolved, stale or superseded deployment')
+            require(state['phase'] in ('committed', 'restored'), 'Previous deployment is unresolved')
+            run = state['run']
+            require(type(run) is int and 0 < run < meta['run'], 'Invalid or superseded deployment run')
+            require(re.fullmatch('[a-f0-9]{64}', state.get('pairSha256', '')), 'Missing verified pair digest')
+            if state['phase'] == 'committed':
+                expected_pair, self.old_migrations = state['new'], state['newMigrations']
+            else:
+                expected_pair, self.old_migrations = state['old'], state['oldMigrations']
+            require(list(old) == expected_pair, 'Current pair differs from the previous deployment')
+            require(re.fullmatch('[a-f0-9]{40}', self.old_migrations), 'Invalid predecessor migration tree')
         else:
             self.old_migrations = '04386967f003c2d6638558cd89fcdd722134e594'
             require(old == ('7a811b326aa4b344cee08bc5a33c04e44a780fd4', 'release-7a811b326aa4'),
