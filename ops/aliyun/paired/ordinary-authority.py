@@ -50,7 +50,10 @@ class Authority:
         self.signer_policy = config['signerPolicy']
         self.merge_policy = config['mergePolicy']
         self.attestation_digests = config['attestationDigests']
-        self.github_read_token = read(TOKEN, 1024, private=True).decode('ascii').removesuffix('\n')
+
+    @property
+    def github_read_token(self):
+        return self.read(TOKEN, 1024, private=True).decode('ascii').removesuffix('\n')
 
     def _record(self, path):
         body = self.read(path, 262144)

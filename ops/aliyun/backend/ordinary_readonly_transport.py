@@ -1,4 +1,5 @@
-"""Exchange one ordinary release challenge and a redacted receipt over mutual TLS."""
+"""Bounded, mutually authenticated transport for independent release observers."""
+from contextlib import contextmanager
 from functools import partial
 import hashlib
 import hmac
@@ -99,34 +100,50 @@ def write_frame(connection, value, limit, deadline):
     connection.sendall(HEADER.pack(len(body)) + body)
 
 
-def client(policy, *, ca, cert, key):
+def client_connection(policy, *, ca, cert, key):
     exact(policy, {'schemaVersion', 'address', 'port', 'serverName', 'peerSha256'})
     if (type(policy['schemaVersion']) is not int or policy['schemaVersion'] != 1
             or type(policy['serverName']) is not str or not HOST.fullmatch(policy['serverName'])):
         raise ValueError('Invalid installed observer endpoint policy')
     peer = fingerprint(policy['peerSha256'])
     address = endpoint(policy['address'], policy['port'])
-    return partial(exchange, address=address, server_name=policy['serverName'], peer=peer,
+    return partial(connect, address=address, server_name=policy['serverName'], peer=peer,
                    context=tls_context(ca, cert, key, server=False))
 
 
-def exchange(challenge, *, deadline, address, server_name, peer, context):
+@contextmanager
+def connect(*, deadline, address, server_name, peer, context):
     with socket.create_connection(address, timeout=timeout(deadline)) as raw:
         raw.settimeout(timeout(deadline))
         with context.wrap_socket(raw, server_hostname=server_name) as connection:
             authenticate(connection, peer)
-            write_frame(connection, challenge, CHALLENGE_LIMIT, deadline)
-            response = read_frame(connection, RESPONSE_LIMIT, deadline)
+            yield connection
+
+
+def client(policy, *, ca, cert, key):
+    return partial(exchange, open_connection=client_connection(policy, ca=ca, cert=cert, key=key))
+
+
+def exchange(challenge, *, deadline, open_connection):
+    with open_connection(deadline=deadline) as connection:
+        write_frame(connection, challenge, CHALLENGE_LIMIT, deadline)
+        response = read_frame(connection, RESPONSE_LIMIT, deadline)
     if type(response) is not dict or response.get('kind') != RESPONSE:
         raise ValueError('Independent observer did not return a read-only receipt')
     return response
 
 
-def serve_one(raw, *, context, peer, verify, deadline):
-    """Serve one caller. Only the pinned release peer may invoke the verifier."""
+@contextmanager
+def accept(raw, *, context, peer, deadline):
     raw.settimeout(timeout(deadline))
     with context.wrap_socket(raw, server_side=True) as connection:
         authenticate(connection, peer)
+        yield connection
+
+
+def serve_one(raw, *, context, peer, verify, deadline):
+    """Serve one caller. Only the pinned release peer may invoke the verifier."""
+    with accept(raw, context=context, peer=peer, deadline=deadline) as connection:
         challenge = read_frame(connection, CHALLENGE_LIMIT, deadline)
         if type(challenge) is not dict or challenge.get('kind') != CHALLENGE:
             raise ValueError('Only ordinary read-only release challenges are supported')
@@ -137,6 +154,10 @@ def serve_one(raw, *, context, peer, verify, deadline):
 
 
 def listen(policy, *, ca, cert, key, verify):
+    listen_one(policy, ca=ca, cert=cert, key=key, handler=partial(serve_one, verify=verify), lifetime=SERVER_TIMEOUT)
+
+
+def listen_one(policy, *, ca, cert, key, handler, lifetime):
     exact(policy, {'schemaVersion', 'bindAddress', 'port', 'peerSha256'})
     if type(policy['schemaVersion']) is not int or policy['schemaVersion'] != 1:
         raise ValueError('Invalid independent observer listener policy')
@@ -151,7 +172,7 @@ def listen(policy, *, ca, cert, key, verify):
             raw, _ = listener.accept()
             with raw:
                 try:
-                    serve_one(raw, context=context, peer=peer, verify=verify, deadline=time.monotonic() + SERVER_TIMEOUT)
+                    handler(raw, context=context, peer=peer, deadline=time.monotonic() + lifetime)
                 except (OSError, ValueError, TypeError, KeyError, RuntimeError):
                     # No cookies, request bodies or upstream errors go back to the caller.
                     continue
