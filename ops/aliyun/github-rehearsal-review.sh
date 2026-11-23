@@ -45,7 +45,16 @@ elif [[ "$phase" != hosted-shadow && -n "$phase" ]]; then
 fi
 [[ "$BACKEND_MANIFEST_SHA" =~ ^[a-f0-9]{64}$ && "$FRONTEND_SUBJECT_SHA" =~ ^[a-f0-9]{64}$ ]]
 [[ -n ${REHEARSAL_PUBLIC_CONFIG:-} && ${#REHEARSAL_PUBLIC_CONFIG} -le 16384 ]] || { echo 'Missing staging public configuration for pair intake.' >&2; exit 1; }
-[[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" && -z "$(git status --porcelain)" ]]
+if [[ "$phase" == hosted-shadow && -n ${ZIMAGE_CANDIDATE_BARE_GIT:-} ]]; then
+  [[ "$(git rev-parse HEAD)" == "${ZIMAGE_INTAKE_TOOLS_SHA:?}" && -z "$(git status --porcelain)" ]]
+  [[ "$(realpath -e "$ZIMAGE_CANDIDATE_BARE_GIT")" == "$RUNNER_TEMP/zimage-candidate.git" ]]
+  candidate_git=(git --git-dir="$RUNNER_TEMP/zimage-candidate.git")
+  [[ "$("${candidate_git[@]}" rev-parse --is-bare-repository)" == true &&
+     "$("${candidate_git[@]}" rev-parse 'FETCH_HEAD^{commit}')" == "$GITHUB_SHA" ]]
+else
+  [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" && -z "$(git status --porcelain)" ]]
+  candidate_git=(git)
+fi
 umask 077
 private=$(mktemp -d "$RUNNER_TEMP/zimage-pair.XXXXXXXX")
 trap 'rm -rf -- "$private"' EXIT
@@ -66,8 +75,8 @@ gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$FRONTEND_ID/zip" | head -c 1
 if [[ "$phase" == hosted-shadow ]]; then
   printf '%s  %s\n' "$BACKEND_ARTIFACT_DIGEST" "$private/backend.zip" "$FRONTEND_ARTIFACT_DIGEST" "$private/frontend.zip" | sha256sum --check --status
 fi
-tree=$(git ls-tree -r --full-tree HEAD | sha256sum)
-lock=$(sha256sum pnpm-lock.yaml)
+tree=$("${candidate_git[@]}" ls-tree -r --full-tree "$GITHUB_SHA" | sha256sum)
+lock=$("${candidate_git[@]}" cat-file blob "$GITHUB_SHA:pnpm-lock.yaml" | sha256sum)
 python3 - "$private/pins.json" "${tree%% *}" "${lock%% *}" "$(zimage_frontend_namespace)" <<'PY_PINS'
 import json, os,sys
 e = os.environ
