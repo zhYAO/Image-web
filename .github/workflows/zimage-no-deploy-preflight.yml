@@ -1,0 +1,73 @@
+name: ZImage anonymous public HTTPS preflight
+on:
+  push:
+    branches: [codex/zimage-no-deploy-preflight-20261124]
+permissions: {}
+jobs:
+  probe:
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-no-deploy-preflight-20261124' && !github.event.deleted
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Probe fixed public endpoints without credentials
+        shell: bash
+        run: |
+          python3 -I -B - <<'PY'
+          import hashlib
+          import http.client
+          import json
+          import re
+          import socket
+          import ssl
+
+          HOST = 'www.zimage.store'
+          ASSET = '/static-assets/6cec0b9f8a13b1523e3d52c0e95947234fb81028ad91a46721071cb41cfb7e24/commerce/apparel-v2/detail-01.jpg'
+          SHA256 = '79afe4e1118e94b11b9a11b44db5cef0cfefa9b48fe2cb3eb811e30c6367421f'
+          TLS = ssl.create_default_context()
+          TLS.minimum_version = ssl.TLSVersion.TLSv1_2
+
+          def probe(name, path, media, limit, predicate):
+              conn = http.client.HTTPSConnection(HOST, timeout=8, context=TLS)
+              try:
+                  conn.connect()
+                  family = {socket.AF_INET: 'IPv4', socket.AF_INET6: 'IPv6'}.get(conn.sock.family, 'other')
+                  version = conn.sock.version()
+                  conn.request('GET', path, headers={'Accept': media, 'Accept-Encoding': 'identity', 'Connection': 'close'})
+                  response = conn.getresponse()
+                  ok = False
+                  if (response.status == 200 and response.headers.get_content_type() == media
+                          and response.headers.get('Content-Encoding', 'identity').lower() == 'identity'):
+                      body = response.read(limit + 1)
+                      if len(body) <= limit:
+                          try:
+                              ok = bool(predicate(body))
+                          except (UnicodeError, ValueError, TypeError):
+                              pass
+                  print(f'{name}: status={response.status} tls={version} family={family} match={str(ok).lower()}')
+                  return ok
+              except ssl.SSLCertVerificationError:
+                  print(f'{name}: certificate-validation-failed')
+              except (ssl.SSLError, TimeoutError, ConnectionError, OSError, http.client.HTTPException):
+                  print(f'{name}: transport-failed')
+              finally:
+                  conn.close()
+              return False
+
+          def version_ok(body):
+              obj = json.loads(body)
+              return (type(obj) is dict and obj.get('schemaVersion') == 1
+                      and bool(re.fullmatch(r'release-[a-f0-9]{12}(?:[a-f0-9]{28})?', obj.get('frontendRelease', ''))))
+
+          def ready_ok(body):
+              obj = json.loads(body)
+              return (type(obj) is dict and obj.get('status') == 'ok'
+                      and bool(re.fullmatch(r'[a-f0-9]{40}', obj.get('version', ''))))
+
+          results = [
+              probe('asset', ASSET, 'image/jpeg', 217622,
+                    lambda body: len(body) == 217622 and hashlib.sha256(body).hexdigest() == SHA256),
+              probe('version', '/version.json', 'application/json', 8192, version_ok),
+              probe('readiness', '/api/health/ready', 'application/json', 8192, ready_ok),
+          ]
+          raise SystemExit(not all(results))
+          PY
