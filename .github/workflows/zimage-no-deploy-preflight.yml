@@ -20,8 +20,11 @@ jobs:
           import runpy, subprocess, sys
           try:
               runpy.run_path(sys.argv[1])['probe']('7a811b326aa4b344cee08bc5a33c04e44a780fd4', 'release-7a811b326aa4', local=False)
-          except subprocess.CalledProcessError:
-              sys.exit(print('public-curl-failed') or 1)
+          except subprocess.CalledProcessError as exc:
+              url = exc.cmd[-1]
+              path = url.removeprefix('https://www.zimage.store')
+              label = path if path in ('/api/health/ready', '/version.json', '/api/meta', '/api/public-config', '/') else 'versioned-js-or-unknown'
+              sys.exit(print(f'public-curl-failed path={label} code={exc.returncode}') or 1)
           except Exception:
               sys.exit(print('public-contract-failed') or 1)
           print('public-contract-passed')
