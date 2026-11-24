@@ -56,13 +56,13 @@ jobs:
           persist-credentials: false
       - name: Require a production Turnstile site key
         env:
-          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.ZIMAGE_PRODUCTION_TURNSTILE_SITE_KEY }}
         run: python3 -I -B ops/aliyun/production/check_turnstile.py
       - uses: ./.github/actions/build-production-pair
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.ZIMAGE_PRODUCTION_TURNSTILE_SITE_KEY }}
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         id: provenance
         with:
