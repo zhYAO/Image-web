@@ -230,6 +230,45 @@ with open(sys.argv[1], 'r+') as f:
                 self.assertEqual(subprocess.run(cmd).returncode, 9)
             self.assertEqual(subprocess.run(cmd).returncode, 0)
 
+    def test_sender_uses_public_transport_for_forward_and_restoration(self):
+        def bodies(pair):
+            sha, namespace = pair
+            asset = '/frontend-assets/' + namespace + '/app.js'
+            return {
+                '/api/health/ready': json.dumps(dict(status='ok', version=sha)).encode(),
+                '/version.json': json.dumps(dict(schemaVersion=1, frontendRelease=namespace)).encode(),
+                '/api/meta': json.dumps(dict(backendRelease=sha, api=dict(major=1),
+                    capabilities=['runtime.public-config.v1', 'runtime.meta.v1'])).encode(),
+                '/api/public-config': b'{"formalAuth":true,"dataMode":"http"}',
+                '/': ('<script src="' + asset + '"></script>').encode(),
+                asset: b'console.log(1)',
+            }
+
+        phases = [('before', OLD), ('candidate', NEW), ('live', NEW),
+                  ('restoration', OLD), ('restored-live', OLD)]
+        # The post-open live check fails. Both checks of the short-namespace incumbent must run.
+        expected = iter(item for phase, pair in phases for item in
+                        ([('/api/health/ready', None)] if phase == 'live' else bodies(pair).items()))
+
+        def node_output(argv, **kwargs):
+            path, body = next(expected)
+            self.assertEqual(argv, ['node', Path(send.__file__).with_name('sender_fetch.cjs'), path])
+            self.assertEqual(kwargs, dict(env={'PATH': os.environ['PATH']}, stdin=subprocess.DEVNULL, timeout=8))
+            if body is None:
+                raise subprocess.CalledProcessError(1, argv)
+            return body
+
+        wire = b''.join((json.dumps([phase, *pair]) + '\n').encode() for phase, pair in phases)
+        proc = SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(wire), wait=lambda: 20)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(check, 'fetch', side_effect=AssertionError), \
+                patch.object(send.subprocess, 'check_output', side_effect=node_output):
+            file = Path(tmp)/'data'
+            file.write_bytes(b'x')
+            with self.assertRaisesRegex(RuntimeError, 'restored and verified publicly'):
+                send.deliver(proc, NEW[0], file, file)
+        self.assertIsNone(next(expected, None))
+        self.assertTrue(proc.stdin.getvalue().endswith(b'yes\nyes\nno\nyes\nyes\n'))
+
     def test_sender_and_receiver_share_one_bounded_session(self):
         child = """
 import sys, receive, kit

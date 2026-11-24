@@ -1,4 +1,5 @@
 """A single noninteractive SSH session. A lost connection never triggers a write retry."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -9,8 +10,25 @@ import subprocess
 import sys
 import tempfile
 
-from check import SHA, NAMESPACE, probe
+from check import SHA, NAMESPACE
 from kit import identity, source_contents
+
+
+def fetch_public(path, local):
+    if local:
+        raise ValueError('The sender only checks the public origin')
+    # setup-node supplies PATH. No inherited Node hooks, proxy settings or credentials.
+    return subprocess.check_output(['node', Path(__file__).with_name('sender_fetch.cjs'), path],
+                                   env={'PATH': os.environ['PATH']}, stdin=subprocess.DEVNULL, timeout=8)
+
+
+def probe(sha, namespace):
+    # Bind the transport on a private instance; the receiver uses the original module.
+    spec = importlib.util.spec_from_file_location('sender_contract', Path(__file__).with_name('check.py'))
+    contract = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(contract)
+    contract.fetch = fetch_public
+    contract.probe(sha, namespace)
 
 
 def deliver(process, sha, archive, bundle):
