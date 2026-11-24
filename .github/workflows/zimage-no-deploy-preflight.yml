@@ -1,75 +1,161 @@
-name: ZImage verified curl versus Node HTTPS
+name: ZImage full public contract comparison (read only)
 on:
   push:
     branches: [codex/zimage-no-deploy-preflight-20261124]
 permissions: {}
 jobs:
-  client-compare:
+  full-contract:
     if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-no-deploy-preflight-20261124' && !github.event.deleted
     runs-on: ubuntu-22.04
-    timeout-minutes: 4
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [a, b]
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
-      - name: Read-only public TLS client comparison
+      - name: Compare full production public contract using normal DNS
         shell: bash
         run: |
-          node --input-type=module <<'JS'
-          import { execFile, execFileSync } from 'node:child_process';
-          import { resolve4 } from 'node:dns/promises';
-          import { readFileSync } from 'node:fs';
-          import https from 'node:https';
-          const host = 'www.zimage.store';
-          const path = '/api/health/ready';
-          const caFile = '/etc/ssl/certs/ca-certificates.crt';
-          const expected = '7a811b326aa4b344cee08bc5a33c04e44a780fd4';
-          const ca = readFileSync(caFile);
-          const addresses = await resolve4(host);
-          if (new Set(addresses).size !== 1) { console.log('dns-single-peer=no'); process.exit(2); }
-          const peer = addresses[0];
-          const evidence = (status, body) => {
-            if (status !== '200') return false;
-            try { const p = JSON.parse(body); return p.status === 'ok' && p.version === expected; } catch { return false; }
+          set -eu
+          d="$(mktemp -d)"
+          cat > "$d/check.py" <<'PY_CHECK'
+          """Read-only checks shared by the host TLS probe and independent public runner."""
+          import json
+          import re
+          import subprocess
+          
+          ORIGIN = 'https://www.zimage.store'
+          SHA = re.compile('[a-f0-9]{40}')
+          NAMESPACE = re.compile('[A-Za-z0-9][A-Za-z0-9._-]{0,127}')
+          
+          
+          def fetch(path, local):
+              cmd = ['/usr/bin/curl', '-q', '--silent', '--show-error', '--noproxy', '*',
+                     '--proto', '=https', '--max-time', '8', '--max-filesize', '8000000',
+                     '--header', 'Cache-Control: no-cache', '--write-out', '\n%{content_type}\n%{http_code}']
+              if local:
+                  cmd += ['--resolve', 'www.zimage.store:443:127.0.0.1']
+              output = subprocess.check_output(cmd + [ORIGIN + path])
+              body, content_type, status = output.rsplit(b'\n', 2)
+              if status != b'200':
+                  raise ValueError('Unexpected HTTP status on ' + path)
+              if path.endswith('.js') and content_type.lower().split(b';')[0] not in (b'application/javascript', b'text/javascript'):
+                  raise ValueError('Unexpected script MIME type')
+              return body
+          
+          
+          def probe(sha, namespace, local=False):
+              if not SHA.fullmatch(sha) or not NAMESPACE.fullmatch(namespace):
+                  raise ValueError('Invalid expected pair')
+              ready = json.loads(fetch('/api/health/ready', local))
+              version = json.loads(fetch('/version.json', local))
+              meta = json.loads(fetch('/api/meta', local))
+              conf = json.loads(fetch('/api/public-config', local))
+              if (ready.get('status') != 'ok' or ready.get('version') != sha or meta.get('backendRelease') != sha
+                      or version != {'schemaVersion': 1, 'frontendRelease': namespace}
+                      or conf.get('formalAuth') is not True or conf.get('dataMode') != 'http'
+                      or meta.get('api', {}).get('major') != 1 or
+                      not {'runtime.public-config.v1', 'runtime.meta.v1'}.issubset(meta['capabilities'])):
+                  raise ValueError('HTTPS pair or runtime contract mismatch')
+              html = fetch('/', local).decode()
+              script = re.search(r'<script\b[^>]*\bsrc="(/frontend-assets/' + re.escape(namespace)
+                                 + r'/[a-zA-Z0-9_./-]+\.js)"', html)
+              if not script or '..' in script[1].split('/') or not fetch(script[1], local).strip():
+                  raise ValueError('Versioned frontend entry missing')
+          PY_CHECK
+          cat > "$d/fetch.cjs" <<'JS_NODE'
+          const https = require('node:https');
+          const ca = require('node:fs').readFileSync('/etc/ssl/certs/ca-certificates.crt');
+          const hostname = 'www.zimage.store';
+          const path = process.argv[2];
+          const fixed = new Set(['/api/health/ready','/version.json','/api/meta','/api/public-config','/']);
+          if (!fixed.has(path) && (!/^\/frontend-assets\/release-7a811b326aa4\/[A-Za-z0-9_./-]+\.js$/.test(path) || path.split('/').includes('..'))) process.exit(2);
+          let finished = false, timer;
+          const finish = (code, label) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            if (label) console.error(label);
+            process.exitCode = code;
           };
-          console.log('at=' + new Date().toISOString() + ' node=' + process.version + ' openssl=' + process.versions.openssl);
-          console.log(execFileSync('/usr/bin/curl', ['-V'], {encoding:'utf8'}).split(String.fromCharCode(10))[0]);
-          const curl = new Promise(done => {
-            const args = ['-q','--silent','--show-error','--ipv4','--noproxy','*','--proto','=https','--http1.1','--cacert',caFile,'--resolve',host+':443:'+peer,'--max-time','8','--max-filesize','8192','-H','Cache-Control: no-cache','--write-out','@@META@@%{http_code} %{time_connect} %{time_appconnect} %{remote_ip}','https://'+host+path];
-            execFile('/usr/bin/curl', args, {timeout:10000,maxBuffer:16384}, (error, out, err) => {
-              const marker = out.lastIndexOf('@@META@@');
-              if (marker < 0) { console.log('curl metadata=unavailable'); done(false); return; }
-              const [status,tcp,tls,remote] = out.slice(marker+8).trim().split(' ');
-              const detail = err.toLowerCase().includes('connection reset') ? 'reset' : error ? 'other' : 'none';
-              const match = evidence(status,out.slice(0,marker));
-              console.log('curl rc='+(error?.code ?? 0)+' http='+status+' tcp='+(Number(tcp)>0)+' tls='+(Number(tls)>0)+' intended-peer='+(remote===peer)+' expected-pair='+match+' detail='+detail);
-              done(!error && remote===peer && match);
+          const req = https.request({hostname, servername:hostname, port:443, path, method:'GET', agent:false, rejectUnauthorized:true, ca, headers:{'Cache-Control':'no-cache'}}, res => {
+            const chunks = [];
+            let size = 0;
+            if (res.statusCode !== 200) { finish(1,'http-'+res.statusCode); req.destroy(); return; }
+            if (path.endsWith('.js') && !['application/javascript','text/javascript'].includes((res.headers['content-type'] || '').toLowerCase().split(';')[0])) { finish(1,'script-mime'); req.destroy(); return; }
+            res.on('data', chunk => {
+              size += chunk.length;
+              if (size > 8000000) { finish(1,'response-too-large'); req.destroy(); return; }
+              chunks.push(chunk);
             });
+            res.on('error', () => finish(1,'response-error'));
+            res.on('end', () => { if (!finished) { finish(0); process.stdout.write(Buffer.concat(chunks)); } });
           });
-          const node = new Promise(done => {
-            let tcp=false, tls=false, remote='', timer, size=0, finished=false;
-            const complete=(status,body,detail)=>{
-              if(finished) return;
-              finished=true; clearTimeout(timer);
-              const match=evidence(status,body);
-              console.log('node http='+status+' tcp='+tcp+' tls='+tls+' intended-peer='+(remote===peer)+' expected-pair='+match+' detail='+detail);
-              done(match && remote===peer && tls);
-            };
-            const req=https.request({hostname:host,servername:host,port:443,path,method:'GET',agent:false,rejectUnauthorized:true,ca,family:4,lookup:(_host,opts,cb)=>opts?.all ? cb(null,[{address:peer,family:4}]) : cb(null,peer,4),headers:{'Cache-Control':'no-cache'}},res=>{
-              const chunks=[];
-              res.on('error',()=>complete('000','','response-error'));
-              res.on('data',part=>{ size+=part.length; if(size>8192){ complete('000','','too-large'); req.destroy(); } else chunks.push(part); });
-              res.on('end',()=>complete(String(res.statusCode),Buffer.concat(chunks),'none'));
-            });
-            req.on('socket',s=>{
-              s.once('connect',()=>{tcp=true;remote=s.remoteAddress;});
-              s.once('secureConnect',()=>{tls=s.authorized;remote=s.remoteAddress;});
-            });
-            req.on('error',e=>complete('000','',e.code==='ECONNRESET'?'reset':e.code==='ETIMEDOUT'?'timeout':e.code==='ERR_TLS_CERT_ALTNAME_INVALID'?'hostname-mismatch':'other'));
-            timer=setTimeout(()=>{complete('000','','timeout');req.destroy();},8000);
-            req.end();
-          });
-          const [c,n]=await Promise.all([curl,node]);
-          console.log('comparison='+(c?(n?'both-pass':'curl-only'):(n?'node-only':'neither')));
-          process.exitCode=c&&n?0:1;
-          JS
+          req.on('error', e => finish(1, ['ECONNRESET','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','ERR_TLS_CERT_ALTNAME_INVALID','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED'].includes(e.code) ? e.code : 'network-error'));
+          timer = setTimeout(() => { finish(1,'deadline'); req.destroy(); },8000);
+          req.end();
+          JS_NODE
+          cat > "$d/compare.py" <<'PY_DRIVER'
+          import pathlib
+          import subprocess
+          import sys
+          import check
+          from concurrent.futures import ThreadPoolExecutor
+          
+          sha = '7a811b326aa4b344cee08bc5a33c04e44a780fd4'
+          namespace = 'release-7a811b326aa4'
+          orig = check.fetch
+          # Two separately loaded modules let both clients run the same checks without sharing a patched fetch.
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('check_node', pathlib.Path(__file__).with_name('check.py'))
+          node_check = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(node_check)
+          
+          def category(path):
+              return 'versioned-js' if path.startswith('/frontend-assets/') else path
+          
+          def curl_fetch(path, local):
+              assert not local
+              try:
+                  body = orig(path, local)
+              except subprocess.CalledProcessError as exc:
+                  print(f'probe client=curl endpoint={category(path)} exit={exc.returncode}', flush=True)
+                  raise
+              print(f'probe client=curl endpoint={category(path)} transport=ok', flush=True)
+              return body
+          
+          def node_fetch(path, local):
+              assert not local
+              p = subprocess.run(['node', str(pathlib.Path(__file__).with_name('fetch.cjs')), path], capture_output=True, timeout=10)
+              result = p.stderr.decode().strip()
+              if p.returncode:
+                  if not check.re.fullmatch(r'[A-Za-z0-9_-]{1,48}', result):
+                      result = 'unknown'
+                  print(f'probe client=node endpoint={category(path)} error={result}', flush=True)
+                  raise RuntimeError('Node transport failed')
+              print(f'probe client=node endpoint={category(path)} transport=ok', flush=True)
+              return p.stdout
+          
+          check.fetch = curl_fetch
+          node_check.fetch = node_fetch
+          
+          def run(name, module):
+              try:
+                  module.probe(sha, namespace)
+              except Exception as exc:
+                  print(f'contract client={name} result=failed kind={type(exc).__name__}', flush=True)
+                  return False
+              print(f'contract client={name} result=passed', flush=True)
+              return True
+          
+          with ThreadPoolExecutor(max_workers=2) as pool:
+              c = pool.submit(run,'curl',check)
+              n = pool.submit(run,'node',node_check)
+              curl_ok, node_ok = c.result(), n.result()
+          print('full-contract-comparison=' + ('both-pass' if curl_ok and node_ok else 'node-only' if node_ok else 'curl-only' if curl_ok else 'neither'))
+          sys.exit(0 if node_ok else 1)
+          PY_DRIVER
+          python3 "$d/compare.py"
