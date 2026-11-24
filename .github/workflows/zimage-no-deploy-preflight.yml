@@ -5,7 +5,7 @@ on:
 permissions: {}
 jobs:
   client-compare:
-    if: github.repository == 'zhYAO/Image-web' &amp;&amp; github.ref == 'refs/heads/codex/zimage-no-deploy-preflight-20261124' &amp;&amp; !github.event.deleted
+    if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-no-deploy-preflight-20261124' && !github.event.deleted
     runs-on: ubuntu-22.04
     timeout-minutes: 4
     steps:
@@ -15,7 +15,7 @@ jobs:
       - name: Read-only public TLS client comparison
         shell: bash
         run: |
-          node --input-type=module &lt;&lt;'JS'
+          node --input-type=module <<'JS'
           import { execFile, execFileSync } from 'node:child_process';
           import { resolve4 } from 'node:dns/promises';
           import { readFileSync } from 'node:fs';
@@ -28,48 +28,48 @@ jobs:
           const addresses = await resolve4(host);
           if (new Set(addresses).size !== 1) { console.log('dns-single-peer=no'); process.exit(2); }
           const peer = addresses[0];
-          const evidence = (status, body) =&gt; {
+          const evidence = (status, body) => {
             if (status !== '200') return false;
-            try { const p = JSON.parse(body); return p.status === 'ok' &amp;&amp; p.version === expected; } catch { return false; }
+            try { const p = JSON.parse(body); return p.status === 'ok' && p.version === expected; } catch { return false; }
           };
           console.log('at=' + new Date().toISOString() + ' node=' + process.version + ' openssl=' + process.versions.openssl);
           console.log(execFileSync('/usr/bin/curl', ['-V'], {encoding:'utf8'}).split(String.fromCharCode(10))[0]);
-          const curl = new Promise(done =&gt; {
+          const curl = new Promise(done => {
             const args = ['-q','--silent','--show-error','--ipv4','--noproxy','*','--proto','=https','--http1.1','--cacert',caFile,'--resolve',host+':443:'+peer,'--max-time','8','--max-filesize','8192','-H','Cache-Control: no-cache','--write-out','@@META@@%{http_code} %{time_connect} %{time_appconnect} %{remote_ip}','https://'+host+path];
-            execFile('/usr/bin/curl', args, {timeout:10000,maxBuffer:16384}, (error, out, err) =&gt; {
+            execFile('/usr/bin/curl', args, {timeout:10000,maxBuffer:16384}, (error, out, err) => {
               const marker = out.lastIndexOf('@@META@@');
-              if (marker &lt; 0) { console.log('curl metadata=unavailable'); done(false); return; }
+              if (marker < 0) { console.log('curl metadata=unavailable'); done(false); return; }
               const [status,tcp,tls,remote] = out.slice(marker+8).trim().split(' ');
               const detail = err.toLowerCase().includes('connection reset') ? 'reset' : error ? 'other' : 'none';
               const match = evidence(status,out.slice(0,marker));
-              console.log('curl rc='+(error?.code ?? 0)+' http='+status+' tcp='+(Number(tcp)&gt;0)+' tls='+(Number(tls)&gt;0)+' intended-peer='+(remote===peer)+' expected-pair='+match+' detail='+detail);
-              done(!error &amp;&amp; remote===peer &amp;&amp; match);
+              console.log('curl rc='+(error?.code ?? 0)+' http='+status+' tcp='+(Number(tcp)>0)+' tls='+(Number(tls)>0)+' intended-peer='+(remote===peer)+' expected-pair='+match+' detail='+detail);
+              done(!error && remote===peer && match);
             });
           });
-          const node = new Promise(done =&gt; {
+          const node = new Promise(done => {
             let tcp=false, tls=false, remote='', timer, size=0, finished=false;
-            const complete=(status,body,detail)=&gt;{
+            const complete=(status,body,detail)=>{
               if(finished) return;
               finished=true; clearTimeout(timer);
               const match=evidence(status,body);
               console.log('node http='+status+' tcp='+tcp+' tls='+tls+' intended-peer='+(remote===peer)+' expected-pair='+match+' detail='+detail);
-              done(match &amp;&amp; remote===peer &amp;&amp; tls);
+              done(match && remote===peer && tls);
             };
-            const req=https.request({hostname:host,servername:host,port:443,path,method:'GET',agent:false,rejectUnauthorized:true,ca,family:4,lookup:(_host,opts,cb)=&gt;opts?.all ? cb(null,[{address:peer,family:4}]) : cb(null,peer,4),headers:{'Cache-Control':'no-cache'}},res=&gt;{
+            const req=https.request({hostname:host,servername:host,port:443,path,method:'GET',agent:false,rejectUnauthorized:true,ca,family:4,lookup:(_host,opts,cb)=>opts?.all ? cb(null,[{address:peer,family:4}]) : cb(null,peer,4),headers:{'Cache-Control':'no-cache'}},res=>{
               const chunks=[];
-              res.on('error',()=&gt;complete('000','','response-error'));
-              res.on('data',part=&gt;{ size+=part.length; if(size&gt;8192){ complete('000','','too-large'); req.destroy(); } else chunks.push(part); });
-              res.on('end',()=&gt;complete(String(res.statusCode),Buffer.concat(chunks),'none'));
+              res.on('error',()=>complete('000','','response-error'));
+              res.on('data',part=>{ size+=part.length; if(size>8192){ complete('000','','too-large'); req.destroy(); } else chunks.push(part); });
+              res.on('end',()=>complete(String(res.statusCode),Buffer.concat(chunks),'none'));
             });
-            req.on('socket',s=&gt;{
-              s.once('connect',()=&gt;{tcp=true;remote=s.remoteAddress;});
-              s.once('secureConnect',()=&gt;{tls=s.authorized;remote=s.remoteAddress;});
+            req.on('socket',s=>{
+              s.once('connect',()=>{tcp=true;remote=s.remoteAddress;});
+              s.once('secureConnect',()=>{tls=s.authorized;remote=s.remoteAddress;});
             });
-            req.on('error',e=&gt;complete('000','',e.code==='ECONNRESET'?'reset':e.code==='ETIMEDOUT'?'timeout':e.code==='ERR_TLS_CERT_ALTNAME_INVALID'?'hostname-mismatch':'other'));
-            timer=setTimeout(()=&gt;{complete('000','','timeout');req.destroy();},8000);
+            req.on('error',e=>complete('000','',e.code==='ECONNRESET'?'reset':e.code==='ETIMEDOUT'?'timeout':e.code==='ERR_TLS_CERT_ALTNAME_INVALID'?'hostname-mismatch':'other'));
+            timer=setTimeout(()=>{complete('000','','timeout');req.destroy();},8000);
             req.end();
           });
           const [c,n]=await Promise.all([curl,node]);
           console.log('comparison='+(c?(n?'both-pass':'curl-only'):(n?'node-only':'neither')));
-          process.exitCode=c&amp;&amp;n?0:1;
+          process.exitCode=c&&n?0:1;
           JS
