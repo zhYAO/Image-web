@@ -44,3 +44,7 @@ GitHub concurrency 保留正在运行的作业。ECS 使用现有 `/opt/zimage/d
 - 恢复或公网确认失败，记录 `needs_attention` 并尝试封闭业务入口；SSH 中断后也可能留下非终态。先读 `/opt/zimage/production-release.json`（含签名整包 SHA-256）、两个 current、Nginx open/saved-open 标记、Node 门禁、MainPID 和实际本机/公网版本，再决定人工恢复。不得凭客户端断线、指针已切回或本机 200 宣告恢复或重发。进程被杀或主机掉电时需要人工对账。
 
 本地回归命令为 `python3 -B -m unittest discover -s ops/aliyun/production -v`。用临时目录、真实进程、文件锁、符号链接验证事务，GitHub 签发和生产服务链路需在授权合并后验收。
+
+生产发布在构建、签名和发往 ECS 前检查 NEXT_PUBLIC_TURNSTILE_SITE_KEY，仅拒绝缺失、不合法格式及 Cloudflare 公布的测试值，不输出键值。此门槛不验证真实域名绑定或后端密钥配对；仅构建和 PR 检查不受影响。
+
+已确认恢复旧版本时，修复后走新提交的受保护合并流程。若 SSH 中断或恢复结果不明，先读 ECS 发布日志、当前两端版本和真实公网结果，不重放，也不凭旧指针或本机健康宣告已恢复。
