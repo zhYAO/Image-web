@@ -1,161 +1,47 @@
-name: ZImage full public contract comparison (read only)
+name: ZImage sender patch validation (read only)
 on:
   push:
     branches: [codex/zimage-no-deploy-preflight-20261124]
-permissions: {}
+permissions:
+  contents: read
 jobs:
-  full-contract:
+  sender-check:
     if: github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/codex/zimage-no-deploy-preflight-20261124' && !github.event.deleted
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        sample: [a, b]
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 079180fea6fdd4dc3c0de87b87bd2d8cfd2fab0f
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.19.0
-      - name: Compare full production public contract using normal DNS
+      - name: Check exact patch, kit identity, and sender regression
         shell: bash
         run: |
           set -eu
-          d="$(mktemp -d)"
-          cat > "$d/check.py" <<'PY_CHECK'
-          """Read-only checks shared by the host TLS probe and independent public runner."""
-          import json
-          import re
-          import subprocess
-          
-          ORIGIN = 'https://www.zimage.store'
-          SHA = re.compile('[a-f0-9]{40}')
-          NAMESPACE = re.compile('[A-Za-z0-9][A-Za-z0-9._-]{0,127}')
-          
-          
-          def fetch(path, local):
-              cmd = ['/usr/bin/curl', '-q', '--silent', '--show-error', '--noproxy', '*',
-                     '--proto', '=https', '--max-time', '8', '--max-filesize', '8000000',
-                     '--header', 'Cache-Control: no-cache', '--write-out', '\n%{content_type}\n%{http_code}']
-              if local:
-                  cmd += ['--resolve', 'www.zimage.store:443:127.0.0.1']
-              output = subprocess.check_output(cmd + [ORIGIN + path])
-              body, content_type, status = output.rsplit(b'\n', 2)
-              if status != b'200':
-                  raise ValueError('Unexpected HTTP status on ' + path)
-              if path.endswith('.js') and content_type.lower().split(b';')[0] not in (b'application/javascript', b'text/javascript'):
-                  raise ValueError('Unexpected script MIME type')
-              return body
-          
-          
-          def probe(sha, namespace, local=False):
-              if not SHA.fullmatch(sha) or not NAMESPACE.fullmatch(namespace):
-                  raise ValueError('Invalid expected pair')
-              ready = json.loads(fetch('/api/health/ready', local))
-              version = json.loads(fetch('/version.json', local))
-              meta = json.loads(fetch('/api/meta', local))
-              conf = json.loads(fetch('/api/public-config', local))
-              if (ready.get('status') != 'ok' or ready.get('version') != sha or meta.get('backendRelease') != sha
-                      or version != {'schemaVersion': 1, 'frontendRelease': namespace}
-                      or conf.get('formalAuth') is not True or conf.get('dataMode') != 'http'
-                      or meta.get('api', {}).get('major') != 1 or
-                      not {'runtime.public-config.v1', 'runtime.meta.v1'}.issubset(meta['capabilities'])):
-                  raise ValueError('HTTPS pair or runtime contract mismatch')
-              html = fetch('/', local).decode()
-              script = re.search(r'<script\b[^>]*\bsrc="(/frontend-assets/' + re.escape(namespace)
-                                 + r'/[a-zA-Z0-9_./-]+\.js)"', html)
-              if not script or '..' in script[1].split('/') or not fetch(script[1], local).strip():
-                  raise ValueError('Versioned frontend entry missing')
-          PY_CHECK
-          cat > "$d/fetch.cjs" <<'JS_NODE'
-          const https = require('node:https');
-          const ca = require('node:fs').readFileSync('/etc/ssl/certs/ca-certificates.crt');
-          const hostname = 'www.zimage.store';
-          const path = process.argv[2];
-          const fixed = new Set(['/api/health/ready','/version.json','/api/meta','/api/public-config','/']);
-          if (!fixed.has(path) && (!/^\/frontend-assets\/release-7a811b326aa4\/[A-Za-z0-9_./-]+\.js$/.test(path) || path.split('/').includes('..'))) process.exit(2);
-          let finished = false, timer;
-          const finish = (code, label) => {
-            if (finished) return;
-            finished = true;
-            clearTimeout(timer);
-            if (label) console.error(label);
-            process.exitCode = code;
-          };
-          const req = https.request({hostname, servername:hostname, port:443, path, method:'GET', agent:false, rejectUnauthorized:true, ca, headers:{'Cache-Control':'no-cache'}}, res => {
-            const chunks = [];
-            let size = 0;
-            if (res.statusCode !== 200) { finish(1,'http-'+res.statusCode); req.destroy(); return; }
-            if (path.endsWith('.js') && !['application/javascript','text/javascript'].includes((res.headers['content-type'] || '').toLowerCase().split(';')[0])) { finish(1,'script-mime'); req.destroy(); return; }
-            res.on('data', chunk => {
-              size += chunk.length;
-              if (size > 8000000) { finish(1,'response-too-large'); req.destroy(); return; }
-              chunks.push(chunk);
-            });
-            res.on('error', () => finish(1,'response-error'));
-            res.on('end', () => { if (!finished) { finish(0); process.stdout.write(Buffer.concat(chunks)); } });
-          });
-          req.on('error', e => finish(1, ['ECONNRESET','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','ERR_TLS_CERT_ALTNAME_INVALID','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED'].includes(e.code) ? e.code : 'network-error'));
-          timer = setTimeout(() => { finish(1,'deadline'); req.destroy(); },8000);
-          req.end();
-          JS_NODE
-          cat > "$d/compare.py" <<'PY_DRIVER'
-          import pathlib
-          import subprocess
+          test "$(git rev-parse HEAD)" = 079180fea6fdd4dc3c0de87b87bd2d8cfd2fab0f
+          test "$(node --version)" = v24.19.0
+          patch="$(mktemp)"
+          printf '%s' 'ZGlmZiAtLWdpdCBhL29wcy9hbGl5dW4vcHJvZHVjdGlvbi9zZW5kLnB5IGIvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3NlbmQucHkKaW5kZXggZDdhNTRlMi4uMTgwYzFjZCAxMDA2NDQKLS0tIGEvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3NlbmQucHkKKysrIGIvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3NlbmQucHkKQEAgLTEsNCArMSw1IEBACiAiIiJBIHNpbmdsZSBub25pbnRlcmFjdGl2ZSBTU0ggc2Vzc2lvbi4gQSBsb3N0IGNvbm5lY3Rpb24gbmV2ZXIgdHJpZ2dlcnMgYSB3cml0ZSByZXRyeS4iIiIKK2ltcG9ydCBpbXBvcnRsaWIudXRpbAogaW1wb3J0IGpzb24KIGltcG9ydCBvcwogZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCkBAIC05LDEwICsxMCwyNyBAQCBpbXBvcnQgc3VicHJvY2VzcwogaW1wb3J0IHN5cwogaW1wb3J0IHRlbXBmaWxlCiAKLWZyb20gY2hlY2sgaW1wb3J0IFNIQSwgTkFNRVNQQUNFLCBwcm9iZQorZnJvbSBjaGVjayBpbXBvcnQgU0hBLCBOQU1FU1BBQ0UKIGZyb20ga2l0IGltcG9ydCBpZGVudGl0eSwgc291cmNlX2NvbnRlbnRzCiAKIAorZGVmIGZldGNoX3B1YmxpYyhwYXRoLCBsb2NhbCk6CisgICAgaWYgbG9jYWw6CisgICAgICAgIHJhaXNlIFZhbHVlRXJyb3IoJ1RoZSBzZW5kZXIgb25seSBjaGVja3MgdGhlIHB1YmxpYyBvcmlnaW4nKQorICAgICMgc2V0dXAtbm9kZSBzdXBwbGllcyBQQVRILiBObyBpbmhlcml0ZWQgTm9kZSBob29rcywgcHJveHkgc2V0dGluZ3Mgb3IgY3JlZGVudGlhbHMuCisgICAgcmV0dXJuIHN1YnByb2Nlc3MuY2hlY2tfb3V0cHV0KFsnbm9kZScsIFBhdGgoX19maWxlX18pLndpdGhfbmFtZSgnc2VuZGVyX2ZldGNoLmNqcycpLCBwYXRoXSwKKyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgZW52PXsnUEFUSCc6IG9zLmVudmlyb25bJ1BBVEgnXX0sIHN0ZGluPXN1YnByb2Nlc3MuREVWTlVMTCwgdGltZW91dD04KQorCisKK2RlZiBwcm9iZShzaGEsIG5hbWVzcGFjZSk6CisgICAgIyBCaW5kIHRoZSB0cmFuc3BvcnQgb24gYSBwcml2YXRlIGluc3RhbmNlOyB0aGUgcmVjZWl2ZXIgdXNlcyB0aGUgb3JpZ2luYWwgbW9kdWxlLgorICAgIHNwZWMgPSBpbXBvcnRsaWIudXRpbC5zcGVjX2Zyb21fZmlsZV9sb2NhdGlvbignc2VuZGVyX2NvbnRyYWN0JywgUGF0aChfX2ZpbGVfXykud2l0aF9uYW1lKCdjaGVjay5weScpKQorICAgIGNvbnRyYWN0ID0gaW1wb3J0bGliLnV0aWwubW9kdWxlX2Zyb21fc3BlYyhzcGVjKQorICAgIHNwZWMubG9hZGVyLmV4ZWNfbW9kdWxlKGNvbnRyYWN0KQorICAgIGNvbnRyYWN0LmZldGNoID0gZmV0Y2hfcHVibGljCisgICAgY29udHJhY3QucHJvYmUoc2hhLCBuYW1lc3BhY2UpCisKKwogZGVmIGRlbGl2ZXIocHJvY2Vzcywgc2hhLCBhcmNoaXZlLCBidW5kbGUpOgogICAgIHJlY2VpdmVyX2lkID0gaWRlbnRpdHkoc291cmNlX2NvbnRlbnRzKCkpCiAgICAgaGVhZGVyID0gZid7cmVjZWl2ZXJfaWR9IHtzaGF9IHtidW5kbGUuc3RhdCgpLnN0X3NpemV9IHthcmNoaXZlLnN0YXQoKS5zdF9zaXplfVxuJy5lbmNvZGUoKQpkaWZmIC0tZ2l0IGEvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3Rlc3RfcHJvZHVjdGlvbi5weSBiL29wcy9hbGl5dW4vcHJvZHVjdGlvbi90ZXN0X3Byb2R1Y3Rpb24ucHkKaW5kZXggZjk4Mjk5ZS4uOTNiNzhjMSAxMDA2NDQKLS0tIGEvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3Rlc3RfcHJvZHVjdGlvbi5weQorKysgYi9vcHMvYWxpeXVuL3Byb2R1Y3Rpb24vdGVzdF9wcm9kdWN0aW9uLnB5CkBAIC0yMzAsNiArMjMwLDQ1IEBAIHdpdGggb3BlbihzeXMuYXJndlsxXSwgJ3IrJykgYXMgZjoKICAgICAgICAgICAgICAgICBzZWxmLmFzc2VydEVxdWFsKHN1YnByb2Nlc3MucnVuKGNtZCkucmV0dXJuY29kZSwgOSkKICAgICAgICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoc3VicHJvY2Vzcy5ydW4oY21kKS5yZXR1cm5jb2RlLCAwKQogCisgICAgZGVmIHRlc3Rfc2VuZGVyX3VzZXNfcHVibGljX3RyYW5zcG9ydF9mb3JfZm9yd2FyZF9hbmRfcmVzdG9yYXRpb24oc2VsZik6CisgICAgICAgIGRlZiBib2RpZXMocGFpcik6CisgICAgICAgICAgICBzaGEsIG5hbWVzcGFjZSA9IHBhaXIKKyAgICAgICAgICAgIGFzc2V0ID0gJy9mcm9udGVuZC1hc3NldHMvJyArIG5hbWVzcGFjZSArICcvYXBwLmpzJworICAgICAgICAgICAgcmV0dXJuIHsKKyAgICAgICAgICAgICAgICAnL2FwaS9oZWFsdGgvcmVhZHknOiBqc29uLmR1bXBzKGRpY3Qoc3RhdHVzPSdvaycsIHZlcnNpb249c2hhKSkuZW5jb2RlKCksCisgICAgICAgICAgICAgICAgJy92ZXJzaW9uLmpzb24nOiBqc29uLmR1bXBzKGRpY3Qoc2NoZW1hVmVyc2lvbj0xLCBmcm9udGVuZFJlbGVhc2U9bmFtZXNwYWNlKSkuZW5jb2RlKCksCisgICAgICAgICAgICAgICAgJy9hcGkvbWV0YSc6IGpzb24uZHVtcHMoZGljdChiYWNrZW5kUmVsZWFzZT1zaGEsIGFwaT1kaWN0KG1ham9yPTEpLAorICAgICAgICAgICAgICAgICAgICBjYXBhYmlsaXRpZXM9WydydW50aW1lLnB1YmxpYy1jb25maWcudjEnLCAncnVudGltZS5tZXRhLnYxJ10pKS5lbmNvZGUoKSwKKyAgICAgICAgICAgICAgICAnL2FwaS9wdWJsaWMtY29uZmlnJzogYid7ImZvcm1hbEF1dGgiOnRydWUsImRhdGFNb2RlIjoiaHR0cCJ9JywKKyAgICAgICAgICAgICAgICAnLyc6ICgnPHNjcmlwdCBzcmM9IicgKyBhc3NldCArICciPjwvc2NyaXB0PicpLmVuY29kZSgpLAorICAgICAgICAgICAgICAgIGFzc2V0OiBiJ2NvbnNvbGUubG9nKDEpJywKKyAgICAgICAgICAgIH0KKworICAgICAgICBwaGFzZXMgPSBbKCdiZWZvcmUnLCBPTEQpLCAoJ2NhbmRpZGF0ZScsIE5FVyksICgnbGl2ZScsIE5FVyksCisgICAgICAgICAgICAgICAgICAoJ3Jlc3RvcmF0aW9uJywgT0xEKSwgKCdyZXN0b3JlZC1saXZlJywgT0xEKV0KKyAgICAgICAgIyBUaGUgcG9zdC1vcGVuIGxpdmUgY2hlY2sgZmFpbHMuIEJvdGggY2hlY2tzIG9mIHRoZSBzaG9ydC1uYW1lc3BhY2UgaW5jdW1iZW50IG11c3QgcnVuLgorICAgICAgICBleHBlY3RlZCA9IGl0ZXIoaXRlbSBmb3IgcGhhc2UsIHBhaXIgaW4gcGhhc2VzIGZvciBpdGVtIGluCisgICAgICAgICAgICAgICAgICAgICAgICAoWygnL2FwaS9oZWFsdGgvcmVhZHknLCBOb25lKV0gaWYgcGhhc2UgPT0gJ2xpdmUnIGVsc2UgYm9kaWVzKHBhaXIpLml0ZW1zKCkpKQorCisgICAgICAgIGRlZiBub2RlX291dHB1dChhcmd2LCAqKmt3YXJncyk6CisgICAgICAgICAgICBwYXRoLCBib2R5ID0gbmV4dChleHBlY3RlZCkKKyAgICAgICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoYXJndiwgWydub2RlJywgUGF0aChzZW5kLl9fZmlsZV9fKS53aXRoX25hbWUoJ3NlbmRlcl9mZXRjaC5janMnKSwgcGF0aF0pCisgICAgICAgICAgICBzZWxmLmFzc2VydEVxdWFsKGt3YXJncywgZGljdChlbnY9eydQQVRIJzogb3MuZW52aXJvblsnUEFUSCddfSwgc3RkaW49c3VicHJvY2Vzcy5ERVZOVUxMLCB0aW1lb3V0PTgpKQorICAgICAgICAgICAgaWYgYm9keSBpcyBOb25lOgorICAgICAgICAgICAgICAgIHJhaXNlIHN1YnByb2Nlc3MuQ2FsbGVkUHJvY2Vzc0Vycm9yKDEsIGFyZ3YpCisgICAgICAgICAgICByZXR1cm4gYm9keQorCisgICAgICAgIHdpcmUgPSBiJycuam9pbigoanNvbi5kdW1wcyhbcGhhc2UsICpwYWlyXSkgKyAnXG4nKS5lbmNvZGUoKSBmb3IgcGhhc2UsIHBhaXIgaW4gcGhhc2VzKQorICAgICAgICBwcm9jID0gU2ltcGxlTmFtZXNwYWNlKHN0ZGluPWlvLkJ5dGVzSU8oKSwgc3Rkb3V0PWlvLkJ5dGVzSU8od2lyZSksIHdhaXQ9bGFtYmRhOiAyMCkKKyAgICAgICAgd2l0aCB0ZW1wZmlsZS5UZW1wb3JhcnlEaXJlY3RvcnkoKSBhcyB0bXAsIHBhdGNoLm9iamVjdChjaGVjaywgJ2ZldGNoJywgc2lkZV9lZmZlY3Q9QXNzZXJ0aW9uRXJyb3IpLCBcCisgICAgICAgICAgICAgICAgcGF0Y2gub2JqZWN0KHNlbmQuc3VicHJvY2VzcywgJ2NoZWNrX291dHB1dCcsIHNpZGVfZWZmZWN0PW5vZGVfb3V0cHV0KToKKyAgICAgICAgICAgIGZpbGUgPSBQYXRoKHRtcCkvJ2RhdGEnCisgICAgICAgICAgICBmaWxlLndyaXRlX2J5dGVzKGIneCcpCisgICAgICAgICAgICB3aXRoIHNlbGYuYXNzZXJ0UmFpc2VzUmVnZXgoUnVudGltZUVycm9yLCAncmVzdG9yZWQgYW5kIHZlcmlmaWVkIHB1YmxpY2x5Jyk6CisgICAgICAgICAgICAgICAgc2VuZC5kZWxpdmVyKHByb2MsIE5FV1swXSwgZmlsZSwgZmlsZSkKKyAgICAgICAgc2VsZi5hc3NlcnRJc05vbmUobmV4dChleHBlY3RlZCwgTm9uZSkpCisgICAgICAgIHNlbGYuYXNzZXJ0VHJ1ZShwcm9jLnN0ZGluLmdldHZhbHVlKCkuZW5kc3dpdGgoYid5ZXNcbnllc1xubm9cbnllc1xueWVzXG4nKSkKKwogICAgIGRlZiB0ZXN0X3NlbmRlcl9hbmRfcmVjZWl2ZXJfc2hhcmVfb25lX2JvdW5kZWRfc2Vzc2lvbihzZWxmKToKICAgICAgICAgY2hpbGQgPSAiIiIKIGltcG9ydCBzeXMsIHJlY2VpdmUsIGtpdApkaWZmIC0tZ2l0IGEvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3NlbmRlcl9mZXRjaC5janMgYi9vcHMvYWxpeXVuL3Byb2R1Y3Rpb24vc2VuZGVyX2ZldGNoLmNqcwpuZXcgZmlsZSBtb2RlIDEwMDY0NAppbmRleCAwMDAwMDAwLi5hMzkxMTM1Ci0tLSAvZGV2L251bGwKKysrIGIvb3BzL2FsaXl1bi9wcm9kdWN0aW9uL3NlbmRlcl9mZXRjaC5janMKQEAgLTAsMCArMSw0OSBAQAorJ3VzZSBzdHJpY3QnOworCitjb25zdCB7IG9uY2UgfSA9IHJlcXVpcmUoJ25vZGU6ZXZlbnRzJyk7Citjb25zdCB7IHJlYWRGaWxlU3luYyB9ID0gcmVxdWlyZSgnbm9kZTpmcycpOworY29uc3QgaHR0cHMgPSByZXF1aXJlKCdub2RlOmh0dHBzJyk7CisKK2NvbnN0IGhvc3RuYW1lID0gJ3d3dy56aW1hZ2Uuc3RvcmUnOworY29uc3QgZml4ZWRQYXRocyA9IG5ldyBTZXQoWycvYXBpL2hlYWx0aC9yZWFkeScsICcvdmVyc2lvbi5qc29uJywgJy9hcGkvbWV0YScsICcvYXBpL3B1YmxpYy1jb25maWcnLCAnLyddKTsKK2NvbnN0IGFzc2V0ID0gL15cL2Zyb250ZW5kLWFzc2V0c1wvW0EtWmEtejAtOV1bQS1aYS16MC05Ll8tXXswLDEyN31cLyg/OltBLVphLXowLTlfLi1dK1wvKSpbQS1aYS16MC05Xy4tXStcLmpzJC87Citjb25zdCBtYXhCeXRlcyA9IDhfMDAwXzAwMDsKKworYXN5bmMgZnVuY3Rpb24gZmV0Y2hCb2R5KHBhdGgpIHsKKyAgaWYgKHR5cGVvZiBwYXRoICE9PSAnc3RyaW5nJyB8fCBwYXRoLmxlbmd0aCA+IDQwOTYgfHwKKyAgICAgICEoZml4ZWRQYXRocy5oYXMocGF0aCkgfHwgKGFzc2V0LnRlc3QocGF0aCkgJiYgIXBhdGguc3BsaXQoJy8nKS5zb21lKHAgPT4gcCA9PT0gJy4nIHx8IHAgPT09ICcuLicpKSkpIHsKKyAgICB0aHJvdyBuZXcgRXJyb3IoJ0ludmFsaWQgcHVibGljIHByb2JlIHBhdGgnKTsKKyAgfQorCisgIC8vIE5vcm1hbCBwdWJsaWMgRE5TLCBzeXN0ZW0gdHJ1c3Qgc3RvcmUsIGRlZmF1bHQgaG9zdG5hbWUgdmVyaWZpY2F0aW9uLCBubyByZWRpcmVjdCBoYW5kbGVyLgorICBjb25zdCByZXF1ZXN0ID0gaHR0cHMuZ2V0KHsKKyAgICBob3N0bmFtZSwgc2VydmVybmFtZTogaG9zdG5hbWUsIHBvcnQ6IDQ0MywgcGF0aCwgYWdlbnQ6IGZhbHNlLCByZWplY3RVbmF1dGhvcml6ZWQ6IHRydWUsCisgICAgY2E6IHJlYWRGaWxlU3luYygnL2V0Yy9zc2wvY2VydHMvY2EtY2VydGlmaWNhdGVzLmNydCcpLAorICAgIGhlYWRlcnM6IHsgJ0NhY2hlLUNvbnRyb2wnOiAnbm8tY2FjaGUnIH0sCisgIH0pOworICB0cnkgeworICAgIGNvbnN0IFtyZXNwb25zZV0gPSBhd2FpdCBvbmNlKHJlcXVlc3QsICdyZXNwb25zZScpOworICAgIGlmIChyZXNwb25zZS5zdGF0dXNDb2RlICE9PSAyMDApIHRocm93IG5ldyBFcnJvcignVW5leHBlY3RlZCBIVFRQIHN0YXR1cyAnICsgcmVzcG9uc2Uuc3RhdHVzQ29kZSk7CisgICAgY29uc3QgbWltZSA9IChyZXNwb25zZS5oZWFkZXJzWydjb250ZW50LXR5cGUnXSB8fCAnJykudG9Mb3dlckNhc2UoKS5zcGxpdCgnOycpWzBdOworICAgIGlmIChwYXRoLmVuZHNXaXRoKCcuanMnKSAmJiAhWydhcHBsaWNhdGlvbi9qYXZhc2NyaXB0JywgJ3RleHQvamF2YXNjcmlwdCddLmluY2x1ZGVzKG1pbWUpKSB7CisgICAgICB0aHJvdyBuZXcgRXJyb3IoJ1VuZXhwZWN0ZWQgc2NyaXB0IE1JTUUgdHlwZScpOworICAgIH0KKyAgICBpZiAoTnVtYmVyKHJlc3BvbnNlLmhlYWRlcnNbJ2NvbnRlbnQtbGVuZ3RoJ10pID4gbWF4Qnl0ZXMpIHRocm93IG5ldyBFcnJvcignUmVzcG9uc2UgdG9vIGxhcmdlJyk7CisgICAgY29uc3QgY2h1bmtzID0gW107CisgICAgbGV0IHNpemUgPSAwOworICAgIGZvciBhd2FpdCAoY29uc3QgY2h1bmsgb2YgcmVzcG9uc2UpIHsKKyAgICAgIHNpemUgKz0gY2h1bmsubGVuZ3RoOworICAgICAgaWYgKHNpemUgPiBtYXhCeXRlcykgdGhyb3cgbmV3IEVycm9yKCdSZXNwb25zZSB0b28gbGFyZ2UnKTsKKyAgICAgIGNodW5rcy5wdXNoKGNodW5rKTsKKyAgICB9CisgICAgaWYgKCFyZXNwb25zZS5jb21wbGV0ZSkgdGhyb3cgbmV3IEVycm9yKCdJbmNvbXBsZXRlIHJlc3BvbnNlJyk7CisgICAgcmV0dXJuIEJ1ZmZlci5jb25jYXQoY2h1bmtzLCBzaXplKTsKKyAgfSBmaW5hbGx5IHsKKyAgICByZXF1ZXN0LmRlc3Ryb3koKTsKKyAgfQorfQorCitmZXRjaEJvZHkocHJvY2Vzcy5hcmd2WzJdKS50aGVuKGJvZHkgPT4gcHJvY2Vzcy5zdGRvdXQud3JpdGUoYm9keSkpLmNhdGNoKGVycm9yID0+IHsKKyAgY29uc29sZS5lcnJvcihlcnJvci5jb2RlIHx8IGVycm9yLm1lc3NhZ2UpOworICBwcm9jZXNzLmV4aXRDb2RlID0gMTsKK30pOwo=' | base64 -d > "$patch"
+          printf '%s  %s\n' a81c0634e62a7c39e744d3ed9b5bdbe1f57d779bd3ff946842483170c4bd4867 "$patch" | sha256sum -c -
+          git apply --check --whitespace=error-all "$patch"
+          git apply --whitespace=error-all "$patch"
+          cd ops/aliyun/production
+          python3 -B -c 'import kit; got=kit.identity(kit.source_contents()); assert got=="feb228cd9adc85825716dc9d8b532b7dfc877859cbebb7cb95a84d1911e7abbf", got; print("sender-validation kit=unchanged")'
+          python3 -B -m unittest -v test_production
+      - name: Exercise actual sender probe against incumbent (HTTPS GETs only)
+        shell: bash
+        run: |
+          python3 -I -B - <<'PY'
+          from pathlib import Path
           import sys
-          import check
-          from concurrent.futures import ThreadPoolExecutor
-          
-          sha = '7a811b326aa4b344cee08bc5a33c04e44a780fd4'
-          namespace = 'release-7a811b326aa4'
-          orig = check.fetch
-          # Two separately loaded modules let both clients run the same checks without sharing a patched fetch.
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('check_node', pathlib.Path(__file__).with_name('check.py'))
-          node_check = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(node_check)
-          
-          def category(path):
-              return 'versioned-js' if path.startswith('/frontend-assets/') else path
-          
-          def curl_fetch(path, local):
-              assert not local
-              try:
-                  body = orig(path, local)
-              except subprocess.CalledProcessError as exc:
-                  print(f'probe client=curl endpoint={category(path)} exit={exc.returncode}', flush=True)
-                  raise
-              print(f'probe client=curl endpoint={category(path)} transport=ok', flush=True)
-              return body
-          
-          def node_fetch(path, local):
-              assert not local
-              p = subprocess.run(['node', str(pathlib.Path(__file__).with_name('fetch.cjs')), path], capture_output=True, timeout=10)
-              result = p.stderr.decode().strip()
-              if p.returncode:
-                  if not check.re.fullmatch(r'[A-Za-z0-9_-]{1,48}', result):
-                      result = 'unknown'
-                  print(f'probe client=node endpoint={category(path)} error={result}', flush=True)
-                  raise RuntimeError('Node transport failed')
-              print(f'probe client=node endpoint={category(path)} transport=ok', flush=True)
-              return p.stdout
-          
-          check.fetch = curl_fetch
-          node_check.fetch = node_fetch
-          
-          def run(name, module):
-              try:
-                  module.probe(sha, namespace)
-              except Exception as exc:
-                  print(f'contract client={name} result=failed kind={type(exc).__name__}', flush=True)
-                  return False
-              print(f'contract client={name} result=passed', flush=True)
-              return True
-          
-          with ThreadPoolExecutor(max_workers=2) as pool:
-              c = pool.submit(run,'curl',check)
-              n = pool.submit(run,'node',node_check)
-              curl_ok, node_ok = c.result(), n.result()
-          print('full-contract-comparison=' + ('both-pass' if curl_ok and node_ok else 'node-only' if node_ok else 'curl-only' if curl_ok else 'neither'))
-          sys.exit(0 if node_ok else 1)
-          PY_DRIVER
-          python3 "$d/compare.py"
+          production = Path("ops/aliyun/production").resolve(strict=True)
+          sys.path.insert(0, str(production))
+          import send
+          if Path(send.__file__).resolve() != production / "send.py" or send.probe.__module__ != "send":
+              raise SystemExit("Patched sender probe was not loaded")
+          send.probe("7a811b326aa4b344cee08bc5a33c04e44a780fd4","release-7a811b326aa4")
+          print("sender-validation full-public-contract=pass")
+          PY
