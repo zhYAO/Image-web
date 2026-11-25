@@ -37,9 +37,9 @@ select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'text reservation hold
 select is(pg_temp.call('text_start',pg_temp.text_input())->>'id',pg_temp.state('text')->>'id','stable text request');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input(),'{input,message}','"different"'))$$,'P0001','idempotency_conflict','changed payload rejected');
 select ok((pg_temp.call('text_claim',pg_temp.text_input())->>'claimed')::boolean,'one model claim');
-select ok((public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')->>'action')='start','the relay claims the metered turn once');
-select throws_ok($$select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')$$,'P0001','relay_result_pending','duplicate claim denied');
-select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','usage_result',jsonb_build_object('content','saved reply','receipt',jsonb_build_object('providerRequestId','test-request-1','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
+select ok((public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')->>'action')='start','the relay claims the metered turn once');
+select throws_ok($$select public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')$$,'P0001','relay_result_pending','duplicate claim denied');
+select public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','usage_result',jsonb_build_object('content','saved reply','receipt',jsonb_build_object('providerRequestId','test-request-1','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
 select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('text')))->>'status','succeeded','verified tokens settle the reservation');
 select is((pg_temp.call('wallet')->>'frozenMinor')::int,0,'settlement releases the whole cap');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,2,'text captured once');
@@ -47,9 +47,9 @@ select is((select count(*)::int from public.timeline_items where session_id=(pg_
 select throws_ok($$select public.credit_dispatch(pg_temp.uid('other'),'text_complete',pg_temp.text_input())$$,'P0001','credit_operation_not_found','cross account denied');
 select pg_temp.call('text_start',pg_temp.text_input('unknown'));
 select ok((pg_temp.call('text_claim',pg_temp.text_input('unknown'))->>'claimed')::boolean,'a second turn claims once');
-select ok((public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')->>'action')='start','the relay starts the second turn once');
+select ok((public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')->>'action')='start','the relay starts the second turn once');
 select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'unknown keeps freeze');
-select throws_ok($$select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')$$,'P0001','relay_result_pending','unknown never replays provider');
+select throws_ok($$select public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')$$,'P0001','relay_result_pending','unknown never replays provider');
 select pg_temp.call('text_start',pg_temp.text_input('failed'));
 select pg_temp.call('text_refund',pg_temp.text_input('failed'));
 select pg_temp.call('text_refund',pg_temp.text_input('failed'));
@@ -120,7 +120,7 @@ select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('stale-af
 -- A pause rejects new charges but still completes an already-frozen turn; the
 -- reservation keeps the rate it was created under.
 update private.credit_settings set enabled=false;
-select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','usage_result',jsonb_build_object('content','Recovered existing output','receipt',jsonb_build_object('providerRequestId','test-request-2','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
+select public.doubao_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','usage_result',jsonb_build_object('content','Recovered existing output','receipt',jsonb_build_object('providerRequestId','test-request-2','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
 select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('unknown')))->>'status','succeeded','pause continues frozen text settlement');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,34,'recovered prior output uses original price');
 select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('paused-new'))$$,'P0001','credit_price_changed','pause blocks new model charges');
