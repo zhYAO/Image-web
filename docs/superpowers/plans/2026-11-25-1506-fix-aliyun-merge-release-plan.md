@@ -17,12 +17,12 @@ execution: code
 
 | `main` 中现有文件 | 最终处理 | 保留什么、去掉什么 |
 | --- | --- | --- |
-| [`.github/workflows/pr-build.yml`](../../.github/workflows/pr-build.yml) | **保留：PR 检查** | 不改 GitHub 已要求的 `zimage-release-pr-required` 名字。PR 做无生产凭据的快检和配对构建。把仍有用的深度质量检查、本地数据库测试集中到此文件，不另建第三条流水线 |
-| [`.github/workflows/production.yml`](../../.github/workflows/production.yml) | **保留：合并发布** | 路径也是 ECS 验签策略的一部分。只接受受保护 `main` 的合并 push，一次构建、一次签名、一次发送 |
+| [`.github/workflows/pr-build.yml`](../../../.github/workflows/pr-build.yml) | **保留：PR 检查** | 不改 GitHub 已要求的 `zimage-release-pr-required` 名字。PR 做无生产凭据的快检和配对构建。把仍有用的深度质量检查、本地数据库测试集中到此文件，不另建第三条流水线 |
+| [`.github/workflows/production.yml`](../../../.github/workflows/production.yml) | **保留：合并发布** | 路径也是 ECS 验签策略的一部分。只接受受保护 `main` 的合并 push，一次构建、一次签名、一次发送 |
 | [`.github/workflows/ci.yml`（审计版本）](https://github.com/zhYAO/Image-web/blob/a0de637f8aa3d59ac873c8db6c9e3d7b1f7f08db/.github/workflows/ci.yml) | **迁移有效检查后删除** | 原 `quality`、`database` 的独有检查有用；旧 `candidate-build` 的 layers/full 选择、一天期 ZIP 和手工下载都不进入实际发布，退役这条制品通道 |
 | [`.github/workflows/production-ssh-identity.yml`（审计版本）](https://github.com/zhYAO/Image-web/blob/a0de637f8aa3d59ac873c8db6c9e3d7b1f7f08db/.github/workflows/production-ssh-identity.yml) | **删除独立工作流** | 已有主机指纹和密钥认证证据，`ssh -N` 不会运行接收器。保留手册中的按需排障方法和发送端的严格主机校验，不再维护一条单独取生产密钥的流水线 |
 
-[`.github/actions/build-production-pair/action.yml`](../../.github/actions/build-production-pair/action.yml) 是前两者复用的本地动作，不计作第三个工作流。历史 Actions run 保留作证据，清理范围是默认分支上的入口。
+[`.github/actions/build-production-pair/action.yml`](../../../.github/actions/build-production-pair/action.yml) 是前两者复用的本地动作，不计作第三个工作流。历史 Actions run 保留作证据，清理范围是默认分支上的入口。
 
 ---
 
@@ -107,9 +107,14 @@ flowchart TB
 4. **同一改动中移除两个旧入口及失效引用。** `ops/aliyun/production/test_ssh_identity.py` 会直接读取待删 YAML；将需要长期保留的 pin/发送契约断言移到发送端测试。`ops/aliyun/candidate-artifact.py`、`ops/aliyun/lifecycle-smoke.py` 及对应测试依赖 `ci.yml`、`candidate-build`、旧 ZIP；退役远端选择/下载契约，保留能独立运行的本地包校验。`ops/aliyun/test_lifecycle_smoke.py` 还锁定旧 job 结构和旧组装器字节，`ops/aliyun/prepare-candidate-fonts.test.mjs` 断言旧 deploy/rollback job；把仍有意义的行为验证迁到新入口，而非整体跳过测试或盲目更新固定摘要。更新手册入口；不删历史 run 或顺带删除无关账号密钥。
 5. 对 `ops/aliyun/production/receive.py` 的验签器版本和数字仓库 ID 实施 KTD4，在 `test_kit.py`、`test_production.py` 中验证缺失/不匹配时拒收。接收器文件变化会生成**新的** kit 摘要；不能让旧安装自动信任新入口。
 
+**迁移旧检查时有两个已知不兼容点：**
+
+- `test_linux_handoff.py` 要求仓库候选路径都符合源码交接白名单。`doc/separation/20261106-paired-preflight/` 已跟踪的四份 `.log` 不在白名单内。将这四个历史证据路径作为非源码明确排除，保留“在打开文件前拒绝未知路径”的测试；若改旧助手，独立复核后更新其字节固定值。不要简单允许所有日志。本文与复核记录使用已支持的 `docs/superpowers/{plans,reviews}/` 目录，不增加拒绝项。
+- 新版是 `model-only-jsquash`，锁文件明确排除 Sharp。`native-font-probe.test.mjs` 和 `package-release.test.mjs` 的旧原生用例依赖 Sharp，仅准备字体仍会失败。新包验收运行实际 jsquash/WASM 检查；旧版恢复的 Sharp 和原字体检查使用隔离的、版本固定的旧运行时夹具。不要给新版加回 Sharp，也不要跳过旧版恢复验证。
+
 ### U3. First-release runbook and handoff
 
-对应 R1–R5。实施时将验证过的结果回填 [`ops/aliyun/production/README.md`](../../ops/aliyun/production/README.md)，当前事实记录在 [`doc/project-progress.md`](../../doc/project-progress.md)。由工作台或云助手做一次性主机配置，GitHub 不获得阿里云管理凭据。具体顺序见下表。
+对应 R1–R5。实施时将验证过的结果回填 [`ops/aliyun/production/README.md`](../../../ops/aliyun/production/README.md)，当前事实记录在 [`doc/project-progress.md`](../../../doc/project-progress.md)。由工作台或云助手做一次性主机配置，GitHub 不获得阿里云管理凭据。具体顺序见下表。
 
 ---
 
@@ -118,10 +123,12 @@ flowchart TB
 | 次序 / 负责人 | 操作 | 放行条件 |
 | --- | --- | --- |
 | 1 · 仓库维护者：关开关合并实施 PR | 先跑 Ubuntu 必需检查、共享 inode 回归和成对恢复夹具，再合并。手动补跑一次迁移后的深检 | 只剩两份 workflow；原必需检查仍由 GitHub Actions 提供；main run 明确为“仅构建”，没有签名和投递 |
-| 2 · ECS 管理员：不停服准备 | 从已审阅的 Linux/Git 原始字节执行 `python3 -I -B ops/aliyun/production/kit.py digest` 并按[接收器安装说明](../../ops/aliyun/production/README.md) stage 新版本；保留旧目录。从官方包安装 `gh`，从另一台可信机器导出 `gh attestation trusted-root` 并核对传入文件摘要 | 三层目标、工具链及可用磁盘满足包大小；启用的精确 `KIT_ID` 不来自 CRLF 工作树或传入包。云助手看实际状态和 `ExitCode`，不能只看 `InvokeId` |
-| 3 · 数据库负责人 / 维护者 | 数据库负责人核对线上已应用修订、RPC/权限、Worker 及读写/回退兼容性。维护者另核实 Turnstile 域名、前后端密钥配对与登录 | 对同一个真实生产合同有新旧版本的兼容证据，再由管理员配置 `production-target.json` 的实例 ID 和批准树；不能把本地 SQL 绿灯或 Git tree 值当批准。合同未变的普通应用发布自动复用，涉及 DB/Worker 合同变化则重新复核 |
+| 2 · ECS 管理员：不停服准备 | 从已审阅的 Linux/Git 原始字节执行 `python3 -I -B ops/aliyun/production/kit.py digest` 并按[接收器安装说明](../../../ops/aliyun/production/README.md) stage 新版本；保留旧目录。从官方包安装 `gh`，从另一台可信机器导出 `gh attestation trusted-root` 并核对传入文件摘要 | 三层目标、工具链及可用磁盘满足包大小；启用的精确 `KIT_ID` 不来自 CRLF 工作树或传入包。云助手看实际状态和 `ExitCode`，不能只看 `InvokeId` |
+| 3 · 数据库负责人 / 维护者 | 数据库负责人核对线上已应用修订、RPC/权限、Worker 及读写/回退兼容性。维护者另核实 Turnstile 域名、前后端密钥配对与**在役旧版**登录 | 对同一个真实生产合同有新旧版本的兼容证据，再由管理员配置 `production-target.json` 的实例 ID 和批准树；不能把本地 SQL 绿灯或 Git tree 值当批准。合同未变的普通应用发布自动复用，涉及 DB/Worker 合同变化则重新复核 |
 | 4 · ECS 管理员：维护窗口 | 保留原启动配置与独立管理通道。将 root 管理的 key、有效 sshd 强制命令、精确 sudoers、preload 同时绑定新 `KIT_ID`；验证强制命令及禁转发后才允许该账户 shell 执行固定入口。按下述冷启动顺序重启**原版本** | `sshd -t`、实际连接条件下的 `sshd -T -C` 和 `visudo -c` 通过；新 MainPID、cwd、私有 socket、preload、旧版本及公网契约均正确。失败则恢复原配置和旧进程，开关仍关 |
 | 5 · 维护者：首次投递 | 前四项通过后在**仓库**设置 `ZIMAGE_PRODUCTION_DEPLOY_ENABLED=1`，正常合并一个新的小 PR。单机切换期间允许短暂 503 | Actions 的 commit 与 `pair.tar` 摘要匹配 ECS `/opt/zimage/production-release.json` 中的 `new[0]`、`pairSha256` 及 `phase=committed`，公网前后端和版本化 JS 匹配才算上线 |
+
+**首发登录单独验收：** 在确认 `committed` 的新 SHA 上，用正常 Edge 浏览器会话重新走一次登录，核对 Turnstile 与登录后会话，再记录“新版本登录可用”。该检查不进入每次 PR 的 CI，不需要提供 Cookie 或验证码；旧版登录和六项匿名探测都不能替代它。
 
 [阿里云云助手执行结果](https://help.aliyun.com/zh/ecs/user-guide/check-execution-results-and-troubleshoot-common-issues) · [阿里云安全组](https://help.aliyun.com/zh/ecs/user-guide/start-using-security-groups) · [OpenSSH ForceCommand](https://man.openbsd.org/sshd_config#ForceCommand) · [GitHub 托管 runner 出口](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#ip-addresses)。当前普通托管 runner 没有已验证的固定出口；不要直接删入站规则把管理员和发布器一起锁在外面。管理员应先从独立维护通道和受控发布出口验通，再收紧两条覆盖规则。没有受控出口时，首次开关前由所有者明确是否接受现状或推迟首发；不把整个 GitHub 地址列表当可信客户端，不给普通 CI 增加修改安全组的权限。
 

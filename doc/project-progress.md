@@ -4,7 +4,7 @@
 
 `main@a0de637` 的[最近一次合并构建](https://github.com/zhYAO/Image-web/actions/runs/45539467107)成功，`publish` 跳过。07:02 UTC 上海 ECS 检查与公网核对均为原后端 `7a811b3`、原前端 `release-7a811b326aa4`。受限密钥已通过身份认证，但服务器缺 `/usr/bin/gh`、独立验签根和目标兼容策略，账户执行路径与 systemd preload 也未就绪。公网匿名入口正常，证书到期时间为 2026-12-16 14:41 UTC。
 
-本轮只交付[两工作流实施计划](../docs/plans/2026-11-25-1506-fix-aliyun-merge-release-plan.md)和[复核记录](../docs/reviews/2026-11-25-aliyun-merge-release-review.md)。下一步是开关关闭时提交实施 PR：修复硬链接影响切换/回退的问题，迁移有效检查后从四个工作流减到两个，再安排首次维护窗口。本轮未删工作流、未更改生产配置、未重启或发布。
+本轮只交付[两工作流实施计划](../docs/superpowers/plans/2026-11-25-1506-fix-aliyun-merge-release-plan.md)和[复核记录](../docs/superpowers/reviews/2026-11-25-aliyun-merge-release-review.md)。下一步是开关关闭时提交实施 PR：修复硬链接影响切换/回退的问题，迁移有效检查后从四个工作流减到两个，再安排首次维护窗口。本轮未删工作流、未更改生产配置、未重启或发布。
 
 ## 2026-11-06 13:46UTC M7与A+发布准备已验证，正式价格仍关闭
 
