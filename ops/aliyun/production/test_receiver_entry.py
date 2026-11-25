@@ -21,6 +21,31 @@ INCOMING = 'c'*40
 OLD_TREE, NEW_TREE = '1'*40, '2'*40
 
 
+class ReceiverNodeGuard(unittest.TestCase):
+    def test_untrusted_node_prevents_receipt_and_target_probe(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root, kit = Path(tmp), 'e'*64
+            header = f'{kit} {INCOMING} 1 1\n'.encode()
+            stdin = SimpleNamespace(buffer=io.BytesIO(header+b'xx'))
+            isolated = SimpleNamespace(argv=['receive.py'], flags=SimpleNamespace(isolated=True), stdin=stdin)
+            management = Mock()
+            def owned(path, **kwargs):
+                if path == Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'):
+                    raise ValueError('Untrusted root-managed backend path')
+            management.owned.side_effect = owned
+            bridge = management.load.return_value
+            bridge.safe_node_environment.side_effect = nullcontext
+            stack.enter_context(patch.multiple(receive, ROOT=root, TOOLS=root/kit, sys=isolated))
+            stack.enter_context(patch.object(receive.os, 'geteuid', return_value=0, create=True))
+            stack.enter_context(patch.object(receive.os, 'umask'))
+            stack.enter_context(patch.object(receive, 'load', return_value=management))
+            stack.enter_context(patch.object(receive, 'target_policy'))
+            with self.assertRaisesRegex(ValueError, 'Untrusted root-managed'):
+                receive.main()
+            self.assertEqual(stdin.buffer.tell(), len(header))
+            bridge.Adapter.assert_not_called()
+
+
 class ReceiverEntry(unittest.TestCase):
     def setUp(self):
         contexts = ExitStack()
@@ -49,9 +74,8 @@ class ReceiverEntry(unittest.TestCase):
         self.space = Mock()
         modules[receive.TOOLS/'space.py'] = self.space
         enter(patch.object(management, 'load', side_effect=lambda path, name: modules[path]))
-        self.owned = enter(patch.object(management, 'owned'))  # Test directory is owned by the local user.
-        enter(patch.object(receive.shutil, 'which', return_value=str(Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'))))
-        self.bridge = bridge
+        enter(patch.object(management, 'owned'))  # Test directory is owned by the local user.
+        enter(patch.object(receive.shutil, 'which', return_value=str(receive.NODE)))
         enter(patch.object(management, 'service_launch_preflight'))
         enter(patch.object(receive, 'load', return_value=management))
         enter(patch.multiple(receive, ROOT=root, ETC=etc, JOURNAL=self.journal))
@@ -106,16 +130,6 @@ class ReceiverEntry(unittest.TestCase):
         self.gh.assert_not_called()
         self.prepare.assert_not_called()
         self.activate.assert_not_called()
-
-    def test_untrusted_node_prevents_receipt_and_target_check(self):
-        def owned(path, **kwargs):
-            if path == Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'):
-                raise ValueError('Untrusted root-managed backend path')
-        self.owned.side_effect = owned
-        with self.assertRaisesRegex(ValueError, 'Untrusted root-managed'):
-            self.receive('committed', PREVIOUS_CANDIDATE)
-        self.gh.assert_not_called()
-        self.bridge.Adapter.assert_not_called()
 
     def test_terminal_phase_selects_matching_live_pair_and_tree(self):
         for phase, live, tree in [('committed', PREVIOUS_CANDIDATE, NEW_TREE), ('restored', RETAINED, OLD_TREE)]:

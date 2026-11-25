@@ -53,8 +53,7 @@ function frameworkProfile(version, hashes, legacyRelease) {
   return { version, profileId, hashes: expected, legacy: legacyRelease !== undefined };
 }
 function trustedLegacyEntry(entry) {
-  // Production callers get entry only from realpath(process.argv[1]). Existing
-  // managed release/helper trust checks remain; no environment override exists.
+  // A regular managed file and a chain of trusted directories to the root.
   for (let current = entry; ; current = path.dirname(current)) {
     const info = fs.lstatSync(current);
     if (info.isSymbolicLink() || !(current === entry ? info.isFile() : info.isDirectory()) || info.uid !== 0 || (info.mode & 0o022))
@@ -343,8 +342,7 @@ function installForTesting({ readGate, nextRequire }) {
 }
 
 module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, SOURCE_PROFILES, stableNext, inspectRuntime, legacyReleaseFromCanonicalPath, frameworkProfile, trustedLegacyEntry, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
-const inspection = require.main === module && process.argv[2] === 'inspect';
-if (inspection) {
+if (require.main === module && process.argv[2] === 'inspect') {
   if (process.argv.length !== 4) throw new Error('Expected one immutable release entry for inspect');
   const value = inspectRuntime(createRequire(process.argv[3]), process.argv[3], true);
   console.log(JSON.stringify({ release: value.release, contract: value.contract, files: value.files }));
