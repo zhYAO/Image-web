@@ -18,6 +18,7 @@
 
 - **GitHub：** 核过生效 ruleset、`production` 的允许分支、配置项名称和最近的 job 结论。[合并运行](https://github.com/zhYAO/Image-web/actions/runs/45539467107) 的 `build-only` 为 137 秒，`publish` 跳过；[SSH 运行](https://github.com/zhYAO/Image-web/actions/runs/45534241885) 仅证实认证。两者都不是线上发布回执。
 - **阿里云：** 在匹配的上海 Ubuntu 实例，通过云助手取得实际执行结果。07:02 UTC：旧应用 active，旧前后端在位，已安装 kit 的入口通过字节核对；管理员检查因 `/usr/bin/gh` 缺失退出 1。验签根、目标策略和绑定该 kit 的已加载 preload 当时都未就绪。07:03 UTC：复核了发布账户和精确 sudo 许可的缺口。这是只读观察，不是首装或切换演练。
+- **网络：** 根据该实例主网卡及其所绑定安全组的实际规则，云侧有两条允许任意 IPv4 来源到达 SSH 端口的规则。主机级防火墙和其他账户权限未知。先核对管理员与发布器的可用通道再收紧；本轮未改安全组。
 - **公网：** 在客户端正常校验证书和主机名，6 个匿名契约检查通过，观察到旧后端 `7a811b3` 和旧前端 `release-7a811b326aa4`。只读服务正常不证明真实登录、付费生成、生产 DB 兼容或备份可恢复。当前证书有效至 **2026-12-16 14:41 UTC**；未验证续期能否自动成功。
 - **代码：** 对照了 `production.yml`、`pr-build.yml`、`ci.yml`、独立 SSH 诊断、成对构建动作和接收器的准备/激活/回退分支；还查找了工作流文件名、`candidate-build` 及旧候选工件的消费者。GitHub 的[跳过检查语义](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)、[离线验签](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline)和阿里云的[命令实际执行结果](https://help.aliyun.com/zh/ecs/user-guide/check-execution-results-and-troubleshoot-common-issues)用于校核相应判断。
 - **文档一致性：** 已从 `origin/main` 的 Git 对象解析四份工作流定义，核对必需检查名、生产触发分支、旧候选 job 和两棵迁移树；计划、复核记录及新增进度条目的本地链接均可解析。
