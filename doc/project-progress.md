@@ -1394,3 +1394,10 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - 修正：把该专用账户 shell 改为 `/bin/sh`（`ForceCommand`、`PermitTTY no`、`DisableForwarding yes`、密钥 `restrict`、禁密码认证均已核对），并在 sudoers 增加 `Defaults:zimage-release !use_pty`，避免二进制 stdin 经过伪终端。`visudo -c`、`sudo -n -l -U zimage-release` 通过。
 - 端到端验证：以该账户经 `sh -c` + `sudo -n` 执行 `kit.py`，115 字节合成报文被完整读入并走到 `gh attestation verify`（伪造 bundle 按预期被拒），证明 shell、sudo、二进制 stdin 与验签器均可用。
 - 说明：工作流对 `run_attempt != 1` 的重跑不授予发布权，因此首次上线需要一次新的受保护合并触发。
+### 2026-11-25 首发上线：合并即发布（run #10）
+
+- PR #32 合并为 `ed19f0f2ea7301c233263a8bb19045f95ab46fdb` 后，`Publish merged ZImage pair` 的 `publish` 作业在 3 分 51 秒内完成构建、签名、投递与切换，结论为 `PHASE: committed`。
+- 一致性：Actions 的 attestation subject `sha256:83c75559c01128d7a0efb8f07437307b16e97e463d0457a224b29bf9fe6f9ca5` 与 ECS `/opt/zimage/production-release.json` 的 `pairSha256` 完全相同；`new[0]` 为 `ed19f0f2…`，`old` 为原在役的 `7a811b32…`，`newMigrations` 为 `e5f52c26…`，`oldMigrations` 为 `04386967…`。
+- 公网复核：`/version.json` 为 `release-ed19f0f2…`，`/api/health/ready` 与 `/api/meta.backendRelease` 同为 `ed19f0f2…`，首页引用的版本化脚本为 `release-ed19f0f2…/assets/index-DNgA_E96.js`，`/api/public-config` 返回 `formalAuth=true`、`dataMode=http`。
+- 主机状态：`zimage.service` active，MainPID 746174，无额外重启；preload 指向 `versions/1b7853dd…/backend/http-admission.cjs`；旧版本目录保留可回退；磁盘余量 11G。
+- 仍需单独验收：在 `committed` 版本上用正常 Edge 会话走一次真实登录（Turnstile 域名与前后端密钥配对）；公网证书 2026-12-16 到期，续期未验证。
