@@ -44,8 +44,14 @@ select is((pg_temp.call('wallet')->>'frozenMinor')::int,0,'settlement releases t
 select is((pg_temp.call('wallet')->>'spentMinor')::int,2,'text captured once');
 select is((select count(*)::int from public.timeline_items where session_id=(pg_temp.state('text')->>'session_id')::uuid),2,'one user and one assistant saved');
 select throws_ok($$select public.credit_dispatch(pg_temp.uid('other'),'text_complete',pg_temp.text_input())$$,'P0001','credit_operation_not_found','cross account denied');
+select pg_temp.call('text_start',pg_temp.text_input('unknown'));
+select ok((public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')->>'action')='start','a second turn claims once');
+select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'unknown keeps freeze');
+select throws_ok($$select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','claim')$$,'P0001','relay_result_pending','unknown never replays provider');
 select pg_temp.call('text_start',pg_temp.text_input('failed'));
-select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'an unsettled token reservation stays frozen');
+select pg_temp.call('text_refund',pg_temp.text_input('failed'));
+select pg_temp.call('text_refund',pg_temp.text_input('failed'));
+select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'failed refund once');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input('badprice'),'{billing,totalMinor}','1'))$$,'P0001','credit_price_changed','tampered price rejected');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input('oldprice'),'{billing,version}','"old"'))$$,'P0001','credit_price_changed','old price rejected');
 -- Real task admission and individual outcomes; no model or external queue service.
@@ -109,12 +115,13 @@ select public.credit_admin(jsonb_build_object('action','price','version','test-v
 select is((private.credit_quote(jsonb_build_array(pg_temp.item('chat','doubao','')))->>'totalMinor')::int,3,'new price used only for new quotes');
 select is((select amount_minor::int from private.credit_operations where business_key='text:'||pg_temp.uid('text') and user_id=pg_temp.uid()),2,'old charge immutable after price change');
 select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('stale-after-price'))$$,'P0001','credit_price_changed','old confirmation rejected after price activation');
--- A pause rejects new charges but completes already-frozen results.
+-- A pause rejects new charges but still completes an already-frozen turn; the
+-- reservation keeps the rate it was created under.
 update private.credit_settings set enabled=false;
-select pg_temp.call('text_result',pg_temp.text_input('unknown')||'{"result":{"content":"Recovered existing output"}}');
-select is(pg_temp.call('text_complete',pg_temp.text_input('unknown'))->>'status','succeeded','pause continues frozen text settlement');
+select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','usage_result',jsonb_build_object('content','Recovered existing output','receipt',jsonb_build_object('providerRequestId','test-request-2','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005))::text);
+select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('unknown')))->>'status','succeeded','pause continues frozen text settlement');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,34,'recovered prior output uses original price');
-select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('paused-new'))$$,'P0001','credits_disabled','pause blocks new model charges');
+select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('paused-new'))$$,'P0001','credit_price_changed','pause blocks new model charges');
 -- Prebilling tasks remain free after activation.
 select pg_temp.keep('old',private.submit_image_generation(pg_temp.uid(),null,'Old unbilled task','seedream','doubao-seedream-5.0-pro',pg_temp.image_input('legacy',1)->'config','direct',null,null,null,pg_temp.uid('legacy')::text,'legacy-hash',gen_random_uuid()));
 update private.credit_settings set enabled=true;
