@@ -57,7 +57,7 @@ function trustedLegacyEntry(entry) {
   // managed release/helper trust checks remain; no environment override exists.
   for (let current = entry; ; current = path.dirname(current)) {
     const info = fs.lstatSync(current);
-    if (info.isSymbolicLink() || (!info.isFile() && !info.isDirectory()) || info.uid !== 0 || (info.mode & 0o022))
+    if (info.isSymbolicLink() || !(current === entry ? info.isFile() : info.isDirectory()) || info.uid !== 0 || (info.mode & 0o022))
       throw new Error('Untrusted retained Next entry');
     if (current === path.dirname(current)) break;
   }
@@ -203,61 +203,68 @@ function createAdmissionController(readGate = readControl) {
   return Object.freeze({ snapshot, createServer, trackFramework, setFrameworkProbe });
 }
 
-function inspectRuntime(nextRequire, entry, strict) {
-  const pkg = nextRequire('next/package.json');
-  if (!stableNext(pkg.version)) throw new Error('HTTP admission requires audited Next stable 16.4.x');
-  if (typeof nextRequire.resolve !== 'function') throw new Error('Unaudited Next source resolution');
-  const packagePath = fs.realpathSync(nextRequire.resolve('next/package.json'));
+// Also runs as root. Only resolve paths and read data here; release modules are
+// loaded separately by installFrameworkTracking in the live service.
+function inspectRuntime({ resolve }, entry, strict) {
+  if (typeof resolve !== 'function') throw new Error('Unaudited Next source resolution');
+  let releaseRoot, release, legacyRelease, appPackage;
+  function artifactPath(file) {
+    const canonical = fs.realpathSync(file);
+    if (strict) {
+      if (!canonical.startsWith(releaseRoot + '/')) throw new Error('Next module escapes immutable release');
+      trustedLegacyEntry(canonical);
+    }
+    return canonical;
+  }
+  if (strict) {
+    const match = /^(\/opt\/zimage\/releases\/([a-f0-9]{40}))\/apps\/web\/server\.js$/.exec(entry);
+    if (!match || entry !== fs.realpathSync(entry)) throw new Error('Next identity requires canonical immutable release entry');
+    releaseRoot = match[1];
+    release = match[2];
+    trustedLegacyEntry(entry);
+    legacyRelease = legacyReleaseFromCanonicalPath(entry);
+    appPackage = artifactPath(path.join(path.dirname(entry), 'package.json'));
+    trustedLegacyEntry(CATALOG_PATH);
+    trustedLegacyEntry(__filename);
+  }
+  const packagePath = artifactPath(resolve('next/package.json'));
   const packageRoot = path.dirname(packagePath);
-  const publicEntry = fs.realpathSync(nextRequire.resolve('next'));
-  if (!publicEntry.startsWith(packageRoot + path.sep)
+  const publicEntry = artifactPath(resolve('next'));
+  if (path.basename(packagePath) !== 'package.json' || !publicEntry.startsWith(packageRoot + path.sep)
       || publicEntry !== fs.realpathSync(path.join(packageRoot, 'dist/server/next.js'))) throw new Error('Unaudited Next admission source module identity');
+  const { version } = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+  if (!stableNext(version)) throw new Error('HTTP admission requires audited Next stable 16.4.x');
+  if (strict && JSON.parse(fs.readFileSync(appPackage, 'utf8')).dependencies?.next !== version)
+    throw new Error('Resolved Next differs from artifact pin');
   const paths = {}, hashes = {};
   for (const name of Object.keys(NEXT_SOURCE_HASHES)) {
-    const resolved = fs.realpathSync(nextRequire.resolve(name));
+    const resolved = artifactPath(resolve(name));
     if (!resolved.startsWith(packageRoot + path.sep)
         || resolved !== fs.realpathSync(path.join(packageRoot, name.slice(5)))) throw new Error('Unaudited Next admission source module identity');
     paths[name] = resolved;
     hashes[name] = createHash('sha256').update(fs.readFileSync(resolved)).digest('hex');
   }
-  let release, legacyRelease, appPackage;
-  if (strict) {
-    entry = fs.realpathSync(entry);
-    const match = /^(\/opt\/zimage\/releases\/([a-f0-9]{40}))\/apps\/web\/server\.js$/.exec(entry);
-    if (!match) throw new Error('Next identity requires canonical immutable release entry');
-    release = match[2];
-    legacyRelease = legacyReleaseFromCanonicalPath(entry);
-    appPackage = path.join(path.dirname(entry), 'package.json');
-    const declared = JSON.parse(fs.readFileSync(appPackage, 'utf8')).dependencies?.next;
-    if (declared !== pkg.version || !stableNext(declared)) throw new Error('Resolved Next differs from artifact pin');
-    for (const file of [entry, appPackage, packagePath, publicEntry, ...Object.values(paths)]) {
-      if (!fs.realpathSync(file).startsWith(match[1] + '/')) throw new Error('Next module escapes immutable release');
-      trustedLegacyEntry(fs.realpathSync(file));
-    }
-    trustedLegacyEntry(CATALOG_PATH);
-    trustedLegacyEntry(__filename);
-  }
-  const profile = frameworkProfile(pkg.version, hashes, legacyRelease);
+  const profile = frameworkProfile(version, hashes, legacyRelease);
   const contract = profile.legacy
-    ? { protocolVersion: 1, nextVersion: pkg.version }
-    : { protocolVersion: 2, nextVersion: pkg.version, sourceProfile: profile.profileId };
+    ? { protocolVersion: 1, nextVersion: version }
+    : { protocolVersion: 2, nextVersion: version, sourceProfile: profile.profileId };
   const files = strict ? [entry, appPackage, packagePath, publicEntry, ...Object.values(paths), CATALOG_PATH, __filename].map(file => {
     file = fs.realpathSync(file);
     const s = fs.statSync(file, { bigint: true });
     return { path: file, identity: [s.dev,s.ino,s.size,s.mtimeNs,s.ctimeNs,s.mode,s.uid].map(String) };
   }) : [];
-  return { pkg, packagePath, publicEntry, paths, profile, contract, release, files };
+  return { packagePath, publicEntry, paths, profile, contract, release, files };
 }
 
 function installFrameworkTracking(controller, nextRequire, runtime) {
   if (controller.snapshot().frameworkWork.installed) throw new Error('Incompatible or repeated Next admission hook');
-  if (!runtime) {
-    if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') throw new Error('Production hooks require immutable release identity');
-    runtime = inspectRuntime(nextRequire, undefined, false);
-  }
-  const { profile, contract, pkg, packagePath } = runtime;
+  if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1' && !runtime) throw new Error('Production hooks require immutable release identity');
+  const pkg = nextRequire('next/package.json');
+  if (!stableNext(pkg.version)) throw new Error('HTTP admission requires audited Next stable 16.4.x');
+  runtime ??= inspectRuntime(nextRequire, undefined, false);
+  const { profile, contract, packagePath } = runtime;
   const packageModule = require.cache[packagePath];
-  if (!packageModule || packageModule.exports !== pkg) throw new Error('Next package module identity differs');
+  if (pkg.version !== profile.version || !packageModule || packageModule.exports !== pkg) throw new Error('Next package module identity differs');
   Object.freeze(pkg);
   const diskPath = fs.realpathSync(nextRequire.resolve('next/dist/server/lib/disk-lru-cache.external'));
   if (diskPath !== runtime.paths['next/dist/server/lib/disk-lru-cache.external.js']) throw new Error('Next disk module alias differs from audited identity');
@@ -323,6 +330,7 @@ function installController(controller, nextRequire, qaOnly, entry) {
 function install() {
   // Resolve from the actual standalone entry, rather than the root helper's
   // install directory, so we observe the same module instance as Next itself.
+  if (process.geteuid() === 0) throw new Error('Live HTTP admission requires an unprivileged service');
   const entry = fs.realpathSync(process.argv[1]);
   return installController(createAdmissionController(), createRequire(entry), false, entry);
 }
@@ -335,8 +343,9 @@ function installForTesting({ readGate, nextRequire }) {
 }
 
 module.exports = { BRIDGE_KEY, PROTOCOL_VERSION, BARRIER_ID, CHECK_PATHS: Object.freeze([...CHECK_PATHS]), NEXT_SOURCE_HASHES, SOURCE_PROFILES, stableNext, inspectRuntime, legacyReleaseFromCanonicalPath, frameworkProfile, trustedLegacyEntry, parseControl, readControl, createAdmissionController, installFrameworkTracking, install, installForTesting };
-const inspection = require.main === module && process.argv.length === 4 && process.argv[2] === 'inspect';
+const inspection = require.main === module && process.argv[2] === 'inspect';
 if (inspection) {
+  if (process.argv.length !== 4) throw new Error('Expected one immutable release entry for inspect');
   const value = inspectRuntime(createRequire(process.argv[3]), process.argv[3], true);
   console.log(JSON.stringify({ release: value.release, contract: value.contract, files: value.files }));
 } else if (process.env.ZIMAGE_LIFECYCLE_ENABLED === '1') install();

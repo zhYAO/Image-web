@@ -46,8 +46,12 @@ class ReceiverEntry(unittest.TestCase):
         enter(patch.object(receive, 'TOOLS', root/('e'*64)))
         modules = {receive.LAYERS/'release-three-layer.py': bridge,
                    receive.BACKEND/'transaction.py': engine, receive.TOOLS/'check.py': checks}
+        self.space = Mock()
+        modules[receive.TOOLS/'space.py'] = self.space
         enter(patch.object(management, 'load', side_effect=lambda path, name: modules[path]))
-        enter(patch.object(management, 'owned'))  # Test directory is owned by the local user.
+        self.owned = enter(patch.object(management, 'owned'))  # Test directory is owned by the local user.
+        enter(patch.object(receive.shutil, 'which', return_value=str(Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'))))
+        self.bridge = bridge
         enter(patch.object(management, 'service_launch_preflight'))
         enter(patch.object(receive, 'load', return_value=management))
         enter(patch.multiple(receive, ROOT=root, ETC=etc, JOURNAL=self.journal))
@@ -103,6 +107,16 @@ class ReceiverEntry(unittest.TestCase):
         self.prepare.assert_not_called()
         self.activate.assert_not_called()
 
+    def test_untrusted_node_prevents_receipt_and_target_check(self):
+        def owned(path, **kwargs):
+            if path == Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'):
+                raise ValueError('Untrusted root-managed backend path')
+        self.owned.side_effect = owned
+        with self.assertRaisesRegex(ValueError, 'Untrusted root-managed'):
+            self.receive('committed', PREVIOUS_CANDIDATE)
+        self.gh.assert_not_called()
+        self.bridge.Adapter.assert_not_called()
+
     def test_terminal_phase_selects_matching_live_pair_and_tree(self):
         for phase, live, tree in [('committed', PREVIOUS_CANDIDATE, NEW_TREE), ('restored', RETAINED, OLD_TREE)]:
             with self.subTest(phase=phase):
@@ -110,6 +124,14 @@ class ReceiverEntry(unittest.TestCase):
                 self.assertEqual(self.prepare.call_args.args[0].old_migrations, tree)
                 self.assertEqual(self.activate.call_args.args[1:], (live, (INCOMING, 'release-'+INCOMING), 19))
         self.assertEqual(sum(call.args[0][1:3] == ['attestation', 'verify'] for call in self.gh.call_args_list), 2)
+
+    def test_insufficient_space_for_retained_version_stops_before_switching(self):
+        self.space.check_headroom.side_effect = ValueError('Insufficient verification headroom')
+        with self.assertRaisesRegex(ValueError, 'Insufficient verification headroom'):
+            self.receive('restored', RETAINED)
+        self.assertEqual(self.space.check_headroom.call_args.args[2:4], (INCOMING, RETAINED[0]))
+        self.activate.assert_not_called()
+        self.assertEqual(json.loads(self.journal.read_text())['phase'], 'restored')
 
     def test_certificate_identity_required_before_archive_or_journal_is_used(self):
         for cert in [{}, {'sourceRepositoryIdentifier': '1329578391'}]:

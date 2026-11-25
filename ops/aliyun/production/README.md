@@ -17,6 +17,8 @@
 
    对应 sudoers 规则仅含 `zimage-release ALL=(root) NOPASSWD: /usr/bin/python3 -I -B /usr/local/libexec/zimage-production/versions/<KIT_ID>/kit.py`。默认 `env_reset`，不授予 SETENV。接收端忽略原始 SSH 命令和任意远程路径参数。
 
+   若主机已用 `Match User zimage-release` 指定 `ForceCommand`，须同时更新它引用的版本。`sshd -t`、真实来源条件的 `sshd -T -C` 和 `visudo -c` 均应通过，核对发布公钥指纹、禁密码/交互认证、禁转发、禁终端及用户 rc。`nologin` 可用于仅认证排查，不能执行正式外部强制命令。先落实并验证强制限制，再在维护窗口调整专用账户 shell；不改其他账户。
+
 3. 从独立审阅的提交运行 `python3 -I -B ops/aliyun/production/kit.py digest` 记录 `KIT_ID`。该 SHA-256 标识接收器、preload、Next profile 和所有依赖助手的名称及字节。可先在私有临时目录执行 `python3 -I -B ops/aliyun/production/kit.py stage "$KIT_ID" "$EMPTY_PARENT"` 核对布局。经单独授权后，管理员在可信控制台创建 root 管理、模式 0755 的 `/usr/local/libexec/zimage-production/versions`，从独立核对过的管理员只读源码目录执行同一条 stage 命令，父目录改为上述绝对路径。目标版本已存在时命令退出。密钥强制命令与 sudoers 中的 `<KIT_ID>` 均须替换为完整的同一摘要。每次进入接收器前，入口检查完整目录清单、UID、权限、链接和摘要。发送方从实际合并提交计算相同摘要。接收端比较固定安装目录的摘要后才读取归档；只有接收器文件变化才需要审批新版本。
 
    先保留原助手、原 systemd 配置和旧应用。单独批准维护窗口后，为现有 `zimage.service` 添加新的独立 drop-in，沿用现有用户、工作目录、资源 EnvironmentFile 和专用 Node。只替换 ExecStart 中的 preload。下例的 `<KIT_ID>` 由管理员写为字面摘要。

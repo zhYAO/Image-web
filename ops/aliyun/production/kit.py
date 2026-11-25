@@ -10,7 +10,7 @@ import tempfile
 
 VERSIONS = Path('/usr/local/libexec/zimage-production/versions')
 FILES = {
-    **{name: 'production/'+name for name in ('kit.py', 'receive.py', 'check.py')},
+    **{name: 'production/'+name for name in ('kit.py', 'receive.py', 'check.py', 'space.py')},
     **{'backend/'+name: 'backend/'+name for name in
        ('release.py', 'transaction.py', 'http-admission.cjs', 'next-source-profiles.json')},
     **{'layers/'+name: name for name in ('release-three-layer.py', 'release.py', 'release-layers.py',

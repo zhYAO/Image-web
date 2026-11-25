@@ -79,6 +79,7 @@ class ReceiverKitTests(unittest.TestCase):
             stack.enter_context(patch.multiple(receive, ROOT=root, ETC=root))
             stack.enter_context(patch.object(receive, 'load', return_value=management))
             stack.enter_context(patch.object(receive, 'target_policy'))
+            stack.enter_context(patch.object(receive.shutil, 'which', return_value=str(receive.NODE)))
             process = stack.enter_context(patch.object(receive.Host, 'process'))
             query = stack.enter_context(patch.object(receive.subprocess, 'check_output', side_effect=[
                 version, flags, json.dumps(dict(release=sha, contract=contract)), version, flags,
@@ -89,6 +90,26 @@ class ReceiverKitTests(unittest.TestCase):
             self.assertEqual(process.call_count, 2)
             self.assertEqual(query.call_args.args[0][2], 'inspect')
             management.SystemOps.assert_called_with(None, None, preload=receive.PRELOAD)
+
+    def test_admin_check_rejects_fallback_node_before_target_probe(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root = Path(tmp)
+            (root/'production-trusted-root.jsonl').write_text('{"certificateAuthorities":[{}]}')
+            management = Mock()
+            bridge = management.load.return_value
+            bridge.safe_node_environment.side_effect = nullcontext
+            stack.enter_context(patch.object(receive, 'load', return_value=management))
+            stack.enter_context(patch.object(receive, 'ETC', root))
+            stack.enter_context(patch.object(receive, 'target_policy'))
+            stack.enter_context(patch.object(receive.shutil, 'which', return_value='/usr/bin/node'))
+            query = stack.enter_context(patch.object(receive.subprocess, 'check_output', side_effect=[
+                'gh version 2.102.0', '--repo --signer-workflow --source-ref --source-digest --signer-digest '
+                '--deny-self-hosted-runners --bundle --custom-trusted-root --format']))
+            with self.assertRaisesRegex(ValueError, 'dedicated Node'):
+                receive.check_installation()
+            management.owned.assert_any_call(Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'))
+            bridge.enabled_target_check.assert_not_called()
+            self.assertEqual(query.call_count, 2)
 
     def test_installed_admin_check_rejects_unpatched_verifier(self):
         with patch.object(receive, 'load') as load, patch.object(receive.subprocess, 'check_output',

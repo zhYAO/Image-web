@@ -167,6 +167,29 @@ test('upgrade and CONNECT output finish cannot release an inbound half-open tunn
   }
 });
 
+test('artifact inspection derives the real Next profile using resolution only', () => {
+  const next = createRequire(resolve(__dirname, '../../../apps/web/package.json'));
+  const { inspectRuntime, SOURCE_PROFILES } = require('./http-admission.cjs');
+  const inspected = inspectRuntime({ resolve: next.resolve }, undefined, false);
+  assert.deepEqual(inspected.contract, { protocolVersion: 2, nextVersion: '16.4.5', sourceProfile: SOURCE_PROFILES.candidateProfile });
+  for (const file of [inspected.packagePath, inspected.publicEntry, ...Object.values(inspected.paths)]) {
+    assert.equal(require.cache[file], undefined, `inspected file loaded: ${file}`);
+  }
+});
+
+test('strict inspection refuses external metadata before reading artifact bytes', t => {
+  const fs = require('node:fs');
+  const entry = `/opt/zimage/releases/${'a'.repeat(40)}/apps/web/server.js`;
+  t.mock.method(fs, 'realpathSync', file => file.replaceAll('\\', '/'));
+  t.mock.method(fs, 'lstatSync', file => ({ uid: 0, mode: 0o755, isSymbolicLink: () => false,
+    isFile: () => /\.(js|cjs|json)$/.test(file), isDirectory: () => !/\.(js|cjs|json)$/.test(file) }));
+  const read = t.mock.method(fs, 'readFileSync', () => assert.fail('read before validation'));
+  assert.throws(() => require('./http-admission.cjs').inspectRuntime({
+    resolve: () => '/other/node_modules/next/package.json',
+  }, entry, true), /escapes immutable release/);
+  assert.equal(read.mock.callCount(), 0);
+});
+
 test('actual audited Next stale image response stays counted through delayed fetch, WASM render, and cache write', async t => {
   const nextRequire = createRequire(resolve(__dirname, '../../../apps/web/package.json'));
   const f = await fixture(t, async (_req, res) => { const cached = await operation; res.end(cached.value.buffer); });

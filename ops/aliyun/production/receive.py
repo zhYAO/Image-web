@@ -15,6 +15,7 @@ import tempfile
 import time
 
 ROOT = Path('/opt/zimage')
+NODE = ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
 ETC = Path('/etc/zimage')
 TOOLS = Path(__file__).absolute().parent
 BACKEND = TOOLS/'backend'
@@ -45,6 +46,13 @@ def target_policy(management):
     instance = Path('/var/lib/cloud/data/instance-id').read_text().strip()
     require(review['instanceId'] == instance and re.fullmatch(r'i-[a-zA-Z0-9]+', instance), 'Wrong ECS instance')
     return review
+
+
+def check_node(management):
+    # owned() rejects symlinks and checks the regular file and every ancestor.
+    management.owned(NODE)
+    # Layer target probes invoke "node" on safe_node_environment's fixed PATH.
+    require(shutil.which('node') == str(NODE), 'Target probes require the executable dedicated Node')
 
 
 def read_exact(stream, dest, size, digest=None):
@@ -238,7 +246,7 @@ class Host:
     @staticmethod
     def process(sha, pid):
         proc = Path('/proc')/str(pid)
-        require((proc/'exe').resolve(strict=True) == ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
+        require((proc/'exe').resolve(strict=True) == NODE
                 and (proc/'cwd').resolve(strict=True) == ROOT/'releases'/sha/'apps/web',
                 'Service PID does not run the selected release with dedicated Node')
 
@@ -387,6 +395,7 @@ def check_installation():
             'Missing Sigstore certificate authorities')
     target_policy(management)
     with bridge.safe_node_environment():
+        check_node(management)
         bridge.enabled_target_check()
         bridge.service_preflight()
         management.service_launch_preflight(PRELOAD)
@@ -397,8 +406,7 @@ def check_installation():
                 and state.get('backendRelease') == target.name and state.get('admissionMode') == 'open'
                 and state.get('controlValid') is True, 'Current release or admission status differs')
         Host.process(target.name, state['pid'])
-        node = ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
-        inspection = json.loads(subprocess.check_output([str(node), str(PRELOAD), 'inspect',
+        inspection = json.loads(subprocess.check_output([str(NODE), str(PRELOAD), 'inspect',
                                                         str(target/'apps/web/server.js')], timeout=30))
         framework = state['httpAdmission']['frameworkWork']
         require(inspection['release'] == target.name and framework == dict(inspection['contract'], installed=True,
@@ -424,6 +432,7 @@ def main():
     proof_size, size = int(match[3]), int(match[4])
     require(0 < proof_size <= 1024*1024 and 0 < size <= MAX_PAIR, 'Transfer exceeds bound')
     with bridge.safe_node_environment(), tempfile.TemporaryDirectory(dir=ROOT) as name:
+        check_node(management)
         layers, legacy = bridge.load_tools(strict=True)
         adapter = bridge.Adapter(ROOT, layers, legacy)
         with adapter.locked():
@@ -436,6 +445,8 @@ def main():
             old = host.preflight(sha, meta)
             new = (sha, 'release-'+sha)
             host.prepare(tmp, new, meta)
+            space = management.load(TOOLS/'space.py', 'production_space')
+            space.check_headroom(ROOT, ETC, sha, old[0], management)
             return activate(host, old, new, meta['run'])
 
 
