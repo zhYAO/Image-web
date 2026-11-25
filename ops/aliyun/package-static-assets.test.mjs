@@ -11,7 +11,7 @@ const script = fileURLToPath(new URL('./package-static-assets.mjs', import.meta.
 const externalFonts = process.env.ZIMAGE_SHARED_FONT_DIR;
 if (!externalFonts) throw new Error('Configure ZIMAGE_SHARED_FONT_DIR before tests');
 const policy = JSON.parse(await readFile(new URL('./release-public-policy.json', import.meta.url), 'utf8'));
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQcGhIAwACqwFHN6327AAAAABJRU5ErkJggg==', 'base64');
 const digest = value => createHash('sha256').update(value).digest('hex');
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'zimage-static-assets-test-'));
