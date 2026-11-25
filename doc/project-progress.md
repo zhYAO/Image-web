@@ -1379,3 +1379,12 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - ZIMAGE_GEMINI_IMAGE_MODEL及所有其他条目字节保持；权限、UID/GID、inode、flags和ACL不变，完整记录语法校验通过。未输出/复制密钥值或创建含值备份。
 - 前一步Sentry四项删除已完成并验证，本轮不改SDK、生产配置或云端Secret，不执行服务重启、部署或付费调用。当前状态取代前一条“Gemini保留待确认”的待办状态。
 - 证据：/Users/zhaoyao/Documents/Codex/2026-11-05/task/verification/gemini-env-removal-proof.json；Sentry证据为同目录sentry-env-removal-proof.json。两次原位修改都仅删除各自授权记录，应用源码和原分支/HEAD保持。
+
+### 2026-11-25 GitHub 合并后自动发布到上海 ECS：链路打通
+
+- 工作流收敛为两条：`pr-build.yml` 保留同名必需检查 `zimage-release-pr-required`，`production.yml` 只接受受保护 `main` 的合并提交。审计版 `ci.yml`、`production-ssh-identity.yml`、旧 candidate ZIP 通道及其失效测试已删除，仍有价值的深检迁入 PR 工作流。
+- 修复三处让检查失真的问题：`test_runtime_reuse.py`、`test_verify_session.py` 把临时目录写死为 macOS 的 `/private/tmp`，在 Ubuntu runner 上整组用例直接报错；`credits.test.sql`、`phase1_preview_guards.test.sql` 仍断言 minimax 默认开启和旧聊天计费入口，而 11-06 的迁移已退役 minimax、改为按已验证 token 结算且费率需人工审批。旧 `database` job 只在手动触发且常被前面的失败跳过，因此 `main` 自 11-06 起一直是红的。
+- 数据库回归现在在 PR 上执行：深检按变更范围触发，范围不明跑全量；生成类型写入 `$RUNNER_TEMP` 后与仓库比对，并随运行上传以便复核。按本次生成结果更新 `apps/web/lib/supabase/database.generated.ts`，为纯新增 52 行。
+- ECS 一次性准备（不改动在役版本）：从官方 deb 安装 `gh 2.105.0`（校验 `1dac939af3e84fb3861927c984b357531341be9403b889e4aa86e8822145a09d`）；用 Linux/Git 原始字节执行 `kit.py digest` 得到 `1b7853ddf2d1a4c153a58c0c801777affe69487627c69ddc149f2aaf2d77d3af` 并 stage 到 `versions/`；写入 `/etc/zimage/production-target.json`（实例 `i-uf6d3nsuz3l4f5goyo48`，批准树 `04386967f003c2d6638558cd89fcdd722134e594`、`e5f52c2647048469bb929124b67eac0f33a6126e`）；sudoers 与 sshd `ForceCommand` 绑定同一 KIT_ID；维护窗口内封闭入口、把 preload 切到版本化 kit、重启原版本后复验，`kit.py check` 通过，公网六项契约与本地探针均通过。
+- 现场发现两处与发布无关但会挡住验收的主机问题：`mihomo` 的 fake-IP DNS 把整机所有域名解析到 `198.18.0.0/15`，主机因此访问不了自己的公网域名（应用出网走 127.0.0.1 代理端口，不受影响）；已在 `/etc/hosts` 固定 `47.100.222.24 www.zimage.store` 使 `check.py` 的公网探针可用。同一 DNS 也让 ECS 无法直连 GitHub，`gh` 安装改用自定义解析器下载并按官方摘要校验。
+- 仍未验收：首发 `committed` 后的真实 Edge 登录与 Turnstile 域名/密钥配对需单独走一次；公网证书 2026-12-16 到期，续期未验证；mihomo 的代理节点与 DNS 劫持本身未修复，只是绕开。
