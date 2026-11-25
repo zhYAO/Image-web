@@ -787,6 +787,10 @@ export type Database = {
         Args: { p_provider: string }
         Returns: boolean
       }
+      chat_usage_dispatch: {
+        Args: { p_action: string; p_input?: Json; p_user_id: string }
+        Returns: Json
+      }
       checkpoint_creative_batch_work: {
         Args: {
           p_batch_id: string
@@ -867,6 +871,10 @@ export type Database = {
         }
         Returns: Json
       }
+      commerce_package_dispatch: {
+        Args: { p_action: string; p_input?: Json; p_user_id: string }
+        Returns: Json
+      }
       commit_preview_usage: {
         Args: { p_business_key: string; p_user_id: string }
         Returns: boolean
@@ -901,8 +909,29 @@ export type Database = {
         Returns: Json
       }
       credit_admin: { Args: { p_input: Json }; Returns: Json }
+      credit_admin_before_openai: { Args: { p_input: Json }; Returns: Json }
       credit_dispatch: {
         Args: { p_action: string; p_input?: Json; p_user_id: string }
+        Returns: Json
+      }
+      doubao_chat_relay: {
+        Args: {
+          p_action: string
+          p_content?: string
+          p_model: string
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      doubao_text_relay: {
+        Args: {
+          p_action: string
+          p_operation: string
+          p_payload?: Json
+          p_request_id: string
+          p_user_id: string
+        }
         Returns: Json
       }
       fail_account_cleanup_job: {
@@ -954,6 +983,16 @@ export type Database = {
         Args: { p_generation_id: string }
         Returns: boolean
       }
+      openai_chat_relay: {
+        Args: {
+          p_action: string
+          p_content?: string
+          p_model: string
+          p_request_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       promote_commerce_reference: {
         Args: {
           p_generation_id: string
@@ -961,6 +1000,15 @@ export type Database = {
           p_request_id: string
           p_task_id: string
           p_user_id: string
+        }
+        Returns: Json
+      }
+      provider_diagnostic: {
+        Args: {
+          p_action: string
+          p_campaign_id: string
+          p_result?: Json
+          p_slot: string
         }
         Returns: Json
       }
@@ -985,6 +1033,10 @@ export type Database = {
           p_generation_id: string
         }
         Returns: undefined
+      }
+      recover_retired_text_operation: {
+        Args: { p_input: Json; p_user_id: string }
+        Returns: Json
       }
       recreate_image_generation: {
         Args: {
