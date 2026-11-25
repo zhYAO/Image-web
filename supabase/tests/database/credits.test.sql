@@ -24,30 +24,28 @@ select is((private.credit_quote(jsonb_build_array(pg_temp.item(),pg_temp.item('i
 create temporary table credit_test_state(k text primary key,v jsonb);
 create function pg_temp.keep(k text,v jsonb) returns void language sql as $$insert into credit_test_state values(k,v) on conflict(k) do update set v=excluded.v$$;
 create function pg_temp.state(k text) returns jsonb language sql as $$select v from credit_test_state where credit_test_state.k=$1$$;
-create function pg_temp.text_input(label text default 'text') returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'operation','chat','model','doubao','billing',jsonb_build_object('version','2026-10-12.1','totalMinor',2),'input',jsonb_build_object('message','hello'))$$;
+create function pg_temp.text_input(label text default 'text') returns jsonb language sql as $$select jsonb_build_object('requestId',pg_temp.uid(label),'operation','chat','model','doubao','billing',jsonb_build_object('version','2026-10-12.1','rateVersion','test-chat-v1','totalMinor',2),'input',jsonb_build_object('message','hello'))$$;
+-- Chat settles per verified token against an operator-approved rate and no
+-- rate ships enabled, so the unapproved path must fail closed before reserving.
+select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input())$$,'P0001','chat_tariff_unavailable','chat fails closed before a token rate is approved');
+insert into private.chat_usage_versions(version,tariff) values('test-chat-v1',jsonb_build_object('model','doubao','requestModel','doubao-seed-1.6','evidence','credits regression tariff approved for local tests','responseModels',jsonb_build_array('doubao-seed-1.6'),'inputPerMillionNano','10000000','cachedInputPerMillionNano','1000000','outputPerMillionNano','20000000','markupBps',0,'maxInputTokens',1024,'maxOutputTokens',8,'meteringVersion',3,'serviceTier','default'));
+update private.chat_usage_settings set enabled=true,version='test-chat-v1' where model='doubao';
+update private.provider_runtime_config set enabled=true where provider='doubao';
+select is(private.chat_usage_cap(private.chat_usage_config('doubao')),2::bigint,'the approved rate caps one turn at two minor units');
 select pg_temp.keep('text',pg_temp.call('text_start',pg_temp.text_input()));
-select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'text reservation');
+select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'text reservation holds the approved cap');
 select is(pg_temp.call('text_start',pg_temp.text_input())->>'id',pg_temp.state('text')->>'id','stable text request');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input(),'{input,message}','"different"'))$$,'P0001','idempotency_conflict','changed payload rejected');
-select ok((pg_temp.call('text_claim',pg_temp.text_input())->>'claimed')::boolean,'one model claim');
-select is(pg_temp.call('text_cancel',pg_temp.text_input())->>'status','processing','a concurrent preflight failure cannot refund a claimed request');
-select ok(not (pg_temp.call('text_claim',pg_temp.text_input())->>'claimed')::boolean,'duplicate claim denied');
-select pg_temp.call('text_result',pg_temp.text_input()||'{"result":{"content":"saved reply"}}');
-select throws_ok($$select pg_temp.call('text_refund',pg_temp.text_input())$$,'P0001','credit_result_must_complete','saved model result cannot be refunded by a late failure');
-select pg_temp.keep('completed',pg_temp.call('text_complete',pg_temp.text_input()));
-select is(pg_temp.call('text_complete',pg_temp.text_input())->>'result',pg_temp.state('completed')->>'result','completion replay returns same message');
+select ok((public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')->>'action')='start','one model claim');
+select throws_ok($$select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')$$,'P0001','relay_result_pending','duplicate claim denied');
+select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','usage_result',jsonb_build_object('content','saved reply','receipt',jsonb_build_object('providerRequestId','test-request-1','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005))::text);
+select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('text')))->>'status','succeeded','verified tokens settle the reservation');
+select is((pg_temp.call('wallet')->>'frozenMinor')::int,0,'settlement releases the whole cap');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,2,'text captured once');
 select is((select count(*)::int from public.timeline_items where session_id=(pg_temp.state('text')->>'session_id')::uuid),2,'one user and one assistant saved');
-select pg_temp.call('text_start',pg_temp.text_input('unknown'));
-select pg_temp.call('text_claim',pg_temp.text_input('unknown'));
-select pg_temp.call('text_unknown',pg_temp.text_input('unknown'));
-select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'unknown keeps freeze');
-select ok(not (pg_temp.call('text_claim',pg_temp.text_input('unknown'))->>'claimed')::boolean,'unknown never replays provider');
 select throws_ok($$select public.credit_dispatch(pg_temp.uid('other'),'text_complete',pg_temp.text_input())$$,'P0001','credit_operation_not_found','cross account denied');
 select pg_temp.call('text_start',pg_temp.text_input('failed'));
-select pg_temp.call('text_refund',pg_temp.text_input('failed'));
-select pg_temp.call('text_refund',pg_temp.text_input('failed'));
-select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'failed refund once');
+select is((pg_temp.call('wallet')->>'frozenMinor')::int,2,'an unsettled token reservation stays frozen');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input('badprice'),'{billing,totalMinor}','1'))$$,'P0001','credit_price_changed','tampered price rejected');
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input('oldprice'),'{billing,version}','"old"'))$$,'P0001','credit_price_changed','old price rejected');
 -- Real task admission and individual outcomes; no model or external queue service.
