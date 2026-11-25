@@ -1388,3 +1388,9 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - ECS 一次性准备（不改动在役版本）：从官方 deb 安装 `gh 2.105.0`（校验 `1dac939af3e84fb3861927c984b357531341be9403b889e4aa86e8822145a09d`）；用 Linux/Git 原始字节执行 `kit.py digest` 得到 `1b7853ddf2d1a4c153a58c0c801777affe69487627c69ddc149f2aaf2d77d3af` 并 stage 到 `versions/`；写入 `/etc/zimage/production-target.json`（实例 `i-uf6d3nsuz3l4f5goyo48`，批准树 `04386967f003c2d6638558cd89fcdd722134e594`、`e5f52c2647048469bb929124b67eac0f33a6126e`）；sudoers 与 sshd `ForceCommand` 绑定同一 KIT_ID；维护窗口内封闭入口、把 preload 切到版本化 kit、重启原版本后复验，`kit.py check` 通过，公网六项契约与本地探针均通过。
 - 现场发现两处与发布无关但会挡住验收的主机问题：`mihomo` 的 fake-IP DNS 把整机所有域名解析到 `198.18.0.0/15`，主机因此访问不了自己的公网域名（应用出网走 127.0.0.1 代理端口，不受影响）；已在 `/etc/hosts` 固定 `47.100.222.24 www.zimage.store` 使 `check.py` 的公网探针可用。同一 DNS 也让 ECS 无法直连 GitHub，`gh` 安装改用自定义解析器下载并按官方摘要校验。
 - 仍未验收：首发 `committed` 后的真实 Edge 登录与 Turnstile 域名/密钥配对需单独走一次；公网证书 2026-12-16 到期，续期未验证；mihomo 的代理节点与 DNS 劫持本身未修复，只是绕开。
+### 2026-11-25 首发投递：强制命令通道修正
+
+- 第一次 `publish` 在投递步骤失败，接收器从未执行：`zimage-release` 的登录 shell 是 `/usr/sbin/nologin`，而 sshd 通过账户 shell 执行 `ForceCommand`，于是 nologin 立即退出，发送端只看到 broken pipe，工作流记为 `unconfirmed`。ECS 上没有事务日志、没有入口标记残留，在役版本未变，可判定为未发送。
+- 修正：把该专用账户 shell 改为 `/bin/sh`（`ForceCommand`、`PermitTTY no`、`DisableForwarding yes`、密钥 `restrict`、禁密码认证均已核对），并在 sudoers 增加 `Defaults:zimage-release !use_pty`，避免二进制 stdin 经过伪终端。`visudo -c`、`sudo -n -l -U zimage-release` 通过。
+- 端到端验证：以该账户经 `sh -c` + `sudo -n` 执行 `kit.py`，115 字节合成报文被完整读入并走到 `gh attestation verify`（伪造 bundle 按预期被拒），证明 shell、sudo、二进制 stdin 与验签器均可用。
+- 说明：工作流对 `run_attempt != 1` 的重跑不授予发布权，因此首次上线需要一次新的受保护合并触发。
