@@ -4,6 +4,7 @@ from pathlib import Path
 import stat
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import Mock, patch
 
@@ -78,18 +79,53 @@ class ReceiverKitTests(unittest.TestCase):
             self.assertEqual(query.call_args.args[0][2], 'inspect')
             management.SystemOps.assert_called_with(None, None, preload=receive.PRELOAD)
 
-    def test_pr_merge_filter_matches_repository_base_and_exact_sha(self):
+    def test_pr_merge_gate_runs_the_workflow_step(self):
         workflow = (Path(__file__).resolve().parents[3]/'.github/workflows/production.yml').read_text()
-        line = next(x for x in workflow.splitlines() if 'jq -se ' in x)
-        expression = line[line.index("'")+1:line.rindex("'")]
+        job = workflow.split('\n  merged-pr:\n', 1)[1].split('\n  build-only:\n', 1)[0]
+        self.assertIn('        shell: bash\n', job)
+        step = textwrap.dedent(job.split('        run: |\n', 1)[1])
         sha, repo = 'c'*40, 'zhYAO/Image-web'
         pr = dict(merged_at='2026-01-01T00:00:00Z', merge_commit_sha=sha,
                   base=dict(ref='main', repo=dict(full_name=repo)))
-        for pages, accepted in [([[], [pr]], True), ([[]], False), ([[dict(pr, merged_at=None)]], False),
-                                ([[dict(pr, merge_commit_sha='d'*40)]], False),
-                                ([[dict(pr, base=dict(pr['base'], ref='dev'))]], False),
-                                ([[dict(pr, base=dict(ref='main', repo=dict(full_name='elsewhere/repo')))]], False)]:
-            with self.subTest(pages=pages):
-                result = subprocess.run(['jq', '-se', '--arg', 'sha', sha, '--arg', 'repo', repo, expression],
-                                        input='\n'.join(map(json.dumps, pages)), text=True, capture_output=True)
-                self.assertEqual(result.returncode, 0 if accepted else 1)
+        match, empty = json.dumps([pr]), '[]'
+        mismatches = json.dumps([dict(pr, merged_at=None), dict(pr, merge_commit_sha='d'*40),
+                                 dict(pr, base=dict(pr['base'], ref='dev')),
+                                 dict(pr, base=dict(ref='main', repo=dict(full_name='elsewhere/repo')))])
+        # Only gh and sleep are replaced. Bash uses the same exit/pipefail flags as Actions.
+        stubs = '''
+gh() {
+  echo gh >> queries
+  [[ $# == 3 && $1 == api && $2 == --paginate &&
+     $3 == "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" ]] || return 91
+  local n
+  n=$(wc -l < queries)
+  cat "reply-$n" || return 92
+  return "$(cat "status-$n")"
+}
+sleep() { echo "$1" >> waits; }
+'''
+        # Each reply is gh's stdout (one array per page) plus its exit code.
+        for name, replies, success in [
+            ('first page', [(match+'\n'+empty, 0)], True),
+            ('delayed last page', [(empty, 0), (empty, 0), (empty+'\n'+match, 0)], True),
+            ('last attempt', [(empty, 0)]*4 + [(match, 0)], True),
+            ('no PR', [(empty, 0)]*5, False),
+            ('inexact PRs', [(mismatches, 0)]*5, False),
+            ('API failure', [('', 1)], False),
+            ('later page failed', [(empty, 0), (match, 1)], False),
+            ('invalid JSON', [(match+'\n[', 0)], False),
+            ('missing body', [('', 0)], False),
+            ('invalid page', [(match+'\n{}', 0)], False),
+        ]:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                for n, (reply, status) in enumerate(replies, 1):
+                    (root/f'reply-{n}').write_text(reply)
+                    (root/f'status-{n}').write_text(str(status))
+                (root/'waits').touch()
+                result = subprocess.run(['bash', '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stubs+step],
+                                        env=dict(PATH='/usr/bin:/bin', GITHUB_SHA=sha, GITHUB_REPOSITORY=repo),
+                                        cwd=root, text=True, capture_output=True, timeout=5)
+                self.assertEqual(result.returncode == 0, success, result.stderr)
+                self.assertEqual((root/'queries').read_text().splitlines(), ['gh']*len(replies))
+                self.assertEqual((root/'waits').read_text().splitlines(), ['2', '4', '8', '16'][:len(replies)-1])

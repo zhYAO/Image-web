@@ -22,8 +22,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" |
-            jq -se --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" 'any(.[][]; .merged_at and .merge_commit_sha == $sha and .base.ref == "main" and .base.repo.full_name == $repo)'
+          for delay in 0 2 4 8 16; do
+            if (( delay )); then
+              echo "No matching merged PR yet; retrying in ${delay}s."
+              sleep "$delay"
+            fi
+            matched=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" |
+              jq -s --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" '
+                if length == 0 or any(.[]; type != "array") then error("invalid commit PR response")
+                else any(.[][]; .merged_at and .merge_commit_sha == $sha and .base.ref == "main" and .base.repo.full_name == $repo)
+                end')
+            if [[ $matched == true ]]; then exit 0; fi
+          done
+          echo "::error::No matching merged PR into main for $GITHUB_SHA after 5 queries."
+          exit 1
 
   build-only:
     needs: merged-pr
