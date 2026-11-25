@@ -28,7 +28,7 @@ create function pg_temp.text_input(label text default 'text') returns jsonb lang
 -- Chat settles per verified token against an operator-approved rate and no
 -- rate ships enabled, so the unapproved path must fail closed before reserving.
 select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input())$$,'P0001','chat_tariff_unavailable','chat fails closed before a token rate is approved');
-insert into private.chat_usage_versions(version,tariff) values('test-chat-v1',jsonb_build_object('model','doubao','requestModel','doubao-seed-1.6','evidence','credits regression tariff approved for local tests','responseModels',jsonb_build_array('doubao-seed-1.6'),'inputPerMillionNano','10000000','cachedInputPerMillionNano','1000000','outputPerMillionNano','20000000','markupBps',0,'maxInputTokens',1024,'maxOutputTokens',8,'meteringVersion',3,'serviceTier','default'));
+insert into private.chat_usage_versions(version,tariff) values('test-chat-v1',jsonb_build_object('model','doubao','requestModel','doubao-seed-1.6','evidence','credits regression tariff approved for local tests','responseModels',jsonb_build_array('doubao-seed-1.6'),'inputPerMillionNano','10000000000','cachedInputPerMillionNano','1000000000','outputPerMillionNano','10000000000','markupBps',0,'maxInputTokens',1024,'maxOutputTokens',8,'meteringVersion',3,'serviceTier','default'));
 update private.chat_usage_settings set enabled=true,version='test-chat-v1' where model='doubao';
 update private.provider_runtime_config set enabled=true where provider='doubao';
 select is(private.chat_usage_cap(private.chat_usage_config('doubao')),2::bigint,'the approved rate caps one turn at two minor units');
@@ -38,7 +38,7 @@ select is(pg_temp.call('text_start',pg_temp.text_input())->>'id',pg_temp.state('
 select throws_ok($$select pg_temp.call('text_start',jsonb_set(pg_temp.text_input(),'{input,message}','"different"'))$$,'P0001','idempotency_conflict','changed payload rejected');
 select ok((public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')->>'action')='start','one model claim');
 select throws_ok($$select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','claim')$$,'P0001','relay_result_pending','duplicate claim denied');
-select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','usage_result',jsonb_build_object('content','saved reply','receipt',jsonb_build_object('providerRequestId','test-request-1','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005))::text);
+select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('text'),'doubao','usage_result',jsonb_build_object('content','saved reply','receipt',jsonb_build_object('providerRequestId','test-request-1','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
 select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('text')))->>'status','succeeded','verified tokens settle the reservation');
 select is((pg_temp.call('wallet')->>'frozenMinor')::int,0,'settlement releases the whole cap');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,2,'text captured once');
@@ -118,7 +118,7 @@ select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('stale-af
 -- A pause rejects new charges but still completes an already-frozen turn; the
 -- reservation keeps the rate it was created under.
 update private.credit_settings set enabled=false;
-select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','usage_result',jsonb_build_object('content','Recovered existing output','receipt',jsonb_build_object('providerRequestId','test-request-2','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005))::text);
+select public.openai_chat_relay(pg_temp.uid(),pg_temp.uid('unknown'),'doubao','usage_result',jsonb_build_object('content','Recovered existing output','receipt',jsonb_build_object('providerRequestId','test-request-2','finishReason','stop','resolvedModel','doubao-seed-1.6','inputTokens',1000,'outputTokens',5,'cachedInputTokens',0,'totalTokens',1005,'meteringVersion',3,'serviceTier','default'))::text);
 select is(public.chat_usage_dispatch(pg_temp.uid(),'complete',jsonb_build_object('requestId',pg_temp.uid('unknown')))->>'status','succeeded','pause continues frozen text settlement');
 select is((pg_temp.call('wallet')->>'spentMinor')::int,34,'recovered prior output uses original price');
 select throws_ok($$select pg_temp.call('text_start',pg_temp.text_input('paused-new'))$$,'P0001','credit_price_changed','pause blocks new model charges');
