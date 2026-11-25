@@ -1,7 +1,7 @@
-"""Opt-in pre-upload smoke of the exact locally produced candidate, without a rebuild.
+"""Check a local layer store against an independently supplied SHA, manifest digest and target.
 
-No production transport/activation, package installation, build or artifact upload.
-Linux execution is opt-in and has NOT been validated merely by local unit tests.
+`check` is read-only. `linux` additionally boots that package on a disposable,
+isolated Linux builder. Both use the trusted checkout's validation tools.
 """
 import argparse
 import errno
@@ -26,20 +26,10 @@ SOURCE = EPOCH = ENTRY = EXPECTED_FRAMEWORK = None
 RUNTIME = dict(node='24.19.0', abi='137', platform='linux', arch='x64', libc='glibc-2.35')
 NODE = '/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
 PRELOAD = '/usr/local/libexec/zimage-backend/http-admission.cjs'
-RECEIPT = '.lifecycle-selection.json'
 UID = 65534
-VALIDATOR_HASHES = {
-    "candidate-artifact.py": "9196b67b6be9010e42918ed6d37e6065978781d98018e17cac79c4222272ec21",
-    "release-transport.py": "328c05956aa4500b908a1876210b0a9085e86642b56a65cf8609408dc8b5591e",
-    "three-layer-release.py": "729128de620b6e08067e4ff00527b02f3151706084ba51e9017a37318cb9bfb3",
-    "release-layers.py": "6de9dfa5b6663382c61c209c46a7bad2c8d8543b008ab9e770067d0f98731149",
-    "release-public-policy.json": "84e6308c0570f2048846eab38becb478663b11a6cf3296506af07a72d0abed97"
-}
-COMPANION_HASHES = {
-    "http-admission.cjs": "f52d6b4d41590b95eaf398ab5c72ecc49f77865e50b790c872b436ed971e13d9",
-    "next-source-profiles.json": "5849a8324eff64ed7ec6c385c929d52188d7a5cbdf29e74e10a66f65f74d6936"
-}
-REVIEWED_PROFILE = 'sha256:e2b48b0ee58bbe42bb949922fac6252d881f3d62e24a689b61a67ccf5ed32e62'
+_spec = importlib.util.spec_from_file_location('smoke_transport', HERE / 'release-transport.py')
+transport = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(transport)
 
 
 class SmokeFailure(ValueError):
@@ -51,116 +41,28 @@ def require(ok, message):
         raise SmokeFailure(message)
 
 
-def digest(path):
-    result = hashlib.sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            result.update(chunk)
-    return result.hexdigest()
-
-
-def load(name):
-    require(name in ('candidate-artifact','release-transport'), 'Unreviewed validator entry')
-    for filename, checksum in VALIDATOR_HASHES.items():
-        require(digest(HERE / filename) == checksum, 'Reviewed validator source changed')
-    spec = importlib.util.spec_from_file_location('smoke_' + name, HERE / (name + '.py'))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def identity(source, run, attempt, transport_sha):
-    require(isinstance(source, str) and re.fullmatch('[a-f0-9]{40}', source), 'Invalid expected source')
-    require(type(run) is int and run > 0 and type(attempt) is int and attempt > 0, 'Invalid expected run/attempt')
-    require(isinstance(transport_sha, str) and re.fullmatch('[a-f0-9]{64}', transport_sha), 'Invalid expected transport digest')
-    return dict(source=source, run_id=run, attempt=attempt, transport_sha256=transport_sha,
-                artifact_name=f'candidate-{source}-{run}-{attempt}')
-
-
-def configure(expected, framework):
+def configure(source):
     global SOURCE, EPOCH, ENTRY, EXPECTED_FRAMEWORK
-    require(set(framework) == {'protocolVersion', 'nextVersion', 'sourceProfile'}
-            and type(framework['protocolVersion']) is int and framework['protocolVersion'] == 2
-            and isinstance(framework['nextVersion'], str)
-            and re.fullmatch(r'16\.4\.(0|[1-9][0-9]*)', framework['nextVersion'])
-            and int(framework['nextVersion'].split('.')[2]) <= 9007199254740991
-            and framework['sourceProfile'] == REVIEWED_PROFILE, 'Expected reviewed v2 contract required')
-    SOURCE = expected['source']
-    EPOCH = f"lifecycle-{expected['run_id']}-{expected['attempt']}"
+    require(re.fullmatch('[a-f0-9]{40}', source), 'Invalid expected source')
+    SOURCE = source
+    EPOCH = 'lifecycle-' + source
     ENTRY = f'/opt/zimage/releases/{SOURCE}/apps/web'
-    EXPECTED_FRAMEWORK = dict(framework)
+    # Expected framework comes from the trusted checkout, never the app's first status.
+    app = json.loads((HERE.parents[1] / 'apps/web/package.json').read_bytes())
+    catalog = json.loads((HERE / 'backend/next-source-profiles.json').read_bytes())
+    EXPECTED_FRAMEWORK = dict(protocolVersion=2, nextVersion=app['dependencies']['next'],
+                              sourceProfile=catalog['candidateProfile'])
 
 
-def provenance(metadata, report, expected, actual_digest):
-    require(actual_digest == expected['transport_sha256'], 'Independent transport digest mismatch')
-    require(type(metadata.get('schema')) is int and type(metadata.get('run_id')) is int
-            and type(metadata.get('attempt')) is int
-            and metadata == dict(schema=1, repository='zhYAO/Image-web', workflow='.github/workflows/ci.yml',
-        action='candidate', sha=expected['source'], run_id=expected['run_id'], attempt=expected['attempt'],
-        transport_sha256=actual_digest), 'Local candidate provenance mismatch')
-    require(type(report['schema']) is int and report['schema'] == 1 and report['releaseSha'] == expected['source'] and report['format'] == 'layers'
-            and report['productionReady'] is False
-            and re.fullmatch('[a-f0-9]{64}', report['pack']['manifestSha256']), 'Expected fresh layered report')
-
-
-def source_file(source, name):
-    return subprocess.check_output(['git', 'show', source + ':' + name])
-
-
-def prepare(delivery, target_file, selection, expected):
-    require(os.environ.get('GITHUB_REPOSITORY') == 'zhYAO/Image-web'
-            and os.environ.get('GITHUB_REF') == 'refs/heads/main'
-            and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
-            and os.environ.get('GITHUB_SHA') == expected['source']
-            and os.environ.get('GITHUB_RUN_ID') == str(expected['run_id'])
-            and os.environ.get('GITHUB_RUN_ATTEMPT') == str(expected['attempt']), 'Only this current-main candidate run is supported')
-    consumer, transport = load('candidate-artifact'), load('release-transport')
-    require(consumer.api('/commits/main')['sha'] == expected['source'], 'Main moved before lifecycle verification')
-    require(set(p.name for p in delivery.iterdir()) == consumer.FILES, 'Unexpected delivery entries')
-    require(not selection.exists(), 'Selection must be new')
-    selection.mkdir(mode=0o700)
-    files = {}
-    for name in sorted(consumer.FILES):
-        with consumer.local_file(delivery, name) as src, (selection / name).open('xb') as dst:
-            shutil.copyfileobj(src, dst)
-        files[name] = digest(selection / name)
-    metadata = transport.layers.parse((selection / 'candidate.json').read_bytes())
-    report = transport.layers.parse((selection / 'release-result.json').read_bytes())
-    provenance(metadata, report, expected, files['transport.tgz'])
-    target = transport.layers.parse(target_file.read_bytes())
-    transport.layers.validate_target_shape(target)
-    require(target['runtime'] == RUNTIME, 'Smoke requires the reviewed exact target runtime')
-    # Derive expectations from the checked-out commit, never the archive or first live status.
-    app = json.loads(source_file(expected['source'], 'apps/web/package.json'))
-    catalog = json.loads(source_file(expected['source'], 'ops/aliyun/backend/next-source-profiles.json'))
-    framework = dict(protocolVersion=2, nextVersion=app['dependencies']['next'], sourceProfile=catalog['candidateProfile'])
-    configure(expected, framework)
-    tools = {}
-    for name in ['http-admission.cjs', 'next-source-profiles.json']:
-        reviewed = source_file(SOURCE, 'ops/aliyun/backend/' + name)
-        require((HERE / 'backend' / name).read_bytes() == reviewed, 'Reviewed companion source changed during build')
-        tools[name] = hashlib.sha256(reviewed).hexdigest()
-    require(tools == COMPANION_HASHES, 'Companions differ from the audited v2 implementation')
-    receipt = dict(identity=expected, target=target, framework=framework, files=files, tools=tools)
-    (selection / RECEIPT).write_text(json.dumps(receipt))
-    print(json.dumps(dict(localCandidateVerified=True, source=SOURCE, artifactName=expected['artifact_name'],
-        transportSha256=expected['transport_sha256'], artifactUploaded=False, productionReady=False)))
-
-
-def recheck(delivery, target_file, selection, expected):
-    consumer, transport = load('candidate-artifact'), load('release-transport')
-    require(consumer.api('/commits/main')['sha'] == expected['source'], 'Main moved before upload')
-    receipt = json.loads((selection / RECEIPT).read_bytes())
-    require(receipt['identity'] == expected and set(receipt['files']) == consumer.FILES, 'Selection identity changed')
-    require(transport.layers.parse(target_file.read_bytes()) == receipt['target'], 'Target changed before upload')
-    require(set(p.name for p in delivery.iterdir()) == consumer.FILES, 'Upload delivery entries changed')
-    for name, checksum in receipt['files'].items():
-        with consumer.local_file(delivery, name) as src:
-            require(consumer.file_hash(src) == checksum, 'Delivery bytes changed before upload')
-    provenance(transport.layers.parse((delivery / 'candidate.json').read_bytes()),
-        transport.layers.parse((delivery / 'release-result.json').read_bytes()), expected, digest(delivery / 'transport.tgz'))
-    for name, checksum in receipt['tools'].items():
-        require(digest(HERE / 'backend' / name) == checksum, 'Companion source changed before upload')
+def check(store, target_file, source, manifest_sha):
+    require(re.fullmatch('[a-f0-9]{40}', source), 'Invalid expected source')
+    manifest_path = store / 'releases' / (source + '.json')
+    # request() checks every file's size and digest, the exact SHA path, and layer bindings.
+    verified = transport.request(store, manifest_path, manifest_sha)
+    body = transport.layers.read_regular(manifest_path)
+    require(hashlib.sha256(body).hexdigest() == manifest_sha, 'Manifest changed after validation')
+    target_binding(transport.layers.parse(body), transport.layers.parse(target_file.read_bytes()))
+    return dict(source=source, manifestSha256=manifest_sha, verifiedFiles=len(verified['files']), productionReady=False)
 
 
 def app_environment(environment):
@@ -169,11 +71,11 @@ def app_environment(environment):
                   HOSTNAME='127.0.0.1', PORT='3100', ZIMAGE_LIFECYCLE_ENABLED='1',
                   ZIMAGE_BUILD_SHA=SOURCE, NEXT_TELEMETRY_DISABLED='1',
                   NODE_OPTIONS='--max-old-space-size=640')
-    require(set(environment) == {'ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256'},
+    require(set(environment) in ({'ZIMAGE_STATIC_ASSET_SHA256'}, {'ZIMAGE_SHARED_FONT_DIR', 'ZIMAGE_STATIC_ASSET_SHA256'}),
             'Unexpected resource environment')
     require(re.fullmatch('[a-f0-9]{64}', environment['ZIMAGE_STATIC_ASSET_SHA256'])
-            and environment['ZIMAGE_SHARED_FONT_DIR'] == '/opt/zimage/layer-cache/assets/'
-                + environment['ZIMAGE_STATIC_ASSET_SHA256'] + '/fonts',
+            and ('ZIMAGE_SHARED_FONT_DIR' not in environment or environment['ZIMAGE_SHARED_FONT_DIR'] ==
+                 '/opt/zimage/layer-cache/assets/' + environment['ZIMAGE_STATIC_ASSET_SHA256'] + '/fonts'),
             'Invalid resource binding')
     return {**result, **environment}
 
@@ -186,7 +88,8 @@ def network_isolated(outer_namespace, interfaces, routes, current_namespace):
 
 
 def target_binding(manifest, target):
-    require(manifest['schema'] == 2 and manifest['distDir'] == '.next'
+    transport.layers.validate_target_shape(target)
+    require(manifest['schema'] in (2, 3) and manifest['distDir'] == '.next'
             and manifest['runtime'] == RUNTIME and manifest['assemblyCacheRoot'] == '/opt/zimage/layer-cache'
             and manifest['target'] == target, 'Manifest differs from independently supplied bound target')
 
@@ -381,7 +284,7 @@ def child_setup(root):
     os.umask(0o077)
 
 
-def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
+def linux(store, target_file, source, manifest_sha, node, outer_namespace, outer_mount_namespace):
     require(sys.platform == 'linux' and os.geteuid() == 0, 'Requires isolated Linux root supervisor')
     require(set(os.environ) == {'PATH', 'LC_ALL'} and os.environ['PATH'] == '/usr/bin:/bin'
             and os.environ['LC_ALL'] == 'C.UTF-8',
@@ -396,35 +299,24 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
     network_isolated(outer_namespace, [n for _, n in socket.if_nameindex()], routes,
                      os.readlink('/proc/self/ns/net'))
     subprocess.run(['/usr/sbin/ip', 'link', 'set', 'lo', 'up'], check=True, capture_output=True)
-    require(not Path('/opt/zimage').exists(), 'Ephemeral runner already contains a zimage tree')
+    require(not os.path.lexists('/opt/zimage'), 'Ephemeral runner already contains a zimage tree')
     require(node.is_absolute() and node.name == 'node', 'Expected explicit trusted Node binary')
+    info = node.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
+            'Writable/untrusted host runtime')
     fingerprint = json.loads(subprocess.check_output([str(node), '-e',
         "const h=process.report.getReport().header;console.log(JSON.stringify({node:process.versions.node,abi:process.versions.modules,platform:process.platform,arch:process.arch,libc:'glibc-'+h.glibcVersionRuntime}))"]))
     require(fingerprint == RUNTIME, 'Exact Linux/Node runtime mismatch')
-    consumer, transport = load('candidate-artifact'), load('release-transport')
-    receipt = json.loads((selection / RECEIPT).read_bytes())
-    require(receipt['identity'] == expected and set(receipt['files']) == consumer.FILES, 'Selection identity differs')
-    transport.layers.validate_target_shape(receipt['target'])
-    require(receipt['target']['runtime'] == RUNTIME, 'Reviewed target differs')
-    require(receipt['tools'] == COMPANION_HASHES, 'Audited companion digest differs')
-    configure(expected, receipt['framework'])
-    for name, checksum in receipt['tools'].items():
-        require(name in ('http-admission.cjs','next-source-profiles.json')
-                and digest(HERE / 'backend' / name) == checksum, 'Reviewed companion source changed')
-    require(set(receipt['tools']) == {'http-admission.cjs','next-source-profiles.json'}, 'Incomplete companion closure')
-    for name, checksum in receipt['files'].items():
-        with consumer.local_file(selection, name) as stream:
-            require(consumer.file_hash(stream) == checksum, 'Selected bytes changed')
-    report = transport.layers.parse((selection / 'release-result.json').read_bytes())
-    provenance(transport.layers.parse((selection / 'candidate.json').read_bytes()), report, expected, digest(selection / 'transport.tgz'))
+    checked = check(store, target_file, source, manifest_sha)
+    configure(source)
     with tempfile.TemporaryDirectory(prefix='zimage-artifact-smoke-') as work:
         work = Path(work)
-        store, root = work / 'store', work / 'root'
+        root = work / 'root'
         root.mkdir(mode=0o755)
-        manifest, body, provided = transport.unpack_bundle(selection / 'transport.tgz', store, SOURCE, report['pack']['manifestSha256'])
-        target_binding(manifest, receipt['target'])
-        require(set(provided) == set(transport.required_files(manifest, SOURCE, body)),
-                'Smoke requires the complete original schema-2 closure')
+        # The assembler requires the absolute cache binding. Only the private
+        # mount namespace sees this temporary root at /opt; the host never does.
+        (root / 'opt').mkdir()
+        subprocess.run(['/usr/bin/mount', '--bind', str(root / 'opt'), '/opt'], check=True, capture_output=True)
         # Original offline assembly, explicit local-only mode; no server adapter/activation.
         node_dir = work / 'node-bin'
         node_dir.mkdir()
@@ -432,9 +324,7 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
         os.environ['PATH'] = str(node_dir) + ':/usr/bin:/bin'
         assembled = transport.layers.assemble(store / 'releases' / (SOURCE + '.json'), store,
             Path('/opt/zimage/releases') / SOURCE, Path('/opt/zimage/layer-cache'),
-            report['pack']['manifestSha256'], True)
-        (root / 'opt').mkdir()
-        os.rename('/opt/zimage', root / 'opt/zimage')
+            manifest_sha, True)
         trusted_copy(node, root / NODE.lstrip('/'))
         # ldd is run only against the trusted setup-node binary, never candidate code.
         linked = subprocess.check_output(['/usr/bin/ldd', str(node)], text=True)
@@ -489,10 +379,9 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
                 require(status == 503 and value.get('code') == 'network'
                         and headers.get('retry-after') == '30', 'Protected-path barrier did not reject')
                 wait_status(root, app, 2, 'after_probes')
-                print(json.dumps(dict(source=SOURCE, artifactName=expected['artifact_name'], runtime=fingerprint, framework=EXPECTED_FRAMEWORK,
+                print(json.dumps(dict(**checked, runtime=fingerprint, framework=EXPECTED_FRAMEWORK,
                     exactArtifactBoot=True, privatePeerAndBridge=True, checkingBarrier=True,
-                    transportSha256=expected['transport_sha256'], artifactUploaded=False,
-                    outboundNetwork=False, productionReady=False, rollbackTested=False)))
+                    outboundNetwork=False, rollbackTested=False)))
             finally:
                 if app.poll() is None:
                     os.killpg(app.pid, 15)
@@ -506,26 +395,22 @@ def linux(selection, node, outer_namespace, outer_mount_namespace, expected):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
-    for command in ('prepare', 'recheck'):
+    for command in ('check', 'linux'):
         item = sub.add_parser(command)
-        item.add_argument('delivery', type=Path)
+        item.add_argument('store', type=Path)
         item.add_argument('target_file', type=Path)
-        item.add_argument('selection', type=Path)
-        for name in ('source', 'run', 'attempt', 'transport_sha'):
-            item.add_argument(name)
-    item = sub.add_parser('linux')
-    item.add_argument('selection', type=Path)
-    item.add_argument('node', type=Path)
-    item.add_argument('outer_namespace')
-    item.add_argument('outer_mount_namespace')
-    for name in ('source', 'run', 'attempt', 'transport_sha'):
-        item.add_argument(name)
+        item.add_argument('source')
+        item.add_argument('manifest_sha')
+        if command == 'linux':
+            item.add_argument('node', type=Path)
+            item.add_argument('outer_namespace')
+            item.add_argument('outer_mount_namespace')
     args = parser.parse_args()
-    expected = identity(args.source, int(args.run), int(args.attempt), args.transport_sha)
-    if args.command in ('prepare','recheck'):
-        globals()[args.command](args.delivery, args.target_file, args.selection, expected)
+    if args.command == 'check':
+        print(json.dumps(check(args.store, args.target_file, args.source, args.manifest_sha)))
     else:
-        linux(args.selection, args.node, args.outer_namespace, args.outer_mount_namespace, expected)
+        linux(args.store, args.target_file, args.source, args.manifest_sha,
+              args.node, args.outer_namespace, args.outer_mount_namespace)
 
 
 if __name__ == '__main__':

@@ -15,6 +15,7 @@ import tempfile
 import time
 
 ROOT = Path('/opt/zimage')
+NODE = ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
 ETC = Path('/etc/zimage')
 TOOLS = Path(__file__).absolute().parent
 BACKEND = TOOLS/'backend'
@@ -23,6 +24,8 @@ PRELOAD = BACKEND/'http-admission.cjs'
 JOURNAL = ROOT/'production-release.json'
 MAX_PAIR = 2_600_000_000
 REPO = 'zhYAO/Image-web'
+# Independently reviewed GitHub numeric ID, part of the administrator-pinned kit.
+REPOSITORY_ID = '1329578390'
 WORKFLOW = REPO+'/.github/workflows/production.yml'
 
 
@@ -45,6 +48,13 @@ def target_policy(management):
     return review
 
 
+def check_node(management):
+    # owned() rejects symlinks and checks the regular file and every ancestor.
+    management.owned(NODE)
+    # Layer target probes invoke "node" on safe_node_environment's fixed PATH.
+    require(shutil.which('node') == str(NODE), 'Target probes require the executable dedicated Node')
+
+
 def read_exact(stream, dest, size, digest=None):
     with dest.open('xb') as out:
         while size:
@@ -57,12 +67,23 @@ def read_exact(stream, dest, size, digest=None):
             size -= len(block)
 
 
+def check_gh_version():
+    version = subprocess.check_output(['/usr/bin/gh', '--version'], text=True, timeout=10)
+    match = re.fullmatch(r'gh version ([0-9]+)\.([0-9]+)\.([0-9]+)(?: \([^()\r\n]+\))?', version.partition('\n')[0])
+    require(match and tuple(map(int, match.groups())) >= (2, 102, 0), 'Require patched gh >= 2.102.0')
+
+
 def verify(archive, bundle, sha):
-    subprocess.run(['/usr/bin/gh', 'attestation', 'verify', str(archive), '--repo', REPO,
-                    '--signer-workflow', WORKFLOW, '--source-ref', 'refs/heads/main', '--source-digest', sha,
-                    '--signer-digest', sha, '--deny-self-hosted-runners', '--bundle', str(bundle),
-                    '--custom-trusted-root', str(ETC/'production-trusted-root.jsonl')],
-                   stdout=sys.stderr, check=True, timeout=120)
+    check_gh_version()
+    verified = json.loads(subprocess.check_output(
+        ['/usr/bin/gh', 'attestation', 'verify', str(archive), '--repo', REPO,
+         '--signer-workflow', WORKFLOW, '--source-ref', 'refs/heads/main', '--source-digest', sha,
+         '--signer-digest', sha, '--deny-self-hosted-runners', '--bundle', str(bundle),
+         '--custom-trusted-root', str(ETC/'production-trusted-root.jsonl'), '--format', 'json'], timeout=120))
+    # Only the verified certificate (not release.json, predicate or raw bundle) identifies the signer.
+    require(isinstance(verified, list) and verified and
+            all(row['verificationResult']['signature']['certificate'].get('sourceRepositoryIdentifier')
+                == REPOSITORY_ID for row in verified), 'Unverified or unexpected certificate repository ID')
 
 
 def unpack(archive, dest):
@@ -225,7 +246,7 @@ class Host:
     @staticmethod
     def process(sha, pid):
         proc = Path('/proc')/str(pid)
-        require((proc/'exe').resolve(strict=True) == ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
+        require((proc/'exe').resolve(strict=True) == NODE
                 and (proc/'cwd').resolve(strict=True) == ROOT/'releases'/sha/'apps/web',
                 'Service PID does not run the selected release with dedicated Node')
 
@@ -360,9 +381,10 @@ def check_installation():
     bridge.load_tools(strict=True)
     require(callable(getattr(bridge.Adapter, 'prepare_archive', None)), 'Missing layered preparation helper')
     management.owned(Path('/usr/bin/gh'))
+    check_gh_version()
     help_text = subprocess.check_output(['/usr/bin/gh', 'attestation', 'verify', '--help'], text=True, timeout=10)
     for flag in ('--repo', '--signer-workflow', '--source-ref', '--source-digest', '--signer-digest',
-                 '--deny-self-hosted-runners', '--bundle', '--custom-trusted-root'):
+                 '--deny-self-hosted-runners', '--bundle', '--custom-trusted-root', '--format'):
         require(re.search(r'(?<![\w-])'+flag+r'(?![\w-])', help_text), 'Installed gh lacks '+flag)
     trust = ETC/'production-trusted-root.jsonl'
     management.owned(trust)
@@ -373,6 +395,7 @@ def check_installation():
             'Missing Sigstore certificate authorities')
     target_policy(management)
     with bridge.safe_node_environment():
+        check_node(management)
         bridge.enabled_target_check()
         bridge.service_preflight()
         management.service_launch_preflight(PRELOAD)
@@ -383,8 +406,7 @@ def check_installation():
                 and state.get('backendRelease') == target.name and state.get('admissionMode') == 'open'
                 and state.get('controlValid') is True, 'Current release or admission status differs')
         Host.process(target.name, state['pid'])
-        node = ROOT/'trusted-toolchain/node-v24.19.0-linux-x64/bin/node'
-        inspection = json.loads(subprocess.check_output([str(node), str(PRELOAD), 'inspect',
+        inspection = json.loads(subprocess.check_output([str(NODE), str(PRELOAD), 'inspect',
                                                         str(target/'apps/web/server.js')], timeout=30))
         framework = state['httpAdmission']['frameworkWork']
         require(inspection['release'] == target.name and framework == dict(inspection['contract'], installed=True,
@@ -398,6 +420,7 @@ def main():
     bridge = management.load(LAYERS/'release-three-layer.py', 'production_layers')
     engine = management.load(BACKEND/'transaction.py', 'production_lifecycle')
     checks = management.load(TOOLS/'check.py', 'production_https')
+    management.owned(Path('/usr/bin/gh'))
     management.owned(ETC/'production-trusted-root.jsonl')
     management.owned(ROOT, directory=True)
     target_policy(management)  # Reject a copied installation before accepting archive bytes.
@@ -409,6 +432,7 @@ def main():
     proof_size, size = int(match[3]), int(match[4])
     require(0 < proof_size <= 1024*1024 and 0 < size <= MAX_PAIR, 'Transfer exceeds bound')
     with bridge.safe_node_environment(), tempfile.TemporaryDirectory(dir=ROOT) as name:
+        check_node(management)
         layers, legacy = bridge.load_tools(strict=True)
         adapter = bridge.Adapter(ROOT, layers, legacy)
         with adapter.locked():
@@ -421,6 +445,8 @@ def main():
             old = host.preflight(sha, meta)
             new = (sha, 'release-'+sha)
             host.prepare(tmp, new, meta)
+            space = management.load(TOOLS/'space.py', 'production_space')
+            space.check_headroom(ROOT, ETC, sha, old[0], management)
             return activate(host, old, new, meta['run'])
 
 

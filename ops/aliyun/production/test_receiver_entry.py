@@ -21,6 +21,31 @@ INCOMING = 'c'*40
 OLD_TREE, NEW_TREE = '1'*40, '2'*40
 
 
+class ReceiverNodeGuard(unittest.TestCase):
+    def test_untrusted_node_prevents_receipt_and_target_probe(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            root, kit = Path(tmp), 'e'*64
+            header = f'{kit} {INCOMING} 1 1\n'.encode()
+            stdin = SimpleNamespace(buffer=io.BytesIO(header+b'xx'))
+            isolated = SimpleNamespace(argv=['receive.py'], flags=SimpleNamespace(isolated=True), stdin=stdin)
+            management = Mock()
+            def owned(path, **kwargs):
+                if path == Path('/opt/zimage/trusted-toolchain/node-v24.19.0-linux-x64/bin/node'):
+                    raise ValueError('Untrusted root-managed backend path')
+            management.owned.side_effect = owned
+            bridge = management.load.return_value
+            bridge.safe_node_environment.side_effect = nullcontext
+            stack.enter_context(patch.multiple(receive, ROOT=root, TOOLS=root/kit, sys=isolated))
+            stack.enter_context(patch.object(receive.os, 'geteuid', return_value=0, create=True))
+            stack.enter_context(patch.object(receive.os, 'umask'))
+            stack.enter_context(patch.object(receive, 'load', return_value=management))
+            stack.enter_context(patch.object(receive, 'target_policy'))
+            with self.assertRaisesRegex(ValueError, 'Untrusted root-managed'):
+                receive.main()
+            self.assertEqual(stdin.buffer.tell(), len(header))
+            bridge.Adapter.assert_not_called()
+
+
 class ReceiverEntry(unittest.TestCase):
     def setUp(self):
         contexts = ExitStack()
@@ -46,8 +71,11 @@ class ReceiverEntry(unittest.TestCase):
         enter(patch.object(receive, 'TOOLS', root/('e'*64)))
         modules = {receive.LAYERS/'release-three-layer.py': bridge,
                    receive.BACKEND/'transaction.py': engine, receive.TOOLS/'check.py': checks}
+        self.space = Mock()
+        modules[receive.TOOLS/'space.py'] = self.space
         enter(patch.object(management, 'load', side_effect=lambda path, name: modules[path]))
         enter(patch.object(management, 'owned'))  # Test directory is owned by the local user.
+        enter(patch.object(receive.shutil, 'which', return_value=str(receive.NODE)))
         enter(patch.object(management, 'service_launch_preflight'))
         enter(patch.object(receive, 'load', return_value=management))
         enter(patch.multiple(receive, ROOT=root, ETC=etc, JOURNAL=self.journal))
@@ -60,16 +88,22 @@ class ReceiverEntry(unittest.TestCase):
         self.public = enter(patch.object(receive.Host, 'public'))
         self.prepare = enter(patch.object(receive.Host, 'prepare', autospec=True))
         self.activate = enter(patch.object(receive, 'activate', return_value=0))
-        # Replace only the external gh verifier with a content- and source-bound test signature.
-        self.verify = enter(patch.object(receive, 'verify', side_effect=self.verify_fixture))
+        # Exercise receive.verify as well. Replace only the external binary, never contact a signer.
+        self.certificate = {'sourceRepositoryIdentifier': '1329578390'}
+        self.gh = enter(patch.object(receive.subprocess, 'check_output', side_effect=self.gh_fixture))
 
     @staticmethod
     def proof(sha, body):
         return hmac.digest(b'offline receiver test fixture', sha.encode()+body, 'sha256')
 
-    def verify_fixture(self, archive, bundle, sha):
+    def gh_fixture(self, argv, **kwargs):
+        if argv == ['/usr/bin/gh', '--version']:
+            return 'gh version 2.102.0 (2026-10-01)'
+        self.assertEqual(argv[:3], ['/usr/bin/gh', 'attestation', 'verify'])
+        archive, bundle, sha = Path(argv[3]), Path(argv[argv.index('--bundle')+1]), argv[argv.index('--source-digest')+1]
         if not hmac.compare_digest(bundle.read_bytes(), self.proof(sha, archive.read_bytes())):
             raise ValueError('Fixture provenance rejected')
+        return json.dumps([{'verificationResult': {'signature': {'certificate': self.certificate}}}])
 
     def receive(self, phase, live, *, run=19, trusted=True, changes=None, kit_id='e'*64):
         self.current.return_value = live
@@ -93,7 +127,7 @@ class ReceiverEntry(unittest.TestCase):
     def test_signed_candidate_for_another_kit_is_rejected_before_archive(self):
         with self.assertRaisesRegex(ValueError, 'different receiver kit'):
             self.receive('committed', PREVIOUS_CANDIDATE, kit_id='f'*64)
-        self.verify.assert_not_called()
+        self.gh.assert_not_called()
         self.prepare.assert_not_called()
         self.activate.assert_not_called()
 
@@ -103,7 +137,26 @@ class ReceiverEntry(unittest.TestCase):
                 self.assertEqual(self.receive(phase, live), 0)
                 self.assertEqual(self.prepare.call_args.args[0].old_migrations, tree)
                 self.assertEqual(self.activate.call_args.args[1:], (live, (INCOMING, 'release-'+INCOMING), 19))
-        self.assertEqual(self.verify.call_count, 2)
+        self.assertEqual(sum(call.args[0][1:3] == ['attestation', 'verify'] for call in self.gh.call_args_list), 2)
+
+    def test_insufficient_space_for_retained_version_stops_before_switching(self):
+        self.space.check_headroom.side_effect = ValueError('Insufficient verification headroom')
+        with self.assertRaisesRegex(ValueError, 'Insufficient verification headroom'):
+            self.receive('restored', RETAINED)
+        self.assertEqual(self.space.check_headroom.call_args.args[2:4], (INCOMING, RETAINED[0]))
+        self.activate.assert_not_called()
+        self.assertEqual(json.loads(self.journal.read_text())['phase'], 'restored')
+
+    def test_certificate_identity_required_before_archive_or_journal_is_used(self):
+        for cert in [{}, {'sourceRepositoryIdentifier': '1329578391'}]:
+            with self.subTest(cert=cert), patch.object(receive, 'unpack') as unpack:
+                self.certificate = cert
+                with self.assertRaisesRegex(ValueError, 'certificate repository ID'):
+                    self.receive('committed', PREVIOUS_CANDIDATE)
+                unpack.assert_not_called()
+        self.current.assert_not_called()
+        self.prepare.assert_not_called()
+        self.activate.assert_not_called()
 
     def test_mismatched_and_superseded_restoration_rejected_before_prepare(self):
         for phase, live, run in [('committed', RETAINED, 19), ('restored', PREVIOUS_CANDIDATE, 19),

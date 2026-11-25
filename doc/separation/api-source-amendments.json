@@ -18,6 +18,13 @@
       "reason": "Bound upload ingestion before parsing and retain route-owned identity/cookie checks, GET/POST DTOs and durable reference intents."
     },
     {
+      "path": "/api/creative-tasks/mock-apparel-render",
+      "source": "apps/web/app/api/creative-tasks/mock-apparel-render/route.ts",
+      "beforeSha256": "8d0da8fc9ac7135a2e9cfe5aa8c46f52beafd434bc5f7467886391f081060cf9",
+      "afterSha256": "a91dfabcb75a12675638e043986190f9bd568485ad2c0bf09564c370e6ced14a",
+      "reason": "eec1f9b retired fixed-layout apparel rendering. POST retains the trusted-origin and local-mock guards, then returns 410 without reading multipart data. The separate download route is unchanged."
+    },
+    {
       "path": "/api/creative-text/optimize",
       "source": "apps/web/app/api/creative-text/optimize/route.ts",
       "beforeSha256": "d980214308fa1b2418062f3c3cb603427f2a6ecaed1ed03c9870a40c6f2ea4ec",

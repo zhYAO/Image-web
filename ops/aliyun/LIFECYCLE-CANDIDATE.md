@@ -1,4 +1,6 @@
-# Opt-in same-job lifecycle validation
+# Retired workflow: opt-in same-job lifecycle validation
+
+The optional Actions ZIP workflow described below has been retired. Current PR and main workflows use the [signed release pair](production/README.md). For an independently identified local layer store, `python3 -B ops/aliyun/lifecycle-smoke.py check STORE TARGET_JSON SOURCE_SHA MANIFEST_SHA256` is read-only; it neither selects nor deploys a remote artifact. The rest of this document records the historical design.
 
 Local review only, based on compatibility commit
 75b13b75ded14220b6024950b16cefc8255e830a. No workflow has run for this code.

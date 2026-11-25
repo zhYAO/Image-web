@@ -751,6 +751,38 @@ def filesystem_accounting(roots):
             'excludes': 'Store archives/indices and other releases; these are logical bytes, not filesystem block usage.'}
 
 
+def assemble_runtime(entries, cache, staging):
+    reused = {'hardlinkedBytes': 0, 'copiedBytes': 0, 'hardlinkedFiles': 0, 'copiedFiles': 0}
+    links = []
+    for entry in entries:
+        target = staging / entry['path']
+        if entry['type'] == 'symlink':
+            links.append((target, entry['target']))
+            continue
+        directory(target.parent)
+        original = cache / entry['path']
+        # Linking even briefly changes ctime on legacy releases sharing the Next inode.
+        # The last node_modules identifies the owning package in both flat and pnpm layouts.
+        package_path = ('/' + entry['path']).rpartition('/node_modules/')[2]
+        if not package_path.startswith('next/'):
+            try:
+                os.link(original, target)
+            except OSError as error:
+                if error.errno != errno.EXDEV:
+                    raise
+            else:
+                reused['hardlinkedBytes'] += entry['bytes']
+                reused['hardlinkedFiles'] += 1
+                continue
+        with original.open('rb') as source, target.open('xb') as output:
+            shutil.copyfileobj(source, output)
+        target.chmod(0o555 if entry['mode'] & 0o111 else 0o444)
+        reused['copiedBytes'] += entry['bytes']
+        reused['copiedFiles'] += 1
+    create_links(staging, links)
+    return reused
+
+
 def assemble(manifest_path, store, destination, cache, expected_digest, allow_sample):
     store = root_path(store)
     destination, cache = ancestors_safe(destination), ancestors_safe(cache)
@@ -830,30 +862,9 @@ def assemble(manifest_path, store, destination, cache, expected_digest, allow_sa
     cached = {kind: ensure_cache(cache, kind, manifest['layers'][kind]['identity'], archives[kind], indexes[kind], raw_assets if kind == 'assets' else None) for kind in ('runtime', 'assets')}
     directory(destination.parent)
     staging = Path(tempfile.mkdtemp(prefix='.' + destination.name + '.pending-', dir=destination.parent))
-    reused = {'hardlinkedBytes': 0, 'copiedBytes': 0, 'hardlinkedFiles': 0, 'copiedFiles': 0}
     try:
         extract(archives['code'], indexes['code'], staging)
-        links = []
-        for entry in indexes['runtime']:
-            target = staging / entry['path']
-            if entry['type'] == 'symlink':
-                links.append((target, entry['target']))
-                continue
-            directory(target.parent)
-            original = Path(cached['runtime']['directory']) / entry['path']
-            try:
-                os.link(original, target)
-                reused['hardlinkedBytes'] += entry['bytes']
-                reused['hardlinkedFiles'] += 1
-            except OSError as error:
-                if error.errno != errno.EXDEV:
-                    raise
-                with original.open('rb') as source, target.open('xb') as output:
-                    shutil.copyfileobj(source, output)
-                target.chmod(0o555 if entry['mode'] & 0o111 else 0o444)
-                reused['copiedBytes'] += entry['bytes']
-                reused['copiedFiles'] += 1
-        create_links(staging, links)
+        reused = assemble_runtime(indexes['runtime'], Path(cached['runtime']['directory']), staging)
         verify_tree(staging, combined, label='assembled app')
         if manifest['schema'] in (2, 3):
             validate_native_files(staging, combined, manifest['runtime'])

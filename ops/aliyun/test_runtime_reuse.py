@@ -31,10 +31,11 @@ class BindingGuards(unittest.TestCase):
     def test_absent_metadata_cannot_match_by_accident(self):
         with self.assertRaises(ValueError):REUSE.validate_reuse_bindings({},{})
 
+@unittest.skipUnless(os.name=='posix','Requires POSIX modes and real symlink assembly; Windows is not acceptance evidence')
 class RuntimeCopyGuards(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(REUSE,'runtime reuse adapter missing')
-        self.tmp=tempfile.TemporaryDirectory(prefix='runtime-reuse-',dir='/private/tmp')
+        self.tmp=tempfile.TemporaryDirectory(prefix='runtime-reuse-')
         self.base=Path(self.tmp.name).resolve()
         def cleanup():
             for root,dirs,files in os.walk(self.base):

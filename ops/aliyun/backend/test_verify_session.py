@@ -9,10 +9,11 @@ def load(name,path):
 session=load('verify_session_test_subject',SCRIPT)if SCRIPT.exists()else None
 fixtures=load('existing_verifier_fixture',REPO/'ops/aliyun/backend/test_verify.py')
 
+@unittest.skipUnless(os.name=='posix','Requires POSIX modes and real symlinks; Windows is not acceptance evidence')
 class LocalVerifierSessionTests(unittest.TestCase):
  def setUp(self):
   self.assertIsNotNone(session,'safe local session helper is missing')
-  self.tmp=tempfile.TemporaryDirectory(dir='/private/tmp');self.addCleanup(self.tmp.cleanup)
+  self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
   self.path=Path(self.tmp.name)/'session'
   self.helper=session.PrivateSession.create(self.path,'operation-1',{'a'*40},now=lambda:1001)
   self.fixture=fixtures.VerifierTests();self.fixture.setUp();self.req=self.fixture.request

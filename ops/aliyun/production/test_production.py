@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import io
 import json
 import os
@@ -168,15 +169,43 @@ class InputChecks(unittest.TestCase):
                 self.assertFalse((root/'frontend').exists())
 
     def test_verification_pins_workflow_ref_both_digests_and_host_trust(self):
-        with patch.object(subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'gh')) as run:
+        with patch.object(subprocess, 'check_output', side_effect=[
+                'gh version 2.102.0 (2026-10-01)', subprocess.CalledProcessError(1, 'gh')]) as run:
             with self.assertRaises(subprocess.CalledProcessError):
                 receive.verify(Path('pair.tar'), Path('bundle'), NEW[0])
         args = run.call_args.args[0]
         for flag, expected in [('--source-digest', NEW[0]), ('--signer-digest', NEW[0]),
-                               ('--source-ref', 'refs/heads/main'), ('--signer-workflow', receive.WORKFLOW),
-                               ('--custom-trusted-root', '/etc/zimage/production-trusted-root.jsonl')]:
+                               ('--source-ref', 'refs/heads/main'), ('--signer-workflow', 'zhYAO/Image-web/.github/workflows/production.yml'),
+                               ('--repo', 'zhYAO/Image-web'), ('--bundle', 'bundle'),
+                               ('--format', 'json'), ('--custom-trusted-root', str(Path('/etc/zimage/production-trusted-root.jsonl')))]:
             self.assertEqual(args[args.index(flag)+1], expected)
         self.assertIn('--deny-self-hosted-runners', args)
+
+    def test_offline_check_requires_every_verified_certificate_to_have_the_reviewed_id(self):
+        def row(cert):
+            # The envelope/statement are never a source of identity.
+            return {'attestation': {'sourceRepositoryIdentifier': '1329578390'},
+                    'verificationResult': {'statement': {'sourceRepositoryIdentifier': '1329578390'},
+                                           'signature': {'certificate': cert}}}
+        good = row({'sourceRepositoryIdentifier': '1329578390'})
+        for rows, valid in [([good], True), ([good, good], True), ([], False), ([row({})], False),
+                            ([row({'sourceRepositoryIdentifier': 1329578390})], False),
+                            ([good, row({'sourceRepositoryIdentifier': '123'})], False)]:
+            with self.subTest(rows=rows), patch.object(subprocess, 'check_output', side_effect=[
+                    'gh version 2.103.0 (2026-11-01)', json.dumps(rows)]):
+                if valid:
+                    receive.verify(Path('pair.tar'), Path('bundle'), NEW[0])
+                else:
+                    with self.assertRaisesRegex(ValueError, 'repository ID'):
+                        receive.verify(Path('pair.tar'), Path('bundle'), NEW[0])
+
+    def test_actual_verifier_rejects_old_or_unrecognized_gh_before_signature_check(self):
+        for version in ['gh version 2.99.99 (2026-01-01)', 'gh version 2.102.0-rc.1', 'not gh 2.102.0', '']:
+            with self.subTest(version=version), patch.object(subprocess, 'check_output', return_value=version) as run:
+                with self.assertRaisesRegex(ValueError, 'gh >= 2.102.0'):
+                    receive.verify(Path('pair.tar'), Path('bundle'), NEW[0])
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(run.call_args.args[0], ['/usr/bin/gh', '--version'])
 
     def test_network_exit_and_false_restoration_never_succeed(self):
         for code in (0, 20, 21, 255):
@@ -208,10 +237,73 @@ class InputChecks(unittest.TestCase):
 
 
 class Channel(unittest.TestCase):
+    def test_sender_pins_host_and_client_and_reports_only_confirmed_outcomes(self):
+        # OpenSSH expands the sender's actual options with -G; it never opens a network connection.
+        self.assertEqual(send.CLIENT_FINGERPRINT, 'SHA256:2KEGjp7U/rFuYaMGzq9WKQKv61ZDvbVKJSc1kqG+AyE')
+        popen = subprocess.Popen
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ('client', 'host'):
+                subprocess.run(['/usr/bin/ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(root/name)], check=True)
+            fingerprint = subprocess.check_output(['/usr/bin/ssh-keygen', '-lf', str(root/'client.pub'),
+                                                   '-E', 'sha256'], text=True).split()[1]
+            pin = ' '.join((root/'host.pub').read_text().split()[:2])
+            (root/'zimage-pair').mkdir()
+            (root/'zimage-pair/pair.tar').write_bytes(b'candidate')
+            (root/'bundle').write_bytes(b'proof')
+            accepted = [('before', OLD), ('candidate', NEW), ('live', NEW)]
+            rollback = [('before', OLD), ('restoration', OLD), ('restored-live', OLD)]
+            for name, host_key, client_id, phases, rc, outcome in [
+                    ('success', pin, fingerprint, accepted, 0, ('committed', 0)),
+                    ('verified recovery', pin, fingerprint, rollback, 20, ('restored', 20)),
+                    ('lost after acknowledgments', pin, fingerprint, accepted, 255, ('unconfirmed', 21)),
+                    ('incomplete recovery', pin, fingerprint, rollback[:-1], 20, ('unconfirmed', 21)),
+                    ('unordered recovery', pin, fingerprint, [rollback[0], rollback[-1]], 20, ('unconfirmed', 21)),
+                    ('different client', pin, 'unreviewed', [], 0, ('not-sent', 1)),
+                    ('malformed host key', 'ssh-ed25519 AAAA', fingerprint, [], 0, ('not-sent', 1)),
+                    ('extra host key', pin+'\n'+pin, fingerprint, [], 0, ('not-sent', 1))]:
+                directories = []
+                env = dict(SSH_KEY=(root/'client').read_text(), SSH_HOST_KEY=host_key, ECS_ADDRESS='192.0.2.10',
+                           GITHUB_SHA=NEW[0], RUNNER_TEMP=tmp, BUNDLE=str(root/'bundle'), GITHUB_OUTPUT=str(root/'output'))
+                def launch(argv, **kwargs):
+                    self.assertNotIn('SSH_KEY', os.environ)
+                    self.assertNotIn('SSH_KEY', kwargs['env'])
+                    if argv[0] == '/usr/bin/ssh-keygen':
+                        return popen(argv, **kwargs)
+                    self.assertEqual(argv[0], '/usr/bin/ssh')
+                    self.assertEqual(argv[-2:], ['--', 'zimage-release@192.0.2.10'])
+                    key = Path(argv[argv.index('-i')+1])
+                    directories.append(key.parent)
+                    if os.name == 'posix':
+                        self.assertEqual(key.stat().st_mode & 0o777, 0o600)
+                    with popen([argv[0], '-G', *argv[1:]], env=kwargs['env'], stdout=subprocess.PIPE,
+                               stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True) as expansion:
+                        stdout, stderr = expansion.communicate(timeout=5)
+                        self.assertEqual(expansion.returncode, 0, stderr)
+                    cfg = dict(line.split(' ', 1) for line in stdout.splitlines() if ' ' in line)
+                    for option, value in [('hostkeyalias', 'zimage-production'), ('hostkeyalgorithms', 'ssh-ed25519'),
+                            ('globalknownhostsfile', '/dev/null'), ('identityagent', 'none'), ('identitiesonly', 'yes'),
+                            ('clearallforwardings', 'yes'), ('forwardagent', 'no'), ('hostname', '192.0.2.10'),
+                            ('user', 'zimage-release'), ('port', '22')]:
+                        self.assertEqual(cfg[option], value)
+                    self.assertIn(cfg['stricthostkeychecking'], ('yes', 'true'))
+                    self.assertEqual(Path(cfg['userknownhostsfile']).read_text(), 'zimage-production '+pin+'\n')
+                    wire = ''.join(json.dumps([phase, *pair])+'\n' for phase, pair in phases).encode()
+                    return nullcontext(SimpleNamespace(stdin=io.BytesIO(), stdout=io.BytesIO(wire), wait=lambda: rc))
+                with self.subTest(case=name), patch.dict(os.environ, env), patch.object(send, 'probe'), \
+                        patch.object(send, 'CLIENT_FINGERPRINT', client_id), patch.object(subprocess, 'Popen', side_effect=launch):
+                    (root/'output').write_text('')
+                    self.assertEqual(send.main(), outcome[1])
+                    self.assertEqual((root/'output').read_text().strip(), 'phase='+outcome[0])
+                    self.assertEqual(len(directories), int(outcome[0] != 'not-sent'))
+                    self.assertFalse(any(directory.exists() for directory in directories))
+
     def test_verifier_rejects_before_unpack(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(receive, 'verify', side_effect=ValueError('untrusted')), \
+        verified = [{'verificationResult': {'signature': {'certificate': {'sourceRepositoryIdentifier': '123'}}}}]
+        with tempfile.TemporaryDirectory() as tmp, patch.object(subprocess, 'check_output', side_effect=[
+                'gh version 2.102.0', json.dumps(verified)]), \
                 patch.object(receive, 'unpack') as unpack:
-            with self.assertRaisesRegex(ValueError, 'untrusted'):
+            with self.assertRaisesRegex(ValueError, 'certificate repository ID'):
                 receive.receive_pair(io.BytesIO(b'proofarchive'), Path(tmp), NEW[0], 5, 7)
             unpack.assert_not_called()
 

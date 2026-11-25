@@ -1,23 +1,56 @@
-name: Build optimized release pair for review
+name: Check ZImage
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: zimage-check-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     name: zimage-release-pr-required
-    if: github.repository == 'zhYAO/Image-web' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
+      - name: Require a same-repository PR or a manual check on main
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [[ "$GITHUB_REPOSITORY" == zhYAO/Image-web ]]; then
+            case "$GITHUB_EVENT_NAME" in
+              pull_request) [[ "$GITHUB_BASE_REF" == main && "$HEAD_REPO" == "$GITHUB_REPOSITORY" ]] && exit 0 ;;
+              workflow_dispatch) [[ "$GITHUB_REF" == refs/heads/main ]] && exit 0 ;;
+            esac
+          fi
+          echo "::error::Use a branch in this repository for PR checks, or dispatch full checks on main."
+          exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0 # The deep suite compares prior release formats against their Git sources.
       - uses: ./.github/actions/build-production-pair
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+      - name: Check the application with the pair's frozen install
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm --filter @zimage/domain test:coverage
+          pnpm --filter @zimage/frontend test:run
+      - name: Run regressions selected for this change (all on manual dispatch)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash ops/aliyun/pr-checks.sh
+      - name: Keep the generated database types for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-generated-types
+          path: ${{ runner.temp }}/database.generated.ts
+          if-no-files-found: ignore

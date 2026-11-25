@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   merged-pr:
-    if: github.repository == 'zhYAO/Image-web' && github.ref_protected && !github.event.deleted
+    if: github.event_name == 'push' && github.repository == 'zhYAO/Image-web' && github.ref == 'refs/heads/main' && github.ref_protected && !github.event.deleted
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     permissions:
@@ -30,7 +30,7 @@ jobs:
             matched=$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" |
               jq -s --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" '
                 if length == 0 or any(.[]; type != "array") then error("invalid commit PR response")
-                else any(.[][]; .merged_at and .merge_commit_sha == $sha and .base.ref == "main" and .base.repo.full_name == $repo)
+                else any(.[][]; .merged_at and .merge_commit_sha == $sha and .base.ref == "main" and .base.repo.full_name == $repo and .head.repo.full_name == $repo)
                 end')
             if [[ $matched == true ]]; then exit 0; fi
           done
@@ -39,7 +39,7 @@ jobs:
 
   build-only:
     needs: merged-pr
-    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED != '1'
+    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED != '1' || github.run_attempt != '1'
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -47,14 +47,24 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/build-production-pair
+        id: pair
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
+      - name: Record build-only outcome
+        if: always()
+        env:
+          BUILD: ${{ steps.pair.outcome }}
+        run: |
+          reason='deployment disabled'
+          if [[ $GITHUB_RUN_ATTEMPT != 1 ]]; then reason='reruns cannot publish'; fi
+          printf 'Build only (%s): %s. No signing or SSH delivery. SHA `%s`, run #%s (ID %s, attempt %s).\n' \
+            "$reason" "$BUILD" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: merged-pr
-    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED == '1'
+    if: vars.ZIMAGE_PRODUCTION_DEPLOY_ENABLED == '1' && github.run_attempt == '1'
     runs-on: ubuntu-22.04
     environment: production
     timeout-minutes: 90
@@ -63,6 +73,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Require original push attempt
+        run: test "$GITHUB_RUN_ATTEMPT" = 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -75,18 +87,73 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.ZIMAGE_PRODUCTION_TURNSTILE_SITE_KEY }}
+      - name: Hash pair for signing
+        id: pair
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/zimage-pair"
+          hash=$(sha256sum pair.tar)
+          printf 'sha256=%s\n' "${hash%% *}" >> "$GITHUB_OUTPUT"
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         id: provenance
         with:
-          subject-path: ${{ runner.temp }}/zimage-pair/pair.tar
-      - name: Verify main tip and deliver the exact signed pair
+          subject-name: pair.tar
+          subject-digest: sha256:${{ steps.pair.outputs.sha256 }}
+          create-storage-record: false
+          show-summary: false
+      - name: Record signed pair before delivery
+        env:
+          SIGNED_SHA256: ${{ steps.pair.outputs.sha256 }}
+        run: |
+          printf 'Signed `pair.tar` SHA-256 `%s` for SHA `%s`, run #%s (ID %s, attempt %s).\n' \
+            "$SIGNED_SHA256" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
+          echo 'If no terminal delivery outcome follows, reconcile this run and digest on ECS before retrying.' >> "$GITHUB_STEP_SUMMARY"
+          cd "$RUNNER_TEMP/zimage-pair"
+          printf '%s  pair.tar\n' "$SIGNED_SHA256" | sha256sum --check --strict -
+      - name: Check protected main tip
+        id: tip
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" |
+            jq -ser 'select(length == 1) | .[0] | select(.name == "main" and .protected == true) | .commit.sha | strings')
+          [[ $tip =~ ^[0-9a-f]{40}$ ]]
+          if [[ $tip == "$GITHUB_SHA" ]]; then
+            echo 'state=current' >> "$GITHUB_OUTPUT"
+          else
+            echo 'state=stale' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deliver once over pinned SSH
+        id: delivery
+        if: steps.tip.outputs.state == 'current'
+        env:
           ECS_ADDRESS: ${{ vars.ZIMAGE_ECS_ADDRESS }}
           SSH_HOST_KEY: ${{ vars.ZIMAGE_ECS_HOST_KEY }}
           SSH_KEY: ${{ secrets.ZIMAGE_PRODUCTION_RELEASE_KEY }}
           BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: python3 -E -s -B ops/aliyun/production/send.py
+      - name: Record release outcome
+        if: always()
+        env:
+          TIP_RESULT: ${{ steps.tip.outcome }}
+          TIP_STATE: ${{ steps.tip.outputs.state }}
+          DELIVERY: ${{ steps.delivery.outcome }}
+          PHASE: ${{ steps.delivery.outputs.phase }}
         run: |
-          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)" = "$GITHUB_SHA"
-          unset GH_TOKEN
-          python3 -B ops/aliyun/production/send.py
+          if [[ $DELIVERY != skipped && -n $DELIVERY ]]; then
+            case $PHASE in
+              committed) result='committed: candidate verified locally and publicly' ;;
+              restored) result='restored: retained pair verified locally and publicly; release failed' ;;
+              not-sent) result='not sent: sender preflight failed' ;;
+              *) result='unconfirmed delivery: stop releases and reconcile the ECS journal; do not retry' ;;
+            esac
+          elif [[ $TIP_STATE == stale ]]; then
+            result='stale after signing: main has advanced; not sent'
+          elif [[ $TIP_RESULT == failure ]]; then
+            result='not sent: could not read and validate protected main'
+          else
+            result='not sent: release did not reach delivery'
+          fi
+          printf '%s. SHA `%s`, run #%s (ID %s, attempt %s).\n' \
+            "$result" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"

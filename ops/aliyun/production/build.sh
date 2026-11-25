@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 # Runs only in the checked-out Linux build. Production SSH material is supplied later.
 set -euo pipefail
+require_clean_checkout() {
+  local changes
+  changes=$(git status --porcelain --untracked-files=normal)
+  if [[ -n "$changes" ]]; then
+    printf 'Pair build requires a clean checkout:\n%s\n' "$changes" >&2
+    exit 1
+  fi
+}
 out="$RUNNER_TEMP/zimage-pair"
 mkdir -m 700 "$out"
 test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-test -z "$(git status --porcelain)"
+require_clean_checkout
 python3 - "$out" <<'PY'
 import json, os, pathlib, runpy, sys
 base = pathlib.Path(sys.argv[1])
@@ -29,7 +37,7 @@ NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @zimage/web exec next build
 node apps/web/scripts/verify-built-retired-route.mjs
 node apps/web/scripts/measure-dist.mjs --assert-slim --json "$out/size.json"
 node ops/aliyun/package-release.mjs apps/web/.next "$out/layers" --assets "$(jq -er .versionDirectory "$out/resources.json")" --release-id "$GITHUB_SHA" --target "$out/target.json" > "$out/backend.json"
-test -z "$(git status --porcelain)"
+require_clean_checkout
 python3 - "$out" <<'PY'
 import json, os, pathlib, runpy, subprocess, sys, tarfile
 root = pathlib.Path(sys.argv[1])

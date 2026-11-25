@@ -18,8 +18,8 @@ const baseline = JSON.parse(readFileSync(`${root}/doc/separation/api-baseline.js
   counts: { routeFiles: number; explicitMethods: number };
   routes: { path: string; source: string; sourceSha256: string; methods: string[] }[];
 };
-// Keep the original baseline immutable. Stage 2 reviews only these two handler
-// changes; an unrelated route edit or subsequent drift still fails this guard.
+// Keep the original baseline immutable. Only explicitly reviewed handler
+// changes are allowed; an unrelated route edit or subsequent drift still fails.
 const amendments = JSON.parse(readFileSync(`${root}/doc/separation/api-source-amendments.json`, 'utf8')) as {
   schemaVersion: number;
   baselineSourceSha: string;
@@ -57,15 +57,18 @@ function routeFiles(directory: string): string[] {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('explicit API inventory (source evidence, not HTTP acceptance)', () => {
-  it('preserves the frozen routes and methods with reviewed source amendments including retired model admission', () => {
+  it('preserves the frozen routes and methods with explicitly reviewed source amendments', () => {
     expect(baseline.counts).toEqual({ routeFiles: 49, explicitMethods: 58 });
     expect(baseline.routes).toHaveLength(49);
     expect(baseline.routes.flatMap(route => route.methods)).toHaveLength(58);
     expect(amendments.schemaVersion).toBe(1);
     expect(amendments.baselineSourceSha).toBe(baseline.sourceSha);
-    expect(amendments.routes.map(route => route.path).sort()).toEqual(['/api/chat', '/api/creative-text/optimize', '/api/health/providers', '/api/uploads']);
+    expect(amendments.routes.map(route => route.path).sort()).toEqual([
+      '/api/chat', '/api/creative-tasks/mock-apparel-render', '/api/creative-text/optimize', '/api/health/providers', '/api/uploads',
+    ]);
     for (const route of baseline.routes) {
-      const source = readFileSync(`${root}/${route.source}`, 'utf8');
+      // The reviewed hashes use Git's LF source, including on CRLF checkouts.
+      const source = readFileSync(`${root}/${route.source}`, 'utf8').replace(/\r\n/g, '\n');
       const amendment = amendments.routes.find(entry => entry.path === route.path);
       if (amendment) {
         expect(amendment.source).toBe(route.source);
