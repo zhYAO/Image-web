@@ -43,19 +43,6 @@ test('all four fingerprints agree with the unchanged downstream packaging policy
   }
 });
 
-test('only candidate job provisions fonts; exact downstream checks and one-day artifact remain', async () => {
-  const workflow = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const candidate = workflow.split('  candidate-build:\n')[1].split('  deploy:\n')[0];
-  assert.equal(workflow.split('prepare-candidate-fonts.mjs').length - 1, 1);
-  assert.ok(candidate.includes('node ops/aliyun/prepare-candidate-fonts.mjs'));
-  assert.ok(candidate.includes('node ops/aliyun/package-static-assets.mjs --font-source "$FONT_SOURCE"'));
-  assert.ok(candidate.includes('retention-days: 1'));
-  assert.ok(!candidate.includes('secrets.') && !candidate.includes('environment: production'));
-  assert.ok(candidate.includes('permissions:\n      contents: read'));
-  assert.deepEqual(workflow.split('\njobs:\n')[1].match(/^  [a-z][a-z-]*:\n/gm),
-    ['  quality:\n', '  database:\n', '  candidate-build:\n', '  deploy:\n', '  rollback:\n']);
-});
-
 test('proven official OTF bytes produce exactly the four original files offline', { skip: !process.env.ZIMAGE_TEST_ORIGINAL_FONT_SOURCE }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'zimage-font-proof-'));
   t.after(() => rm(root, { recursive: true, force: true }));

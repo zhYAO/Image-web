@@ -60,16 +60,22 @@ class ReceiverEntry(unittest.TestCase):
         self.public = enter(patch.object(receive.Host, 'public'))
         self.prepare = enter(patch.object(receive.Host, 'prepare', autospec=True))
         self.activate = enter(patch.object(receive, 'activate', return_value=0))
-        # Replace only the external gh verifier with a content- and source-bound test signature.
-        self.verify = enter(patch.object(receive, 'verify', side_effect=self.verify_fixture))
+        # Exercise receive.verify as well. Replace only the external binary, never contact a signer.
+        self.certificate = {'sourceRepositoryIdentifier': '1329578390'}
+        self.gh = enter(patch.object(receive.subprocess, 'check_output', side_effect=self.gh_fixture))
 
     @staticmethod
     def proof(sha, body):
         return hmac.digest(b'offline receiver test fixture', sha.encode()+body, 'sha256')
 
-    def verify_fixture(self, archive, bundle, sha):
+    def gh_fixture(self, argv, **kwargs):
+        if argv == ['/usr/bin/gh', '--version']:
+            return 'gh version 2.102.0 (2026-10-01)'
+        self.assertEqual(argv[:3], ['/usr/bin/gh', 'attestation', 'verify'])
+        archive, bundle, sha = Path(argv[3]), Path(argv[argv.index('--bundle')+1]), argv[argv.index('--source-digest')+1]
         if not hmac.compare_digest(bundle.read_bytes(), self.proof(sha, archive.read_bytes())):
             raise ValueError('Fixture provenance rejected')
+        return json.dumps([{'verificationResult': {'signature': {'certificate': self.certificate}}}])
 
     def receive(self, phase, live, *, run=19, trusted=True, changes=None, kit_id='e'*64):
         self.current.return_value = live
@@ -93,7 +99,7 @@ class ReceiverEntry(unittest.TestCase):
     def test_signed_candidate_for_another_kit_is_rejected_before_archive(self):
         with self.assertRaisesRegex(ValueError, 'different receiver kit'):
             self.receive('committed', PREVIOUS_CANDIDATE, kit_id='f'*64)
-        self.verify.assert_not_called()
+        self.gh.assert_not_called()
         self.prepare.assert_not_called()
         self.activate.assert_not_called()
 
@@ -103,7 +109,18 @@ class ReceiverEntry(unittest.TestCase):
                 self.assertEqual(self.receive(phase, live), 0)
                 self.assertEqual(self.prepare.call_args.args[0].old_migrations, tree)
                 self.assertEqual(self.activate.call_args.args[1:], (live, (INCOMING, 'release-'+INCOMING), 19))
-        self.assertEqual(self.verify.call_count, 2)
+        self.assertEqual(sum(call.args[0][1:3] == ['attestation', 'verify'] for call in self.gh.call_args_list), 2)
+
+    def test_certificate_identity_required_before_archive_or_journal_is_used(self):
+        for cert in [{}, {'sourceRepositoryIdentifier': '1329578391'}]:
+            with self.subTest(cert=cert), patch.object(receive, 'unpack') as unpack:
+                self.certificate = cert
+                with self.assertRaisesRegex(ValueError, 'certificate repository ID'):
+                    self.receive('committed', PREVIOUS_CANDIDATE)
+                unpack.assert_not_called()
+        self.current.assert_not_called()
+        self.prepare.assert_not_called()
+        self.activate.assert_not_called()
 
     def test_mismatched_and_superseded_restoration_rejected_before_prepare(self):
         for phase, live, run in [('committed', RETAINED, 19), ('restored', PREVIOUS_CANDIDATE, 19),

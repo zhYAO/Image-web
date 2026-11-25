@@ -23,6 +23,8 @@ PRELOAD = BACKEND/'http-admission.cjs'
 JOURNAL = ROOT/'production-release.json'
 MAX_PAIR = 2_600_000_000
 REPO = 'zhYAO/Image-web'
+# Independently reviewed GitHub numeric ID, part of the administrator-pinned kit.
+REPOSITORY_ID = '1329578390'
 WORKFLOW = REPO+'/.github/workflows/production.yml'
 
 
@@ -57,12 +59,23 @@ def read_exact(stream, dest, size, digest=None):
             size -= len(block)
 
 
+def check_gh_version():
+    version = subprocess.check_output(['/usr/bin/gh', '--version'], text=True, timeout=10)
+    match = re.fullmatch(r'gh version ([0-9]+)\.([0-9]+)\.([0-9]+)(?: \([^()\r\n]+\))?', version.partition('\n')[0])
+    require(match and tuple(map(int, match.groups())) >= (2, 102, 0), 'Require patched gh >= 2.102.0')
+
+
 def verify(archive, bundle, sha):
-    subprocess.run(['/usr/bin/gh', 'attestation', 'verify', str(archive), '--repo', REPO,
-                    '--signer-workflow', WORKFLOW, '--source-ref', 'refs/heads/main', '--source-digest', sha,
-                    '--signer-digest', sha, '--deny-self-hosted-runners', '--bundle', str(bundle),
-                    '--custom-trusted-root', str(ETC/'production-trusted-root.jsonl')],
-                   stdout=sys.stderr, check=True, timeout=120)
+    check_gh_version()
+    verified = json.loads(subprocess.check_output(
+        ['/usr/bin/gh', 'attestation', 'verify', str(archive), '--repo', REPO,
+         '--signer-workflow', WORKFLOW, '--source-ref', 'refs/heads/main', '--source-digest', sha,
+         '--signer-digest', sha, '--deny-self-hosted-runners', '--bundle', str(bundle),
+         '--custom-trusted-root', str(ETC/'production-trusted-root.jsonl'), '--format', 'json'], timeout=120))
+    # Only the verified certificate (not release.json, predicate or raw bundle) identifies the signer.
+    require(isinstance(verified, list) and verified and
+            all(row['verificationResult']['signature']['certificate'].get('sourceRepositoryIdentifier')
+                == REPOSITORY_ID for row in verified), 'Unverified or unexpected certificate repository ID')
 
 
 def unpack(archive, dest):
@@ -360,9 +373,10 @@ def check_installation():
     bridge.load_tools(strict=True)
     require(callable(getattr(bridge.Adapter, 'prepare_archive', None)), 'Missing layered preparation helper')
     management.owned(Path('/usr/bin/gh'))
+    check_gh_version()
     help_text = subprocess.check_output(['/usr/bin/gh', 'attestation', 'verify', '--help'], text=True, timeout=10)
     for flag in ('--repo', '--signer-workflow', '--source-ref', '--source-digest', '--signer-digest',
-                 '--deny-self-hosted-runners', '--bundle', '--custom-trusted-root'):
+                 '--deny-self-hosted-runners', '--bundle', '--custom-trusted-root', '--format'):
         require(re.search(r'(?<![\w-])'+flag+r'(?![\w-])', help_text), 'Installed gh lacks '+flag)
     trust = ETC/'production-trusted-root.jsonl'
     management.owned(trust)
@@ -398,6 +412,7 @@ def main():
     bridge = management.load(LAYERS/'release-three-layer.py', 'production_layers')
     engine = management.load(BACKEND/'transaction.py', 'production_lifecycle')
     checks = management.load(TOOLS/'check.py', 'production_https')
+    management.owned(Path('/usr/bin/gh'))
     management.owned(ETC/'production-trusted-root.jsonl')
     management.owned(ROOT, directory=True)
     target_policy(management)  # Reject a copied installation before accepting archive bytes.

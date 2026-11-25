@@ -9,7 +9,10 @@ runs:
     - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       with:
         version: 11.19.0
-    - shell: bash
-      run: python3 -B -m unittest discover -s ops/aliyun/production -v
+    - name: Run the receiver and layer-adapter tests on Linux
+      shell: bash
+      run: |
+        python3 -B -m unittest discover -s ops/aliyun/production -v
+        python3 -B ops/aliyun/test_release_three_layer.py -v
     - shell: bash
       run: bash ops/aliyun/production/build.sh

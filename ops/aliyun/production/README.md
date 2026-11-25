@@ -1,6 +1,8 @@
 # 上海 ECS 的前后端成对发布
 
-维护者把 PR 合并到受保护的 `main` 后，`production.yml` 检查合并提交对应的 PR 和目标分支。GitHub 托管的 Ubuntu 22.04 runner 校验实际 Node、ABI、架构和 glibc，按锁文件构建静态前端、Next standalone 和资源层。默认只执行构建和测试，使用仓库级的三项公开构建变量；缺少必填值会使构建失败。验收完成后，管理员显式将仓库级 Actions 变量 `ZIMAGE_PRODUCTION_DEPLOY_ENABLED` 设为 `1`，后续符合条件的合并才进入 `production` 环境。缺省及其他值均不签发、不发送。启用后，同一 SHA 的前后端封入一个 `pair.tar`，由 `actions/attest` 签发整包 provenance，再检查 main 最新提交。包和证明经一次 SSH 连接直送 ECS。GitHub 保存证明，生产包不上传至 Actions artifacts。旧的手动 CI 仍可检查或构建候选，其 ZIP 按仓库可见性处理。
+日常只有两个入口：PR 看 `Check ZImage` 的 `zimage-release-pr-required`，合并后看 `Publish merged ZImage pair` 的步骤摘要。前者也支持在 `main` 手动运行完整检查，包括临时本地数据库；它不接触生产。后者检查同仓 PR 的合并 SHA，在 GitHub 托管 Ubuntu 22.04 上匹配 Node、ABI、架构及 glibc，按锁文件构建静态前端、Next standalone 和资源层。生产服务器不构建。
+
+仓库级 Actions 变量 `ZIMAGE_PRODUCTION_DEPLOY_ENABLED` 默认关闭。满足下列首次启用条件后才设为 `1`；用一个新的合并投递。未启用或重跑时仅构建，不能提升旧 run。启用后，签发同一 SHA 的 `pair.tar`，记录摘要，发送前复查 `main`，再通过一次固定身份的 SSH 连接交给 ECS。GitHub 保存签名证明，不上传生产包，也不从旧 ZIP 提升发布。
 
 启用发布后，构建及发送位于同一个受保护的 production 作业，避免跨作业公开传包。这个 runner、被合并的构建代码及锁定依赖都属于信任边界。专用 SSH 私钥只供发送步骤使用。ECS 按管理员独立安装的信任根离线验证仓库、工作流路径、main ref、源码 SHA、工作流 SHA、托管 runner 和实际归档摘要，然后才解包。[GitHub Environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) · [官方 attest Action](https://github.com/actions/attest) · [离线验证](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline) · [CLI 验证参数](https://cli.github.com/manual/gh_attestation_verify)
 
@@ -27,7 +29,7 @@
 
    在业务已排空且现有版本可恢复的窗口重载单元、重启当前旧应用。管理员运行 `/usr/bin/python3 -I -B /usr/local/libexec/zimage-production/versions/<KIT_ID>/kit.py check`。该操作只读，检查实例、gh 验签能力、信任根、Node 目标、已加载的单元、真实 MainPID/UID 私有 socket、进程 cwd 及可执行文件。运行中 preload 在状态响应中返回自身路径，预检再用版本化 profile 独立检查当前 Next 文件。仅重载 systemd、旧进程仍在运行时检查会失败。若旧应用无法用新 preload 通过检查，应在同一窗口恢复原 drop-in 和旧进程，核对服务健康并保持发布开关关闭。检查真实 SSH 限权、同 SHA 签发和公网链路仍需各自的外部证据。
 
-4. 目标机的 `/usr/bin/gh` 需要支持本实现使用的验证参数（本地验证使用 2.83.2）。管理员从独立可信机器执行 `gh attestation trusted-root`，将结果安装为 root 管理的 `/etc/zimage/production-trusted-root.jsonl`，按官方轮换指引更新。发布发送方不能提供或更改该文件。
+4. 目标机的 `/usr/bin/gh` 至少为 **2.102.0**。管理员从独立可信机器执行 `gh attestation trusted-root`，将结果安装为 root 管理的 `/etc/zimage/production-trusted-root.jsonl`，按官方轮换指引更新。离线验签还检查已验签证书中的仓库数字 ID（`1329578390`）。发布发送方不能提供或更改信任根。
 5. 由数据库负责人核实**同一真实生产数据库**支持当前代码、候选代码以及切回旧代码。当前生产库及 Edge 采用 M6 合同；诊断迁移 M8 已按实际时间戳应用，M7 尚未应用，新计量开关关闭。复核候选和旧版在这个真实合同下的请求及回滚行为。核对实际已应用的修订、RPC/权限、Worker 和计量兼容后，由管理员把实际实例 ID 和已批准的迁移树写入 `/etc/zimage/production-target.json`。字段为 `instanceId` 和 `compatibleMigrationTrees`（Git tree SHA 字符串数组）；通过 `git rev-parse <commit>:supabase/migrations` 取值。一次发布要求候选、保留版两棵树同时获准。静态树值是审查索引，不能替代检查生产数据库。此流程不访问数据库或执行 SQL。
 6. 先确认真正的公网 DNS、证书、首页及版本接口已经恢复。当前首次基线要求后端 `7a811b326aa4b344cee08bc5a33c04e44a780fd4`、前端 `release-7a811b326aa4`、对应源 SHA 和健康原进程。首次启用仍需由维护者在授权窗口验证真实服务、SSH 权限及真实恢复。演示样例或本机回环 200 都不足以满足这些条件。
 
@@ -43,8 +45,8 @@ GitHub concurrency 保留正在运行的作业。ECS 使用现有 `/opt/zimage/d
 - 候选启动或验收失败时，事务选回本次记录的旧前后端，实际启动旧进程，并核对 PID、路径、版本和公网服务。完整恢复后写 `restored`，返回 20，本次发布仍失败。
 - 恢复或公网确认失败，记录 `needs_attention` 并尝试封闭业务入口；SSH 中断后也可能留下非终态。先读 `/opt/zimage/production-release.json`（含签名整包 SHA-256）、两个 current、Nginx open/saved-open 标记、Node 门禁、MainPID 和实际本机/公网版本，再决定人工恢复。不得凭客户端断线、指针已切回或本机 200 宣告恢复或重发。进程被杀或主机掉电时需要人工对账。
 
-本地回归命令为 `python3 -B -m unittest discover -s ops/aliyun/production -v`。用临时目录、真实进程、文件锁、符号链接验证事务，GitHub 签发和生产服务链路需在授权合并后验收。
+Linux 回归命令为 `python3 -B -m unittest discover -s ops/aliyun/production -v` 和 `python3 -B ops/aliyun/test_release_three_layer.py -v`。首次切换及恢复要同时对账工作流 run number、合并 SHA、`pairSha256` 和本机/公网实际前后端版本。签名成功或密钥认证成功都不等于已发布。
 
-生产发布在构建、签名和发往 ECS 前检查 NEXT_PUBLIC_TURNSTILE_SITE_KEY，仅拒绝缺失、不合法格式及 Cloudflare 公布的测试值，不输出键值。此门槛不验证真实域名绑定或后端密钥配对；仅构建和 PR 检查不受影响。
+生产从 `production` 环境变量 `ZIMAGE_PRODUCTION_TURNSTILE_SITE_KEY` 注入 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`；检查缺失、格式及 Cloudflare 测试值，不输出键值。PR 和仅构建使用仓库级公开配置。首发登录须在实际 `committed` 的版本上单独验证。
 
 已确认恢复旧版本时，修复后走新提交的受保护合并流程。若 SSH 中断或恢复结果不明，先读 ECS 发布日志、当前两端版本和真实公网结果，不重放，也不凭旧指针或本机健康宣告已恢复。

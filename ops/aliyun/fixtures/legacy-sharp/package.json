@@ -1,0 +1,14 @@
+{
+  "name": "zimage-legacy-sharp-test-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Native codec closure for testing restoration of the pre-jsquash release",
+  "dependencies": {
+    "sharp": "0.35.5"
+  },
+  "overrides": {
+    "@img/colour": "1.1.0",
+    "detect-libc": "2.1.2",
+    "semver": "7.8.5"
+  }
+}

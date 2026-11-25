@@ -1,4 +1,4 @@
-import test, { after } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, access, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const script = fileURLToPath(new URL('./package-release.mjs', import.meta.url));
 const gnuTarOnly = { skip: process.platform === 'win32' ? 'Windows system tar is bsdtar and lacks --hard-dereference' : false };
@@ -16,7 +18,7 @@ const excluded = [
   'commerce/apparel-v2/source-lifestyle.png',
   'commerce/apparel-v2/source-seated.png',
 ];
-async function fixture(t) {
+async function fixture(t, { legacy = true } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'zimage-package-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   async function put(name, value = name) {
@@ -37,7 +39,7 @@ async function fixture(t) {
   for (const file of ['main-1', 'main-2', 'main-3', 'main-4', 'main-5', 'detail-01', 'detail-03', 'detail-04', 'detail-05', 'detail-06', 'detail-07'])
     for (const extension of ['jpg', 'webp']) kept.push(`commerce/apparel-v2/${file}.${extension}`);
   for (const name of kept) await put(`apps/web/public/${name}`);
-  await installSharpFixture(path.join(root, 'dist/standalone'));
+  if (legacy) await installSharpFixture(path.join(root, 'dist/standalone'));
   const destination = path.join(root, 'release');
   return { root, put, kept, destination, run: () => spawnSync(process.execPath, [script, 'dist', destination, '--format', 'full'], { cwd: root, encoding: 'utf8' }) };
 }
@@ -293,62 +295,43 @@ test('rejects stale traced apparel font payloads instead of shipping them in the
  assert.match(r.stderr,/external font resources/i);
  await assert.rejects(access(f.destination+'.tgz'));
 });
-import { cp, readdir, symlink, rename, link } from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import { cp, readdir, symlink, rename } from 'node:fs/promises';
 
 const hostPlatform = process.platform === 'linux' && !process.report.getReport().header.glibcVersionRuntime ? 'linuxmusl' : process.platform;
 const hostNative = `@img/sharp-${hostPlatform}-${process.arch}`;
-let sharpFixture;
-after(async () => { if (sharpFixture) await rm(await sharpFixture, { recursive: true, force: true }); });
-// Copy the real host closure once, then hardlink immutable files into independent fixture directories.
+// npm ci installs this pinned legacy closure independently of the pnpm workspace.
 async function installSharpFixture(destination) {
-  if (sharpFixture) {
-    async function clone(source, target) {
-      await mkdir(target, { recursive: true });
-      for (const entry of await readdir(source, { withFileTypes: true })) {
-        if (entry.isDirectory()) await clone(path.join(source, entry.name), path.join(target, entry.name));
-        else await link(path.join(source, entry.name), path.join(target, entry.name));
-      }
-    }
-    await clone(await sharpFixture, destination);
-    return;
+  const source = fileURLToPath(new URL('./fixtures/legacy-sharp/node_modules/', import.meta.url));
+  for (const name of await readdir(source)) {
+    if (!name.startsWith('.')) await cp(path.join(source, name), path.join(destination, 'node_modules', name),
+      { recursive: true, mode: constants.COPYFILE_FICLONE });
   }
-  sharpFixture = mkdtemp(path.join(tmpdir(), 'zimage-sharp-fixture-'));
-  const cache = await sharpFixture;
-  const sourceRequire = createRequire(new URL('../../apps/web/package.json', import.meta.url));
-  const copied = new Set();
-  async function copyPackage(name, resolver) {
-    if (copied.has(name)) return;
-    let manifest;
-    try { manifest = resolver.resolve(`${name}/package.json`); }
-    catch (error) {
-      if (error.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error;
-      const exportedEntry = name.startsWith('@img/sharp-libvips-') ? `${name}/lib`
-        : name.startsWith('@img/sharp-') ? `${name}/sharp.node` : name;
-      let directory = path.dirname(resolver.resolve(exportedEntry));
-      while (true) {
-        try {
-          const candidate = path.join(directory, 'package.json');
-          if (JSON.parse(await readFile(candidate, 'utf8')).name === name) { manifest = candidate; break; }
-        } catch (error) { if (error.code !== 'ENOENT') throw error; }
-        const parent = path.dirname(directory);
-        if (parent === directory) throw new Error(`Cannot find exact manifest for ${name}`);
-        directory = parent;
-      }
-    }
-    const data = JSON.parse(await readFile(manifest, 'utf8'));
-    copied.add(name);
-    await cp(path.dirname(manifest), path.join(cache, 'node_modules', name), { recursive: true, dereference: true });
-    const resolverHere = createRequire(manifest);
-    for (const dep of Object.keys(data.dependencies || {})) await copyPackage(dep, resolverHere);
-    for (const dep of Object.keys(data.optionalDependencies || {}))
-      if (dep === hostNative || dep === `@img/sharp-libvips-${hostPlatform}-${process.arch}`) await copyPackage(dep, resolverHere);
-  }
-  await copyPackage('sharp', sourceRequire);
-  await installSharpFixture(destination);
 }
 
 async function preflight() { return import('./package-preflight.mjs'); }
+
+test('model-only staging runs the application WASM codecs without native dependencies', async t => {
+  const f = await fixture(t, { legacy: false });
+  await f.put('dist/required-server-files.json', JSON.stringify({ config: {
+    distDir: '.next', env: { ZIMAGE_IMAGE_ENGINE: 'jsquash', ZIMAGE_APPAREL_TEXT_MODE: 'model-only' },
+    images: { unoptimized: true },
+  } }));
+  const web = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+  const packages = ['@jsquash/jpeg', '@jsquash/png', '@jsquash/webp'];
+  for (const name of packages) {
+    const src = path.dirname(web.resolve(`${name}/package.json`));
+    await cp(src, path.join(f.root, 'dist/standalone/node_modules', name), { recursive: true });
+  }
+  const { stageCandidate } = await import('./package-stage.mjs');
+  const stage = await stageCandidate({ project: f.root, dist: 'dist', destination: f.destination });
+  assert.equal(stage.nativeReport.engine, 'jsquash');
+  assert.deepEqual(stage.nativeReport.codecs, ['jpeg', 'png', 'webp']);
+  assert.deepEqual(stage.nativeReport.native, []);
+  const binary = path.join(f.destination, stage.nativeReport.wasm[0]);
+  await writeFile(binary, 'corrupt');
+  const { probeCandidateWasm } = await preflight();
+  await assert.rejects(probeCandidateWasm(f.destination), WebAssembly.CompileError);
+});
 
 test('candidate preflight loads real host Sharp and reports JPEG WebP AVIF round trips after relocation', async t => {
   const f = await fixture(t);

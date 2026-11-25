@@ -26,7 +26,7 @@ HANDOFF = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HANDOFF)
 FIXTURE_COMMIT = '1' * 40
 FIXTURE_TREE = '2' * 40
-REVIEWED_ADAPTER_SHA256 = 'c63209f4827de101f70a2bb2512359c5e1b97c2c06afaee3a89f86f413d8b104'
+REVIEWED_ADAPTER_SHA256 = '44537014a8638981c6522c898640ad7da61e70420f87ef316738d0fd53803e65'
 
 
 def credential_name(name):
@@ -138,7 +138,7 @@ class SourceGuards(HandoffFixture):
         self.assertIn('ops/aliyun/linux-handoff.py', names)
         self.assertIn('apps/web/.env.example', names)
         self.assertIn('supabase/functions/generation-worker/.npmrc', names)
-        self.assertEqual([name for name in names if not credential_name(name)
+        self.assertEqual([name for name in names if not credential_name(name) and name not in HANDOFF.NON_SOURCE_LOGS
                           and not HANDOFF.allowed(name)], [])
 
     def test_credential_names_are_skipped_before_filesystem_probe_or_content_read(self):
@@ -161,12 +161,28 @@ class SourceGuards(HandoffFixture):
         self.assertEqual([item['path'] for item in files], sorted(self.names[:2]))
         self.assertEqual(deleted, [])
 
-    def test_forbidden_candidate_is_rejected_before_open(self):
-        self.names = ['ops/not-reviewed.pem']
+    def test_only_four_reviewed_logs_are_omitted_before_filesystem_access(self):
+        folder = 'doc/separation/20261106-paired-preflight/'
+        evidence = [folder + name for name in ('candidate-reconciliation-result.log',
+            'candidate-repair-install.log', 'candidate-repair-linux-tests.log', 'paired-frontend-selection.log')]
+        self.names = evidence
         with patch.object(HANDOFF, 'git', side_effect=self.git), \
+                patch.object(Path, 'exists', side_effect=AssertionError('non-source probe')), \
+                patch.object(Path, 'read_bytes', side_effect=AssertionError('non-source read')):
+            self.assertEqual(HANDOFF.source_files(self.source), ([], []))
+            self.deletions = evidence
+            self.assertEqual(HANDOFF.source_files(self.source), ([], []))
+        for name in evidence:
+            self.assertFalse(HANDOFF.allowed(name))
+
+    def test_forbidden_candidate_is_rejected_before_open(self):
+        for name in ['ops/not-reviewed.pem', 'doc/separation/20261106-paired-preflight/unreviewed.log',
+                     'doc/separation/other/candidate-repair-install.log']:
+            self.names = [name]
+            with self.subTest(name=name), patch.object(HANDOFF, 'git', side_effect=self.git), \
                 patch.object(Path, 'read_bytes', side_effect=AssertionError('forbidden read')):
-            with self.assertRaisesRegex(ValueError, 'outside source allowlist'):
-                HANDOFF.source_files(self.source)
+                with self.assertRaisesRegex(ValueError, 'outside source allowlist'):
+                    HANDOFF.source_files(self.source)
 
     def test_staged_delete_and_rename_source_paths_are_recorded(self):
         self.deletions = ['apps/web/old.ts', 'ops/old-script.py']

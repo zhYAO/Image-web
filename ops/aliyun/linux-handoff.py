@@ -27,6 +27,13 @@ ROOT_FILES = {'.gitignore', '.node-version', '.prettierignore', 'DESIGN.md', 'RE
               'eslint.config.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
               'tsconfig.base.json'}
 ROOT_DIRS = {'.github', 'apps', 'doc', 'ops', 'packages', 'scripts', 'supabase'}
+# Historical evidence, not source. Every other log still requires explicit review.
+NON_SOURCE_LOGS = {
+    'doc/separation/20261106-paired-preflight/candidate-reconciliation-result.log',
+    'doc/separation/20261106-paired-preflight/candidate-repair-install.log',
+    'doc/separation/20261106-paired-preflight/candidate-repair-linux-tests.log',
+    'doc/separation/20261106-paired-preflight/paired-frontend-selection.log',
+}
 DENY_PARTS = {'.git', '.aws', '.agents', '.codex', '.ssh', '.design-qa', 'node_modules',
               '.pnpm-store', 'dist', '.prerender', '__pycache__', 'coverage', 'test-results'}
 EXTENSIONS = {'.cjs', '.conf', '.css', '.example', '.html', '.inc', '.jpg', '.js', '.json',
@@ -137,10 +144,13 @@ def source_files(root):
     # deletion names directly against HEAD, without opening any deleted content.
     deletion_names = [x.decode('utf-8') for x in git(root, 'diff', '--no-renames',
                       '--diff-filter=D', '--name-only', '-z', 'HEAD').split(b'\0') if x]
+    deletion_names = [name for name in deletion_names if name not in NON_SOURCE_LOGS]
     for name in deletion_names:
         if not allowed(name): raise ValueError('Deleted path outside source allowlist: '+name)
     files, deleted = [], list(deletion_names)
     for name in names:
+        if name in NON_SOURCE_LOGS:
+            continue
         # Omit credential configuration by name without opening or hashing its bytes.
         if PurePosixPath(name).name.startswith('.env') or PurePosixPath(name).name in {'.npmrc', '.netrc'}:
             continue
@@ -193,6 +203,7 @@ def snapshot(args):
                 'gitStatus': before.decode().splitlines(),
                 'excludedByDesign': ['Git internals', 'ignored QA/build outputs', 'all node_modules',
                     'actual environment files', 'npm/SSH/cloud credentials', 'external fonts'],
+                'excludedHistoricalEvidence': sorted(NON_SOURCE_LOGS),
                 'scanScope': 'explicit path allowlist and high confidence byte markers only'}
     manifest['reviewedNegativeTestMarker'] = REVIEWED_TEST_MARKER
     manifest['excludedCredentialPathsWithoutRead'] = [n.decode() for n in git(

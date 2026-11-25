@@ -11,9 +11,12 @@ import { spawnSync } from 'node:child_process';
 // Linux archive assembly remain separate Linux-only checks.
 const adapter = await readFile(new URL('./release.py', import.meta.url), 'utf8');
 const probe = adapter.match(/NATIVE_PROBE = r"""([\s\S]*?)"""/)[1];
-const cwd = fileURLToPath(new URL('../../apps/web/', import.meta.url));
-const run = (directory, sha) => spawnSync(process.execPath, ['-e', probe], {
-  cwd, encoding: 'utf8', env: { ...process.env, ZIMAGE_SHARED_FONT_DIR: directory, ZIMAGE_STATIC_ASSET_SHA256: sha },
+const cwd = fileURLToPath(new URL('./fixtures/legacy-sharp/', import.meta.url));
+// Fail before the negative tests if this host's isolated restoration fixture is absent.
+const installed = JSON.parse(await readFile(path.join(cwd, 'node_modules/sharp/package.json')));
+assert.equal(installed.version, JSON.parse(await readFile(path.join(cwd, 'package.json'))).dependencies.sharp);
+const run = (directory, sha) => spawnSync(process.execPath, ['--no-global-search-paths', '-e', probe], {
+  cwd, encoding: 'utf8', env: { SystemRoot: process.env.SystemRoot, ZIMAGE_SHARED_FONT_DIR: directory, ZIMAGE_STATIC_ASSET_SHA256: sha },
 });
 
 test('actual deployment native payload validates original external fonts and all six codec operations', () => {

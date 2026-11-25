@@ -42,7 +42,7 @@ Default packaging is the three-layer entry described below; use its shared stagi
 
 已确认公网 HTTP 被阿里云备案拦截，HTTPS 握手被中断；服务器回环 TLS 和应用健康检查通过。注册门禁保持关闭；真实登录、验证码、流式聊天、上传和模型生成未在该生产域名验收。
 
-## 2026-09-19 起：GitHub main 自动发布
+## 2026-09-19 自动发布（历史记录，以下旧工作流及手动重放入口已退役）
 
 `.github/workflows/ci.yml` 在 PR 执行质量与本地数据库检查；`main` 更新且两项检查全部成功后，在 Ubuntu 24.04、Node 24.19.0、pnpm 11.19.0 上构建 HTTP standalone，连同 Linux 原生依赖、public、static 打包。生产服务器不构建，不自动迁移数据库或发布 Worker。上文 2026-09-17 为历史记录。
 
