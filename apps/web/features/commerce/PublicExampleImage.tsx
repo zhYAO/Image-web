@@ -6,5 +6,5 @@ import { publicAssetUrl, usesDirectPublicImage } from '@/lib/public-assets';
 export default function PublicExampleImage(props: ComponentProps<typeof Image>) {
   const src = typeof props.src === 'string' ? publicAssetUrl(props.src) : props.src;
   const direct = typeof src === 'string' && usesDirectPublicImage(src);
-  return <Image {...props} src={src} {...(direct ? { unoptimized: true } : {})} />;
+  return <Image {...props} alt={props.alt} src={src} {...(direct ? { unoptimized: true } : {})} />;
 }

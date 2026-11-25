@@ -126,9 +126,9 @@ export class MockApparelGateway implements ApparelGateway {
       return this.hydrate(task);
     });
   }
-  async submit(_id: string, _input: Parameters<ApparelGateway["submit"]>[1]): Promise<ApparelTask> {
+  submit: ApparelGateway["submit"] = async () => {
     throw new Error("服装固定排版已停用，请前往生图工作台使用提示词生图。");
-  }
+  };
 
   select(id: string, raw: Parameters<ApparelGateway["select"]>[1]) {
     return this.serial(async () => {

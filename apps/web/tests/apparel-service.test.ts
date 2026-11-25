@@ -12,9 +12,9 @@ function fixture() {
     data: args.p_operation === "asset" ? { path: "existing/one.jpg", name: "main/1.jpg" }
       : args.p_operation === "list" ? [task] : task, error: null,
   }));
-  const download = vi.fn(async (_path: string) => ({ data: { arrayBuffer: async () => storedJpeg }, error: null }));
+  const download = vi.fn(async () => ({ data: { arrayBuffer: async () => storedJpeg }, error: null }));
   const upload = vi.fn();
-  const from = vi.fn((_bucket: string) => ({ download, upload }));
+  const from = vi.fn(() => ({ download, upload }));
   return { service: createApparelService({ rpc, storage: { from } }), rpc, download, upload, from };
 }
 

@@ -28,6 +28,31 @@ def load(path, name):
     return module
 
 
+class RuntimeReuse(unittest.TestCase):
+    def test_only_next_package_files_are_copied_and_charged_as_copies(self):
+        layers = load(SCRIPT.with_name('three-layer-release.py'), 'runtime_reuse_test')
+        copied = {'node_modules/next/dist/bin/next': b'cli',
+                  'node_modules/.pnpm/next@16.4.5/node_modules/next/package.json': b'{}'}
+        linked = {'node_modules/next/node_modules/other/index.js': b'nested',
+                  'node_modules/next-plugin/index.js': b'plugin'}
+        with tempfile.TemporaryDirectory() as tmp:
+            cache, app = Path(tmp) / 'cache', Path(tmp) / 'app'
+            entries = []
+            for name, body in {**copied, **linked}.items():
+                original = cache / name
+                original.parent.mkdir(parents=True)
+                original.write_bytes(body)
+                entries.append(dict(path=name, type='file', mode=0o644, bytes=len(body)))
+            result = layers.assemble_runtime(entries, cache, app)
+            for name in copied:
+                self.assertFalse((app / name).samefile(cache / name), name)
+                self.assertEqual((app / name).read_bytes(), copied[name])
+            for name in linked:
+                self.assertTrue((app / name).samefile(cache / name), name)
+            self.assertEqual(result, {'copiedFiles': 2, 'copiedBytes': 5,
+                                      'hardlinkedFiles': 2, 'hardlinkedBytes': 12})
+
+
 @unittest.skipUnless(os.name == 'posix' and fcntl is not None and hasattr(fcntl, 'flock'),
                      'Requires real Linux/glibc, POSIX ownership, flock and symlink assembly')
 class RootThreeLayerAdapter(unittest.TestCase):
@@ -66,11 +91,8 @@ class RootThreeLayerAdapter(unittest.TestCase):
         link.parent.mkdir(parents=True)
         link.symlink_to('../../../packages/domain')
         self.producer = self.root / 'producer-store'
-        self.packed = self.layers.pack(self.source, self.producer, self.project, self.assets, SHA,
-                                       source_commit=SHA, assembly_cache_root=self.cache, schema=1)
         self.incoming.mkdir(parents=True)
-        self.bundle = self.incoming / (SHA + '.layers.tgz')
-        self.transport = self.adapter.bundle(self.producer, Path(self.packed['manifest']), self.bundle, self.packed['manifestSha256'])
+        self.packed, self.bundle, self.transport = self.pack_transport(SHA)
         old = self.host / 'releases' / ('b' * 40)
         self.put(old / '.release-sha', 'b' * 40)
         (self.host / 'current').symlink_to(old)
@@ -90,6 +112,12 @@ class RootThreeLayerAdapter(unittest.TestCase):
 
     def deploy(self, run='1'):
         return self.operation.deploy(SHA, self.transport['outerSha256'], self.packed['manifestSha256'], run)
+
+    def pack_transport(self, sha):
+        packed = self.layers.pack(self.source, self.producer, self.project, self.assets, sha,
+                                  source_commit=sha, assembly_cache_root=self.cache, schema=1)
+        bundle = self.incoming / (sha + '.layers.tgz')
+        return packed, bundle, self.adapter.bundle(self.producer, Path(packed['manifest']), bundle, packed['manifestSha256'])
 
     def test_fontless_schema3_needs_explicit_profile_and_exact_cdn_identity(self):
         op = self.operation
@@ -144,6 +172,82 @@ class RootThreeLayerAdapter(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'retained runtime probe failed'):
             self.operation.activation_preflight(target)
         self.activate.assert_not_called()
+
+    def test_same_runtime_prepare_and_recovery_preserve_reviewed_next_inodes(self):
+        catalog = json.loads((SCRIPT.parent / 'backend/next-source-profiles.json').read_text())
+        reviewed = catalog['profiles'][catalog['candidateProfile']]['hashes']
+        files = ['package.json', 'dist/server/next.js', *(p.removeprefix('next/') for p in reviewed), 'dist/bin/next']
+        package = Path('node_modules/.pnpm/next@16.4.5/node_modules/next')
+        for name in files:
+            self.put(self.source / package / name, name)
+        (self.source / package / 'dist/bin/next').chmod(0o755)
+        alias = Path('apps/web/node_modules/next')
+        (self.source / alias).symlink_to(Path('../../..') / package)
+
+        def prepare(sha):
+            config = self.source / 'apps/web/.next/required-server-files.json'
+            value = json.loads(config.read_bytes())
+            value['config']['env']['ZIMAGE_BUILD_SHA'] = sha
+            self.put(config, json.dumps(value))
+            self.put(self.source / 'apps/web/.next/BUILD_ID', sha)
+            packed, bundle, transport = self.pack_transport(sha)
+            target, reused = self.operation.prepare_archive(
+                bundle, sha, transport['outerSha256'], packed['manifestSha256'], run_probe=False)
+            self.assertFalse(reused)
+            return target, self.cache / 'runtime' / packed['layers']['runtime']['identity']
+
+        def identities(root):
+            result = {}
+            for name in files:
+                s = (root / alias / name).stat()
+                result[name] = (s.st_dev, s.st_ino, s.st_ctime_ns, s.st_nlink, s.st_mode)
+            return result
+
+        old, runtime = prepare('c' * 40)
+        # Reconstruct the predecessor exactly as the old assembler installed it.
+        for name in files:
+            path = old / package / name
+            path.unlink()
+            os.link(runtime / package / name, path)
+        def select(target):
+            current = self.host / 'current'
+            current.unlink()
+            current.symlink_to(target)
+        select(old)
+        old_before = identities(old)
+        self.assertEqual(identities(runtime), old_before)
+
+        new, new_runtime = prepare('d' * 40)
+        self.assertEqual(new_runtime, runtime)
+        self.assertEqual(identities(old), old_before, 'candidate preparation disturbed the running predecessor')
+        new_before = identities(new)
+        for name in files:
+            self.assertFalse((new / alias / name).samefile(runtime / package / name), name)
+            expected_mode = 0o555 if name == 'dist/bin/next' else 0o444
+            self.assertEqual(stat.S_IMODE((new / alias / name).stat().st_mode), expected_mode)
+        self.assertTrue((new / 'node_modules/pkg/index.js').samefile(runtime / 'node_modules/pkg/index.js'))
+
+        def health(target):
+            self.assertEqual(identities(new), new_before)
+            self.assertEqual(identities(old), old_before)
+            if target == new:
+                raise RuntimeError('candidate health failed')
+        with patch.object(self.legacy, 'switch', side_effect=select), \
+             patch.object(self.legacy, 'wait_healthy', side_effect=health) as checked:
+            with self.assertRaisesRegex(RuntimeError, 'candidate health failed'):
+                self.real_activate(new, preflight=self.operation.activation_preflight)
+        self.assertEqual(checked.call_args_list, [call(new), call(old)])
+        self.assertEqual([c.args[0] for c in self.native.call_args_list], [new, old])
+        self.assertEqual(self.operation.current_target(), old)
+
+        tampered = new / alias / 'dist/server/next.js'
+        tampered.chmod(0o644)
+        with self.assertRaisesRegex(ValueError, 'retained release differs'):
+            self.operation.activation_preflight(new)
+        tampered.write_bytes(b'X' * tampered.stat().st_size)
+        tampered.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, 'retained release differs'):
+            self.operation.activation_preflight(new)
 
     def test_local_bundle_and_deploy_publish_without_rewriting_manifest(self):
         with tarfile.open(self.bundle, 'r:gz') as archive:

@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { publicAssetUrl } from '../src/platform/public-assets';
 import { publicExampleUrl } from '../../web/features/commerce/public-example-images';
 import { publicAssetUrl as nextPublicAssetUrl } from '../../web/lib/public-assets';
-import { hash, imagePolicyVersion, previewMetadataPath, readImageDelivery, validatePreview } from '../build/image-delivery.mjs';
+import { imagePolicyVersion, previewMetadataPath, readImageDelivery, validatePreview } from '../build/image-delivery.mjs';
 import { copyPublicAssets } from '../scripts/copy-public-assets.mjs';
 import { namespacePublicAssetSource } from '../build/public-asset-source';
 import { checkStaticResources } from '../scripts/check-dist.mjs';
