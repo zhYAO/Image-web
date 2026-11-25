@@ -112,20 +112,47 @@ jobs:
           printf '%s\n' 'client-fingerprint=verified'
 
 
-          rc=0
-          timeout -k 2 15 /usr/bin/ssh -F /dev/null -fNTnM -S "$tmp/master" -vv -E "$tmp/ssh.log" \
+          # -N disables all session requests. One dispatch makes one attempt to the fixed port.
+          options=(-F /dev/null -fNTnM -S "$tmp/master" -p 22 \
             -o BatchMode=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o ControlPersist=15s \
             -o StrictHostKeyChecking=yes -o HostKeyAlias=zimage-production -o HostKeyAlgorithms=ssh-ed25519 \
             -o GlobalKnownHostsFile=/dev/null -o "UserKnownHostsFile=$tmp/hosts" -o UpdateHostKeys=no \
             -o IdentitiesOnly=yes -o "IdentityAgent=$SSH_AUTH_SOCK" -i "$tmp/identity.pub" \
             -o CertificateFile=none -o PubkeyAcceptedAlgorithms=ssh-ed25519 -o PreferredAuthentications=publickey \
-            -o ClearAllForwardings=yes -o ForwardAgent=no -o ForwardX11=no -- "$target" \
+            -o ClearAllForwardings=yes -o ForwardAgent=no -o ForwardX11=no -- "$target")
+          if ! /usr/bin/ssh -G "${options[@]}" </dev/null >/dev/null 2>&1; then
+            die 'client-options=rejected'
+          fi
+          printf '%s\n' 'client-options=accepted port=22 session=none'
+          rc=0
+          timeout -k 2 15 /usr/bin/ssh -vv -E "$tmp/ssh.log" "${options[@]}" \
             </dev/null >/dev/null 2>&1 || rc=$?
-          grep -Fxq 'debug1: SSH2_MSG_SERVICE_ACCEPT received' "$tmp/ssh.log" || die 'pinned-host=unverified'
+          printf 'ssh-exit=%d\n' "$rc"
+          [[ -s $tmp/ssh.log ]] || die 'ssh-log=missing'
+          # OpenSSH can write CRLF to -E. Strip only the line terminator. Never publish either file.
+          sed 's/\r$//' "$tmp/ssh.log" > "$tmp/stages"
+          log=$tmp/stages
+          if ! grep -Fxq 'debug1: Connection established.' "$log"; then
+            if grep -Eq '^ssh: connect to host .+ port 22: Connection refused$' "$log"; then die 'tcp=refused'; fi
+            if grep -Eq '^ssh: connect to host .+ port 22: Connection timed out$' "$log"; then die 'tcp=timeout'; fi
+            [[ $rc != 124 ]] || die 'tcp=unconfirmed deadline=expired'
+            die 'tcp=unconfirmed'
+          fi
+          printf '%s\n' 'tcp=connected'
+          grep -Eq '^debug1: Remote protocol version 2\.0, remote software version ' "$log" || die 'ssh-banner=unconfirmed'
+          printf '%s\n' 'ssh-banner=received'
+          if ! grep -Fxq "debug1: Host 'zimage-production' is known and matches the ED25519 host key." "$log"; then
+            if grep -Fxq 'Host key verification failed.' "$log"; then die 'pinned-host=rejected'; fi
+            if grep -Eq '^Unable to negotiate with .+: no matching ' "$log"; then die 'negotiation=no-common-algorithm'; fi
+            die 'pinned-host=unverified'
+          fi
+          grep -Fxq 'debug1: SSH2_MSG_NEWKEYS received' "$log" || die 'key-exchange=unconfirmed'
           printf '%s\n' 'pinned-host=verified'
-          grep -Fq "debug1: Server accepts key: $tmp/identity.pub ED25519 $actual_fp " "$tmp/ssh.log" || die 'release-public-key=unconfirmed'
+          grep -Fxq 'debug1: SSH2_MSG_SERVICE_ACCEPT received' "$log" || die 'auth-service=unconfirmed'
+          grep -Fq "debug1: Server accepts key: $tmp/identity.pub ED25519 $actual_fp " "$log" || die 'release-public-key=unconfirmed'
           printf '%s\n' 'release-public-key=accepted'
-          [[ $rc == 0 ]] && grep -Eq '^Authenticated to .+ using "publickey"\.$' "$tmp/ssh.log" || die 'signed-publickey-auth=unconfirmed'
+          grep -Eq '^Authenticated to .+ using "publickey"\.$' "$log" || die 'signed-publickey-auth=unconfirmed'
+          [[ $rc == 0 ]] || die 'master-start=failed'
           timeout -k 1 3 "${control[@]}" check -- "$target" </dev/null >/dev/null 2>&1 || die 'master-check=failed'
           timeout -k 1 3 "${control[@]}" exit -- "$target" </dev/null >/dev/null 2>&1 || die 'master-exit=failed'
           master_closed=true

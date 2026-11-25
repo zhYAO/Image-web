@@ -33,6 +33,11 @@ elif name == 'ssh-add':
     else: sys.exit(3)
 elif name == 'ssh':
     assert args[-2:] == ['--', 'zimage-release@192.0.2.10']
+    if args[0] == '-G':
+        import subprocess
+        if mode == 'invalid-option':
+            args[1:1] = ['-o', 'NoSuchSSHProbeOption=yes']
+        sys.exit(subprocess.run(['/usr/bin/ssh', *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode)
     if '-O' in args:
         op = args[args.index('-O')+1]
         assert op in ('check', 'exit')
@@ -45,19 +50,45 @@ elif name == 'ssh':
     assert (sock.parent/'hosts').read_text().split() == ['zimage-production', *(root/'host.pub').read_text().split()[:2]]
     # The real client expands these exact arguments offline. -G never connects.
     import subprocess
-    cfg = subprocess.check_output(['/usr/bin/ssh','-G',*args], text=True, stderr=subprocess.DEVNULL)
+    cfg = subprocess.check_output(['/usr/bin/ssh','-G',*args[args.index('-F'):]], text=True, stderr=subprocess.DEVNULL)
     for item in ('sessiontype none','requesttty false','clearallforwardings yes','forwardagent no'):
         assert item in cfg.splitlines(), item
+    assert 'port 22' in cfg.splitlines()
+    assert len(os.fsencode(args[args.index('-S')+1])) + 17 < 108
     log = sock.parent/'ssh.log'
+    if mode == 'no-log':
+        sys.exit(255)
+    sep = '\n' if mode == 'signed-lf' else '\r\n'
+    def finish(lines, rc=255):
+        log.write_bytes((sep.join(lines) + sep).encode())
+        sys.exit(rc)
+    if mode == 'refused':
+        finish(['ssh: connect to host 192.0.2.10 port 22: Connection refused'])
+    if mode == 'timeout':
+        finish(['ssh: connect to host 192.0.2.10 port 22: Connection timed out'])
+    if mode == 'deadline':
+        finish(['debug1: Connecting to fixture.'], 124)
+    lines = ['debug1: Connection established.']
+    if mode == 'no-banner':
+        finish(lines)
+    lines.append('debug1: Remote protocol version 2.0, remote software version DO-NOT-PRINT-ME')
     if mode == 'bad-pin':
-        log.write_text('Host key verification failed.\n'); sys.exit(255)
-    lines = ['debug1: SSH2_MSG_SERVICE_ACCEPT received']
+        finish(lines + ['Host key verification failed.'])
+    if mode == 'no-algorithm':
+        finish(lines + ['Unable to negotiate with 192.0.2.10 port 22: no matching host key type found.'])
+    if mode != 'wrong-alias':
+        lines.append("debug1: Host 'zimage-production' is known and matches the ED25519 host key.")
+    if mode == 'bad-kex':
+        finish(lines)
+    lines.append('debug1: SSH2_MSG_NEWKEYS received')
+    if mode == 'no-service':
+        finish(lines)
+    lines.append('debug1: SSH2_MSG_SERVICE_ACCEPT received')
     if mode != 'key-denied':
         lines.append('debug1: Server accepts key: '+str(public)+' ED25519 '+os.environ['EXPECTED_KEY_SHA256']+' explicit agent')
     if mode not in ('bad-signature','key-denied'):
         lines.append('Authenticated to fixture ([192.0.2.10]:22) using "publickey".')
-    log.write_text('\n'.join(lines)+'\n')
-    sys.exit(255 if mode in ('bad-signature','key-denied') else 0)
+    finish(lines, 255 if mode in ('bad-signature','key-denied','bad-start') else 0)
 else: sys.exit(3)
 '''
 
@@ -97,7 +128,19 @@ class SSHIdentity(unittest.TestCase):
                 ('missing', {'RELEASE_KEY':''}, 'release-secret=missing', False),
                 ('wrong-client', {'EXPECTED_KEY_SHA256':'SHA256:'+'A'*43}, 'client-fingerprint=mismatch', False),
                 ('wrong-name', {'HOST_KEY':'other.example '+pub}, 'different endpoint', False),
-                ('bad-pin', {}, 'pinned-host=unverified', True),
+                ('invalid-option', {}, 'client-options=rejected', False),
+                ('no-log', {}, 'ssh-log=missing', True),
+                ('refused', {}, 'tcp=refused', True),
+                ('timeout', {}, 'tcp=timeout', True),
+                ('deadline', {}, 'tcp=unconfirmed deadline=expired', True),
+                ('no-algorithm', {}, 'negotiation=no-common-algorithm', True),
+                ('no-banner', {}, 'ssh-banner=unconfirmed', True),
+                ('bad-pin', {}, 'pinned-host=rejected', True),
+                ('wrong-alias', {}, 'pinned-host=unverified', True),
+                ('bad-kex', {}, 'key-exchange=unconfirmed', True),
+                ('no-service', {}, 'auth-service=unconfirmed', True),
+                ('bad-start', {}, 'master-start=failed', True),
+                ('signed-lf', {}, 'signed-publickey-auth=verified', True),
                 ('key-denied', {}, 'release-public-key=unconfirmed', True),
                 ('bad-signature', {}, 'signed-publickey-auth=unconfirmed', True),
                 ('bad-mux', {}, 'master-check=failed', True),
@@ -117,7 +160,8 @@ class SSHIdentity(unittest.TestCase):
                     self.assertEqual('signed-publickey-auth=verified' in output, ok)
                     self.assertNotIn(env['RELEASE_KEY'].strip(), output)
                     calls = (root/'calls').read_text() if (root/'calls').exists() else ''
-                    self.assertEqual('ssh -F' in calls, connects)
+                    self.assertEqual(calls.count('ssh -vv -E '), int(connects))
+                    self.assertNotIn('DO-NOT-PRINT-ME', output)
                     if ok:
                         self.assertIn(' -O check -- ', calls)
                         self.assertIn(' -O exit -- ', calls)
