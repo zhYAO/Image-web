@@ -1401,3 +1401,8 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - 公网复核：`/version.json` 为 `release-ed19f0f2…`，`/api/health/ready` 与 `/api/meta.backendRelease` 同为 `ed19f0f2…`，首页引用的版本化脚本为 `release-ed19f0f2…/assets/index-DNgA_E96.js`，`/api/public-config` 返回 `formalAuth=true`、`dataMode=http`。
 - 主机状态：`zimage.service` active，MainPID 746174，无额外重启；preload 指向 `versions/1b7853dd…/backend/http-admission.cjs`；旧版本目录保留可回退；磁盘余量 11G。
 - 仍需单独验收：在 `committed` 版本上用正常 Edge 会话走一次真实登录（Turnstile 域名与前后端密钥配对）；公网证书 2026-12-16 到期，续期未验证。
+### 2026-11-26 合并即发布的最小流程归档
+
+- 把两条工作流、分支保护、主机一次性准备、成功判据、证书自动化和故障对照整理成 [合并即发布](merge-to-release.md)，作为后续复用或修改的唯一入口。
+- 明确闸门就是人工点 Merge：分支保护所需批准数为 0，不再加第二人复核；`ZIMAGE_PRODUCTION_DEPLOY_ENABLED` 可随时降级为只构建。
+- 证书改为全自动：Let's Encrypt 90 天，`certbot.timer` + 阿里云云解析 DNS-01 钩子 + 续期前刷新真实 IP，当前证书 2026-11-26 至 2027-02-24；新增只授权 `zimage.store` 的 RAM 用户 `zimage-acme`。
