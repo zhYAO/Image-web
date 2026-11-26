@@ -26,7 +26,7 @@ HANDOFF = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HANDOFF)
 FIXTURE_COMMIT = '1' * 40
 FIXTURE_TREE = '2' * 40
-REVIEWED_ADAPTER_SHA256 = '44537014a8638981c6522c898640ad7da61e70420f87ef316738d0fd53803e65'
+REVIEWED_ADAPTER_SHA256 = '86e414f49553a806eebf9149265a9fc592511c95db4c0dd71ef7c6c9b16701f8'
 
 
 def credential_name(name):
@@ -112,8 +112,9 @@ class SourceGuards(HandoffFixture):
         self.assertEqual(HANDOFF.digest(SCRIPT.read_bytes()), REVIEWED_ADAPTER_SHA256)
 
     def test_explicit_allowlist_and_credential_names(self):
-        for name in ('README.md', 'package.json', '.github/workflows/ci.yaml',
+        for name in ('AGENTS.md', 'README.md', 'package.json', '.github/workflows/ci.yaml',
                      'apps/frontend/src/App.tsx', 'ops/aliyun/linux-handoff.py',
+                     'ops/aliyun/production/zimage-release-retention.timer',
                      'doc/separation/linux-source-transfer.md'):
             with self.subTest(name=name):
                 self.assertTrue(HANDOFF.allowed(name))
@@ -124,7 +125,8 @@ class SourceGuards(HandoffFixture):
                      'apps/web/.env', 'apps/web/.env.example',
                      'supabase/functions/generation-worker/.npmrc', 'apps/.netrc',
                      'ops/credentials.json', 'ops/secrets.yaml', 'ops/id_ed25519',
-                     'ops/key.pem', 'unexpected-root-file.py'):
+                     'ops/key.pem', 'unexpected-root-file.py', 'unexpected-root-file.md',
+                     'ops/aliyun/production/unreviewed.timer'):
             with self.subTest(name=name):
                 self.assertFalse(HANDOFF.allowed(name))
 
