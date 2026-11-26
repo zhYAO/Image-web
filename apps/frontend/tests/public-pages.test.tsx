@@ -29,6 +29,7 @@ describe('static public content', () => {
     expect(page.html).toContain('电商生图');
     expect(page.html).toContain('href="/create/product-main"');
     expect(page.html).toContain('href="/create/apparel-catalog"');
+    expect(page.html).not.toContain('href="/create/batch"');
     expect(page.robots).toBe('index,follow');
   });
   it.each(['/workspace', '/account', '/sessions/private-id', '/create/batch', '/unknown'])('refuses to enumerate %s as a public page', path => {
