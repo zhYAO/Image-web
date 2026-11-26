@@ -11,7 +11,7 @@
 ## 2. 仓库侧
 
 - `.github/workflows/pr-build.yml`：PR 必过检查，作业名固定为 `zimage-release-pr-required`。第一步就拒绝来自 fork 的 PR，只接受同仓库分支；文档类改动走快检，其他改动跑全量（领域、前端、Web、Worker、Python 接收器、本地 Supabase/pgTAP、生成类型比对）。
-- `.github/workflows/production.yml`：只在受保护 `main` 的合并提交上运行。`merged-pr` 先确认该 SHA 确实是合并进 `main` 的 PR 合并提交，否则直接失败。
+- `.github/workflows/production.yml`：只在受保护 `main` 的合并提交上运行。`merged-pr` 先确认该 SHA 确实是合并进 `main` 的 PR 合并提交，否则直接失败。触发条件带 `paths-ignore`（`doc/**`、`docs/**`、`**.md`、`LICENSE`）：只改文档的合并**完全不触发**工作流，既不构建也不发布；同一 PR 里只要有一处非文档改动就会正常触发。
 - 分支保护：必须走 PR、必须通过上面的检查、分支需为最新（strict）、禁快进与删除；**所需批准数为 0**。
 - 发布开关：仓库变量 `ZIMAGE_PRODUCTION_DEPLOY_ENABLED=1`。取其他值时只跑 `build-only`，构建、记录结果，但不签名、不投递。
 - 只有第一次 push attempt 会发布（`github.run_attempt == 1`）；重跑只记录不投递，避免重复上线。

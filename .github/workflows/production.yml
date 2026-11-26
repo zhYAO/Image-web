@@ -2,6 +2,13 @@ name: Publish merged ZImage pair
 on:
   push:
     branches: [main]
+    # Documentation-only merges change nothing that ships, so they must not
+    # trigger a build, a signature or a production switch.
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE'
 permissions:
   contents: read
 concurrency:
