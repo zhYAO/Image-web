@@ -1408,9 +1408,21 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - 证书改为全自动：Let's Encrypt 90 天，`certbot.timer` + 阿里云云解析 DNS-01 钩子 + 续期前刷新真实 IP，当前证书 2026-11-26 至 2027-02-24；新增只授权 `zimage.store` 的 RAM 用户 `zimage-acme`。
 ### 2026-11-26 发布产物体积与主机占用盘点
 
-- 单次发布的传输包 `pair.tar` 约 18 MB：后端分层压缩后 15.39 MiB，前端原始文件 2.42 MB（46 个文件），其余为 tar 头。
+- 经生产清单和部署后文件复核，run #13 的 `pair.tar` 约 **8.02 MB**。后端 `backend.tgz` 为 5.45 MB，重建后的 SHA-256 与生产记录一致。前端为 2.48 MB（48 个文件），封装与元数据约 0.09 MB。这组实测值替代此前的 18 MB 估算。详细口径见[版本保留和产物大小](merge-to-release.md#9-版本保留和产物大小)。
 - 后端运行时 30.76 MB（构建期 `measure-dist` 实测）：runtime dependencies 13.45 MB（43.7%）、public assets 8.09 MB（26.3%）、server business 5.70 MB（18.6%）、client static 3.51 MB（11.4%）。
 - 落地后每个版本占盘 28 MB（`node_modules` 17 MB、`apps` 11 MB，其中 `.next/server` 6.6 MB、`.next/static` 4.2 MB）；前端版本目录 2.5 MB。
 - 一次发布只写这几处：`releases/<sha>/`、`layer-store/releases/<sha>.json` 与 `layer-store/layers/`、`frontend/releases/release-<sha>/`、`frontend/assets/release-<sha>` 软链、`current` 与 `frontend/current` 软链、`production-release.json`，随后重启服务。`incoming/` 已不再写入。
 - 清理：删除 `incoming`（1.6G，9 月至 11 月遗留）、`build`（1.4G，9-17 遗留）和三个 `isolation-*`（1.15G，11-06/08 手工隔离残留），release 只保留当前与前一个。`/opt/zimage` 从 8.8G 降到 712M，磁盘占用从 73% 降到 54%。
 - 文档类合并不再触发发布：`production.yml` 增加 `paths-ignore`（`doc/**`、`docs/**`、`**.md`、`LICENSE`），只改文档的合并完全不运行工作流；同一 PR 含非文档改动时仍正常发布。
+
+### 2026-11-26 自动保留三个代码版本与资源复核
+
+- 已启用独立的 `zimage-release-retention.timer`。Linux 的 5 项用例覆盖实删和重复执行、发布锁、异常事务、旧 `previous` 引用、清单和链接校验。首次清理保留 `ab7b2d2`、`8bdcec5`、`37ecfc7` 三套前后端，删除 12 个过期链接、清单及代码层文件，释放 **11.1 MiB**。清理后应用 PID 一致，公网首页和就绪检查为 200。
+- 对照官方 Linux amd64 镜像的 OCI 压缩层。NextChat `v2.16.1` 为 **65.88 MB**，生产 `COPY` 层 **18.44 MB**。Dify Web `1.10.1` 为 **184.36 MB**，生产 `COPY` 层 **57.31 MB**。两个应用层合计都排除了基础镜像与运行时附加的命令层。LobeHub `latest` 的采样摘要 `sha256:02fe938e7b29316065b67b77c0e9a296efcac88d54675c91631e8369cf07a091` 为 **327.97 MB**，以完整镜像作参考。[NextChat](https://hub.docker.com/r/yidadaa/chatgpt-next-web/tags?name=v2.16.1) · [Dify Web](https://hub.docker.com/r/langgenius/dify-web/tags?name=1.10.1) · [LobeHub](https://hub.docker.com/r/lobehub/lobehub/tags)
+- ECS 为 2 vCPU、1,608 MiB RAM，7 天 CPU 平均 1.08%、15 分钟均值 P95 1.34%、云监控记录峰值 11.78%。独立采样有 829 MiB 可用内存，1 GiB swap 未使用。应用的 cgroup 实测约 88–145 MiB，宝塔约 230 MiB。当前云监控无内存历史数据。根盘 40 GiB、使用 54%、可用约 18 GiB，清理后 `/opt/zimage` 约 728 MiB，systemd journal 约 1.4 GiB。旧 Node 工具链约 273 MiB，采样时没有进程使用其中的可执行文件，历史回滚用途需另查。
+- 优先级为控制系统日志留存并补齐内存历史，再评估闲置的宝塔和旧工具链。包体重建与对照表明 **8.02 MB** 已较小，发布耗时主要在构建与测试。
+
+### 2026-11-26 退役代码清理（本地）
+
+- 删除 7 个无运行时引用的源码文件和 3 个专用测试。涉及独立分析占位模块、服装源图复用实验、旧电商目录组件和旧脱敏工具。移除环境模板中的源图复用开关，保留现行服装加载配置用例。公开目录、历史批次读写和隐私回归分别覆盖实际 Next 页面、Vite 预渲染、Web 日志及 Worker Sentry 入口。
+- Node 24.19.0 下通过仓库 lint 与三个包的类型检查。Web 1,233 项、领域契约 286 项、Worker 189 项、验收预算 5 项通过。Vite 238 项通过，另有两项因本机符号链接权限跳过。Vite 构建和公开目录产物检查通过。Next Mock 构建完成编译、类型检查和静态生成，独立产物的 7 项本地 HTTP 检查通过。重复构建的临时文件清理被批量删除保护拦截。

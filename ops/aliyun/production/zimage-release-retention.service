@@ -1,0 +1,12 @@
+[Unit]
+Description=Prune retired ZImage production code
+ConditionPathExists=/opt/zimage/deploy.lock
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/zimage-maintenance/retention.py --apply
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/opt/zimage/releases /opt/zimage/frontend/releases /opt/zimage/frontend/assets /opt/zimage/layer-store/releases /opt/zimage/layer-store/layers

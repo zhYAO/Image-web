@@ -39,7 +39,7 @@
 
 ## 切换与失败
 
-GitHub concurrency 保留正在运行的作业。ECS 使用现有 `/opt/zimage/deploy.lock` 串行化接收、验签、准备、切换和恢复，拒绝旧运行号及未对账的事务。它保留所有正式版本及旧静态资源。发布期间由本助手独占生产切换，暂停旧人工发布工具。[GitHub 并发语义](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+GitHub concurrency 保留正在运行的作业。ECS 使用现有 `/opt/zimage/deploy.lock` 串行化接收、验签、准备、切换和恢复，拒绝旧运行号及未对账的事务。发布期间由接收器独占生产切换，暂停旧人工发布工具。独立的主机定时器也使用这把锁，负责版本保留。[GitHub 并发语义](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
 
 在切换前，本机 TLS 和外部 runner 分别检查现网精确版本、API 契约、首页与实际版本化 JS。排空同一 PID 的 HTTP、后台工作及业务计数后，临时移走已有 Nginx open 标记，并实测静态首页和 API 一致返回维护 503。随后停止该服务、检查原生依赖、分别原子替换两个 current，再以原 systemd 单元启动。Nginx 保持封闭直至新进程的 PID、cwd、私有 socket 与排空门禁都通过检查；此时才还原原标记。单机重启有短暂不可用窗口。候选先处于只读检查模式，本机和外部均通过后才开放业务，并再次检查双方。生产业务登录、付费生成、数据库内容等不在这套只读探测的验证范围。
 
@@ -51,4 +51,26 @@ Linux 回归命令为 `python3 -B -m unittest discover -s ops/aliyun/production 
 
 生产从 `production` 环境变量 `ZIMAGE_PRODUCTION_TURNSTILE_SITE_KEY` 注入 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`；检查缺失、格式及 Cloudflare 测试值，不输出键值。PR 和仅构建使用仓库级公开配置。首发登录须在实际 `committed` 的版本上单独验证。
 
-已确认恢复旧版本时，修复后走新提交的受保护合并流程。若 SSH 中断或恢复结果不明，先读 ECS 发布日志、当前两端版本和真实公网结果，不重放，也不凭旧指针或本机健康宣告已恢复。
+已确认恢复旧版本后，修复并通过新的受保护合并发布。SSH 中断或恢复结果不明时，先核对 ECS 发布日志、当前前后端版本和公网结果，再决定恢复操作。
+
+## 代码版本保留
+
+`zimage-release-retention.timer` 每小时检查一次。清理程序在拿到 `/opt/zimage/deploy.lock`、确认事务为 `committed`，并核对两个 `current` 和运行中进程的工作目录后，保留线上前后端、事务的回滚目标和最近的一套成对版本。第三套按版本化资源链接创建时间选择；仍有效的旧 `previous` 引用也受保护。发布或恢复未完成时等下一轮检查。
+
+清理范围包括过期代码目录、版本化前端链接、对应清单和无引用的 `code-*` 归档及索引。共享运行时、公共资源层和缓存继续由原有机制管理。清掉的前端版本若还有打开的旧页面，页面需要刷新才能取得新的资源链接。
+
+管理员在已核对的生产主机上安装 root 所有的 `retention.py` 和两个 systemd 单元。它们独立于版本化接收器。先运行预演确认每个路径，再启用定时器。
+
+```sh
+install -d -m 0755 /usr/local/libexec/zimage-maintenance
+install -m 0644 retention.py /usr/local/libexec/zimage-maintenance/retention.py
+install -m 0644 zimage-release-retention.service zimage-release-retention.timer /etc/systemd/system/
+/usr/bin/python3 -I -B /usr/local/libexec/zimage-maintenance/retention.py
+systemd-analyze verify /etc/systemd/system/zimage-release-retention.{service,timer}
+systemctl daemon-reload
+systemctl enable --now zimage-release-retention.timer
+systemctl list-timers zimage-release-retention.timer
+journalctl -u zimage-release-retention.service -n 30
+```
+
+以上命令从本目录以管理员身份运行。安装后的线上定时清理使用同一个脚本并传入 `--apply`。暂停清理可运行 `systemctl disable --now zimage-release-retention.timer`。
