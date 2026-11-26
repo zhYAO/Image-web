@@ -1,0 +1,9 @@
+[Unit]
+Description=Check ZImage production code retention hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=yes
+
+[Install]
+WantedBy=timers.target

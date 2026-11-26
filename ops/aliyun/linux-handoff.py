@@ -23,8 +23,8 @@ import tarfile
 import time
 from urllib.parse import urlsplit
 
-ROOT_FILES = {'.gitignore', '.node-version', '.prettierignore', 'DESIGN.md', 'README.md',
-              'eslint.config.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
+ROOT_FILES = {'.gitignore', '.node-version', '.prettierignore', 'AGENTS.md', 'DESIGN.md',
+              'README.md', 'eslint.config.mjs', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml',
               'tsconfig.base.json'}
 ROOT_DIRS = {'.github', 'apps', 'doc', 'ops', 'packages', 'scripts', 'supabase'}
 # Historical evidence, not source. Every other log still requires explicit review.
@@ -92,7 +92,10 @@ def allowed(name):
         return False
     if p.name.startswith('.env'):
         return False
-    if p.name in {'.npmrc', '.netrc', '.DS_Store'} or p.suffix.lower() not in EXTENSIONS:
+    if p.name in {'.npmrc', '.netrc', '.DS_Store'}:
+        return False
+    if (p.suffix.lower() not in EXTENSIONS
+            and name != 'ops/aliyun/production/zimage-release-retention.timer'):
         return False
     if p.name.lower() in {'credentials', 'credentials.json', 'secrets.json', 'secrets.yaml',
                           'id_rsa', 'id_ed25519', 'authorized_keys', 'known_hosts'}:

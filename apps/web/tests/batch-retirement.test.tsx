@@ -1,18 +1,19 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { COMMERCE_PRIMARY_SCENE_IDS, COMMERCE_SCENES, commerceSceneSchema } from '@zimage/domain';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import CreateCataloguePage from '@/app/create/page';
 import { workspaceRoute } from '@/features/workspace/workspace-route';
-import { CommerceCatalogue } from '@/features/commerce/CommerceCatalogue';
-import { CommerceHeader, CommerceNav } from '@/features/commerce/CommerceChrome';
 
 const boundary = vi.hoisted(() => ({ server: vi.fn(), admin: vi.fn(), create: vi.fn(), advance: vi.fn(), worker: vi.fn(), list: vi.fn(), get: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: boundary.server }));
 vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: boundary.admin }));
 vi.mock('@/server/commerce/commerce-batch-service', () => ({ createCreativeBatch: boundary.create, advanceCreativeBatch: boundary.advance, runCreativeBatchWorker: boundary.worker, listCreativeBatches: boundary.list, getCreativeBatch: boundary.get }));
-vi.mock('@/features/credits/CreditsProvider', () => ({ CreditBalance: () => <span>积分</span> }));
-vi.mock('@/features/auth/AuthStatusProvider', () => ({ useAuthStatus: () => ({ status: 'authenticated' }) }));
+vi.mock('@/features/auth/AuthStatusProvider', () => ({ useAuthStatus: () => ({ status: 'guest' }) }));
 vi.mock('@/server/route-context', () => ({ executeRoute: async (fn: (id: string) => unknown) => fn('test'), assertTrustedOrigin: () => undefined, readJson: async () => ({}), requireVerifiedUserId: async () => 'owner' }));
-vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('NEXT_HTTP_ERROR_FALLBACK;404'); } }));
+vi.mock('next/navigation', () => ({
+  notFound: () => { throw new Error('NEXT_HTTP_ERROR_FALLBACK;404'); },
+  useRouter: () => ({ push: vi.fn() }),
+}));
 import CommercePage from '@/app/create/[scene]/page';
 import { POST as createPost, GET as listGet } from '@/app/api/creative-batches/route';
 import { GET as historyGet, POST as advancePost } from '@/app/api/creative-batches/[id]/route';
@@ -30,9 +31,11 @@ describe('retired multi-product batch entry', () => {
     for (const scene of ['product-set', 'detail', 'clone']) expect(workspaceRoute(`/create/${scene}`)).toMatchObject({ kind: 'commerce', scene });
   });
 
-  it('removes the batch launcher from catalogue, header and tool navigation', () => {
-    render(<><CommerceHeader /><CommerceNav /><CommerceCatalogue /></>);
+  it('shows the current tools without the batch launcher on the public catalogue page', () => {
+    render(<CreateCataloguePage />);
+    const catalogue = screen.getByRole('region', { name: '电商工具目录' });
     expect(COMMERCE_PRIMARY_SCENE_IDS).toHaveLength(5);
+    expect(within(catalogue).getAllByRole('link', { name: /^开始/ })).toHaveLength(COMMERCE_PRIMARY_SCENE_IDS.length);
     expect(COMMERCE_SCENES.some(scene => String(scene.id) === 'batch')).toBe(false);
     expect(screen.queryByRole('link', { name: /批量生成/ })).toBeNull();
     expect(screen.getAllByRole('link').some(link => link.getAttribute('href') === '/create/batch')).toBe(false);
