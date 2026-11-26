@@ -1406,3 +1406,11 @@ The workflow requires a supplied measured target, a compatible trusted runner, r
 - 把两条工作流、分支保护、主机一次性准备、成功判据、证书自动化和故障对照整理成 [合并即发布](merge-to-release.md)，作为后续复用或修改的唯一入口。
 - 明确闸门就是人工点 Merge：分支保护所需批准数为 0，不再加第二人复核；`ZIMAGE_PRODUCTION_DEPLOY_ENABLED` 可随时降级为只构建。
 - 证书改为全自动：Let's Encrypt 90 天，`certbot.timer` + 阿里云云解析 DNS-01 钩子 + 续期前刷新真实 IP，当前证书 2026-11-26 至 2027-02-24；新增只授权 `zimage.store` 的 RAM 用户 `zimage-acme`。
+### 2026-11-26 发布产物体积与主机占用盘点
+
+- 单次发布的传输包 `pair.tar` 约 18 MB：后端分层压缩后 15.39 MiB，前端原始文件 2.42 MB（46 个文件），其余为 tar 头。
+- 后端运行时 30.76 MB（构建期 `measure-dist` 实测）：runtime dependencies 13.45 MB（43.7%）、public assets 8.09 MB（26.3%）、server business 5.70 MB（18.6%）、client static 3.51 MB（11.4%）。
+- 落地后每个版本占盘 28 MB（`node_modules` 17 MB、`apps` 11 MB，其中 `.next/server` 6.6 MB、`.next/static` 4.2 MB）；前端版本目录 2.5 MB。
+- 一次发布只写这几处：`releases/<sha>/`、`layer-store/releases/<sha>.json` 与 `layer-store/layers/`、`frontend/releases/release-<sha>/`、`frontend/assets/release-<sha>` 软链、`current` 与 `frontend/current` 软链、`production-release.json`，随后重启服务。`incoming/` 已不再写入。
+- 清理：删除 `incoming`（1.6G，9 月至 11 月遗留）、`build`（1.4G，9-17 遗留）和三个 `isolation-*`（1.15G，11-06/08 手工隔离残留），release 只保留当前与前一个。`/opt/zimage` 从 8.8G 降到 712M，磁盘占用从 73% 降到 54%。
+- 文档类合并不再触发发布：`production.yml` 增加 `paths-ignore`（`doc/**`、`docs/**`、`**.md`、`LICENSE`），只改文档的合并完全不运行工作流；同一 PR 含非文档改动时仍正常发布。
